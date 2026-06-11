@@ -16,7 +16,7 @@ fi
 
 echo "Building Celeritas for 1.12.2..."
 
-# Execute the Stonecutter build command
-./gradlew -Ptarget_versions="1.12.2" packageJar
+# FIX: Changed -Ptarget_versions to -Pceleritas_target_versions
+./gradlew -Pceleritas_target_versions="1.12.2" packageJar
 
 echo "Done. The compiled jar should be located in build/libs/1.12.2/"
