@@ -30,6 +30,7 @@ public class ColorProviderRegistry {
         var providers = ((BlockColorsAccessor)blockColors).celeritas$getProviders();
 
         var overridenBlocks = new ReferenceOpenHashSet<Block>();
+        //? if (forgelike && <26.1) || >=26.1 {
         for (var entry : providers.entrySet()) {
             var block = entry.getKey()
                     /*? if forge && >=1.17 && <26.1 {*/.value()/*?}*/
@@ -39,6 +40,18 @@ public class ColorProviderRegistry {
             }
             this.blocks.put(block, DefaultColorProviders.adapt(entry.getValue()));
         }
+        //?} else {
+        /*for (var block : net.minecraft.core.registries.BuiltInRegistries.BLOCK) {
+            var provider = providers.byId(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getId(block));
+            if (provider == null) {
+                continue;
+            }
+            if (!DefaultColorProviders.isVanillaProvider(provider)) {
+                overridenBlocks.add(block);
+            }
+            this.blocks.put(block, DefaultColorProviders.adapt(provider));
+        }
+        *///?}
 
         this.overridenBlocks = overridenBlocks;
 
