@@ -142,6 +142,15 @@ tasks.register<ReobfuscateCodeAndMixinsTask>("celeritasRemapJar") {
 
 ShadowHelper.createShadowRemapJar(project, "celeritasRemapJar")
 
+// JOML (and potentially other shaded deps) ship a Java 9 `module-info.class`. Forge 1.12.2's mod scanner uses
+// ASM 5.2, which throws on the module descriptor ("failed to read properly, it will be ignored"). Minecraft 1.12.2
+// runs on Java 8 in classpath mode, so module descriptors are never used — strip them from the shaded jar.
+tasks.named<ShadowJar>("shadowRemapJar") {
+    exclude("module-info.class")
+    exclude("**/module-info.class")
+    exclude("META-INF/versions/**/module-info.class")
+}
+
 tasks.named<ApplySourceAccessTransformersTask>("applySourceAccessTransformers") {
     accessTransformerFiles.from("src/main/resources/META-INF/celeritas_at.cfg")
 }
