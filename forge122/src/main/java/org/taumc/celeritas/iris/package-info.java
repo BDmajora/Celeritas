@@ -37,7 +37,11 @@
  *
  * <h3>Repo-specific notes (differ from the original porting brief)</h3>
  * <ul>
- *   <li>The build uses Jabel, so {@code var}/records/{@code .toList()} compile to Java 8 bytecode and are used freely.</li>
+ *   <li>The build uses Jabel, so modern Java <em>syntax</em> ({@code var}, records, switch expressions, ...) compiles
+ *       to Java 8 bytecode. But forge122 compiles with {@code --release 8}, so Java 9+ <em>library</em> APIs
+ *       ({@code Set.of}, {@code List.of}, {@code Stream.toList()}, ...) are NOT available here — use Java 8
+ *       equivalents (e.g. {@code Arrays.asList}, {@code Collectors.toList()}). Only the bytecode-downgraded
+ *       {@code common} module may use newer library APIs.</li>
  *   <li>All GL access goes through {@code org.taumc.celeritas.lwjgl.*} (LWJGL2/3-compatible), never raw
  *       {@code org.lwjgl.opengl.*}.</li>
  * </ul>

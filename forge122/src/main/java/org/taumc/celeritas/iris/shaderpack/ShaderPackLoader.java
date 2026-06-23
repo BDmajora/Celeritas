@@ -12,7 +12,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -28,9 +31,14 @@ import java.util.zip.ZipInputStream;
  * is a later phase. All keys are made relative to the pack's {@code shaders/} directory.
  */
 public final class ShaderPackLoader {
-    /** File extensions read as GLSL/text. Includes may use any of these. */
-    private static final Set<String> TEXT_EXTENSIONS = Set.of(
-            "vsh", "fsh", "gsh", "tcs", "tes", "glsl", "inc", "properties", "txt");
+    /**
+     * File extensions read as GLSL/text. Includes may use any of these.
+     * <p>
+     * Built with {@code Arrays.asList} rather than {@code Set.of}: forge122 compiles with {@code --release 8}, so
+     * Java 9+ library APIs like {@code Set.of} are unavailable even though Jabel allows modern syntax.
+     */
+    private static final Set<String> TEXT_EXTENSIONS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+            "vsh", "fsh", "gsh", "tcs", "tes", "glsl", "inc", "properties", "txt")));
 
     /** Guard against accidentally slurping a huge file as a string. */
     private static final long MAX_TEXT_FILE_BYTES = 8L * 1024 * 1024;

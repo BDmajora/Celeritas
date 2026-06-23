@@ -15,7 +15,7 @@ written. Everything below was **verified against the actual `Celeritas` source**
 
 | # | Original brief said | Reality in this repo | Impact |
 |---|---|---|---|
-| 1 | "Java 8 — NO `var`, NO `record`, NO text blocks." | Build uses **Jabel** (`sourceCompatibility=21`, `options.release=8`) **+ Lombok**. `var`, records, `.toList()`, text blocks all compile to Java 8 bytecode and are used throughout. | Following the brief would make new code stylistically inconsistent; the real constraint is "Java 8 *bytecode*, Java 21 *syntax*." Match the surrounding code. |
+| 1 | "Java 8 — NO `var`, NO `record`, NO text blocks." | Build uses **Jabel** (`sourceCompatibility=21`, `options.release=8`) **+ Lombok**. Modern *syntax* (`var`, records, text blocks, switch expressions) compiles to Java 8 bytecode. **But** because forge122 uses `--release 8`, Java 9+ *library* APIs (`Set.of`, `List.of`, `Stream.toList()`, `Path.of`, ...) are **not** available in forge122 sources — use Java 8 equivalents (`Arrays.asList`, `Collectors.toList()`). Only the bytecode-downgraded `common` module may use newer library APIs. | The real constraint is "Java 8 *bytecode + library API*, Java 21 *syntax*." Match the surrounding code (e.g. existing forge122 code uses `Collectors.toList()`, never `Set.of`/`.toList()`). |
 | 2 | "Use raw `org.lwjgl.opengl.GL20.*` / `GL30.*` directly." | All GL goes through the Celeritas abstraction **`org.taumc.celeritas.lwjgl.*`**: call functions via `LWJGLServiceProvider.LWJGL` (a `LWJGLService`), constants via generated classes `org.taumc.celeritas.lwjgl.GL11..GL46`. This is what provides LWJGL2/3 compatibility. | Raw LWJGL calls would break the LWJGL3/lwjgl3ify path. **The `LWJGLService` interface currently lacks many functions Iris needs** (see §5.1) and must be extended first. |
 | 3 | "`ChunkShaderTextureService` SPI; replace `VintageChunkShaderTextureService`." | **No such interface exists.** The real chunk-shader API is `ChunkShaderInterface` + `DefaultChunkShaderInterface` + enum `ChunkShaderTextureSlot{BLOCK, LIGHT}` (in `org.embeddedt.embeddium.impl.render.chunk.shader`). | Texture-slot binding for Iris must extend `ChunkShaderTextureSlot` / implement a custom `ChunkShaderInterface`, not a nonexistent service. |
 | 4 | Lists three SPI services incl. `VintageChunkShaderTextureService`, `VintageRenderVisualsService`. | Only real SPI interfaces are **`FogService`** and **`RenderVisualsService`**. The `META-INF/services` entries point at `Vintage*Service` classes that **do not exist in source** (stale). Only `GLStateManagerFogService` exists. | Don't model new code on those names. If `RenderVisualsService` is actually loaded via `ServiceLoader`, its missing impl is a latent runtime bug to be aware of. |
@@ -32,7 +32,8 @@ written. Everything below was **verified against the actual `Celeritas` source**
 
 - **Minecraft:** 1.12.2 (Forge), MCP mappings `stable_39`.
 - **Java:** source level 21 via Jabel, **emitted as Java 8 bytecode** (`options.release = 8`). Lombok is on the
-  annotation-processor path. Use modern syntax freely; do not hand-desugar.
+  annotation-processor path. Use modern *syntax* freely; do not hand-desugar. **But** `--release 8` also pins the
+  *library* API to Java 8 in forge122 — no `Set.of`/`List.of`/`Stream.toList()`/`Path.of`; use Java 8 equivalents.
 - **GL backend:** LWJGL2 by default, LWJGL3 via `legacy-lwjgl3` / RetroFuturaBootstrap. **Always** go through
   `org.taumc.celeritas.lwjgl` (`LWJGLServiceProvider.LWJGL` + `GLxx` constant classes).
 - **Mixins:** SpongePowered Mixin 0.8+ via MixinBooter (`zone.rong:mixinbooter`), MixinExtras available.
@@ -203,7 +204,8 @@ TextureMapMixin for normal/specular atlas stitching).
 
 ## 9. Constraints (corrected)
 
-1. Java 21 syntax → Java 8 bytecode (Jabel + Lombok). Match surrounding code; no manual desugaring.
+1. Java 21 syntax → Java 8 bytecode (Jabel + Lombok). forge122 sources are restricted to Java 8 *library* APIs
+   (`--release 8`); use Java 8 equivalents, not `Set.of`/`List.of`/`.toList()`. Match surrounding code; no manual desugaring.
 2. No Fabric APIs — Forge 1.12.2 + Mixin + the `org.taumc.celeritas.lwjgl` abstraction.
 3. Zero-cost when disabled: no pack ⇒ Celeritas behaves exactly as today (Phase 1 already honors this).
 4. Hot-swappable packs; strict GL-resource cleanup (§5.2).
