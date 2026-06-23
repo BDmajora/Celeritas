@@ -26,6 +26,8 @@ import org.embeddedt.embeddium.impl.gl.device.GLRenderDevice;
 import org.embeddedt.embeddium.impl.gui.SodiumGameOptions;
 import org.taumc.celeritas.impl.command.TogglePassCommand;
 import org.taumc.celeritas.impl.render.terrain.CeleritasWorldRenderer;
+import org.taumc.celeritas.impl.util.PlatformUtil;
+import org.taumc.celeritas.iris.Iris;
 
 @Mod(modid = CeleritasVintage.MODID, useMetadata = true, clientSideOnly = true, acceptableRemoteVersions = "*")
 public class CeleritasVintage {
@@ -47,6 +49,9 @@ public class CeleritasVintage {
             ClientCommandHandler.instance.registerCommand(new TogglePassCommand());
         }
 
+        // Phase 1: load (parse only) the selected shader pack. No rendering changes happen here — if no pack is
+        // selected or loading fails, Celeritas renders exactly as before.
+        Iris.initialize(PlatformUtil.getGameDir().toPath());
     }
 
     @SubscribeEvent

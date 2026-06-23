@@ -4,7 +4,7 @@ import net.minecraftforge.fml.relauncher.IFMLLoadingPlugin;
 import org.jetbrains.annotations.Nullable;
 import zone.rong.mixinbooter.IEarlyMixinLoader;
 
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -38,6 +38,8 @@ public class CeleritasLoadingPlugin implements IFMLLoadingPlugin, IEarlyMixinLoa
 
     @Override
     public List<String> getMixinConfigs() {
-        return Collections.singletonList("mixins.celeritas.json");
+        // The Iris config is currently inert (no mixins yet); registering it here reserves the early-load slot so the
+        // rendering-integration phases can add client mixins without further coremod changes.
+        return Arrays.asList("mixins.celeritas.json", "mixins.iris.json");
     }
 }
