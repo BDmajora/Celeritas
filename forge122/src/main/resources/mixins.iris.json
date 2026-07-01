@@ -4,7 +4,6 @@
   "package": "org.taumc.celeritas.iris.mixin",
   "compatibilityLevel": "JAVA_8",
   "client": [
-    "GuiVideoSettingsMixin"
   ],
   "injectors": {
     "defaultRequire": 1
