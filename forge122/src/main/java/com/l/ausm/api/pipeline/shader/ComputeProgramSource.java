@@ -1,0 +1,32 @@
+package com.l.ausm.api.pipeline.shader;
+import com.github.bsideup.jabel.Desugar;
+
+import com.l.ausm.api.pipeline.fbo.*;
+import com.l.ausm.api.pipeline.shader.*;
+import com.l.ausm.api.pipeline.pack.*;
+
+/**
+ * Parsed identity for an Iris-style compute shader source.
+ */
+@Desugar
+public record ComputeProgramSource(
+        String name,
+        int arrayIndex,
+        String path,
+        String source,
+        int[] workGroups,
+        float[] workGroupRelative,
+        ShaderIndirectPointer indirectPointer
+) {
+    public boolean hasFixedWorkGroups() {
+        return workGroups != null;
+    }
+
+    public boolean hasRelativeWorkGroups() {
+        return workGroupRelative != null;
+    }
+
+    public boolean hasIndirectPointer() {
+        return indirectPointer != null;
+    }
+}

@@ -74,7 +74,9 @@ public class ProgramBuilder {
                     + (log.isEmpty() ? "(no info log)" : log.trim()));
         }
 
-        if (!log.isEmpty()) {
+        // NVIDIA returns a wall of deprecation warnings in the link log for legacy #version 120 packs; only surface
+        // the log when it actually reports an error, otherwise it's just noise.
+        if (!log.isEmpty() && log.toLowerCase(java.util.Locale.ROOT).contains("error")) {
             LOGGER.warn("Program link log for '{}': {}", this.name, log.trim());
         }
 
