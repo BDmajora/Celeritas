@@ -18,6 +18,7 @@ import net.minecraftforge.fml.common.Mod.EventHandler;
 import net.minecraftforge.fml.common.event.FMLConstructionEvent;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.embeddedt.embeddium.impl.common.util.MathUtil;
@@ -52,6 +53,15 @@ public class CeleritasVintage {
         // Phase 1: load (parse only) the selected shader pack. No rendering changes happen here — if no pack is
         // selected or loading fails, Celeritas renders exactly as before.
         Iris.initialize(PlatformUtil.getGameDir().toPath());
+    }
+
+    @SubscribeEvent
+    public void onRenderTick(TickEvent.RenderTickEvent event) {
+        // Render thread with a live GL context: build/rebuild the Iris pipeline the first frame after a pack change.
+        // No-op unless a shader pack was (un)loaded. Safe when Iris is disabled.
+        if (event.phase == TickEvent.Phase.START) {
+            Iris.updatePipeline();
+        }
     }
 
     @SubscribeEvent

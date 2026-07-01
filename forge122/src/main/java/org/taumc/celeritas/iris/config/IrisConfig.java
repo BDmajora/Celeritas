@@ -4,7 +4,12 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
 import java.util.Properties;
+import java.util.stream.Stream;
 
 /**
  * Iris configuration backed by the OptiFine-style {@code optionsshaders.txt} file in the game directory, plus the
@@ -82,5 +87,28 @@ public final class IrisConfig {
     /** Ensures the {@code shaderpacks/} directory exists so users have somewhere to drop packs. */
     public void ensureShaderpacksDirectory() throws IOException {
         Files.createDirectories(this.shaderpacksDirectory);
+    }
+
+    /**
+     * @return the names of every selectable shader pack in {@code shaderpacks/}: sub-directories and {@code .zip}
+     * files, sorted case-insensitively. Never throws — an unreadable directory yields an empty list.
+     */
+    public List<String> listShaderpacks() {
+        List<String> result = new ArrayList<>();
+        if (!Files.isDirectory(this.shaderpacksDirectory)) {
+            return result;
+        }
+        try (Stream<Path> entries = Files.list(this.shaderpacksDirectory)) {
+            entries.forEach(path -> {
+                String name = path.getFileName().toString();
+                if (Files.isDirectory(path) || name.toLowerCase(Locale.ROOT).endsWith(".zip")) {
+                    result.add(name);
+                }
+            });
+        } catch (IOException e) {
+            // Best-effort listing; return whatever we managed to collect.
+        }
+        result.sort(String.CASE_INSENSITIVE_ORDER);
+        return Collections.unmodifiableList(result);
     }
 }

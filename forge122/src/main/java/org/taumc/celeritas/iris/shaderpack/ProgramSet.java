@@ -70,6 +70,31 @@ public final class ProgramSet {
         return this.programArrays.get(id);
     }
 
+    /**
+     * @return every directly-declared (non-fallback) valid program, keyed by its source name (e.g.
+     * {@code gbuffers_terrain}, {@code composite2}). Used by the pipeline to compile the pack's programs.
+     */
+    public Map<String, ProgramSource> collectDeclaredPrograms() {
+        Map<String, ProgramSource> result = new java.util.LinkedHashMap<>();
+        for (Map.Entry<ProgramId, ProgramSource> e : this.programs.entrySet()) {
+            if (e.getValue() != null && e.getValue().isValid()) {
+                result.put(e.getKey().getSourceName(), e.getValue());
+            }
+        }
+        for (Map.Entry<ProgramArrayId, ProgramSource[]> e : this.programArrays.entrySet()) {
+            ProgramSource[] arr = e.getValue();
+            if (arr == null) {
+                continue;
+            }
+            for (int i = 0; i < arr.length; i++) {
+                if (arr[i] != null && arr[i].isValid()) {
+                    result.put(e.getKey().getSourceName(i), arr[i]);
+                }
+            }
+        }
+        return result;
+    }
+
     /** @return the directly-declared (non-fallback) program names, for diagnostics. */
     public List<String> listDeclaredPrograms() {
         List<String> names = new ArrayList<>();

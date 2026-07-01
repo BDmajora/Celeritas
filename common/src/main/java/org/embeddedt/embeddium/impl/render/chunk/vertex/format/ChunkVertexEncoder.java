@@ -23,6 +23,22 @@ public interface ChunkVertexEncoder {
          */
         public int trueNormal;
 
+        // ---- Iris (Celeritas shader pipeline) extended per-vertex data ----
+        // These are only read by an Iris-extended ChunkVertexType/encoder; the default encoders ignore them, so they
+        // are inert (and cost nothing) unless a shader pack is active. Populated by the meshing pipeline only when
+        // Iris is in use. See org.taumc.celeritas.iris.vertices.
+
+        /** {@code mc_midTexCoord.x} — U of the sprite center ({@code (minU+maxU)/2}); NOT an average of quad UVs. */
+        public float midTexU;
+        /** {@code mc_midTexCoord.y} — V of the sprite center ({@code (minV+maxV)/2}). */
+        public float midTexV;
+        /** {@code mc_Entity.x} — block registry id ({@code Block.getIdFromBlock}). */
+        public int blockId;
+        /** {@code mc_Entity.y} — block metadata ({@code Block.getMetaFromState}). */
+        public int blockData;
+        /** {@code at_tangent} — packed tangent (xyz signed bytes + handedness), same packing as a normal. */
+        public int tangent;
+
         public static Vertex[] uninitializedQuad() {
             Vertex[] vertices = new Vertex[4];
 

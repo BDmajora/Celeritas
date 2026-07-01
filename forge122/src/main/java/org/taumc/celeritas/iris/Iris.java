@@ -3,6 +3,7 @@ package org.taumc.celeritas.iris;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.taumc.celeritas.iris.config.IrisConfig;
+import org.taumc.celeritas.iris.pipeline.IrisPipeline;
 import org.taumc.celeritas.iris.shaderpack.ShaderPack;
 import org.taumc.celeritas.iris.shaderpack.ShaderPackLoader;
 
@@ -27,6 +28,10 @@ public final class Iris {
 
     private static IrisConfig config;
     private static ShaderPack currentPack;
+
+    /** The active GL pipeline. Built lazily on the render thread (needs a GL context) from {@link #currentPack}. */
+    private static IrisPipeline pipeline;
+    private static boolean pipelineNeedsInit;
 
     private Iris() {
     }
@@ -86,6 +91,7 @@ public final class Iris {
             }
 
             currentPack = pack;
+            pipelineNeedsInit = true;
             List<String> programs = pack.getProgramSet().listDeclaredPrograms();
             LOGGER.info("Loaded shader pack '{}' with {} program(s): {}", name, programs.size(), programs);
         } catch (Exception e) {
@@ -95,11 +101,46 @@ public final class Iris {
     }
 
     /**
+     * Render-thread hook: builds (or rebuilds) the GL pipeline for the current pack the first frame after a pack
+     * change. Cheap no-op when there is nothing to do. Must be called with a current GL context (e.g. from a
+     * {@code RenderTickEvent}). Never throws — a compile failure disables shaders and logs.
+     */
+    public static synchronized void updatePipeline() {
+        if (!pipelineNeedsInit) {
+            return;
+        }
+        pipelineNeedsInit = false;
+
+        if (pipeline != null) {
+            pipeline.destroy();
+            pipeline = null;
+        }
+
+        if (currentPack == null) {
+            return;
+        }
+
+        try {
+            pipeline = new IrisPipeline(currentPack);
+        } catch (Exception e) {
+            pipeline = null;
+            LOGGER.error("Failed to build Iris pipeline; shaders disabled", e);
+        }
+    }
+
+    /** @return the active GL pipeline, or {@code null} when shaders are disabled or not yet built this frame. */
+    public static IrisPipeline getPipeline() {
+        return pipeline;
+    }
+
+    /**
      * Drops the active pack. Phase 1 simply releases the parsed model; GL resource teardown (the hot-swap cleanup
      * protocol) is wired in once the rendering phases exist.
      */
     public static synchronized void unloadShaderpack() {
         currentPack = null;
+        // GL teardown must run on the render thread; flag a rebuild so updatePipeline() disposes the pipeline there.
+        pipelineNeedsInit = true;
     }
 
     /** @return {@code true} when a shader pack is parsed and active. */
@@ -110,5 +151,33 @@ public final class Iris {
     /** @return the active shader pack, or {@code null} when shaders are disabled. */
     public static ShaderPack getCurrentPack() {
         return currentPack;
+    }
+
+    /** @return the name of the currently selected pack, or the "off" sentinel when none is selected. */
+    public static String getSelectedPackName() {
+        return config == null ? IrisConfig.NO_PACK : config.getShaderPackName();
+    }
+
+    /** @return the names of every pack available under {@code shaderpacks/} (for the selection UI). */
+    public static List<String> listAvailablePacks() {
+        return config == null ? java.util.Collections.emptyList() : config.listShaderpacks();
+    }
+
+    /**
+     * Selects a shader pack by name (or {@link IrisConfig#NO_PACK} to disable), persists the choice to
+     * {@code optionsshaders.txt}, and re-parses it. The GL pipeline is (re)built on the next render frame by
+     * {@link #updatePipeline()}. Safe to call from the client/GUI thread — no GL work happens here.
+     */
+    public static synchronized void setShaderpackAndReload(String name) {
+        if (config == null) {
+            return;
+        }
+        config.setShaderPackName(name);
+        try {
+            config.save();
+        } catch (IOException e) {
+            LOGGER.error("Failed to save shader selection to optionsshaders.txt", e);
+        }
+        loadCurrentShaderpack();
     }
 }
