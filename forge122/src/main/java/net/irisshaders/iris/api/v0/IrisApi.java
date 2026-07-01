@@ -22,7 +22,9 @@ public class IrisApi {
     }
 
     public boolean isShaderPackInUse() {
-        return Iris.isShaderPackInUse();
+        // Reflect the grafted AUSM pipeline's state (the menu drives AUSM's ShaderPackManager).
+        com.l.ausm.impl.pipeline.pack.ShaderPackManager manager = com.l.ausm.impl.MainMod.getShaderPackManager();
+        return manager != null && manager.areShadersEnabled();
     }
 
     /**

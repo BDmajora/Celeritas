@@ -1,23 +1,25 @@
 package org.taumc.celeritas.iris.gui;
 
+import com.l.ausm.impl.MainMod;
+import com.l.ausm.impl.pipeline.pack.ShaderPackManager;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
-import org.taumc.celeritas.iris.Iris;
-import org.taumc.celeritas.iris.config.IrisConfig;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A minimal in-game shader-pack selector (OptiFine's "Shaders" screen, trimmed to essentials): lists the packs found
- * in {@code shaderpacks/} plus an "off" entry, applies the choice immediately (persisting to
- * {@code optionsshaders.txt} and re-parsing the pack), and lets the user reload the current pack while iterating.
+ * In-game shader-pack selector, reachable from Celeritas' video-options "Shader Packs" tab (via
+ * {@code ShaderModBridge}/{@code IrisApi}). This drives the grafted <b>AUSM</b> pipeline directly through
+ * {@link ShaderPackManager}: it lists the packs AUSM knows about, and selecting one loads + enables it (compiling the
+ * pipeline) and reloads the chunk renderers — exactly the sequence AUSM's own screen uses, so a single click both
+ * applies and enables.
  * <p>
- * Built on plain {@link GuiScreen}/{@link GuiButton} only (no Forge {@code GuiScrollingList}) with simple paging, so
- * there are no unverified GUI-API assumptions. The GL pipeline rebuild happens on the next render frame via
- * {@link Iris#updatePipeline()}, so selecting a pack here surfaces the compile log without a restart.
+ * Selecting "OFF" disables shaders and restores stock Celeritas rendering.
  */
 public class GuiSelectShaderPack extends GuiScreen {
+    private static final String OFF = "OFF";
     private static final int VISIBLE_PER_PAGE = 12;
     private static final int ID_DONE = 1;
     private static final int ID_PREV = 2;
@@ -33,27 +35,37 @@ public class GuiSelectShaderPack extends GuiScreen {
         this.parent = parent;
     }
 
+    private static ShaderPackManager manager() {
+        return MainMod.getShaderPackManager();
+    }
+
     @Override
     public void initGui() {
         this.buttonList.clear();
 
+        ShaderPackManager manager = manager();
         this.entries = new ArrayList<>();
-        this.entries.add(IrisConfig.NO_PACK);
-        this.entries.addAll(Iris.listAvailablePacks());
+        if (manager != null) {
+            this.entries.addAll(manager.getAvailablePacks()); // already includes "OFF" first
+        } else {
+            this.entries.add(OFF);
+        }
 
         int totalPages = Math.max(1, (int) Math.ceil(this.entries.size() / (double) VISIBLE_PER_PAGE));
         this.page = Math.max(0, Math.min(this.page, totalPages - 1));
 
         int start = this.page * VISIBLE_PER_PAGE;
         int end = Math.min(this.entries.size(), start + VISIBLE_PER_PAGE);
-        String selected = Iris.getSelectedPackName();
+        String selected = manager != null ? manager.getSelectedPackName() : OFF;
+        boolean enabled = manager != null && manager.areShadersEnabled();
 
         int y = 32;
         for (int i = start; i < end; i++) {
             String name = this.entries.get(i);
             String label = displayName(name);
-            if (selected.equals(name)) {
-                label = "§a" + label; // highlight the active selection in green
+            boolean isActive = name.equals(selected) && (OFF.equals(name) ? !enabled : enabled);
+            if (isActive) {
+                label = "§a" + label; // green highlight on the active selection
             }
             this.buttonList.add(new GuiButton(ID_ENTRY_BASE + (i - start), this.width / 2 - 155, y, 310, 20, label));
             y += 22;
@@ -73,11 +85,12 @@ public class GuiSelectShaderPack extends GuiScreen {
     }
 
     private static String displayName(String name) {
-        return IrisConfig.NO_PACK.equals(name) ? "(shaders off — vanilla Celeritas)" : name;
+        return OFF.equals(name) ? "(shaders off - vanilla Celeritas)" : name;
     }
 
     @Override
     protected void actionPerformed(GuiButton button) {
+        ShaderPackManager manager = manager();
         switch (button.id) {
             case ID_DONE:
                 this.mc.displayGuiScreen(this.parent);
@@ -91,18 +104,37 @@ public class GuiSelectShaderPack extends GuiScreen {
                 initGui();
                 break;
             case ID_RELOAD:
-                Iris.loadCurrentShaderpack();
+                if (manager != null) {
+                    manager.reloadPack();
+                    reloadRenderers();
+                }
                 initGui();
                 break;
             default:
-                if (button.id >= ID_ENTRY_BASE) {
+                if (button.id >= ID_ENTRY_BASE && manager != null) {
                     int index = this.page * VISIBLE_PER_PAGE + (button.id - ID_ENTRY_BASE);
                     if (index >= 0 && index < this.entries.size()) {
-                        Iris.setShaderpackAndReload(this.entries.get(index));
+                        applyPack(manager, this.entries.get(index));
                         initGui();
                     }
                 }
                 break;
+        }
+    }
+
+    /** Selects + enables a pack in one click (or disables for "OFF"), matching AUSM's apply-then-enable flow. */
+    private void applyPack(ShaderPackManager manager, String name) {
+        manager.loadPack(name);
+        if (!OFF.equals(name)) {
+            manager.setShadersEnabled(true);
+        }
+        reloadRenderers();
+    }
+
+    private void reloadRenderers() {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc.renderGlobal != null) {
+            mc.renderGlobal.loadRenderers();
         }
     }
 
