@@ -40,6 +40,7 @@ public class CeleritasLoadingPlugin implements IFMLLoadingPlugin, IEarlyMixinLoa
     public List<String> getMixinConfigs() {
         // The Iris config is currently inert (no mixins yet); registering it here reserves the early-load slot so the
         // rendering-integration phases can add client mixins without further coremod changes.
-        return Arrays.asList("mixins.celeritas.json", "mixins.iris.json");
+        // mixins.ausm.json activates the grafted AUSM shader pipeline's render hooks (non-fatal: defaultRequire=0).
+        return Arrays.asList("mixins.celeritas.json", "mixins.iris.json", "mixins.ausm.json");
     }
 }

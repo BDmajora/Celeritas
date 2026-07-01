@@ -12,5 +12,17 @@
     "logoFile": "icon.png",
     "screenshots": [],
     "dependencies": []
+  },
+  {
+    "modid": "ausm",
+    "name": "Actually Usable Shader Mod (Celeritas graft)",
+    "description": "Iris-style shader pipeline (from AUSM by MtcLuna05, LGPLv3) grafted into Celeritas.",
+    "version": "1.0.4",
+    "mcversion": "1.12.2",
+    "url": "https://github.com/MtcLuna05/AUSM",
+    "authorList": ["MtcLuna05"],
+    "credits": "AUSM / Iris",
+    "screenshots": [],
+    "dependencies": []
   }
 ]
