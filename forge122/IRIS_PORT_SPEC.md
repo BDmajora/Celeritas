@@ -1,8 +1,30 @@
 # Iris-on-Celeritas (1.12.2) — Porting Spec
 
-> **Status:** Phase 1 (Foundation) complete. Shader-pack loading & parsing implemented under
-> `forge122/src/main/java/org/taumc/celeritas/iris/`. **No rendering behavior changes yet** — with no pack selected,
-> Celeritas renders identically to before.
+> **Status:** Phase 1 (Foundation) complete + **Phase 2 GL foundation complete (compiles green)**.
+> The reference source for the port is now **OptiFine 1.12.2 HD U C6 `shadersmod`** (the real 1.12.2 shader
+> implementation packs are written against), combined with the `modern/` module's Iris↔Sodium compat layer for the
+> Embeddium terrain integration. **No rendering behavior changes yet** — with no pack selected, Celeritas renders
+> identically to before.
+>
+> **Done in Phase 2 so far (all under `forge122/.../iris/`, all going through the `org.taumc.celeritas.lwjgl`
+> abstraction, verified with `:forge122:compileJava`):**
+> - **`LWJGLService` extended** (interface + LWJGL2 + LWJGL3 impls): `glTexImage2D`, `glTexParameteri/f`,
+>   `glDrawBuffers(int|IntBuffer)`, `glReadBuffer`, `glBlitFramebuffer`, `glGen/Bind/Delete/RenderbufferStorage/
+>   FramebufferRenderbuffer`, `glClearDepth`, `glCullFace`, `glDrawArrays`, `glDetachShader`, `glUniform2f/4f/4i`.
+> - **`gl/` — program layer:** `GlResource`, `shader/{ShaderType,GlShader,ShaderCompileException}`,
+>   `program/{GlProgram,ProgramBuilder,ProgramCreationException}`.
+> - **`gl/uniform/` — uniform layer:** `Uniform` + `Float/Int/Vector2Int/Vector3/Vector4/Matrix` uniforms,
+>   `FloatSupplier`, `UniformUpdateFrequency`; `gl/program/ProgramUniforms` (+ `Builder`) with per-value diffing.
+> - **`gl/texture/` + `targets/` — FBO/render targets:** `InternalTextureFormat` (full OptiFine format set),
+>   `gl/framebuffer/IrisFramebuffer` (up to 8 color attachments, draw/read masks), `IrisRenderTarget` (main+alt
+>   ping-pong), `DepthTexture`, `BufferFlipper`, `IrisRenderTargets` pool (8 colortex + depthtex0/1/2).
+> - **Program compiler bridge:** `gl/shader/ShaderMacros` (OptiFine `MC_*` defines), `gl/program/DrawBuffers`
+>   (`DRAWBUFFERS`/`RENDERTARGETS` parsing), `gl/program/{IrisProgram,ShaderProgramCompiler}`,
+>   `vertices/IrisVertexAttributes` (`mc_Entity`=10, `mc_midTexCoord`=11, `at_tangent`=12).
+>
+> **Not yet wired (needs an in-game GL context to iterate):** deferred program compilation on pack load, the
+> `ChunkBuilderMeshingTask` vertex-format extension, terrain draw replacement in `RenderGlobalMixin`, the
+> `EntityRenderer.renderWorld` frame hooks, and the shadow/composite/final pass execution. See §8.
 
 This document supersedes the original "Port the Iris Shaders mod to Minecraft 1.12.2" brief. That brief was written
 without access to the real codebase and contained a number of concrete inaccuracies that would not compile or run as

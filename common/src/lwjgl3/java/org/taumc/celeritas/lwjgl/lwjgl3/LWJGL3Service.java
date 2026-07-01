@@ -343,6 +343,11 @@ public record LWJGL3Service(
     }
 
     @Override
+    public void glDetachShader(int program, int shader) {
+        GL20C.glDetachShader(program, shader);
+    }
+
+    @Override
     public void glLinkProgram(int program) {
         GL20C.glLinkProgram(program);
     }
@@ -412,6 +417,21 @@ public record LWJGL3Service(
     @Override
     public void glUniform2i(int location, int v0, int v1) {
         GL20C.glUniform2i(location, v0, v1);
+    }
+
+    @Override
+    public void glUniform2f(int location, float v0, float v1) {
+        GL20C.glUniform2f(location, v0, v1);
+    }
+
+    @Override
+    public void glUniform4f(int location, float v0, float v1, float v2, float v3) {
+        GL20C.glUniform4f(location, v0, v1, v2, v3);
+    }
+
+    @Override
+    public void glUniform4i(int location, int v0, int v1, int v2, int v3) {
+        GL20C.glUniform4i(location, v0, v1, v2, v3);
     }
 
     @Override
@@ -607,6 +627,21 @@ public record LWJGL3Service(
         GL11C.glPixelStorei(pname, param);
     }
 
+    @Override
+    public void glTexImage2D(int target, int level, int internalformat, int width, int height, int border, int format, int type, ByteBuffer pixels) {
+        GL11C.glTexImage2D(target, level, internalformat, width, height, border, format, type, pixels);
+    }
+
+    @Override
+    public void glTexParameteri(int target, int pname, int param) {
+        GL11C.glTexParameteri(target, pname, param);
+    }
+
+    @Override
+    public void glTexParameterf(int target, int pname, float param) {
+        GL11C.glTexParameterf(target, pname, param);
+    }
+
     // ===================== FRAMEBUFFER OPERATIONS =====================
 
     @Override
@@ -632,6 +667,51 @@ public record LWJGL3Service(
     @Override
     public void glFramebufferTexture2D(int target, int attachment, int textarget, int texture, int level) {
         GL30C.glFramebufferTexture2D(target, attachment, textarget, texture, level);
+    }
+
+    @Override
+    public void glDrawBuffers(int buf) {
+        GL20C.glDrawBuffers(buf);
+    }
+
+    @Override
+    public void glDrawBuffers(IntBuffer bufs) {
+        GL20C.glDrawBuffers(bufs);
+    }
+
+    @Override
+    public void glReadBuffer(int mode) {
+        GL11C.glReadBuffer(mode);
+    }
+
+    @Override
+    public void glBlitFramebuffer(int srcX0, int srcY0, int srcX1, int srcY1, int dstX0, int dstY0, int dstX1, int dstY1, int mask, int filter) {
+        GL30C.glBlitFramebuffer(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter);
+    }
+
+    @Override
+    public int glGenRenderbuffers() {
+        return GL30C.glGenRenderbuffers();
+    }
+
+    @Override
+    public void glDeleteRenderbuffers(int renderbuffer) {
+        GL30C.glDeleteRenderbuffers(renderbuffer);
+    }
+
+    @Override
+    public void glBindRenderbuffer(int target, int renderbuffer) {
+        GL30C.glBindRenderbuffer(target, renderbuffer);
+    }
+
+    @Override
+    public void glRenderbufferStorage(int target, int internalformat, int width, int height) {
+        GL30C.glRenderbufferStorage(target, internalformat, width, height);
+    }
+
+    @Override
+    public void glFramebufferRenderbuffer(int target, int attachment, int renderbuffertarget, int renderbuffer) {
+        GL30C.glFramebufferRenderbuffer(target, attachment, renderbuffertarget, renderbuffer);
     }
 
     // ===================== STATE OPERATIONS =====================
@@ -684,6 +764,21 @@ public record LWJGL3Service(
     @Override
     public void glClearColor(float red, float green, float blue, float alpha) {
         GL11C.glClearColor(red, green, blue, alpha);
+    }
+
+    @Override
+    public void glClearDepth(double depth) {
+        GL11C.glClearDepth(depth);
+    }
+
+    @Override
+    public void glCullFace(int mode) {
+        GL11C.glCullFace(mode);
+    }
+
+    @Override
+    public void glDrawArrays(int mode, int first, int count) {
+        GL11C.glDrawArrays(mode, first, count);
     }
 
     @Override
