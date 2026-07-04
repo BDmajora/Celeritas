@@ -29,6 +29,7 @@ import org.taumc.celeritas.iris.targets.IrisRenderTargets;
 import org.taumc.celeritas.iris.targets.NoiseTexture;
 import org.taumc.celeritas.iris.terrain.FullscreenTransformer;
 import org.taumc.celeritas.iris.uniforms.CapturedRenderingState;
+import org.taumc.celeritas.iris.uniforms.CelestialUniforms;
 import org.taumc.celeritas.iris.uniforms.CommonUniforms;
 import org.taumc.celeritas.iris.uniforms.EyeBrightnessTracker;
 import org.taumc.celeritas.iris.uniforms.MatrixUniforms;
@@ -309,11 +310,6 @@ public class IrisRenderingPipeline {
      * and {@code shadowDistance} parsed from the OptiFine const directives anywhere in the pack sources.
      */
     private IrisShadowRenderer createShadowRenderer(ShaderPack pack) {
-        Optional<ProgramSource> shadowSource = pack.getProgramSet().get(ProgramId.Shadow);
-        if (!shadowSource.isPresent()) {
-            LOGGER.info("[Iris] Pack declares no shadow program; shadow mapping disabled (always-lit stub in use)");
-            return null;
-        }
         StringBuilder allSources = new StringBuilder();
         for (ProgramId id : new ProgramId[]{ProgramId.Shadow, ProgramId.Terrain, ProgramId.Water, ProgramId.Final}) {
             pack.getProgramSet().get(id).ifPresent(source -> {
@@ -322,10 +318,21 @@ public class IrisRenderingPipeline {
             });
         }
         String text = allSources.toString();
+
+        // Tilt of the sun/moon's daily arc. Needed by the celestial-position uniforms whether or not the pack draws
+        // shadows, so set it before the no-shadow early-out.
+        float sunPathRotation = parseConstFloat(text, "sunPathRotation", 0.0f);
+        CelestialUniforms.setSunPathRotation(sunPathRotation);
+
+        Optional<ProgramSource> shadowSource = pack.getProgramSet().get(ProgramId.Shadow);
+        if (!shadowSource.isPresent()) {
+            LOGGER.info("[Iris] Pack declares no shadow program; shadow mapping disabled (always-lit stub in use)");
+            return null;
+        }
         int resolution = parseConstInt(text, "shadowMapResolution", 1024);
         float distance = parseConstFloat(text, "shadowDistance", 120.0f);
         try {
-            return new IrisShadowRenderer(resolution, distance);
+            return new IrisShadowRenderer(resolution, distance, sunPathRotation);
         } catch (Exception e) {
             LOGGER.error("[Iris] Failed to create the shadow renderer; shadows disabled", e);
             return null;
@@ -338,7 +345,8 @@ public class IrisRenderingPipeline {
     }
 
     private static float parseConstFloat(String text, String name, float fallback) {
-        Matcher matcher = Pattern.compile("const\\s+float\\s+" + name + "\\s*=\\s*([0-9]+(?:\\.[0-9]+)?)").matcher(text);
+        // Allow a leading sign (sunPathRotation is often negative) and an optional f/F suffix (e.g. -40.0f).
+        Matcher matcher = Pattern.compile("const\\s+float\\s+" + name + "\\s*=\\s*(-?[0-9]+(?:\\.[0-9]+)?)[fF]?").matcher(text);
         return matcher.find() ? Float.parseFloat(matcher.group(1)) : fallback;
     }
 

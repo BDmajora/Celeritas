@@ -38,6 +38,7 @@ public class IrisShadowRenderer {
 
     private final int resolution;
     private final float halfPlaneLength;
+    private final float sunPathRotation;
     private final float intervalSize = 2.0f;
 
     private final DepthTexture depthTexture;
@@ -50,9 +51,10 @@ public class IrisShadowRenderer {
     private final Matrix4f shadowModelView = new Matrix4f();
     private final Matrix4f shadowProjection = new Matrix4f();
 
-    public IrisShadowRenderer(int resolution, float shadowDistance) {
+    public IrisShadowRenderer(int resolution, float shadowDistance, float sunPathRotation) {
         this.resolution = resolution;
         this.halfPlaneLength = shadowDistance;
+        this.sunPathRotation = sunPathRotation;
 
         this.depthTexture = new DepthTexture(resolution, resolution,
                 GL14.GL_DEPTH_COMPONENT24, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT);
@@ -156,27 +158,47 @@ public class IrisShadowRenderer {
     }
 
     /**
-     * The Iris shadow camera: ortho half-extent {@code shadowDistance}, view = translate back 100, look straight down,
-     * spin by the shadow angle, then snap to the world interval grid (geometry is camera-relative, so only the
-     * fractional camera offset is needed).
+     * The Iris shadow camera, a verbatim port of {@code net.coderbot.iris.shadow.ShadowMatrices}
+     * ({@code createModelViewMatrix} = {@code createBaselineModelViewMatrix} + {@code snapModelViewToGrid}) and
+     * {@code createOrthoMatrix}. Mojang {@code PoseStack.multiply}/{@code mulPose} post-multiply, matching JOML's
+     * {@code translate}/{@code rotate*}; {@code Vector3f.XP/ZP.rotationDegrees(d)} == {@code rotateX/Z(toRadians(d))}.
+     * The grid snap (offset by the fractional camera position, centred by half a cell) is what keeps shadow-map
+     * texels from swimming as the camera moves — the previous hand-rolled snap omitted the centring and had the wrong
+     * sign, which is what made the shadows flicker.
      */
     private void computeMatrices() {
+        // ShadowMatrices.createOrthoMatrix(halfPlaneLength): JOML setOrtho produces the identical matrix
+        // (z-scale 2/(NEAR-FAR), z-translate -(FAR+NEAR)/(FAR-NEAR)) for NEAR=0.05, FAR=256.
         this.shadowProjection.identity().setOrtho(
                 -this.halfPlaneLength, this.halfPlaneLength,
                 -this.halfPlaneLength, this.halfPlaneLength,
                 0.05f, 256.0f);
 
+        // ---- createBaselineModelViewMatrix(target, shadowAngle, sunPathRotation) ----
         float shadowAngle = CelestialUniforms.getShadowAngle();
-        Vector3d camera = CapturedRenderingState.INSTANCE.getCameraPosition();
+        float skyAngle;
+        if (shadowAngle < 0.25f) {
+            skyAngle = shadowAngle + 0.75f;
+        } else {
+            skyAngle = shadowAngle - 0.25f;
+        }
 
         this.shadowModelView.identity()
                 .translate(0.0f, 0.0f, -100.0f)
-                .rotateX((float) Math.toRadians(90.0))
-                .rotateZ((float) Math.toRadians(shadowAngle * -360.0f))
-                .translate(
-                        (float) -(camera.x % this.intervalSize),
-                        (float) -(camera.y % this.intervalSize),
-                        (float) -(camera.z % this.intervalSize));
+                .rotateX((float) Math.toRadians(90.0f))
+                .rotateZ((float) Math.toRadians(skyAngle * -360.0f))
+                .rotateX((float) Math.toRadians(this.sunPathRotation));
+
+        // ---- snapModelViewToGrid(target, intervalSize, cameraX, cameraY, cameraZ) ----
+        Vector3d camera = CapturedRenderingState.INSTANCE.getCameraPosition();
+        float offsetX = (float) (camera.x % this.intervalSize);
+        float offsetY = (float) (camera.y % this.intervalSize);
+        float offsetZ = (float) (camera.z % this.intervalSize);
+        float halfIntervalSize = this.intervalSize / 2.0f;
+        offsetX -= halfIntervalSize;
+        offsetY -= halfIntervalSize;
+        offsetZ -= halfIntervalSize;
+        this.shadowModelView.translate(offsetX, offsetY, offsetZ);
     }
 
     public Matrix4f getShadowModelView() {

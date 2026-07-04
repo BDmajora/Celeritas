@@ -50,6 +50,10 @@ public final class CommonUniforms {
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "viewHeight", CommonUniforms::getViewHeight)
                 .uniform1f(UniformUpdateFrequency.ONCE, "near", () -> 0.05f)
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "far", CommonUniforms::getFar)
+                // Distant Horizons / voxelization render distances. We ship neither, so report "absent" (0) — modern
+                // packs (Complementary) gate on these and fall back to `far`. Present so their shaders link.
+                .uniform1i(UniformUpdateFrequency.ONCE, "dhRenderDistance", () -> 0)
+                .uniform1i(UniformUpdateFrequency.ONCE, "vxRenderDistance", () -> 0)
                 .uniform3f(UniformUpdateFrequency.PER_FRAME, "fogColor", CapturedRenderingState.INSTANCE::getFogColor)
                 .uniform3f(UniformUpdateFrequency.PER_FRAME, "skyColor", CommonUniforms::getSkyColor)
                 .uniform2i(UniformUpdateFrequency.PER_FRAME, "eyeBrightness", EyeBrightnessTracker::getEyeBrightness)

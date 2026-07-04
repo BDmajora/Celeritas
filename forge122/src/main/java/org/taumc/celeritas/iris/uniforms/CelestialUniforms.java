@@ -22,7 +22,22 @@ import org.taumc.celeritas.iris.gl.uniform.UniformUpdateFrequency;
  * so they only carry real values once the {@code EntityRenderer} mixin has captured the frame's matrices.
  */
 public final class CelestialUniforms {
+    /**
+     * The pack's {@code sunPathRotation} (degrees), tilting the sun/moon's daily arc off the vertical. Applied to the
+     * celestial positions here <em>and</em> to the shadow model-view in {@link org.taumc.celeritas.iris.pipeline.IrisShadowRenderer}
+     * so the shadows stay aligned with the lit side. Set once when a pack is loaded; 0 (untilted) until then.
+     */
+    private static volatile float sunPathRotation = 0.0f;
+
     private CelestialUniforms() {
+    }
+
+    public static void setSunPathRotation(float degrees) {
+        sunPathRotation = degrees;
+    }
+
+    public static float getSunPathRotation() {
+        return sunPathRotation;
     }
 
     public static void addCelestialUniforms(ProgramUniforms.Builder uniforms) {
@@ -59,7 +74,10 @@ public final class CelestialUniforms {
     private static Vector3f getCelestialPosition(float y) {
         Vector4f position = new Vector4f(0.0f, y, 0.0f, 0.0f);
         Matrix4f celestial = new Matrix4f(CapturedRenderingState.INSTANCE.getGbufferModelView());
+        // renderSky's transform, plus the pack's sunPathRotation (Iris applies it as a Z-rotation between the fixed
+        // -90 Y-rotation and the time-of-day X-rotation).
         celestial.rotateY((float) Math.toRadians(-90.0));
+        celestial.rotateZ((float) Math.toRadians(sunPathRotation));
         celestial.rotateX((float) Math.toRadians(getCelestialAngle() * 360.0f));
         celestial.transform(position);
         return new Vector3f(position.x, position.y, position.z);
