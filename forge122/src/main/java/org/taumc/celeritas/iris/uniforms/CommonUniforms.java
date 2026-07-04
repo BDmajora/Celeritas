@@ -1,13 +1,22 @@
 package org.taumc.celeritas.iris.uniforms;
 
+import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.MobEffects;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
+import org.joml.Vector3f;
 import org.taumc.celeritas.iris.gl.program.ProgramUniforms;
 import org.taumc.celeritas.iris.gl.uniform.UniformUpdateFrequency;
+import org.taumc.celeritas.lwjgl.GL11;
+
+import static org.taumc.celeritas.lwjgl.LWJGLServiceProvider.LWJGL;
 
 /**
  * Registers the OptiFine 1.12.2 "common" uniforms — the ones that are a direct read of world/player/display state.
@@ -40,7 +49,77 @@ public final class CommonUniforms {
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "viewWidth", CommonUniforms::getViewWidth)
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "viewHeight", CommonUniforms::getViewHeight)
                 .uniform1f(UniformUpdateFrequency.ONCE, "near", () -> 0.05f)
-                .uniform1f(UniformUpdateFrequency.PER_FRAME, "far", CommonUniforms::getFar);
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "far", CommonUniforms::getFar)
+                .uniform3f(UniformUpdateFrequency.PER_FRAME, "fogColor", CapturedRenderingState.INSTANCE::getFogColor)
+                .uniform3f(UniformUpdateFrequency.PER_FRAME, "skyColor", CommonUniforms::getSkyColor)
+                .uniform2i(UniformUpdateFrequency.PER_FRAME, "eyeBrightness", EyeBrightnessTracker::getEyeBrightness)
+                .uniform2i(UniformUpdateFrequency.PER_FRAME, "eyeBrightnessSmooth", EyeBrightnessTracker::getEyeBrightnessSmooth)
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "wetness", EyeBrightnessTracker::getWetness)
+                .uniform1i(UniformUpdateFrequency.PER_FRAME, "fogMode", CommonUniforms::getFogMode)
+                .uniform1i(UniformUpdateFrequency.PER_FRAME, "heldItemId", CommonUniforms::getHeldItemId)
+                .uniform1i(UniformUpdateFrequency.PER_FRAME, "heldBlockLightValue", CommonUniforms::getHeldBlockLightValue)
+                .uniform1i(UniformUpdateFrequency.PER_FRAME, "heldItemId2", CommonUniforms::getHeldItemId2)
+                .uniform1i(UniformUpdateFrequency.PER_FRAME, "heldBlockLightValue2", CommonUniforms::getHeldBlockLightValue2)
+                .uniform1i(UniformUpdateFrequency.PER_FRAME, "hideGUI",
+                        () -> Minecraft.getMinecraft().gameSettings.hideGUI ? 1 : 0)
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "screenBrightness",
+                        () -> Minecraft.getMinecraft().gameSettings.gammaSetting)
+                .uniform2i(UniformUpdateFrequency.PER_FRAME, "atlasSize", CapturedRenderingState.INSTANCE::getAtlasSize)
+                .uniform2i(UniformUpdateFrequency.PER_FRAME, "terrainTextureSize", CapturedRenderingState.INSTANCE::getAtlasSize);
+    }
+
+    /**
+     * The fixed-function fog mode (LINEAR/EXP/EXP2), or 0 while fog is disabled — read live from GL state like
+     * OptiFine, so each program bound mid-frame sees the fog vanilla configured for that stage.
+     */
+    private static int getFogMode() {
+        return LWJGL.glGetInteger(GL11.GL_FOG) != 0 ? LWJGL.glGetInteger(GL11.GL_FOG_MODE) : 0;
+    }
+
+    private static ItemStack heldItem() {
+        EntityPlayer player = Minecraft.getMinecraft().player;
+        return player == null ? ItemStack.EMPTY : player.getHeldItemMainhand();
+    }
+
+    private static int getHeldItemId() {
+        ItemStack stack = heldItem();
+        return stack.isEmpty() ? -1 : Item.getIdFromItem(stack.getItem());
+    }
+
+    private static int getHeldBlockLightValue() {
+        return blockLightValue(heldItem());
+    }
+
+    private static ItemStack offhandItem() {
+        EntityPlayer player = Minecraft.getMinecraft().player;
+        return player == null ? ItemStack.EMPTY : player.getHeldItemOffhand();
+    }
+
+    private static int getHeldItemId2() {
+        ItemStack stack = offhandItem();
+        return stack.isEmpty() ? -1 : Item.getIdFromItem(stack.getItem());
+    }
+
+    private static int getHeldBlockLightValue2() {
+        return blockLightValue(offhandItem());
+    }
+
+    private static int blockLightValue(ItemStack stack) {
+        if (stack.isEmpty()) {
+            return 0;
+        }
+        Block block = Block.getBlockFromItem(stack.getItem());
+        return block.getDefaultState().getLightValue();
+    }
+
+    private static Vector3f getSkyColor() {
+        World world = world();
+        Entity camera = Minecraft.getMinecraft().getRenderViewEntity();
+        if (world == null || camera == null) {
+            return new Vector3f();
+        }
+        Vec3d sky = world.getSkyColor(camera, CapturedRenderingState.INSTANCE.getTickDelta());
+        return new Vector3f((float) sky.x, (float) sky.y, (float) sky.z);
     }
 
     private static World world() {

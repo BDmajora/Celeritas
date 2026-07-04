@@ -161,6 +161,30 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
                 vertex.vanillaNormal = trueNormal;
                 vertex.trueNormal = trueNormal;
             }
+            if (org.taumc.celeritas.iris.terrain.IrisTerrainProgramOverride.areShadersActive()) {
+                // OptiFine extended attributes for the vanilla-sourced path (fluids etc.). No block state is
+                // available here, so mc_Entity stays zero; mid-tex and tangent are derivable.
+                float midU = 0.0f, midV = 0.0f;
+                if (sprite != null) {
+                    midU = (sprite.getMinU() + sprite.getMaxU()) * 0.5f;
+                    midV = (sprite.getMinV() + sprite.getMaxV()) * 0.5f;
+                }
+                int tangent = org.taumc.celeritas.iris.vertices.NormalHelper.computeTangent(
+                        org.taumc.celeritas.iris.vertices.NormI8.unpackX(trueNormal),
+                        org.taumc.celeritas.iris.vertices.NormI8.unpackY(trueNormal),
+                        org.taumc.celeritas.iris.vertices.NormI8.unpackZ(trueNormal),
+                        quad[0].x, quad[0].y, quad[0].z, quad[0].u, quad[0].v,
+                        quad[1].x, quad[1].y, quad[1].z, quad[1].u, quad[1].v,
+                        quad[2].x, quad[2].y, quad[2].z, quad[2].u, quad[2].v);
+                for (int v = 0; v < 4; v++) {
+                    var vertex = quad[v];
+                    vertex.midTexU = midU;
+                    vertex.midTexV = midV;
+                    vertex.tangent = tangent;
+                    vertex.blockId = 0;
+                    vertex.blockData = 0;
+                }
+            }
             ModelQuadFacing facing = QuadUtil.findNormalFace(trueNormal);
             Material correctMaterial = selectMaterial(material, sprite);
             buffers.get(correctMaterial).getVertexBuffer(facing).push(quad, correctMaterial);

@@ -5,60 +5,56 @@ import org.embeddedt.embeddium.impl.gl.attribute.GlVertexFormat;
 import org.embeddedt.embeddium.impl.render.chunk.vertex.format.ChunkVertexEncoder;
 import org.embeddedt.embeddium.impl.render.chunk.vertex.format.ChunkVertexType;
 
-import java.util.Map;
-
 import static org.taumc.celeritas.lwjgl.LWJGLServiceProvider.LWJGL;
 
 /**
- * The terrain vertex format used when a shader pack is active: Embeddium's compact 20-byte layout with the three
- * OptiFine per-vertex attributes appended — {@code mc_midTexCoord} (vec2), {@code at_tangent} (packed vec4), and
- * {@code mc_Entity} (vec2). Position/color/uv/light are byte-identical to {@code CompactChunkVertex} so the same
- * decode prologue works; the extra data comes from the meshing pipeline (see {@link ExtendedDataHelper}/
- * {@link NormalHelper}).
- * <p>
- * This type is only selected while shaders are loaded (Task #6 flips {@code CeleritasWorldRenderer.chooseVertexType}),
- * so the wider stride never costs anything when shaders are off.
+ * The terrain vertex format used while a shader pack is active: byte-identical to
+ * {@code VanillaLikeChunkVertex} (float position, byte color, float UV, packed light/draw-params — the layout
+ * {@code EmbeddiumTerrainTransformer}'s prologue decodes) with the OptiFine per-vertex attributes appended:
+ * the true face normal ({@code gl_Normal}), {@code at_tangent}, {@code mc_midTexCoord} (sprite center in atlas UV),
+ * and {@code mc_Entity} (block id + metadata). The extra data comes straight off
+ * {@link ChunkVertexEncoder.Vertex}'s Iris fields, which the meshing pipeline populates when shaders are on.
+ * Only selected by {@code CeleritasWorldRenderer.chooseVertexType} while a pack is loaded, so the wider stride
+ * costs nothing otherwise.
  */
 public class IrisChunkVertexType implements ChunkVertexType {
-    public static final int STRIDE = 40;
+    public static final IrisChunkVertexType INSTANCE = new IrisChunkVertexType();
 
-    // Offsets after the 20-byte compact base.
-    private static final int OFFSET_MID_TEX = 20; // 2 x float
-    private static final int OFFSET_TANGENT = 28; // 4 x byte (packed, normalized)
-    private static final int OFFSET_ENTITY = 32;  // 2 x float
+    public static final int STRIDE = 52;
+
+    // Offsets after the 28-byte vanilla-like base.
+    private static final int OFFSET_NORMAL = 28;   // NormI8-packed face normal (4 normalized signed bytes)
+    private static final int OFFSET_TANGENT = 32;  // NormI8-packed tangent, w = handedness
+    private static final int OFFSET_MID_TEX = 36;  // 2 x float, sprite center in atlas UV space
+    private static final int OFFSET_ENTITY = 44;   // 2 x float, (block id, metadata)
 
     public static final GlVertexFormat VERTEX_FORMAT = GlVertexFormat.builder(STRIDE)
-            .addElement("a_PosId", 0, GlVertexAttributeFormat.UNSIGNED_SHORT, 4, false, true)
-            .addElement("a_Color", 8, GlVertexAttributeFormat.UNSIGNED_BYTE, 4, true, false)
-            .addElement("a_TexCoord", 12, GlVertexAttributeFormat.UNSIGNED_SHORT, 2, false, false)
-            .addElement("a_LightCoord", 16, GlVertexAttributeFormat.UNSIGNED_SHORT, 2, false, true)
-            .addElement("mc_midTexCoord", OFFSET_MID_TEX, GlVertexAttributeFormat.FLOAT, 2, false, false)
-            .addElement("at_tangent", OFFSET_TANGENT, GlVertexAttributeFormat.BYTE, 4, true, false)
-            .addElement("mc_Entity", OFFSET_ENTITY, GlVertexAttributeFormat.FLOAT, 2, false, false)
+            .addElement("a_PosId", 0, GlVertexAttributeFormat.FLOAT, 3, false, false)
+            .addElement("a_Color", 12, GlVertexAttributeFormat.UNSIGNED_BYTE, 4, true, false)
+            .addElement("a_TexCoord", 16, GlVertexAttributeFormat.FLOAT, 2, false, false)
+            .addElement("a_LightCoord", 24, GlVertexAttributeFormat.UNSIGNED_INT, 1, false, true)
+            .addElement("iris_Normal", OFFSET_NORMAL, GlVertexAttributeFormat.BYTE, 4, true, false)
+            .addElement("iris_Tangent", OFFSET_TANGENT, GlVertexAttributeFormat.BYTE, 4, true, false)
+            .addElement("iris_MidTexCoord", OFFSET_MID_TEX, GlVertexAttributeFormat.FLOAT, 2, false, false)
+            .addElement("iris_BlockInfo", OFFSET_ENTITY, GlVertexAttributeFormat.FLOAT, 2, false, false)
             .build();
 
-    // Mirror CompactChunkVertex's position/texture encoding so the decode is shared.
-    private static final int POSITION_MAX_VALUE = 65536;
-    private static final int TEXTURE_MAX_VALUE = 32768;
-    private static final float MODEL_ORIGIN = 8.0f;
-    private static final float MODEL_RANGE = 32.0f;
-    private static final float MODEL_SCALE = MODEL_RANGE / POSITION_MAX_VALUE;
-    private static final float MODEL_SCALE_INV = POSITION_MAX_VALUE / MODEL_RANGE;
-    private static final float TEXTURE_SCALE = (1.0f / TEXTURE_MAX_VALUE);
-
-    @Override
-    public float getTextureScale() {
-        return TEXTURE_SCALE;
+    private IrisChunkVertexType() {
     }
 
     @Override
     public float getPositionScale() {
-        return MODEL_SCALE;
+        return 1f;
     }
 
     @Override
     public float getPositionOffset() {
-        return -MODEL_ORIGIN;
+        return 0;
+    }
+
+    @Override
+    public float getTextureScale() {
+        return 1f;
     }
 
     @Override
@@ -69,24 +65,20 @@ public class IrisChunkVertexType implements ChunkVertexType {
     @Override
     public ChunkVertexEncoder createEncoder() {
         return (ptr, material, vertex, sectionIndex) -> {
-            LWJGL.memPutShort(ptr + 0, encodePosition(vertex.x));
-            LWJGL.memPutShort(ptr + 2, encodePosition(vertex.y));
-            LWJGL.memPutShort(ptr + 4, encodePosition(vertex.z));
+            // Base layout identical to VanillaLikeChunkVertex (the transformer prologue decodes this).
+            LWJGL.memPutFloat(ptr + 0, vertex.x);
+            LWJGL.memPutFloat(ptr + 4, vertex.y);
+            LWJGL.memPutFloat(ptr + 8, vertex.z);
+            LWJGL.memPutInt(ptr + 12, vertex.color);
+            LWJGL.memPutFloat(ptr + 16, encodeTexture(vertex.u));
+            LWJGL.memPutFloat(ptr + 20, encodeTexture(vertex.v));
+            LWJGL.memPutInt(ptr + 24, (encodeDrawParameters(material.bits(), sectionIndex) << 0) | (encodeLight(vertex.light) << 16));
 
-            LWJGL.memPutByte(ptr + 6, (byte) (material.bits() & 0xFF));
-            LWJGL.memPutByte(ptr + 7, (byte) (sectionIndex & 0xFF));
-
-            LWJGL.memPutInt(ptr + 8, vertex.color);
-
-            LWJGL.memPutShort(ptr + 12, encodeTexture(vertex.u));
-            LWJGL.memPutShort(ptr + 14, encodeTexture(vertex.v));
-
-            LWJGL.memPutInt(ptr + 16, vertex.light);
-
-            // Iris extended data (populated by the meshing pipeline when shaders are active; zero otherwise).
+            // OptiFine extended attributes, filled in by the meshing pipeline while shaders are active.
+            LWJGL.memPutInt(ptr + OFFSET_NORMAL, vertex.trueNormal);
+            LWJGL.memPutInt(ptr + OFFSET_TANGENT, vertex.tangent);
             LWJGL.memPutFloat(ptr + OFFSET_MID_TEX, vertex.midTexU);
             LWJGL.memPutFloat(ptr + OFFSET_MID_TEX + 4, vertex.midTexV);
-            LWJGL.memPutInt(ptr + OFFSET_TANGENT, vertex.tangent);
             LWJGL.memPutFloat(ptr + OFFSET_ENTITY, vertex.blockId);
             LWJGL.memPutFloat(ptr + OFFSET_ENTITY + 4, vertex.blockData);
 
@@ -94,19 +86,17 @@ public class IrisChunkVertexType implements ChunkVertexType {
         };
     }
 
-    @Override
-    public Map<String, String> getDefines() {
-        Map<String, String> map = ChunkVertexType.super.getDefines();
-        map.put("USE_VERTEX_COMPRESSION", "");
-        map.put("IRIS_EXTENDED_VERTEX", "");
-        return map;
+    private static int encodeDrawParameters(int materialBits, int sectionIndex) {
+        return (((sectionIndex & 0xFF) << 8) | ((materialBits & 0xFF) << 0));
     }
 
-    private static short encodePosition(float value) {
-        return (short) ((MODEL_ORIGIN + value) * MODEL_SCALE_INV);
+    private static int encodeLight(int light) {
+        int block = light & 0xFF;
+        int sky = (light >> 16) & 0xFF;
+        return ((block << 0) | (sky << 8));
     }
 
-    private static short encodeTexture(float value) {
-        return (short) (Math.round(value * TEXTURE_MAX_VALUE) & 0xFFFF);
+    private static float encodeTexture(float value) {
+        return Math.min(0.99999997F, value);
     }
 }

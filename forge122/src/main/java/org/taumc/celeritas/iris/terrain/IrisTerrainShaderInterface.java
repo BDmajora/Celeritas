@@ -1,6 +1,5 @@
 package org.taumc.celeritas.iris.terrain;
 
-import com.l.ausm.impl.pipeline.PipelineContext;
 import org.embeddedt.embeddium.impl.gl.shader.ShaderBindingContext;
 import org.embeddedt.embeddium.impl.gl.shader.uniform.GlUniformFloat3v;
 import org.embeddedt.embeddium.impl.gl.shader.uniform.GlUniformInt;
@@ -11,6 +10,9 @@ import org.embeddedt.embeddium.impl.render.chunk.shader.ChunkShaderInterface;
 import org.embeddedt.embeddium.impl.render.chunk.shader.ChunkShaderTextureSlot;
 import org.embeddedt.embeddium.impl.render.chunk.terrain.TerrainRenderPass;
 import org.joml.Matrix4fc;
+import org.taumc.celeritas.iris.Iris;
+import org.taumc.celeritas.iris.gl.program.ProgramUniforms;
+import org.taumc.celeritas.iris.pipeline.IrisRenderingPipeline;
 
 import java.util.EnumMap;
 import java.util.Map;
@@ -26,10 +28,19 @@ public class IrisTerrainShaderInterface implements ChunkShaderInterface {
     private final GlUniformMatrix4f uProjectionMatrix;
     private final GlUniformFloat3v uRegionOffset;
     private final Map<ChunkShaderTextureSlot, GlUniformInt> uTextures = new EnumMap<>(ChunkShaderTextureSlot.class);
+    /** The program's sanitized {@code DRAWBUFFERS} mask, applied to the gbuffer FBO whenever this program binds. */
+    private final int[] drawBuffers;
+    /**
+     * The pack's OptiFine uniform set ({@code gbufferModelView(Inverse)}, {@code cameraPosition}, time…), uploaded on
+     * every bind. Without these the pack's world-space round-trip (through {@code gbufferModelViewInverse}) multiplies
+     * by zero matrices and every vertex collapses to the origin. Attached after link by the program override.
+     */
+    private ProgramUniforms uniforms;
 
     private GlPrimitiveType primitiveType = GlPrimitiveType.TRIANGLES;
 
-    public IrisTerrainShaderInterface(ShaderBindingContext context) {
+    public IrisTerrainShaderInterface(ShaderBindingContext context, int[] drawBuffers) {
+        this.drawBuffers = drawBuffers;
         this.uModelViewMatrix = context.bindUniformIfPresent("u_ModelViewMatrix", GlUniformMatrix4f::new);
         this.uProjectionMatrix = context.bindUniformIfPresent("u_ProjectionMatrix", GlUniformMatrix4f::new);
         this.uRegionOffset = context.bindUniformIfPresent("u_RegionOffset", GlUniformFloat3v::new);
@@ -54,12 +65,25 @@ public class IrisTerrainShaderInterface implements ChunkShaderInterface {
         return null;
     }
 
+    public void setUniforms(ProgramUniforms uniforms) {
+        this.uniforms = uniforms;
+    }
+
     @Override
     public void setupState(TerrainRenderPass pass) {
         this.primitiveType = pass.primitiveType() == QuadPrimitiveType.DIRECT
                 ? GlPrimitiveType.QUADS : GlPrimitiveType.TRIANGLES;
-        // Draw terrain into the shader pipeline's gbuffer (already bound by the frame hook, re-bound here defensively).
-        PipelineContext.getInstance().bindWorldFramebuffer();
+        // Terrain draws into the gbuffer bound by the frame pipeline; point its draw-buffer mask at this program's
+        // DRAWBUFFERS so iris_FragData[k] lands in the colortex the pack asked for. (Skipped during the shadow pass —
+        // onTerrainDraw would rebind the gbuffer over the shadow framebuffer.)
+        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        if (pipeline != null && !org.taumc.celeritas.iris.pipeline.IrisShadowRenderer.isShadowPass()) {
+            pipeline.onTerrainDraw(this.drawBuffers);
+        }
+        // ShaderChunkRenderer.begin binds the program before setupState, so uniform uploads land on this program.
+        if (this.uniforms != null) {
+            this.uniforms.update();
+        }
     }
 
     @Override

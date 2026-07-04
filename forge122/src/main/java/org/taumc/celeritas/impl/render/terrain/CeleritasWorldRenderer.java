@@ -60,6 +60,11 @@ public class CeleritasWorldRenderer extends SimpleWorldRenderer<WorldClient, Vin
 
     @Override
     protected ChunkRenderMatrices createChunkRenderMatrices() {
+        if (org.taumc.celeritas.iris.pipeline.IrisShadowRenderer.isShadowPass()) {
+            // The Iris shadow pass re-drives this render path from the sun's point of view.
+            var state = org.taumc.celeritas.iris.uniforms.CapturedRenderingState.INSTANCE;
+            return new ChunkRenderMatrices(state.getShadowProjection(), state.getShadowModelView());
+        }
         return new ChunkRenderMatrices(ActiveRenderInfoAccessor.getProjectionMatrix(), ActiveRenderInfoAccessor.getModelViewMatrix());
     }
 
@@ -145,6 +150,13 @@ public class CeleritasWorldRenderer extends SimpleWorldRenderer<WorldClient, Vin
     }
 
     private ChunkVertexType chooseVertexType() {
+        // When a shader pack is active, terrain is drawn by the pack's transformed gbuffers_terrain, which reads
+        // the vanilla-like float layout plus the OptiFine extended attributes (true normals, at_tangent,
+        // mc_midTexCoord, mc_Entity) that IrisChunkVertexType appends.
+        if (org.taumc.celeritas.iris.terrain.IrisTerrainProgramOverride.areShadersActive()) {
+            return org.taumc.celeritas.iris.vertices.IrisChunkVertexType.INSTANCE;
+        }
+
         if (!CeleritasVintage.options().performance.useCompactVertexFormat) {
             return ChunkMeshFormats.VANILLA_LIKE;
         }

@@ -136,6 +136,10 @@ public interface LWJGLService {
     void glActiveTexture(int texture);
     int glGetTexLevelParameteri(int target, int level, int pname);
     void glCopyTexSubImage2D(int target, int level, int xoffset, int yoffset, int x, int y, int width, int height);
+    void glReadPixels(int x, int y, int width, int height, int format, int type, ByteBuffer pixels);
+    void glGenerateMipmap(int target);
+
+    void glDepthRange(double zNear, double zFar);
     void glPixelStorei(int pname, int param);
     void glTexImage2D(int target, int level, int internalformat, int width, int height, int border, int format, int type, ByteBuffer pixels);
     void glTexParameteri(int target, int pname, int param);

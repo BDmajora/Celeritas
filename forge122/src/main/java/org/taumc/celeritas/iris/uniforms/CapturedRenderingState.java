@@ -1,7 +1,9 @@
 package org.taumc.celeritas.iris.uniforms;
 
 import org.joml.Matrix4f;
+import org.joml.Vector2i;
 import org.joml.Vector3d;
+import org.joml.Vector3f;
 
 /**
  * A singleton snapshot of per-frame render state captured from the vanilla render loop, for uniforms that cannot be
@@ -17,6 +19,13 @@ public final class CapturedRenderingState {
     private final Matrix4f gbufferModelView = new Matrix4f();
     private final Matrix4f gbufferProjection = new Matrix4f();
     private final Vector3d cameraPosition = new Vector3d();
+    private final Matrix4f previousGbufferModelView = new Matrix4f();
+    private final Matrix4f previousGbufferProjection = new Matrix4f();
+    private final Vector3d previousCameraPosition = new Vector3d();
+    private final Vector3f fogColor = new Vector3f();
+    private final Matrix4f shadowModelView = new Matrix4f();
+    private final Matrix4f shadowProjection = new Matrix4f();
+    private final Vector2i atlasSize = new Vector2i();
 
     private float tickDelta;
     private float currentAlphaTest;
@@ -48,6 +57,61 @@ public final class CapturedRenderingState {
 
     public void setCameraPosition(double x, double y, double z) {
         this.cameraPosition.set(x, y, z);
+    }
+
+    public Matrix4f getPreviousGbufferModelView() {
+        return this.previousGbufferModelView;
+    }
+
+    public Matrix4f getPreviousGbufferProjection() {
+        return this.previousGbufferProjection;
+    }
+
+    public Vector3d getPreviousCameraPosition() {
+        return this.previousCameraPosition;
+    }
+
+    public Matrix4f getShadowModelView() {
+        return this.shadowModelView;
+    }
+
+    public void setShadowModelView(Matrix4f modelView) {
+        this.shadowModelView.set(modelView);
+    }
+
+    public Matrix4f getShadowProjection() {
+        return this.shadowProjection;
+    }
+
+    public void setShadowProjection(Matrix4f projection) {
+        this.shadowProjection.set(projection);
+    }
+
+    public Vector2i getAtlasSize() {
+        return this.atlasSize;
+    }
+
+    public void setAtlasSize(int width, int height) {
+        this.atlasSize.set(width, height);
+    }
+
+    public Vector3f getFogColor() {
+        return this.fogColor;
+    }
+
+    public void setFogColor(float red, float green, float blue) {
+        this.fogColor.set(red, green, blue);
+    }
+
+    /**
+     * Copies the current matrices/camera position into the "previous frame" slots. Called once at the end of each
+     * shader frame so {@code gbufferPreviousModelView}/{@code previousCameraPosition} (used for temporal effects like
+     * motion blur and TAA) see last frame's values.
+     */
+    public void rollOverPreviousFrame() {
+        this.previousGbufferModelView.set(this.gbufferModelView);
+        this.previousGbufferProjection.set(this.gbufferProjection);
+        this.previousCameraPosition.set(this.cameraPosition);
     }
 
     public float getTickDelta() {

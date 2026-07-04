@@ -18,6 +18,7 @@ public final class SystemTimeUniforms {
     public static void addSystemTimeUniforms(ProgramUniforms.Builder uniforms) {
         uniforms
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "frameTimeCounter", COUNTER::getFrameTimeCounter)
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "frameTime", COUNTER::getLastFrameTime)
                 .uniform1i(UniformUpdateFrequency.PER_FRAME, "frameCounter", COUNTER::getFrameCounter);
     }
 
@@ -27,12 +28,14 @@ public final class SystemTimeUniforms {
 
         private int frameCounter;
         private float frameTimeCounter;
+        private float lastFrameTime;
         private long lastFrameTimeNanos = -1L;
 
         /** Advances the counters using the supplied monotonic timestamp (nanoseconds), e.g. {@code System.nanoTime()}. */
         public void beginFrame(long nowNanos) {
             if (this.lastFrameTimeNanos >= 0) {
                 float deltaSeconds = (nowNanos - this.lastFrameTimeNanos) / 1_000_000_000.0f;
+                this.lastFrameTime = deltaSeconds;
                 this.frameTimeCounter += deltaSeconds;
                 if (this.frameTimeCounter > FRAME_TIME_WRAP_SECONDS) {
                     this.frameTimeCounter -= FRAME_TIME_WRAP_SECONDS;
@@ -40,6 +43,11 @@ public final class SystemTimeUniforms {
             }
             this.lastFrameTimeNanos = nowNanos;
             this.frameCounter = (this.frameCounter + 1) % FRAME_COUNTER_WRAP;
+        }
+
+        /** The previous frame's duration in seconds (OptiFine's {@code frameTime}). */
+        public float getLastFrameTime() {
+            return this.lastFrameTime;
         }
 
         public float getFrameTimeCounter() {

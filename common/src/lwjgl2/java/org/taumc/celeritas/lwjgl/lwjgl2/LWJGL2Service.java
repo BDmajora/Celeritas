@@ -706,6 +706,21 @@ public record LWJGL2Service(
     }
 
     @Override
+    public void glReadPixels(int x, int y, int width, int height, int format, int type, java.nio.ByteBuffer pixels) {
+        GL11.glReadPixels(x, y, width, height, format, type, pixels);
+    }
+
+    @Override
+    public void glGenerateMipmap(int target) {
+        GL30.glGenerateMipmap(target);
+    }
+
+    @Override
+    public void glDepthRange(double zNear, double zFar) {
+        GL11.glDepthRange(zNear, zFar);
+    }
+
+    @Override
     public void glPixelStorei(int pname, int param) {
         GL11.glPixelStorei(pname, param);
     }

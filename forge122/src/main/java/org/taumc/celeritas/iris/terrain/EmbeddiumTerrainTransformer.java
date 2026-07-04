@@ -33,51 +33,89 @@ public final class EmbeddiumTerrainTransformer {
             "in vec4 a_Color;",
             "in vec2 a_TexCoord;",
             "in uint a_LightCoord;",
+            "in vec4 iris_Normal;",      // true face normal, NormI8 (normalized signed bytes)
+            "in vec4 iris_Tangent;",     // at_tangent, w = handedness
+            "in vec2 iris_MidTexCoord;", // sprite center in atlas UV
+            "in vec2 iris_BlockInfo;",   // (block id, metadata)
             "uniform mat4 u_ModelViewMatrix;",
             "uniform mat4 u_ProjectionMatrix;",
             "uniform vec3 u_RegionOffset;",
             "",
             "uvec3 _iris_relChunk(uint pos) { return (uvec3(pos) >> uvec3(5u,0u,2u)) & uvec3(7u,3u,7u); }",
             "vec3 _iris_drawTranslation(uint pos) { return vec3(_iris_relChunk(pos)) * 16.0; }",
+            "// GLSL-120 shadow2D returned vec4; 330's texture() on a shadow sampler returns float. Wrap so .x/.z work.",
+            "vec4 iris_shadow2D(sampler2DShadow s, vec3 p) { return vec4(texture(s, p)); }",
+            "vec4 iris_shadow2DLod(sampler2DShadow s, vec3 p, float l) { return vec4(textureLod(s, p, l)); }",
             "",
             "vec4 iris_Vertex;",
             "vec4 iris_Color;",
             "vec4 iris_MultiTexCoord0;",
             "vec4 iris_MultiTexCoord1;",
-            "vec3 iris_Normal;",
-            "mat4 iris_ModelView = u_ModelViewMatrix;",
-            "mat4 iris_Projection = u_ProjectionMatrix;",
-            "mat4 iris_ModelViewProjection = u_ProjectionMatrix * u_ModelViewMatrix;",
-            "mat3 iris_NormalMatrix = mat3(transpose(inverse(u_ModelViewMatrix)));",
+            "vec4 iris_MultiTexCoord2 = vec4(0.0, 0.0, 0.0, 1.0);",
+            "vec4 iris_MultiTexCoord3 = vec4(0.0, 0.0, 0.0, 1.0);",
+            "vec4 iris_MidTexFull;",
+            "vec4 iris_EntityFull;",
+            "// The matrix built-ins alias the uniforms directly (as expressions, not uniform-initialized globals —",
+            "// global initializers must be constant expressions in GLSL 330; drivers that accept them may evaluate",
+            "// them before uniforms are loaded, collapsing every vertex to the origin).",
+            "// gl_TextureMatrix[1] is vanilla's lightmap matrix (scale 1/256, translate 8/256): raw 0..240 lightmap",
+            "// coords -> 0..1 UVs. The rest are identity (the block atlas uses untransformed coords).",
+            "const mat4 iris_LightmapTextureMatrix = mat4(",
+            "    vec4(0.00390625, 0.0, 0.0, 0.0), vec4(0.0, 0.00390625, 0.0, 0.0),",
+            "    vec4(0.0, 0.0, 0.00390625, 0.0), vec4(0.03125, 0.03125, 0.03125, 1.0));",
+            "mat4 iris_TextureMatrix[8] = mat4[8](mat4(1.0), iris_LightmapTextureMatrix,",
+            "    mat4(1.0), mat4(1.0), mat4(1.0), mat4(1.0), mat4(1.0), mat4(1.0));",
             "",
             "#define gl_Vertex iris_Vertex",
             "#define gl_Color iris_Color",
             "#define gl_MultiTexCoord0 iris_MultiTexCoord0",
             "#define gl_MultiTexCoord1 iris_MultiTexCoord1",
-            "#define gl_Normal iris_Normal",
-            "#define gl_ModelViewMatrix iris_ModelView",
-            "#define gl_ProjectionMatrix iris_Projection",
-            "#define gl_ModelViewProjectionMatrix iris_ModelViewProjection",
-            "#define gl_NormalMatrix iris_NormalMatrix",
-            "#define ftransform() (iris_ModelViewProjection * iris_Vertex)",
-            "",
-            "void irisMain();",
-            "void main() {",
-            "    uint packed = a_LightCoord;",
-            "    uint drawId = (packed >> 8u) & 0xFFu;",
-            "    vec3 pos = a_PosId + u_RegionOffset + _iris_drawTranslation(drawId);",
-            "    iris_Vertex = vec4(pos, 1.0);",
-            "    iris_Color = a_Color;",
-            "    iris_MultiTexCoord0 = vec4(a_TexCoord, 0.0, 1.0);",
-            "    uint blockLight = (packed >> 16u) & 0xFFu;",
-            "    uint skyLight = (packed >> 24u) & 0xFFu;",
-            "    iris_MultiTexCoord1 = vec4((vec2(blockLight, skyLight) / 15.0) * 240.0, 0.0, 1.0);",
-            "    iris_Normal = vec3(0.0, 1.0, 0.0);",
-            "    irisMain();",
-            "}",
+            "#define gl_MultiTexCoord2 iris_MultiTexCoord2",
+            "#define gl_MultiTexCoord3 iris_MultiTexCoord3",
+            "#define gl_Normal (iris_Normal.xyz)",
+            "#define at_tangent iris_Tangent",
+            "#define mc_midTexCoord iris_MidTexFull",
+            "#define mc_Entity iris_EntityFull",
+            "#define gl_ModelViewMatrix u_ModelViewMatrix",
+            "#define gl_ProjectionMatrix u_ProjectionMatrix",
+            "#define gl_ModelViewProjectionMatrix (u_ProjectionMatrix * u_ModelViewMatrix)",
+            "#define gl_NormalMatrix (mat3(transpose(inverse(u_ModelViewMatrix))))",
+            "#define gl_TextureMatrix iris_TextureMatrix",
+            "#define ftransform() (u_ProjectionMatrix * (u_ModelViewMatrix * iris_Vertex))",
+            "out float iris_FogFragCoord;",
+            "#define gl_FogFragCoord iris_FogFragCoord",
+            "out vec4 iris_TexCoordArr[4];",
+            "#define gl_TexCoord iris_TexCoordArr",
+            "// OptiFine packs rely on fixed-function GL_ALPHA_TEST for cutout transparency, but Embeddium disables it",
+            "// and discards in-shader instead; mirror its per-material cutoff (bits 1-2 of the material byte).",
+            "const float[4] _IRIS_ALPHA_CUTOFF = float[4](0.0, 0.1, 0.5, 1.0);",
+            "flat out float iris_AlphaCutoff;",
             "// ---- end generated prologue ----",
             ""
     ) + "\n";
+
+    /**
+     * The generated vertex main is APPENDED after the pack body: the hoisted global initializers it runs reference
+     * pack globals/uniforms that must already be declared above it.
+     */
+    private static String vertexMain(String hoistedAssignments) {
+        return "\nvoid main() {\n"
+                + "    uint lightData = a_LightCoord;\n" // 'packed' is a reserved word in GLSL 330
+                + "    uint drawId = (lightData >> 8u) & 0xFFu;\n"
+                + "    vec3 pos = a_PosId + u_RegionOffset + _iris_drawTranslation(drawId);\n"
+                + "    iris_Vertex = vec4(pos, 1.0);\n"
+                + "    iris_Color = a_Color;\n"
+                + "    iris_MultiTexCoord0 = vec4(a_TexCoord, 0.0, 1.0);\n"
+                + "    uint blockLight = (lightData >> 16u) & 0xFFu;\n"
+                + "    uint skyLight = (lightData >> 24u) & 0xFFu;\n"
+                + "    iris_MultiTexCoord1 = vec4(float(blockLight), float(skyLight), 0.0, 1.0);\n"
+                + "    iris_MidTexFull = vec4(iris_MidTexCoord, 0.0, 1.0);\n"
+                + "    iris_EntityFull = vec4(iris_BlockInfo, 0.0, 1.0);\n"
+                + "    iris_AlphaCutoff = _IRIS_ALPHA_CUTOFF[int((lightData >> 1u) & 3u)];\n"
+                + hoistedAssignments
+                + "    irisMain();\n"
+                + "}\n";
+    }
 
     /** Fragment prologue: promote GLSL 120 fragment built-ins to 330 core outputs/keywords. */
     private static final String FRAGMENT_PROLOGUE = String.join("\n",
@@ -86,6 +124,19 @@ public final class EmbeddiumTerrainTransformer {
             "out vec4 iris_FragData[8];",
             "#define gl_FragColor iris_FragData[0]",
             "#define gl_FragData iris_FragData",
+            "vec4 iris_shadow2D(sampler2DShadow s, vec3 p) { return vec4(texture(s, p)); }",
+            "vec4 iris_shadow2DLod(sampler2DShadow s, vec3 p, float l) { return vec4(textureLod(s, p, l)); }",
+            "const mat4 iris_LightmapTextureMatrix = mat4(",
+            "    vec4(0.00390625, 0.0, 0.0, 0.0), vec4(0.0, 0.00390625, 0.0, 0.0),",
+            "    vec4(0.0, 0.0, 0.00390625, 0.0), vec4(0.03125, 0.03125, 0.03125, 1.0));",
+            "mat4 iris_TextureMatrix[8] = mat4[8](mat4(1.0), iris_LightmapTextureMatrix,",
+            "    mat4(1.0), mat4(1.0), mat4(1.0), mat4(1.0), mat4(1.0), mat4(1.0));",
+            "#define gl_TextureMatrix iris_TextureMatrix",
+            "in float iris_FogFragCoord;",
+            "#define gl_FogFragCoord iris_FogFragCoord",
+            "in vec4 iris_TexCoordArr[4];",
+            "#define gl_TexCoord iris_TexCoordArr",
+            "flat in float iris_AlphaCutoff;",
             "// ---- end generated prologue ----",
             ""
     ) + "\n";
@@ -96,23 +147,34 @@ public final class EmbeddiumTerrainTransformer {
         body = convertVaryings(body, "out");
         body = dropAttributeStorageQualifier(body);
         body = modernizeCommon(body);
-        return VERTEX_PROLOGUE + body;
+        // Pack globals initialized from uniforms are undefined under 330 (drivers may evaluate them before uniform
+        // upload — zeros/NaNs); run those initializers at the top of the generated main, like GLSL 120 did.
+        GlslGlobalInitHoister.Result hoist = GlslGlobalInitHoister.hoist(body);
+        return VERTEX_PROLOGUE + hoist.body + vertexMain(hoist.hoistedAssignments);
     }
 
     public static String transformFragmentShader(String source) {
         String body = stripVersion(source);
+        body = renameMain(body);
         body = convertVaryings(body, "in");
         body = modernizeCommon(body);
-        return FRAGMENT_PROLOGUE + body;
+        GlslGlobalInitHoister.Result hoist = GlslGlobalInitHoister.hoist(body);
+        return FRAGMENT_PROLOGUE + hoist.body
+                + "\nvoid main() {\n" + hoist.hoistedAssignments + "    irisMain();\n"
+                + "    if (iris_FragData[0].a < iris_AlphaCutoff) { discard; }\n}\n";
     }
 
     private static String stripVersion(String source) {
         return VERSION.matcher(source).replaceFirst("");
     }
 
-    /** Rename the pack's {@code void main()} to {@code irisMain} so the generated {@code main} can wrap it. */
+    /**
+     * Rename the pack's {@code void main()} to {@code irisMain} so the generated {@code main} can wrap it. Must rename
+     * every occurrence: include-flattened sources can contain several {@code main} definitions in mutually exclusive
+     * {@code #ifdef} branches, and this rewrite runs before preprocessing.
+     */
     private static String renameMain(String source) {
-        return source.replaceFirst("\\bvoid\\s+main\\s*\\(\\s*(void)?\\s*\\)", "void irisMain()");
+        return source.replaceAll("\\bvoid\\s+main\\s*\\(\\s*(void)?\\s*\\)", "void irisMain()");
     }
 
     /** {@code varying} → {@code out} (vertex) or {@code in} (fragment). */
@@ -126,15 +188,29 @@ public final class EmbeddiumTerrainTransformer {
      * 330-core attribute declarations. (Feeding real mc_Entity/mc_midTexCoord/at_tangent is a later pass.)
      */
     private static String dropAttributeStorageQualifier(String source) {
-        return source.replaceAll("(?m)^(\\s*)attribute\\b", "$1//attribute-was-here ");
+        // mc_Entity / mc_midTexCoord / at_tangent are now REAL attributes fed by IrisChunkVertexType; the prologue
+        // #defines those names onto its own inputs, so the pack's declarations must be deleted outright (the define
+        // would otherwise rewrite them into duplicate declarations of the prologue globals).
+        source = source.replaceAll("(?m)^\\s*attribute\\s+\\w+\\s+(mc_Entity|mc_midTexCoord|at_tangent)\\s*;\\s*$", "");
+        // Any other attribute becomes an explicitly zero-initialized global — an uninitialized global is undefined.
+        source = source.replaceAll("(?m)^(\\s*)attribute\\s+(\\w+)\\s+(\\w+)\\s*;", "$1$2 $3 = $2(0.0);");
+        // Fallback for forms the initializer rewrite doesn't cover (e.g. multiple declarators): just drop the keyword.
+        return source.replaceAll("(?m)^(\\s*)attribute\\s+", "$1");
     }
 
     /** Keyword modernizations common to both stages for 330 core. */
     private static String modernizeCommon(String source) {
-        source = source.replaceAll("\\btexture2D\\b", "texture");
+        // OptiFine's block sampler is often literally named "texture", which clashes with GLSL 330's texture() builtin.
+        // Rename the standalone sampler to "gtexture" first (word-boundary avoids touching texture2D/texture2DLod),
+        // then modernize the legacy sampling functions to the builtins.
+        source = source.replaceAll("\\btexture\\b", "gtexture");
         source = source.replaceAll("\\btexture2DLod\\b", "textureLod");
+        source = source.replaceAll("\\btexture3DLod\\b", "textureLod");
+        source = source.replaceAll("\\btexture2D\\b", "texture");
         source = source.replaceAll("\\btexture3D\\b", "texture");
-        source = source.replaceAll("\\bshadow2D\\b", "texture");
+        // shadow2D must keep returning vec4 (packs swizzle .x/.z off it); the iris_ wrappers are in the prologues.
+        source = source.replaceAll("\\bshadow2DLod\\b", "iris_shadow2DLod");
+        source = source.replaceAll("\\bshadow2D\\b", "iris_shadow2D");
         return source;
     }
 }

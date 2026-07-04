@@ -4,6 +4,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.taumc.celeritas.iris.config.IrisConfig;
 import org.taumc.celeritas.iris.pipeline.IrisPipeline;
+import org.taumc.celeritas.iris.pipeline.IrisRenderingPipeline;
 import org.taumc.celeritas.iris.shaderpack.ShaderPack;
 import org.taumc.celeritas.iris.shaderpack.ShaderPackLoader;
 
@@ -32,6 +33,11 @@ public final class Iris {
     /** The active GL pipeline. Built lazily on the render thread (needs a GL context) from {@link #currentPack}. */
     private static IrisPipeline pipeline;
     private static boolean pipelineNeedsInit;
+
+    /** The frame pipeline (gbuffer + composite/final chain). Built lazily at renderWorld HEAD on the render thread. */
+    private static IrisRenderingPipeline renderingPipeline;
+    /** Set when pipeline construction failed for the current pack, so we don't retry (and re-log) every frame. */
+    private static boolean renderingPipelineFailed;
 
     private Iris() {
     }
@@ -109,22 +115,53 @@ public final class Iris {
         if (!pipelineNeedsInit) {
             return;
         }
-        pipelineNeedsInit = false;
+        // When the pack was switched off entirely there will be no renderWorld-driven rebuild, so tear down here
+        // (this runs on the render thread with a GL context). When a pack IS active, leave the flag set for
+        // beginFrame() so teardown and rebuild happen together at renderWorld HEAD.
+        if (currentPack == null) {
+            pipelineNeedsInit = false;
+            destroyPipelines();
+        }
+    }
 
+    /**
+     * Render-thread hook for {@code renderWorld} HEAD: (re)builds the frame pipeline the first frame after a pack
+     * change and returns it, or {@code null} when shaders are off or the pack failed to build. Never throws — a
+     * broken pack logs once and leaves rendering stock.
+     */
+    public static synchronized IrisRenderingPipeline beginFrame() {
+        if (pipelineNeedsInit) {
+            pipelineNeedsInit = false;
+            destroyPipelines();
+            renderingPipelineFailed = false;
+        }
+        if (currentPack == null || renderingPipelineFailed) {
+            return null;
+        }
+        if (renderingPipeline == null) {
+            try {
+                renderingPipeline = new IrisRenderingPipeline(currentPack);
+            } catch (Exception e) {
+                renderingPipelineFailed = true;
+                LOGGER.error("Failed to build the Iris rendering pipeline; shaders disabled for this pack", e);
+            }
+        }
+        return renderingPipeline;
+    }
+
+    /** @return the frame pipeline, or {@code null} when shaders are off. For the mid-frame and end-of-frame hooks. */
+    public static IrisRenderingPipeline getRenderingPipeline() {
+        return renderingPipeline;
+    }
+
+    private static void destroyPipelines() {
         if (pipeline != null) {
             pipeline.destroy();
             pipeline = null;
         }
-
-        if (currentPack == null) {
-            return;
-        }
-
-        try {
-            pipeline = new IrisPipeline(currentPack);
-        } catch (Exception e) {
-            pipeline = null;
-            LOGGER.error("Failed to build Iris pipeline; shaders disabled", e);
+        if (renderingPipeline != null) {
+            renderingPipeline.destroy();
+            renderingPipeline = null;
         }
     }
 

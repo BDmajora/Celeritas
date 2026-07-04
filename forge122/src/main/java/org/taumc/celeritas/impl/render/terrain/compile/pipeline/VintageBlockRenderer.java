@@ -38,6 +38,9 @@ import org.taumc.celeritas.impl.render.terrain.compile.VintageChunkBuildContext;
 import org.taumc.celeritas.impl.render.terrain.compile.light.LightDataCache;
 import org.taumc.celeritas.impl.render.terrain.compile.light.VintageDiffuseProvider;
 import org.taumc.celeritas.impl.world.cloned.CeleritasBlockAccess;
+import org.taumc.celeritas.iris.terrain.IrisTerrainProgramOverride;
+import org.taumc.celeritas.iris.vertices.NormI8;
+import org.taumc.celeritas.iris.vertices.NormalHelper;
 import org.taumc.celeritas.mixin.core.terrain.BlockColorsAccessor;
 
 import java.util.Arrays;
@@ -223,7 +226,50 @@ public class VintageBlockRenderer {
             out.trueNormal = trueNormal;
         }
 
+        if (IrisTerrainProgramOverride.areShadersActive()) {
+            populateIrisVertexData(vertices, quad, trueNormal);
+        }
+
         var vertexBuffer = builder.getVertexBuffer(normalFace);
         vertexBuffer.push(vertices, material);
+    }
+
+    /**
+     * Fills the OptiFine per-vertex attributes ({@code mc_midTexCoord}, {@code at_tangent}, {@code mc_Entity}) that
+     * {@code IrisChunkVertexType} encodes while a shader pack is active. All four vertices of a quad share the values.
+     */
+    private void populateIrisVertexData(ChunkVertexEncoder.Vertex[] vertices, BakedQuadView quad, int trueNormal) {
+        float midU = 0.0f, midV = 0.0f;
+        TextureAtlasSprite sprite = (TextureAtlasSprite) quad.celeritas$getSprite();
+        if (sprite != null) {
+            midU = (sprite.getMinU() + sprite.getMaxU()) * 0.5f;
+            midV = (sprite.getMinV() + sprite.getMaxV()) * 0.5f;
+        }
+
+        var v0 = vertices[0];
+        var v1 = vertices[1];
+        var v2 = vertices[2];
+        int tangent = NormalHelper.computeTangent(
+                NormI8.unpackX(trueNormal), NormI8.unpackY(trueNormal), NormI8.unpackZ(trueNormal),
+                v0.x, v0.y, v0.z, v0.u, v0.v,
+                v1.x, v1.y, v1.z, v1.u, v1.v,
+                v2.x, v2.y, v2.z, v2.u, v2.v);
+
+        int blockId = 0;
+        int blockData = 0;
+        IBlockState state = this.currentState;
+        if (state != null) {
+            blockId = Block.getIdFromBlock(state.getBlock());
+            blockData = state.getBlock().getMetaFromState(state);
+        }
+
+        for (int i = 0; i < 4; i++) {
+            var out = vertices[i];
+            out.midTexU = midU;
+            out.midTexV = midV;
+            out.tangent = tangent;
+            out.blockId = blockId;
+            out.blockData = blockData;
+        }
     }
 }
