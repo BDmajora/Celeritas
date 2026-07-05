@@ -4,6 +4,7 @@ import org.taumc.celeritas.iris.gl.shader.GlShader;
 import org.taumc.celeritas.iris.gl.shader.ShaderType;
 import org.taumc.celeritas.iris.shaderpack.ProgramSource;
 import org.taumc.celeritas.iris.shaderpack.preprocessor.GlslPreprocessor;
+import org.taumc.celeritas.iris.terrain.ModernPackTransformer;
 import org.taumc.celeritas.iris.vertices.IrisVertexAttributes;
 
 import java.util.ArrayList;
@@ -31,6 +32,20 @@ public final class ShaderProgramCompiler {
 
         if (vertexSource == null || fragmentSource == null) {
             throw new ProgramCreationException("Program '" + name + "' is missing a vertex or fragment stage");
+        }
+
+        // Modern packs (#version 130+ single-source dual-stage, e.g. Complementary) need the #version bumped to
+        // "330 compatibility" to compile on the 1.12.2 compat context — exactly like the fullscreen/terrain modern
+        // paths. Without this these gbuffer programs fail to compile and their phases fall back to vanilla-style
+        // rendering; for gbuffers_clouds that means drawing the vanilla cloud plane the pack explicitly discards
+        // (gl_Position = vec4(-1.0) + discard when CLOUD_STYLE != 50), which is the "clouds move with the player" bug.
+        // GLSL-120 packs (LIGHT) are not modern, so they are untouched.
+        if (ModernPackTransformer.isModernSource(fragmentSource)) {
+            vertexSource = ModernPackTransformer.transform(vertexSource);
+            fragmentSource = ModernPackTransformer.transform(fragmentSource);
+            if (geometrySource != null) {
+                geometrySource = ModernPackTransformer.transform(geometrySource);
+            }
         }
 
         String processedVertex = applyDefines(vertexSource, defines);
