@@ -164,6 +164,40 @@ public final class EmbeddiumTerrainTransformer {
                 + "    if (iris_FragData[0].a < iris_AlphaCutoff) { discard; }\n}\n";
     }
 
+    // ------------------------------------------------------------------ modern (#version 130+) terrain
+
+    /**
+     * The same Embeddium vertex bridge, but for modern single-source dual-stage packs (Complementary). We keep the
+     * attribute decode, the {@code gl_*}→Embeddium {@code #define}s and the generated {@code main}, but drop every
+     * transform that assumes GLSL-120 Chocapic structure: no {@code varying} conversion (the pack flips {@code in}/
+     * {@code out} itself with {@code #ifdef VERTEX_SHADER}), no global hoisting, and crucially <b>no</b>
+     * {@code texture}→{@code gtexture} rename — modern packs call the {@code texture()} built-in everywhere, so that
+     * rename is what corrupted them. The {@code #ifdef VERTEX_SHADER}/{@code FRAGMENT_SHADER} guards and option gates are
+     * left for the driver's own preprocessor (compatibility profile). {@code renameMain} still applies: it renames both
+     * stages' {@code void main()} to {@code irisMain}, and only the active one survives the driver's {@code #ifdef}.
+     */
+    public static String transformVertexShaderModern(String source) {
+        String body = stripVersion(source);
+        body = renameMain(body);
+        // Delete the pack's mc_Entity/mc_midTexCoord/at_tangent attribute declarations; the prologue #defines those
+        // names onto its own decoded globals, so the pack's declarations would become illegal redeclarations.
+        body = dropAttributeStorageQualifier(body);
+        return compat(VERTEX_PROLOGUE) + body + vertexMain("");
+    }
+
+    public static String transformFragmentShaderModern(String source) {
+        String body = stripVersion(source);
+        body = renameMain(body);
+        return compat(FRAGMENT_PROLOGUE) + body
+                + "\nvoid main() {\n    irisMain();\n"
+                + "    if (iris_FragData[0].a < iris_AlphaCutoff) { discard; }\n}\n";
+    }
+
+    /** The shared prologue targets 330 core; modern packs need 330 compatibility (legacy built-ins + modern intrinsics). */
+    private static String compat(String prologue) {
+        return prologue.replaceFirst("#version 330 core", "#version 330 compatibility");
+    }
+
     private static String stripVersion(String source) {
         return VERSION.matcher(source).replaceFirst("");
     }

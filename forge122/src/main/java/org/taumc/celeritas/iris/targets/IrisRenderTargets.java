@@ -18,8 +18,9 @@ import java.util.List;
  * format via {@link #setColorFormat(int, InternalTextureFormat)} before first use.
  */
 public class IrisRenderTargets {
-    /** OptiFine 1.12.2 exposes colortex0..7; Iris later widened this to 16. Keep the classic 8 for parity. */
-    public static final int MAX_COLOR_BUFFERS = 8;
+    /** colortex0..15, matching modern Iris. Targets past 7 are created lazily only when referenced. Composite/deferred
+     *  passes attach them via dense packing (Iris's scheme); the gbuffer stays on the first 8 attachment points. */
+    public static final int MAX_COLOR_BUFFERS = 16;
 
     private final IrisRenderTarget[] targets = new IrisRenderTarget[MAX_COLOR_BUFFERS];
     private final InternalTextureFormat[] formats = new InternalTextureFormat[MAX_COLOR_BUFFERS];
@@ -108,14 +109,20 @@ public class IrisRenderTargets {
         IrisFramebuffer framebuffer = new IrisFramebuffer();
         this.ownedFramebuffers.add(framebuffer);
 
-        for (int drawBuffer : drawBuffers) {
-            IrisRenderTarget target = getOrCreate(drawBuffer);
-            int texture = this.flipper.isFlipped(drawBuffer) ? target.getMainTexture() : target.getAltTexture();
-            framebuffer.addColorAttachment(drawBuffer, texture);
+        // Dense attachment packing, matching Iris's RenderTargets.createColorFramebuffer: the k-th written target is
+        // attached at color-attachment POINT k (not at point = colortex index). This keeps every attachment point in
+        // 0..7 regardless of the colortex indices, so packs can write colortex8..15 on hardware that exposes only 8
+        // attachment points. gl_FragData[k] -> draw buffer k -> point k -> colortex[drawBuffers[k]].
+        int[] densePoints = new int[drawBuffers.length];
+        for (int i = 0; i < drawBuffers.length; i++) {
+            densePoints[i] = i;
+            IrisRenderTarget target = getOrCreate(drawBuffers[i]);
+            int texture = this.flipper.isFlipped(drawBuffers[i]) ? target.getMainTexture() : target.getAltTexture();
+            framebuffer.addColorAttachment(i, texture);
         }
 
         framebuffer.addDepthAttachment(this.depthTexture.getTextureId());
-        framebuffer.drawBuffers(drawBuffers);
+        framebuffer.drawBuffers(densePoints);
         return framebuffer;
     }
 

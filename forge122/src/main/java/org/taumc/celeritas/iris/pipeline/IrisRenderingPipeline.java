@@ -28,6 +28,7 @@ import org.taumc.celeritas.iris.targets.IrisRenderTarget;
 import org.taumc.celeritas.iris.targets.IrisRenderTargets;
 import org.taumc.celeritas.iris.targets.NoiseTexture;
 import org.taumc.celeritas.iris.terrain.FullscreenTransformer;
+import org.taumc.celeritas.iris.terrain.ModernPackTransformer;
 import org.taumc.celeritas.iris.uniforms.CapturedRenderingState;
 import org.taumc.celeritas.iris.uniforms.CelestialUniforms;
 import org.taumc.celeritas.iris.uniforms.CommonUniforms;
@@ -71,16 +72,20 @@ import static org.taumc.celeritas.lwjgl.LWJGLServiceProvider.LWJGL;
 public class IrisRenderingPipeline {
     private static final Logger LOGGER = LogManager.getLogger("Celeritas/Iris");
 
-    // Texture units: colortex0..7 occupy units 0..7; the rest live above them, clear of anything vanilla touches.
-    private static final int DEPTH_TEX_0_UNIT = 8;
-    private static final int DEPTH_TEX_1_UNIT = 9;
-    private static final int DEPTH_TEX_2_UNIT = 10;
-    private static final int NOISE_TEX_UNIT = 15;
-    private static final int SHADOW_TEX_0_UNIT = 13;
-    private static final int SHADOW_TEX_1_UNIT = 14;
-    private static final int SHADOW_COLOR_0_UNIT = 12;
+    // Texture units: colortex0..15 occupy units 0..15 (Iris parity); the rest live on units 16+, clear of anything
+    // vanilla touches. NVIDIA exposes 32 fragment texture-image units, so there is ample room.
+    private static final int DEPTH_TEX_0_UNIT = 16;
+    private static final int DEPTH_TEX_1_UNIT = 17;
+    private static final int DEPTH_TEX_2_UNIT = 18;
+    private static final int SHADOW_TEX_0_UNIT = 19;
+    private static final int SHADOW_TEX_1_UNIT = 20;
+    private static final int SHADOW_COLOR_0_UNIT = 21;
+    private static final int SHADOW_COLOR_1_UNIT = 22;
+    private static final int NOISE_TEX_UNIT = 23;
+    /** Highest attachment point the gbuffer FBO uses (natural points 0..7); the composite chain packs densely instead. */
+    private static final int GBUFFER_ATTACHMENT_LIMIT = 8;
     /** High texture unit used transiently for depth-copy binds so no sampler or vanilla-tracked unit is disturbed. */
-    private static final int DEPTH_COPY_SCRATCH_UNIT = 11;
+    private static final int DEPTH_COPY_SCRATCH_UNIT = 24;
     /** Draw-buffer mask for fixed-function content with no pack program: plain color into colortex0 only. */
     private static final int[] FIXED_FUNCTION_MASK = {0};
 
@@ -88,10 +93,13 @@ public class IrisRenderingPipeline {
     private static final Map<String, Integer> SAMPLER_UNITS = new LinkedHashMap<>();
 
     static {
+        // Legacy OptiFine aliases only exist for the first 8 targets (colortex0..7); colortex8..15 have no alias.
         String[] legacyColor = {"gcolor", "gdepth", "gnormal", "composite", "gaux1", "gaux2", "gaux3", "gaux4"};
         for (int i = 0; i < IrisRenderTargets.MAX_COLOR_BUFFERS; i++) {
             SAMPLER_UNITS.put("colortex" + i, i);
-            SAMPLER_UNITS.put(legacyColor[i], i);
+            if (i < legacyColor.length) {
+                SAMPLER_UNITS.put(legacyColor[i], i);
+            }
         }
         SAMPLER_UNITS.put("depthtex0", DEPTH_TEX_0_UNIT);
         SAMPLER_UNITS.put("gdepthtex", DEPTH_TEX_0_UNIT);
@@ -99,9 +107,9 @@ public class IrisRenderingPipeline {
         SAMPLER_UNITS.put("depthtex2", DEPTH_TEX_2_UNIT);
         // Shadow samplers are parked on unused units so a shadow-reading pack samples nothing instead of colortex0
         // (sampler uniforms default to unit 0). The shadow pass itself is a later phase.
-        SAMPLER_UNITS.put("shadowcolor1", 11);
-        SAMPLER_UNITS.put("shadowcolor0", 12);
-        SAMPLER_UNITS.put("shadowcolor", 12);
+        SAMPLER_UNITS.put("shadowcolor1", SHADOW_COLOR_1_UNIT);
+        SAMPLER_UNITS.put("shadowcolor0", SHADOW_COLOR_0_UNIT);
+        SAMPLER_UNITS.put("shadowcolor", SHADOW_COLOR_0_UNIT);
         SAMPLER_UNITS.put("shadowtex0", SHADOW_TEX_0_UNIT);
         SAMPLER_UNITS.put("shadow", SHADOW_TEX_0_UNIT);
         SAMPLER_UNITS.put("watershadow", SHADOW_TEX_0_UNIT);
@@ -157,8 +165,19 @@ public class IrisRenderingPipeline {
 
     private boolean worldRenderingActive;
     private boolean destroyed;
+    /**
+     * True when the pack's fullscreen shaders are modern (#version 130+). Such passes position the quad with the
+     * fixed-function {@code ftransform()}/{@code gl_TextureMatrix[0]}, so the composite chain must run with identity
+     * model-view/projection/texture matrices (see {@link #runPass}).
+     */
+    private boolean modernPack;
     /** One-shot debug dump of the render targets, ~4s after the pipeline builds (0 = fired). */
     private int debugDumpCountdown = 240;
+    /**
+     * Frames left to probe {@code glGetError} around each composite pass (0 = off). Pinpoints which pass/step raises
+     * the {@code 1282 Invalid operation} Minecraft's "Post render" check reports. Counts down over the opening frames.
+     */
+    private int glErrorProbeFrames = 60;
 
     public IrisRenderingPipeline(ShaderPack pack) {
         Minecraft mc = Minecraft.getMinecraft();
@@ -412,7 +431,7 @@ public class IrisRenderingPipeline {
             if (program == null) {
                 return null;
             }
-            int[] drawBuffers = sanitizeDrawBuffers(name, program.getDrawBuffers());
+            int[] drawBuffers = sanitizeCompositeDrawBuffers(name, program.getDrawBuffers());
 
             // Reads see the current "front" side; the FBO writes the back side; then the written buffers flip.
             int[] colorSamplers = snapshotFrontTextures(flipper);
@@ -461,20 +480,35 @@ public class IrisRenderingPipeline {
         GlShader vertex = null;
         GlShader fragment = null;
         try {
-            String vsh = FullscreenTransformer.transformVertexShader(vshRaw);
-            String fsh = FullscreenTransformer.transformFragmentShader(fshRaw);
+            // Modern packs (#version 130+ single-source, e.g. Complementary) get the minimal-touch transform; the
+            // GLSL-120 Chocapic family (LIGHT) keeps the full 330-core rewrite. Detect off the fragment source.
+            boolean modern = ModernPackTransformer.isModernSource(fshRaw);
+            this.modernPack |= modern;
+            String vsh;
+            String fsh;
+            if (modern) {
+                vsh = ModernPackTransformer.transform(vshRaw);
+                fsh = ModernPackTransformer.transform(fshRaw);
+            } else {
+                vsh = FullscreenTransformer.transformVertexShader(vshRaw);
+                fsh = FullscreenTransformer.transformFragmentShader(fshRaw);
+            }
             IrisDebugDump.dumpText("src_" + source.getName() + ".vsh", vsh);
             IrisDebugDump.dumpText("src_" + source.getName() + ".fsh", fsh);
             vertex = new GlShader(ShaderType.VERTEX, source.getName() + ".vsh", vsh);
             fragment = new GlShader(ShaderType.FRAGMENT, source.getName() + ".fsh", fsh);
 
-            GlProgram program = ProgramBuilder.begin(source.getName())
+            ProgramBuilder builder = ProgramBuilder.begin(source.getName())
                     .attach(vertex)
                     .attach(fragment)
                     .bindAttributeLocation(FullscreenQuadRenderer.POSITION_SLOT, "a_Position")
-                    .bindAttributeLocation(FullscreenQuadRenderer.TEXCOORD_SLOT, "a_TexCoord")
-                    .bindFragmentDataLocation(0, "iris_FragData")
-                    .link();
+                    .bindAttributeLocation(FullscreenQuadRenderer.TEXCOORD_SLOT, "a_TexCoord");
+            if (!modern) {
+                // The 330-core LIGHT path writes to an explicit out array; modern packs use the compatibility
+                // gl_FragData[] built-in, which the driver already maps to draw buffers 0..n.
+                builder.bindFragmentDataLocation(0, "iris_FragData");
+            }
+            GlProgram program = builder.link();
 
             assignSamplerUnits(program);
             return new IrisProgram(program, DrawBuffers.parse(fshRaw));
@@ -529,14 +563,27 @@ public class IrisRenderingPipeline {
         return flipper.isFlipped(index) ? target.getAltTexture() : target.getMainTexture();
     }
 
+    /**
+     * Gbuffer-program draw buffers: the shared gbuffer FBO uses natural attachment points, so cap at the first 8
+     * (every current pack's gbuffer stages fit). Called by the terrain override and gbuffer phase compiler.
+     */
     public static int[] sanitizeDrawBuffers(String name, int[] drawBuffers) {
+        return sanitizeDrawBuffers(name, drawBuffers, GBUFFER_ATTACHMENT_LIMIT);
+    }
+
+    /** Composite/deferred passes pack attachments densely, so any colortex0..15 index is fine. */
+    private static int[] sanitizeCompositeDrawBuffers(String name, int[] drawBuffers) {
+        return sanitizeDrawBuffers(name, drawBuffers, IrisRenderTargets.MAX_COLOR_BUFFERS);
+    }
+
+    private static int[] sanitizeDrawBuffers(String name, int[] drawBuffers, int maxExclusive) {
         List<Integer> valid = new ArrayList<>();
         for (int buffer : drawBuffers) {
-            if (buffer >= 0 && buffer < IrisRenderTargets.MAX_COLOR_BUFFERS) {
+            if (buffer >= 0 && buffer < maxExclusive) {
                 valid.add(buffer);
             } else {
-                LOGGER.warn("[Iris] '{}' declares unsupported draw buffer {} (only colortex0..7 exist); ignoring it",
-                        name, buffer);
+                LOGGER.debug("[Iris] '{}' declares draw buffer {} (max {} here; usually an inactive #ifdef path); ignoring it",
+                        name, buffer, maxExclusive - 1);
             }
         }
         if (valid.isEmpty()) {
@@ -745,6 +792,9 @@ public class IrisRenderingPipeline {
             return;
         }
         this.worldRenderingActive = false;
+        if (this.glErrorProbeFrames > 0) {
+            this.glErrorProbeFrames--;
+        }
         Minecraft mc = Minecraft.getMinecraft();
 
         // Full-screen passes draw with depth/blend/alpha-test off. Going through GlStateManager keeps its state cache
@@ -846,7 +896,72 @@ public class IrisRenderingPipeline {
         bindColorSamplers(pass);
         pass.program.bind();
         pass.uniforms.update();
-        this.quadRenderer.draw();
+        boolean probe = this.glErrorProbeFrames > 0;
+        if (probe) {
+            drainGlError(); // clear anything vanilla/Embeddium left so we only attribute this pass's own errors
+        }
+        if (this.modernPack) {
+            // ftransform() = projection*modelview*gl_Vertex and (gl_TextureMatrix[0]*gl_MultiTexCoord0) must be
+            // identities so the [-1,1] quad and its [0,1] texcoords pass straight through. Save/restore so the hand
+            // and GUI that vanilla draws after the composite chain are unaffected.
+            pushIdentityFixedFunctionMatrices();
+            if (probe) {
+                reportGlError(pass.name + " push-matrices");
+            }
+            this.quadRenderer.draw();
+            if (probe) {
+                reportGlError(pass.name + " draw");
+            }
+            popFixedFunctionMatrices();
+            if (probe) {
+                reportGlError(pass.name + " pop-matrices");
+            }
+        } else {
+            this.quadRenderer.draw();
+            if (probe) {
+                reportGlError(pass.name + " draw");
+            }
+        }
+    }
+
+    public static void drainGlError() {
+        while (LWJGL.glGetError() != 0) {
+            // discard
+        }
+    }
+
+    public static void reportGlError(String where) {
+        int error = LWJGL.glGetError();
+        if (error != 0) {
+            LOGGER.warn("[Iris] GL error 0x{} ({}) at: {}",
+                    Integer.toHexString(error), error, where);
+        }
+    }
+
+    // Fixed-function matrix modes (GL_MODELVIEW/PROJECTION/TEXTURE); not in the core GL wrapper we use elsewhere.
+    private static final int GL_MODELVIEW_MODE = 0x1700;
+    private static final int GL_PROJECTION_MODE = 0x1701;
+    private static final int GL_TEXTURE_MODE = 0x1702;
+
+    private static void pushIdentityFixedFunctionMatrices() {
+        GlStateManager.matrixMode(GL_PROJECTION_MODE);
+        GlStateManager.pushMatrix();
+        GlStateManager.loadIdentity();
+        GlStateManager.matrixMode(GL_TEXTURE_MODE);
+        GlStateManager.pushMatrix();
+        GlStateManager.loadIdentity();
+        GlStateManager.matrixMode(GL_MODELVIEW_MODE);
+        GlStateManager.pushMatrix();
+        GlStateManager.loadIdentity();
+    }
+
+    private static void popFixedFunctionMatrices() {
+        GlStateManager.matrixMode(GL_PROJECTION_MODE);
+        GlStateManager.popMatrix();
+        GlStateManager.matrixMode(GL_TEXTURE_MODE);
+        GlStateManager.popMatrix();
+        GlStateManager.matrixMode(GL_MODELVIEW_MODE);
+        GlStateManager.popMatrix();
     }
 
     /**
@@ -874,8 +989,16 @@ public class IrisRenderingPipeline {
     private void bindColorSamplers(FullscreenPass pass) {
         for (int i = IrisRenderTargets.MAX_COLOR_BUFFERS - 1; i >= 0; i--) {
             if (pass.colorSamplers[i] != 0) {
-                GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + i);
-                GlStateManager.bindTexture(pass.colorSamplers[i]);
+                if (i < 8) {
+                    // Units 0..7 go through GlStateManager so vanilla's texture-unit cache stays coherent.
+                    GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + i);
+                    GlStateManager.bindTexture(pass.colorSamplers[i]);
+                } else {
+                    // colortex8..15 live beyond GlStateManager's 8-slot cache (indexing it there throws); vanilla
+                    // never touches these units, so a raw bind is correct and safe.
+                    LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + i);
+                    LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, pass.colorSamplers[i]);
+                }
             }
         }
         GlStateManager.setActiveTexture(GL13.GL_TEXTURE0);
@@ -903,8 +1026,14 @@ public class IrisRenderingPipeline {
             LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + unit);
             LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
         }
+        // colortex8..15 sit beyond GlStateManager's 8-slot cache — unbind those with raw GL (indexing the cache at
+        // unit 8+ throws ArrayIndexOutOfBounds); units 0..7 go through GlStateManager to keep its cache coherent.
+        for (int i = IrisRenderTargets.MAX_COLOR_BUFFERS - 1; i >= 8; i--) {
+            LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + i);
+            LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+        }
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
-        for (int i = IrisRenderTargets.MAX_COLOR_BUFFERS - 1; i >= 0; i--) {
+        for (int i = 7; i >= 0; i--) {
             GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + i);
             GlStateManager.bindTexture(0);
         }

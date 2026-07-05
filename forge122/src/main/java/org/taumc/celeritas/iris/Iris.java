@@ -7,11 +7,17 @@ import org.taumc.celeritas.iris.pipeline.IrisPipeline;
 import org.taumc.celeritas.iris.pipeline.IrisRenderingPipeline;
 import org.taumc.celeritas.iris.shaderpack.ShaderPack;
 import org.taumc.celeritas.iris.shaderpack.ShaderPackLoader;
+import org.taumc.celeritas.iris.shaderpack.option.values.MutableOptionValues;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 
 /**
  * Entry point and global state holder for the Iris shader layer inside Celeritas.
@@ -29,6 +35,11 @@ public final class Iris {
 
     private static IrisConfig config;
     private static ShaderPack currentPack;
+
+    /** Option values queued by the in-game menu, applied and merged into {@code <pack>.txt} on the next reload. */
+    private static final Map<String, String> shaderPackOptionQueue = new HashMap<>();
+    /** When set, the next reload discards all changed option values (resets the pack to its defaults). */
+    private static boolean resetShaderPackOptions;
 
     /** The active GL pipeline. Built lazily on the render thread (needs a GL context) from {@link #currentPack}. */
     private static IrisPipeline pipeline;
@@ -84,17 +95,34 @@ public final class Iris {
 
         Path packPath = config.getSelectedPackPath();
         String name = config.getShaderPackName();
+        Path configTxt = config.getShaderpacksDirectory().resolve(name + ".txt");
+
+        // Load the persisted changed option values, layer the queued in-game changes on top, then apply.
+        Map<String, String> changedConfigs = readConfigProperties(configTxt);
+        changedConfigs.putAll(shaderPackOptionQueue);
+        shaderPackOptionQueue.clear();
+        if (resetShaderPackOptions) {
+            changedConfigs.clear();
+        }
+        resetShaderPackOptions = false;
 
         try {
             ShaderPack pack;
             if (Files.isDirectory(packPath)) {
-                pack = ShaderPackLoader.loadFromDirectory(packPath);
+                pack = ShaderPackLoader.loadFromDirectory(packPath, changedConfigs);
             } else if (Files.isRegularFile(packPath) && name.toLowerCase().endsWith(".zip")) {
-                pack = ShaderPackLoader.loadFromZip(packPath);
+                pack = ShaderPackLoader.loadFromZip(packPath, changedConfigs);
             } else {
                 LOGGER.warn("Selected shader pack '{}' was not found at {}; shaders disabled.", name, packPath);
                 return;
             }
+
+            // Persist the effective changed values (only options that differ from pack defaults are stored).
+            MutableOptionValues effective = pack.getShaderPackOptions().getOptionValues().mutableCopy();
+            Properties toSave = new Properties();
+            effective.getBooleanValues().forEach((k, v) -> toSave.setProperty(k, Boolean.toString(v)));
+            effective.getStringValues().forEach(toSave::setProperty);
+            writeConfigProperties(configTxt, toSave);
 
             currentPack = pack;
             pipelineNeedsInit = true;
@@ -103,6 +131,47 @@ public final class Iris {
         } catch (Exception e) {
             currentPack = null;
             LOGGER.error("Failed to load shader pack '" + name + "'; shaders disabled", e);
+        }
+    }
+
+    /**
+     * Queues option-value changes from the in-game menu (keyed by option name; {@code true}/{@code false} for booleans
+     * or the raw token for string options) and reloads the pack so the changes take effect and are persisted.
+     */
+    public static synchronized void queueShaderPackOptions(Map<String, String> changes) {
+        shaderPackOptionQueue.putAll(changes);
+        loadCurrentShaderpack();
+    }
+
+    /** Resets all changed option values back to the pack defaults on the next reload, and reloads now. */
+    public static synchronized void resetShaderPackOptionsAndReload() {
+        resetShaderPackOptions = true;
+        loadCurrentShaderpack();
+    }
+
+    private static Map<String, String> readConfigProperties(Path path) {
+        Map<String, String> result = new HashMap<>();
+        if (!Files.exists(path)) {
+            return result;
+        }
+        Properties properties = new Properties();
+        // NB: OptiFine specifies these config files as ISO-8859-1, but Properties.load defaults to that for byte
+        //     streams, so no special handling is needed.
+        try (InputStream is = Files.newInputStream(path)) {
+            properties.load(is);
+        } catch (IOException e) {
+            LOGGER.warn("Failed to read shader option config {}; using defaults", path, e);
+            return result;
+        }
+        properties.forEach((k, v) -> result.put(String.valueOf(k), String.valueOf(v)));
+        return result;
+    }
+
+    private static void writeConfigProperties(Path path, Properties properties) {
+        try (OutputStream os = Files.newOutputStream(path)) {
+            properties.store(os, "This file stores overrides for the shader pack's default options.");
+        } catch (IOException e) {
+            LOGGER.warn("Failed to write shader option config {}", path, e);
         }
     }
 

@@ -4,8 +4,10 @@ import org.taumc.celeritas.iris.shaderpack.include.AbsolutePackPath;
 import org.taumc.celeritas.iris.shaderpack.include.IncludeProcessor;
 import org.taumc.celeritas.iris.shaderpack.loading.ProgramArrayId;
 import org.taumc.celeritas.iris.shaderpack.loading.ProgramId;
+import org.taumc.celeritas.iris.shaderpack.option.ShaderPackOptions;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -26,20 +28,45 @@ public final class ShaderPack {
     private static final String OVERWORLD_DIR = "/world0";
 
     private final Map<AbsolutePackPath, String> sources;
+    private final ShaderPackOptions shaderPackOptions;
     private final IncludeProcessor includeProcessor;
     private final ShaderProperties properties;
     private final ProgramSet baseProgramSet;
 
     public ShaderPack(Map<AbsolutePackPath, String> sources) {
-        this.sources = Collections.unmodifiableMap(sources);
-        this.includeProcessor = new IncludeProcessor(this.sources);
+        this(sources, Collections.emptyMap());
+    }
 
+    /**
+     * @param sources        the raw source files of the pack (keyed relative to {@code shaders/}).
+     * @param changedConfigs option values that differ from pack defaults, loaded from {@code <pack>.txt} and/or the
+     *                       in-game menu. Applied to the sources before {@code #include} flattening.
+     */
+    public ShaderPack(Map<AbsolutePackPath, String> sources, Map<String, String> changedConfigs) {
+        this.sources = Collections.unmodifiableMap(new HashMap<>(sources));
+
+        // Parse the properties file from the raw (unedited) source — it is configuration, not GLSL, so option edits
+        // must never touch it.
         String propertiesContents = this.sources.get(PROPERTIES_PATH);
         this.properties = propertiesContents != null
                 ? ShaderProperties.parse(propertiesContents)
                 : ShaderProperties.empty();
 
+        // Discover options across every source file except the properties file, and apply the changed values. The
+        // include processor then flattens the EDITED sources so that option toggles/values are already baked in.
+        Map<AbsolutePackPath, String> optionSources = new HashMap<>(this.sources);
+        optionSources.remove(PROPERTIES_PATH);
+        this.shaderPackOptions = new ShaderPackOptions(optionSources, changedConfigs);
+
+        Map<AbsolutePackPath, String> flattenSources = new HashMap<>(this.sources);
+        flattenSources.putAll(this.shaderPackOptions.getEditedSources());
+        this.includeProcessor = new IncludeProcessor(flattenSources);
+
         this.baseProgramSet = buildProgramSet();
+    }
+
+    public ShaderPackOptions getShaderPackOptions() {
+        return this.shaderPackOptions;
     }
 
     public ShaderProperties getProperties() {

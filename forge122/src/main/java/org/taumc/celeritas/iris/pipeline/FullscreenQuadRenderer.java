@@ -20,6 +20,13 @@ import static org.taumc.celeritas.lwjgl.LWJGLServiceProvider.LWJGL;
 public class FullscreenQuadRenderer {
     public static final int POSITION_SLOT = 0;
     public static final int TEXCOORD_SLOT = 1;
+    /**
+     * Modern (#version 130+) packs address the fullscreen quad through the fixed-function built-ins {@code gl_Vertex}
+     * and {@code gl_MultiTexCoord0}. On the compatibility profile these alias generic attribute locations 0 and 8
+     * respectively, so {@code POSITION_SLOT} already feeds {@code gl_Vertex}; we additionally mirror the texcoord into
+     * slot 8 so {@code gl_MultiTexCoord0} is populated. (Harmless for the GLSL-120 path, which reads slot 1.)
+     */
+    public static final int MULTITEXCOORD0_SLOT = 8;
 
     private static final int STRIDE = 4 * Float.BYTES;
 
@@ -51,6 +58,9 @@ public class FullscreenQuadRenderer {
         LWJGL.glVertexAttribPointer(POSITION_SLOT, 2, GL11.GL_FLOAT, false, STRIDE, 0L);
         LWJGL.glEnableVertexAttribArray(TEXCOORD_SLOT);
         LWJGL.glVertexAttribPointer(TEXCOORD_SLOT, 2, GL11.GL_FLOAT, false, STRIDE, 2L * Float.BYTES);
+        // Mirror the texcoord into slot 8 for modern packs' gl_MultiTexCoord0 (see MULTITEXCOORD0_SLOT).
+        LWJGL.glEnableVertexAttribArray(MULTITEXCOORD0_SLOT);
+        LWJGL.glVertexAttribPointer(MULTITEXCOORD0_SLOT, 2, GL11.GL_FLOAT, false, STRIDE, 2L * Float.BYTES);
 
         LWJGL.glBindVertexArray(0);
         LWJGL.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);

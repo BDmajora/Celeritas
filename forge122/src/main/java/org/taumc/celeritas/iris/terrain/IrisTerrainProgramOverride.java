@@ -98,8 +98,15 @@ public final class IrisTerrainProgramOverride {
                 return null;
             }
 
-            String vsh = EmbeddiumTerrainTransformer.transformVertexShader(vshSource);
-            String fsh = EmbeddiumTerrainTransformer.transformFragmentShader(fshSource);
+            // Modern (#version 130+) dual-stage packs (Complementary) get the minimal-surgery bridge; the GLSL-120
+            // Chocapic family (LIGHT) keeps the full rewrite.
+            boolean modern = ModernPackTransformer.isModernSource(fshSource);
+            String vsh = modern
+                    ? EmbeddiumTerrainTransformer.transformVertexShaderModern(vshSource)
+                    : EmbeddiumTerrainTransformer.transformVertexShader(vshSource);
+            String fsh = modern
+                    ? EmbeddiumTerrainTransformer.transformFragmentShaderModern(fshSource)
+                    : EmbeddiumTerrainTransformer.transformFragmentShader(fshSource);
             org.taumc.celeritas.iris.pipeline.IrisDebugDump.dumpText(
                     "src_" + programId.getSourceName() + ".vsh", vsh);
             org.taumc.celeritas.iris.pipeline.IrisDebugDump.dumpText(
@@ -119,19 +126,23 @@ public final class IrisTerrainProgramOverride {
             builder.bindFragmentData("iris_FragData", 0);
             int[] drawBuffers = IrisRenderingPipeline.sanitizeDrawBuffers(
                     programId.getSourceName(), DrawBuffers.parse(fshSource));
+            IrisRenderingPipeline.drainGlError();
             GlProgram<ChunkShaderInterface> program =
                     builder.link(context -> new IrisTerrainShaderInterface(context, drawBuffers));
+            IrisRenderingPipeline.reportGlError("terrain '" + programId.getSourceName() + "' link");
 
             // The pack program needs the full OptiFine uniform set: shaders like LIGHT round-trip positions through
             // gbufferModelView(Inverse), so leaving those at zero collapses every vertex to the origin. Sampler units
             // (shadow, noisetex, …) get the standard mapping; the block/lightmap samplers stay with the interface.
             program.bind();
             IrisRenderingPipeline.assignSamplerUnitsToBoundProgram(program.handle());
+            IrisRenderingPipeline.reportGlError("terrain '" + programId.getSourceName() + "' sampler-units");
             program.unbind();
             ProgramUniforms.Builder uniforms = ProgramUniforms.builder(programId.getSourceName(), program.handle());
             CommonUniforms.addCommonUniforms(uniforms);
             MatrixUniforms.addMatrixUniforms(uniforms);
             ((IrisTerrainShaderInterface) program.getInterface()).setUniforms(uniforms.buildUniforms());
+            IrisRenderingPipeline.reportGlError("terrain '" + programId.getSourceName() + "' uniforms");
 
             LOGGER.info("[Iris] Built terrain override program ('{}') for pass '{}'",
                     programId.getSourceName(), options.pass().name());

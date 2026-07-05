@@ -38,7 +38,7 @@ public final class ShaderPackLoader {
      * Java 9+ library APIs like {@code Set.of} are unavailable even though Jabel allows modern syntax.
      */
     private static final Set<String> TEXT_EXTENSIONS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-            "vsh", "fsh", "gsh", "tcs", "tes", "glsl", "inc", "properties", "txt")));
+            "vsh", "fsh", "gsh", "tcs", "tes", "glsl", "inc", "properties", "txt", "lang")));
 
     /** Guard against accidentally slurping a huge file as a string. */
     private static final long MAX_TEXT_FILE_BYTES = 8L * 1024 * 1024;
@@ -50,6 +50,10 @@ public final class ShaderPackLoader {
      * Loads a pack laid out as a folder containing a {@code shaders/} subdirectory.
      */
     public static ShaderPack loadFromDirectory(Path packRoot) throws IOException {
+        return loadFromDirectory(packRoot, Collections.emptyMap());
+    }
+
+    public static ShaderPack loadFromDirectory(Path packRoot, Map<String, String> changedConfigs) throws IOException {
         Path shadersDir = packRoot.resolve("shaders");
         if (!Files.isDirectory(shadersDir)) {
             throw new IOException("Shader pack has no shaders/ directory: " + packRoot);
@@ -68,7 +72,7 @@ public final class ShaderPackLoader {
             }
         });
 
-        return new ShaderPack(sources);
+        return new ShaderPack(sources, changedConfigs);
     }
 
     /**
@@ -76,6 +80,10 @@ public final class ShaderPackLoader {
      * directory; keys are made relative to it.
      */
     public static ShaderPack loadFromZip(Path zipFile) throws IOException {
+        return loadFromZip(zipFile, Collections.emptyMap());
+    }
+
+    public static ShaderPack loadFromZip(Path zipFile, Map<String, String> changedConfigs) throws IOException {
         Map<AbsolutePackPath, String> sources = new HashMap<>();
         try (ZipInputStream zip = new ZipInputStream(Files.newInputStream(zipFile))) {
             ZipEntry entry;
@@ -103,7 +111,7 @@ public final class ShaderPackLoader {
         if (sources.isEmpty()) {
             throw new IOException("Shader pack zip contained no shaders/ entries: " + zipFile);
         }
-        return new ShaderPack(sources);
+        return new ShaderPack(sources, changedConfigs);
     }
 
     private static boolean isTextPath(String relative) {
