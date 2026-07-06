@@ -1,0 +1,29 @@
+{
+  "provider": {
+    "ollamma": {
+      "name": "Ollamma",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://127.0.0.1:11434"
+      },
+      "models": {
+        "qwen3.5:9b": {
+          "name": "qwen3.5"
+        }
+      }
+    },
+    "ollama": {
+      "name": "Ollama",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://127.0.0.1:11434"
+      },
+      "models": {
+        "qwen3.5:9b": {
+          "name": "qwen3.5:9b"
+        }
+      }
+    }
+  },
+  "$schema": "https://opencode.ai/config.json"
+}
