@@ -144,12 +144,24 @@ public class IrisRenderingPipeline {
     private final PlainTexture defaultSpecular;
     /** "Always lit" 1×1 shadow map on the shadowtex units until the real shadow pass exists. */
     private final StubShadowMap stubShadowMap;
-    private final IrisFramebuffer gbufferFramebuffer;
     /**
-     * The gbuffer FBO used from the translucent stage on. When deferred passes flip {@code colortex0}, the world must
-     * continue rendering into the new front texture; without deferred passes this is {@link #gbufferFramebuffer}.
+     * The two per-frame ping-pong schedules (even/odd frame). The composite chain flips some colortex buffers an odd
+     * number of times per frame (e.g. Complementary's {@code colortex2} TAA history, written once by composite6), so
+     * for a pass to read back its OWN previous-frame output the buffer's front/back must alternate every frame. We bake
+     * the whole gbuffer+deferred+composite schedule for both starting parities and select by {@link #frameParity}; the
+     * odd-flipped buffers thus swap sides each frame and cross-frame temporal accumulation (TAA) works. Matches the
+     * effect of Iris's persistent {@code BufferFlipper} without re-baking framebuffers every frame.
      */
-    private final IrisFramebuffer translucentGbufferFramebuffer;
+    private final FrameSchedule[] schedules = new FrameSchedule[2];
+    /** Which schedule this frame uses; toggled at the end of every frame. */
+    private int frameParity;
+    /**
+     * Fullscreen programs + their uniforms, compiled once and shared between both schedules (only the per-parity FBO
+     * and sampler snapshot differ). A name mapping to {@code null} means that program failed to compile. Owns the GL
+     * programs — they are destroyed here, not per-pass, since the two schedules reference the same objects.
+     */
+    private final java.util.Map<String, IrisProgram> compiledPrograms = new java.util.HashMap<>();
+    private final java.util.Map<String, ProgramUniforms> compiledUniforms = new java.util.HashMap<>();
     /** The pack's fixed-function gbuffer programs (sky/entities/particles/weather/clouds/hand), phase-switched. */
     private final GbufferPrograms gbufferPrograms;
     /** Every color index attached to the gbuffer FBOs: the union of all gbuffer-stage DRAWBUFFERS masks, sorted. */
@@ -158,10 +170,28 @@ public class IrisRenderingPipeline {
     private IrisFramebuffer currentGbuffer;
     /** The shadow-map pass, or {@code null} when the pack declares no {@code shadow} program. */
     private final IrisShadowRenderer shadowRenderer;
-    private final List<FullscreenPass> deferredPasses = new ArrayList<>();
-    private final List<FullscreenPass> passes = new ArrayList<>();
-    /** Reads the post-composite {@code colortex0}; used to blit to screen when the pack has no working {@code final}. */
-    private final IrisFramebuffer blitSourceFramebuffer;
+
+    /** One frame's baked ping-pong assignment: the gbuffer FBOs, the deferred/composite passes, and the blit source. */
+    private static final class FrameSchedule {
+        final IrisFramebuffer gbufferFramebuffer;
+        final IrisFramebuffer translucentGbufferFramebuffer;
+        final List<FullscreenPass> deferredPasses;
+        final List<FullscreenPass> passes;
+        final IrisFramebuffer blitSourceFramebuffer;
+
+        FrameSchedule(IrisFramebuffer gbufferFramebuffer, IrisFramebuffer translucentGbufferFramebuffer,
+                      List<FullscreenPass> deferredPasses, List<FullscreenPass> passes, IrisFramebuffer blitSourceFramebuffer) {
+            this.gbufferFramebuffer = gbufferFramebuffer;
+            this.translucentGbufferFramebuffer = translucentGbufferFramebuffer;
+            this.deferredPasses = deferredPasses;
+            this.passes = passes;
+            this.blitSourceFramebuffer = blitSourceFramebuffer;
+        }
+    }
+
+    private FrameSchedule schedule() {
+        return this.schedules[this.frameParity];
+    }
 
     private boolean worldRenderingActive;
     private boolean destroyed;
@@ -200,48 +230,16 @@ public class IrisRenderingPipeline {
             this.shadowRenderer = createShadowRenderer(pack);
             BufferFlipper flipper = this.renderTargets.getBufferFlipper();
 
-            this.gbufferFramebuffer = createGbufferFramebuffer(flipper);
-
-            for (int i = 0; i < ProgramArrayId.Deferred.getNumPrograms(); i++) {
-                Optional<ProgramSource> source = pack.getProgramSet().get(ProgramArrayId.Deferred, i);
-                if (!source.isPresent()) {
-                    continue;
-                }
-                FullscreenPass pass = buildCompositePass(source.get(), flipper);
-                if (pass != null) {
-                    this.deferredPasses.add(pass);
-                }
-            }
-            this.translucentGbufferFramebuffer = this.deferredPasses.isEmpty()
-                    ? this.gbufferFramebuffer
-                    : createGbufferFramebuffer(flipper);
-
-            for (int i = 0; i < ProgramArrayId.Composite.getNumPrograms(); i++) {
-                Optional<ProgramSource> source = pack.getProgramSet().get(ProgramArrayId.Composite, i);
-                if (!source.isPresent()) {
-                    continue;
-                }
-                FullscreenPass pass = buildCompositePass(source.get(), flipper);
-                if (pass != null) {
-                    this.passes.add(pass);
-                }
-            }
-
-            FullscreenPass finalPass = buildFinalPass(pack, flipper);
-            if (finalPass != null) {
-                this.passes.add(finalPass);
-                this.blitSourceFramebuffer = null;
-            } else {
-                // No (working) final program: show the post-composite colortex0 by blitting it to the screen.
-                IrisFramebuffer blitSource = new IrisFramebuffer();
-                blitSource.addColorAttachment(0, frontTexture(flipper, 0));
-                blitSource.readBuffer(0);
-                this.blitSourceFramebuffer = blitSource;
-            }
+            // Bake both frame parities. The flipper accumulates continuously: parity 0 is built from the reset state,
+            // parity 1 from the state left after parity 0 (each odd-flipped buffer is now on its opposite side). Because
+            // every buffer is flipped the same number of times per schedule, parity 1 leaves the flipper back where
+            // parity 0 started — so the two schedules form a stable period-2 alternation.
+            this.schedules[0] = buildSchedule(pack, flipper);
+            this.schedules[1] = buildSchedule(pack, flipper);
 
             LOGGER.info("[Iris] Rendering pipeline ready: {} deferred + {} composite/final pass(es){}, gbuffer {}x{}",
-                    this.deferredPasses.size(), this.passes.size(),
-                    this.blitSourceFramebuffer != null ? " + colortex0 blit" : "",
+                    this.schedules[0].deferredPasses.size(), this.schedules[0].passes.size(),
+                    this.schedules[0].blitSourceFramebuffer != null ? " + colortex0 blit" : "",
                     this.renderTargets.getWidth(), this.renderTargets.getHeight());
             initialized = true;
         } finally {
@@ -424,10 +422,71 @@ public class IrisRenderingPipeline {
         return framebuffer;
     }
 
+    /** Bakes one frame's ping-pong schedule from the flipper's current state, advancing the flipper as it goes. */
+    private FrameSchedule buildSchedule(ShaderPack pack, BufferFlipper flipper) {
+        IrisFramebuffer gbuffer = createGbufferFramebuffer(flipper);
+
+        List<FullscreenPass> deferred = new ArrayList<>();
+        for (int i = 0; i < ProgramArrayId.Deferred.getNumPrograms(); i++) {
+            Optional<ProgramSource> source = pack.getProgramSet().get(ProgramArrayId.Deferred, i);
+            if (!source.isPresent()) {
+                continue;
+            }
+            FullscreenPass pass = buildCompositePass(source.get(), flipper);
+            if (pass != null) {
+                deferred.add(pass);
+            }
+        }
+        IrisFramebuffer translucent = deferred.isEmpty() ? gbuffer : createGbufferFramebuffer(flipper);
+
+        List<FullscreenPass> composite = new ArrayList<>();
+        for (int i = 0; i < ProgramArrayId.Composite.getNumPrograms(); i++) {
+            Optional<ProgramSource> source = pack.getProgramSet().get(ProgramArrayId.Composite, i);
+            if (!source.isPresent()) {
+                continue;
+            }
+            FullscreenPass pass = buildCompositePass(source.get(), flipper);
+            if (pass != null) {
+                composite.add(pass);
+            }
+        }
+
+        IrisFramebuffer blit = null;
+        FullscreenPass finalPass = buildFinalPass(pack, flipper);
+        if (finalPass != null) {
+            composite.add(finalPass);
+        } else {
+            // No (working) final program: show the post-composite colortex0 by blitting it to the screen.
+            blit = new IrisFramebuffer();
+            blit.addColorAttachment(0, frontTexture(flipper, 0));
+            blit.readBuffer(0);
+        }
+
+        return new FrameSchedule(gbuffer, translucent, deferred, composite, blit);
+    }
+
+    /**
+     * Compiles a fullscreen program (and its uniforms) once and caches it by source name, so the two frame schedules
+     * share the same GL program/uniform objects — only the per-parity framebuffer + sampler snapshot differ. Returns
+     * {@code null} if the program failed to compile (cached as absent so we don't retry).
+     */
+    private IrisProgram cachedProgram(ProgramSource source) {
+        String name = source.getName();
+        if (this.compiledPrograms.containsKey(name)) {
+            return this.compiledPrograms.get(name);
+        }
+        IrisProgram program = compileFullscreenProgram(source);
+        this.compiledPrograms.put(name, program);
+        if (program != null) {
+            this.compiledUniforms.put(name, buildUniforms(name, program));
+        }
+        return program;
+    }
+
     private FullscreenPass buildCompositePass(ProgramSource source, BufferFlipper flipper) {
         String name = source.getName();
         try {
-            IrisProgram program = compileFullscreenProgram(source);
+            IrisProgram program = cachedProgram(source);
             if (program == null) {
                 return null;
             }
@@ -440,9 +499,7 @@ public class IrisRenderingPipeline {
                 flipper.flip(buffer);
             }
 
-            ProgramUniforms uniforms = buildUniforms(name, program);
-            LOGGER.info("[Iris] Built fullscreen pass '{}' writing {}", name, java.util.Arrays.toString(drawBuffers));
-            return new FullscreenPass(name, program, uniforms, framebuffer, colorSamplers);
+            return new FullscreenPass(name, program, this.compiledUniforms.get(name), framebuffer, colorSamplers);
         } catch (Exception e) {
             LOGGER.error("[Iris] Failed to build pass '{}'; it will be skipped: {}", name, e.getMessage());
             return null;
@@ -456,13 +513,11 @@ public class IrisRenderingPipeline {
         }
         String name = source.get().getName();
         try {
-            IrisProgram program = compileFullscreenProgram(source.get());
+            IrisProgram program = cachedProgram(source.get());
             if (program == null) {
                 return null;
             }
-            ProgramUniforms uniforms = buildUniforms(name, program);
-            LOGGER.info("[Iris] Built final pass");
-            return new FullscreenPass(name, program, uniforms, null, snapshotFrontTextures(flipper));
+            return new FullscreenPass(name, program, this.compiledUniforms.get(name), null, snapshotFrontTextures(flipper));
         } catch (Exception e) {
             LOGGER.error("[Iris] Failed to build final pass; falling back to colortex0 blit: {}", e.getMessage());
             return null;
@@ -624,6 +679,7 @@ public class IrisRenderingPipeline {
             CapturedRenderingState.INSTANCE.setCameraPosition(x, y, z);
         }
 
+
         // noisetex (unit 15) and the stub shadow maps (units 13/14) ride along for the whole frame (gbuffer +
         // fullscreen stages); vanilla never binds units above 1, and GlStateManager's 8-slot cache can't address them.
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + NOISE_TEX_UNIT);
@@ -642,15 +698,18 @@ public class IrisRenderingPipeline {
         GlStateManager.bindTexture(this.defaultSpecular.getTextureId());
         GlStateManager.setActiveTexture(GL13.GL_TEXTURE0);
 
-        this.currentGbuffer = this.gbufferFramebuffer;
-        this.gbufferFramebuffer.bind();
+        IrisFramebuffer gbuffer = schedule().gbufferFramebuffer;
+        this.currentGbuffer = gbuffer;
+        gbuffer.bind();
         // Clear every attached color target to transparent black once (OptiFine's clearRenderBuffers); vanilla's own
         // fog-colored clear inside renderWorldPass then covers colortex0 + depth. GlStateManager.clearColor keeps the
-        // vanilla clear-color cache coherent so updateFogColor's subsequent set is not skipped.
-        this.gbufferFramebuffer.drawBuffers(this.gbufferAttachments);
+        // vanilla clear-color cache coherent so updateFogColor's subsequent set is not skipped. NB: buffers the gbuffer
+        // stage does not attach (e.g. the composite-only TAA history colortex2) are deliberately never cleared, so
+        // their contents persist across frames for temporal accumulation.
+        gbuffer.drawBuffers(this.gbufferAttachments);
         GlStateManager.clearColor(0.0f, 0.0f, 0.0f, 0.0f);
         LWJGL.glClear(GL11.GL_COLOR_BUFFER_BIT);
-        this.gbufferFramebuffer.drawBuffers(FIXED_FUNCTION_MASK);
+        gbuffer.drawBuffers(FIXED_FUNCTION_MASK);
         if (this.skyAtFarPlane) {
             LWJGL.glDepthRange(0.0, 1.0);
             this.skyAtFarPlane = false;
@@ -751,7 +810,8 @@ public class IrisRenderingPipeline {
         }
         copyDepthTexture(this.renderTargets.getDepthTextureNoTranslucents());
 
-        if (this.deferredPasses.isEmpty()) {
+        FrameSchedule s = schedule();
+        if (s.deferredPasses.isEmpty()) {
             return;
         }
         Minecraft mc = Minecraft.getMinecraft();
@@ -762,7 +822,7 @@ public class IrisRenderingPipeline {
         GlStateManager.disableAlpha();
 
         bindDepthSamplers();
-        for (FullscreenPass pass : this.deferredPasses) {
+        for (FullscreenPass pass : s.deferredPasses) {
             runPass(pass, mc);
         }
 
@@ -773,8 +833,8 @@ public class IrisRenderingPipeline {
         GlStateManager.enableAlpha();
 
         // The rest of the world (translucents, hand) renders into the post-deferred front textures.
-        this.currentGbuffer = this.translucentGbufferFramebuffer;
-        this.translucentGbufferFramebuffer.bind();
+        this.currentGbuffer = s.translucentGbufferFramebuffer;
+        s.translucentGbufferFramebuffer.bind();
         LWJGL.glViewport(0, 0, this.renderTargets.getWidth(), this.renderTargets.getHeight());
     }
 
@@ -831,20 +891,21 @@ public class IrisRenderingPipeline {
                     CapturedRenderingState.INSTANCE.getFogColor());
         }
 
-        for (FullscreenPass pass : this.passes) {
+        FrameSchedule s = schedule();
+        for (FullscreenPass pass : s.passes) {
             runPass(pass, mc);
         }
 
-        if (dumpThisFrame && !this.passes.isEmpty()) {
-            FullscreenPass lastPass = this.passes.get(this.passes.size() - 1);
+        if (dumpThisFrame && !s.passes.isEmpty()) {
+            FullscreenPass lastPass = s.passes.get(s.passes.size() - 1);
             int colortex4 = lastPass.colorSamplers[4] != 0
                     ? lastPass.colorSamplers[4] : this.renderTargets.getOrCreate(4).getMainTexture();
             IrisDebugDump.dumpColorTexture("colortex4_postcomposite", colortex4,
                     this.renderTargets.getWidth(), this.renderTargets.getHeight());
         }
 
-        if (this.blitSourceFramebuffer != null) {
-            this.blitSourceFramebuffer.bindAsReadBuffer();
+        if (s.blitSourceFramebuffer != null) {
+            s.blitSourceFramebuffer.bindAsReadBuffer();
             int target = OpenGlHelper.isFramebufferEnabled() ? mc.getFramebuffer().framebufferObject : 0;
             LWJGL.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, target);
             LWJGL.glBlitFramebuffer(0, 0, this.renderTargets.getWidth(), this.renderTargets.getHeight(),
@@ -861,6 +922,8 @@ public class IrisRenderingPipeline {
         GlStateManager.enableAlpha();
 
         CapturedRenderingState.INSTANCE.rollOverPreviousFrame();
+        // Alternate the ping-pong schedule so odd-flipped buffers (TAA history) swap sides next frame.
+        this.frameParity ^= 1;
     }
 
     public boolean isWorldRenderingActive() {
@@ -1056,23 +1119,31 @@ public class IrisRenderingPipeline {
         if (this.gbufferPrograms != null) {
             this.gbufferPrograms.destroy();
         }
-        for (FullscreenPass pass : this.deferredPasses) {
-            pass.program.destroy();
+        // Programs/uniforms are shared between the two schedules — destroy them once here, not per-pass.
+        for (IrisProgram program : this.compiledPrograms.values()) {
+            if (program != null) {
+                program.destroy();
+            }
         }
-        this.deferredPasses.clear();
-        for (FullscreenPass pass : this.passes) {
-            pass.program.destroy();
+        this.compiledPrograms.clear();
+        this.compiledUniforms.clear();
+        for (FrameSchedule s : this.schedules) {
+            if (s == null) {
+                continue;
+            }
+            s.deferredPasses.clear();
+            s.passes.clear();
+            if (s.blitSourceFramebuffer != null) {
+                s.blitSourceFramebuffer.destroy();
+            }
+            if (s.translucentGbufferFramebuffer != null && s.translucentGbufferFramebuffer != s.gbufferFramebuffer) {
+                s.translucentGbufferFramebuffer.destroy();
+            }
+            if (s.gbufferFramebuffer != null) {
+                s.gbufferFramebuffer.destroy();
+            }
         }
-        this.passes.clear();
-        if (this.blitSourceFramebuffer != null) {
-            this.blitSourceFramebuffer.destroy();
-        }
-        if (this.translucentGbufferFramebuffer != null && this.translucentGbufferFramebuffer != this.gbufferFramebuffer) {
-            this.translucentGbufferFramebuffer.destroy();
-        }
-        if (this.gbufferFramebuffer != null) {
-            this.gbufferFramebuffer.destroy();
-        }
+        java.util.Arrays.fill(this.schedules, null);
         if (this.quadRenderer != null) {
             this.quadRenderer.destroy();
         }

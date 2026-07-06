@@ -191,13 +191,10 @@ public class IrisShadowRenderer {
 
         // ---- snapModelViewToGrid(target, intervalSize, cameraX, cameraY, cameraZ) ----
         Vector3d camera = CapturedRenderingState.INSTANCE.getCameraPosition();
-        float offsetX = (float) (camera.x % this.intervalSize);
-        float offsetY = (float) (camera.y % this.intervalSize);
-        float offsetZ = (float) (camera.z % this.intervalSize);
         float halfIntervalSize = this.intervalSize / 2.0f;
-        offsetX -= halfIntervalSize;
-        offsetY -= halfIntervalSize;
-        offsetZ -= halfIntervalSize;
+        float offsetX = (float) (camera.x - Math.floor(camera.x / this.intervalSize) * this.intervalSize) - halfIntervalSize;
+        float offsetY = (float) (camera.y - Math.floor(camera.y / this.intervalSize) * this.intervalSize) - halfIntervalSize;
+        float offsetZ = (float) (camera.z - Math.floor(camera.z / this.intervalSize) * this.intervalSize) - halfIntervalSize;
         this.shadowModelView.translate(offsetX, offsetY, offsetZ);
     }
 
