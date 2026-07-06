@@ -28,9 +28,9 @@ public final class MatrixUniforms {
                     // of the camera-relative position (P - C) that modern shader packs expect.
                     // Zeroing the translation column makes ViewToPlayer() camera-relative, matching
                     // the Iris 1.17+ convention that Complementary et al. are written against.
-                    inv.m30(0.0f);
-                    inv.m31(0.0f);
-                    inv.m32(0.0f);
+                    inv.m03(0.0f);
+                    inv.m13(0.0f);
+                    inv.m23(0.0f);
                     return inv;
                 })
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "gbufferProjection", state::getGbufferProjection)
