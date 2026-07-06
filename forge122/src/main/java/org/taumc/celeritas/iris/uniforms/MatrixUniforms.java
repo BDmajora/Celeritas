@@ -22,16 +22,10 @@ public final class MatrixUniforms {
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "gbufferModelView", state::getGbufferModelView)
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "gbufferModelViewInverse", () -> {
                     Matrix4f inv = new Matrix4f(state.getGbufferModelView()).invert();
-                    // Forge 1.12.2 uses absolute world coordinates (gl_Vertex = P) and the modelview
-                    // matrix includes camera translation: gbufferModelView = [R | -R*C]. The inverse
-                    // therefore has [R^T | C] in its last column, making ViewToPlayer() return P instead
-                    // of the camera-relative position (P - C) that modern shader packs expect.
-                    // Zeroing the translation column makes ViewToPlayer() camera-relative, matching
-                    // the Iris 1.17+ convention that Complementary et al. are written against.
-                    inv.m03(0.0f);
-                    inv.m13(0.0f);
-                    inv.m23(0.0f);
-                    return inv;
+                    // Forge 1.12.2 gbufferModelView = [R | -R*C], so its inverse has [R^T | C] in the last column.
+                    // Modern packs expect camera-relative positions from ViewToPlayer (R^T * viewPos without +C).
+                    // Zeroing the translation column makes ViewToPlayer return P - C instead of P.
+                    return inv.m03(0).m13(0).m23(0);
                 })
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "gbufferProjection", state::getGbufferProjection)
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "gbufferProjectionInverse",
