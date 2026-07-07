@@ -259,8 +259,16 @@ public class VintageBlockRenderer {
         int blockData = 0;
         IBlockState state = this.currentState;
         if (state != null) {
-            blockId = Block.getIdFromBlock(state.getBlock());
-            blockData = state.getBlock().getMetaFromState(state);
+            int[] idTable = org.taumc.celeritas.iris.material.WorldRenderingSettings.getBlockStateIds();
+            if (idTable != null) {
+                // Pack ships block.properties: mc_Entity = (pack id or -1, fluid flag) — Iris semantics.
+                blockId = idTable[Block.getStateId(state) & 0xFFFF];
+                blockData = state.getMaterial().isLiquid() ? 1 : 0;
+            } else {
+                // No block.properties: raw 1.12.2 id + metadata, the classic OptiFine-pack contract.
+                blockId = Block.getIdFromBlock(state.getBlock());
+                blockData = state.getBlock().getMetaFromState(state);
+            }
         }
 
         for (int i = 0; i < 4; i++) {

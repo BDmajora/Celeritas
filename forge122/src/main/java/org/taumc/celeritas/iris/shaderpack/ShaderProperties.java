@@ -19,9 +19,14 @@ import java.util.OptionalInt;
  * A parsed {@code shaders.properties} file (OptiFine format).
  * <p>
  * 1.12.2 packs use the classic OptiFine directives. Rather than enumerate every possible key, this parser keeps the
- * full raw key/value map and layers typed accessors over the handful of directives the pipeline actually consumes
- * (shadow configuration, cloud mode, per-program blend modes, per-program enable toggles). Unknown keys are preserved
- * verbatim so later phases can read them without re-parsing.
+ * full key/value map and layers typed accessors over the handful of directives the pipeline actually consumes
+ * (shadow configuration, cloud mode, per-program blend modes, per-program enable toggles, custom textures). Unknown
+ * keys are preserved verbatim so later phases can read them without re-parsing.
+ * <p>
+ * Iris parity ({@code ShaderProperties} loads both a preprocessed and an original Properties object): the pipeline
+ * directives are read from the <em>preprocessed</em> contents, so {@code #if MC_VERSION}/option-gated sections
+ * resolve correctly — while the option-menu layout directives ({@code sliders}, {@code profile.*}, {@code screen*})
+ * are read from the <em>original</em> contents, since the menu must show every option regardless of current values.
  * <p>
  * Parsing is deliberately a simple split-on-first-{@code =}: it avoids {@link java.util.Properties}' backslash-escape
  * surprises, which matter because GLSL-adjacent values occasionally contain {@code \}.
@@ -47,17 +52,32 @@ public final class ShaderProperties {
     /** {@code customTexture.<name> = <path>} — pack-defined named samplers, bound in every stage. */
     private final Map<String, String> irisCustomTextures = new LinkedHashMap<>();
 
-    private ShaderProperties(Map<String, String> raw) {
-        this.raw = raw;
-        parseMenuDirectives();
+    private ShaderProperties(Map<String, String> preprocessed, Map<String, String> original) {
+        this.raw = preprocessed;
+        parseMenuDirectives(original);
         parseCustomTextureDirectives();
     }
 
     public static ShaderProperties empty() {
-        return new ShaderProperties(Collections.emptyMap());
+        return new ShaderProperties(Collections.emptyMap(), Collections.emptyMap());
     }
 
+    /** Parses without conditional evaluation — every {@code #if}-guarded line is read, last one wins. */
     public static ShaderProperties parse(String contents) {
+        Map<String, String> map = parseMap(contents);
+        return new ShaderProperties(map, map);
+    }
+
+    /**
+     * @param original     the file exactly as shipped (menu-layout directives come from here, Iris parity).
+     * @param preprocessed the file with conditionals resolved for the active defines/option values (everything the
+     *                     pipeline consumes comes from here).
+     */
+    public static ShaderProperties parse(String original, String preprocessed) {
+        return new ShaderProperties(parseMap(preprocessed), parseMap(original));
+    }
+
+    private static Map<String, String> parseMap(String contents) {
         Map<String, String> map = new LinkedHashMap<>();
         for (String rawLine : contents.split("\r\n|\r|\n")) {
             String line = rawLine.trim();
@@ -74,15 +94,16 @@ public final class ShaderProperties {
                 map.put(key, value);
             }
         }
-        return new ShaderProperties(map);
+        return map;
     }
 
     /**
      * Parses the option-menu layout directives ({@code sliders}, {@code profile.*}, {@code screen}, {@code screen.*},
-     * {@code screen.columns}, {@code screen.*.columns}) from the raw map. Mirrors Iris's ShaderProperties handling.
+     * {@code screen.columns}, {@code screen.*.columns}) from the ORIGINAL (non-preprocessed) contents — the menu must
+     * present every option regardless of the currently active values. Mirrors Iris's ShaderProperties handling.
      */
-    private void parseMenuDirectives() {
-        this.raw.forEach((key, value) -> {
+    private void parseMenuDirectives(Map<String, String> original) {
+        original.forEach((key, value) -> {
             if (key.equals("sliders")) {
                 this.sliderOptions.clear();
                 this.sliderOptions.addAll(splitWhitespace(value));

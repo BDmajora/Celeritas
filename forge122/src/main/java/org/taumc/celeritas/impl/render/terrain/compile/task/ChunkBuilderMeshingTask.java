@@ -121,12 +121,19 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                                 } else {
                                     var buffer = buildContext.getBufferForLayer(layer);
                                     dispatcher.renderBlock(blockState, blockPos, slice, buffer);
+                                    // Attribute the emitted quads to this block for mc_Entity (fluids take this path).
+                                    buildContext.recordVanillaBlockAttribution(layer, blockState);
                                 }
                             }
                         }
 
                         if (FluidloggedCompat.IS_LOADED) {
                             FluidloggedCompat.renderFluidState(slice, blockPos, blockState, buildContext, dispatcher);
+                            // The compat hook picks its own layer(s) internally; sweep all of them — recording is a
+                            // no-op for layers whose quad count did not change.
+                            for (BlockRenderLayer layer : VintageChunkBuildContext.LAYERS) {
+                                buildContext.recordVanillaBlockAttribution(layer, blockState);
+                            }
                         }
 
                         if (blockState.isOpaqueCube()) {

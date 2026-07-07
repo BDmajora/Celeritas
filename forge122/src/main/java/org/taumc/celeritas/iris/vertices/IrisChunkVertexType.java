@@ -12,7 +12,8 @@ import static org.taumc.celeritas.lwjgl.LWJGLServiceProvider.LWJGL;
  * {@code VanillaLikeChunkVertex} (float position, byte color, float UV, packed light/draw-params — the layout
  * {@code EmbeddiumTerrainTransformer}'s prologue decodes) with the OptiFine per-vertex attributes appended:
  * the true face normal ({@code gl_Normal}), {@code at_tangent}, {@code mc_midTexCoord} (sprite center in atlas UV),
- * and {@code mc_Entity} (block id + metadata). The extra data comes straight off
+ * and {@code mc_Entity} — with a pack {@code block.properties} that is (pack block id or -1, fluid flag), Iris
+ * semantics; without one it is (raw 1.12.2 block id, metadata), the classic OptiFine contract. The extra data comes straight off
  * {@link ChunkVertexEncoder.Vertex}'s Iris fields, which the meshing pipeline populates when shaders are on.
  * Only selected by {@code CeleritasWorldRenderer.chooseVertexType} while a pack is loaded, so the wider stride
  * costs nothing otherwise.
@@ -26,7 +27,7 @@ public class IrisChunkVertexType implements ChunkVertexType {
     private static final int OFFSET_NORMAL = 28;   // NormI8-packed face normal (4 normalized signed bytes)
     private static final int OFFSET_TANGENT = 32;  // NormI8-packed tangent, w = handedness
     private static final int OFFSET_MID_TEX = 36;  // 2 x float, sprite center in atlas UV space
-    private static final int OFFSET_ENTITY = 44;   // 2 x float, (block id, metadata)
+    private static final int OFFSET_ENTITY = 44;   // 2 x float, mc_Entity.xy (see class doc)
 
     public static final GlVertexFormat VERTEX_FORMAT = GlVertexFormat.builder(STRIDE)
             .addElement("a_PosId", 0, GlVertexAttributeFormat.FLOAT, 3, false, false)

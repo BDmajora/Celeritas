@@ -247,6 +247,11 @@ public class IrisRenderingPipeline {
             applyPackFormatDirectives(fullscreenSources);
             materializeSampledTargets(fullscreenSources);
 
+            // Publish the pack's block.properties mapping for the chunk meshers (null keeps raw 1.12.2 IDs). Done
+            // here rather than at pack parse because registry resolution needs the game fully initialized.
+            org.taumc.celeritas.iris.material.WorldRenderingSettings.setBlockStateIds(
+                    org.taumc.celeritas.iris.material.BlockMaterialMapping.createBlockStateIdTable(pack.getIdMap()));
+
             // Custom textures must exist before any program compiles: sampler-unit assignment consults the overrides.
             this.customTextureManager = new CustomTextureManager(pack, SAMPLER_UNITS,
                     CUSTOM_TEX_FIRST_UNIT, CUSTOM_TEX_LAST_UNIT);
@@ -885,31 +890,37 @@ public class IrisRenderingPipeline {
         copyDepthTexture(this.renderTargets.getDepthTextureNoTranslucents());
 
         FrameSchedule s = schedule();
-        if (s.deferredPasses.isEmpty()) {
-            return;
-        }
         Minecraft mc = Minecraft.getMinecraft();
 
-        GlStateManager.disableBlend();
-        GlStateManager.disableDepth();
-        GlStateManager.depthMask(false);
-        GlStateManager.disableAlpha();
+        if (!s.deferredPasses.isEmpty()) {
+            GlStateManager.disableBlend();
+            GlStateManager.disableDepth();
+            GlStateManager.depthMask(false);
+            GlStateManager.disableAlpha();
 
-        bindDepthSamplers();
-        for (FullscreenPass pass : s.deferredPasses) {
-            runPass(pass, mc);
+            bindDepthSamplers();
+            for (FullscreenPass pass : s.deferredPasses) {
+                runPass(pass, mc);
+            }
+
+            LWJGL.glUseProgram(0);
+            restoreTextureUnits();
+            GlStateManager.enableDepth();
+            GlStateManager.enableAlpha();
+
+            // The rest of the world (translucents, hand) renders into the post-deferred front textures.
+            this.currentGbuffer = s.translucentGbufferFramebuffer;
+            s.translucentGbufferFramebuffer.bind();
+            LWJGL.glViewport(0, 0, this.renderTargets.getWidth(), this.renderTargets.getHeight());
         }
 
-        LWJGL.glUseProgram(0);
-        restoreTextureUnits();
+        // OptiFine's Shaders.beginWater() contract (EntityRenderer.java:1870, Shaders.java:4484): the translucent
+        // terrain draws with BLENDING ON and DEPTH WRITES ON. Vanilla itself just set depthMask(false) for this
+        // section, but shader water must land in depthtex0 — the composites find water surfaces by comparing
+        // depthtex0 against the pre-translucent depthtex1 copied above. Blend must also be (re)enabled here: the
+        // deferred chain above runs blend-off, and unlike modern MC there is no RenderType state setup to restore it.
+        GlStateManager.enableBlend();
         GlStateManager.depthMask(true);
-        GlStateManager.enableDepth();
-        GlStateManager.enableAlpha();
-
-        // The rest of the world (translucents, hand) renders into the post-deferred front textures.
-        this.currentGbuffer = s.translucentGbufferFramebuffer;
-        s.translucentGbufferFramebuffer.bind();
-        LWJGL.glViewport(0, 0, this.renderTargets.getWidth(), this.renderTargets.getHeight());
     }
 
     /** Called at the {@code "hand"} profiler anchor: snapshot the pre-hand depth ({@code depthtex2}). */
@@ -1195,6 +1206,7 @@ public class IrisRenderingPipeline {
             this.gbufferPrograms.destroy();
         }
         activeGbufferSamplerOverrides = java.util.Collections.emptyMap();
+        org.taumc.celeritas.iris.material.WorldRenderingSettings.setBlockStateIds(null);
         if (this.customTextureManager != null) {
             this.customTextureManager.destroy();
         }

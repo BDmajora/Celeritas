@@ -35,6 +35,13 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
     private final TextureMapExtension textureAtlas;
     private final net.minecraft.client.renderer.BufferBuilder[] worldRenderers = new net.minecraft.client.renderer.BufferBuilder[LAYERS.length];
     private final boolean[] usedWorldRenderers = new boolean[LAYERS.length];
+    /**
+     * Per layer, the block attribution of the vanilla-sourced quads (fluids and other non-model renders) as runs of
+     * int triples {@code (quadEndExclusive, mcEntityId, mcEntityAux)}, recorded while a shader pack is active so
+     * {@code mc_Entity} survives the vanilla BufferBuilder round-trip. See {@link #recordVanillaBlockAttribution}.
+     */
+    private final it.unimi.dsi.fastutil.ints.IntArrayList[] vanillaBlockRuns =
+            new it.unimi.dsi.fastutil.ints.IntArrayList[LAYERS.length];
     @Getter
     private int offX, offY, offZ;
     @Getter
@@ -73,8 +80,53 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
             builder.begin(GL11.GL_QUADS, DefaultVertexFormats.BLOCK);
             builder.setTranslation(-this.offX, -this.offY, -this.offZ);
             this.usedWorldRenderers[layer.ordinal()] = true;
+            if (this.vanillaBlockRuns[layer.ordinal()] != null) {
+                this.vanillaBlockRuns[layer.ordinal()].clear();
+            }
         }
         return builder;
+    }
+
+    /**
+     * Records which block the vanilla-buffered quads emitted since the last call belong to, so
+     * {@link #copyBlockData} can fill {@code mc_Entity} for the vanilla-sourced path (fluids and other non-model
+     * renders). Call right after every {@code dispatcher.renderBlock} into {@link #getBufferForLayer}'s builder.
+     * No-op when no shader pack is active.
+     */
+    public void recordVanillaBlockAttribution(BlockRenderLayer layer, net.minecraft.block.state.IBlockState state) {
+        if (!org.taumc.celeritas.iris.terrain.IrisTerrainProgramOverride.areShadersActive()) {
+            return;
+        }
+        int i = layer.ordinal();
+        var builder = this.worldRenderers[i];
+        if (builder == null || !this.usedWorldRenderers[i]) {
+            return;
+        }
+        var runs = this.vanillaBlockRuns[i];
+        if (runs == null) {
+            runs = new it.unimi.dsi.fastutil.ints.IntArrayList();
+            this.vanillaBlockRuns[i] = runs;
+        }
+        int quadCount = builder.getVertexCount() / 4;
+        int lastEnd = runs.isEmpty() ? 0 : runs.getInt(runs.size() - 3);
+        if (quadCount <= lastEnd) {
+            return; // the block emitted nothing into this layer
+        }
+        int id;
+        int aux;
+        int[] idTable = org.taumc.celeritas.iris.material.WorldRenderingSettings.getBlockStateIds();
+        if (idTable != null) {
+            // Pack ships block.properties: mc_Entity = (pack id or -1, fluid flag) — Iris semantics.
+            id = idTable[net.minecraft.block.Block.getStateId(state) & 0xFFFF];
+            aux = state.getMaterial().isLiquid() ? 1 : 0;
+        } else {
+            // No block.properties: raw 1.12.2 id + metadata, the classic OptiFine-pack contract.
+            id = net.minecraft.block.Block.getIdFromBlock(state.getBlock());
+            aux = state.getBlock().getMetaFromState(state);
+        }
+        runs.add(quadCount);
+        runs.add(id);
+        runs.add(aux);
     }
 
     public void convertVanillaDataToCeleritasData(ChunkBuildBuffers buffers) {
@@ -89,7 +141,7 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
             used[i] = false;
             ByteBuffer rawBuffer = bufferBuilder.getByteBuffer();
             var material = buffers.getRenderPassConfiguration().getMaterialForRenderType(LAYERS[i]);
-            copyBlockData(rawBuffer, buffers, material);
+            copyBlockData(rawBuffer, buffers, material, this.vanillaBlockRuns[i]);
         }
     }
 
@@ -130,13 +182,27 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
         BLOCK_VERTEX_FORMAT_SIZE = size;
     }
 
-    private void copyBlockData(ByteBuffer source, ChunkBuildBuffers buffers, Material material) {
+    private void copyBlockData(ByteBuffer source, ChunkBuildBuffers buffers, Material material,
+                               it.unimi.dsi.fastutil.ints.IntArrayList blockRuns) {
         int vsize = BLOCK_VERTEX_FORMAT_SIZE;
         int numQuads = source.limit() / (vsize * 4);
         long ptr = LWJGL.memAddress(source);
         var quad = ChunkVertexEncoder.Vertex.uninitializedQuad();
         var animatedSpritesList = ((MinecraftBuiltRenderSectionData<TextureAtlasSprite, TileEntity>)buffers.getSectionContextBundle()).animatedSprites;
+        // Walk the per-block attribution runs in lockstep with the quads (see recordVanillaBlockAttribution).
+        int runCursor = 0;
+        int runId = 0;
+        int runAux = 0;
         for(int q = 0; q < numQuads; q++) {
+            if (blockRuns != null) {
+                while (runCursor < blockRuns.size() && q >= blockRuns.getInt(runCursor)) {
+                    runCursor += 3;
+                }
+                if (runCursor < blockRuns.size()) {
+                    runId = blockRuns.getInt(runCursor + 1);
+                    runAux = blockRuns.getInt(runCursor + 2);
+                }
+            }
             float uSum = 0, vSum = 0;
             for(int v = 0; v < 4; v++) {
                 var vertex = quad[v];
@@ -162,8 +228,8 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
                 vertex.trueNormal = trueNormal;
             }
             if (org.taumc.celeritas.iris.terrain.IrisTerrainProgramOverride.areShadersActive()) {
-                // OptiFine extended attributes for the vanilla-sourced path (fluids etc.). No block state is
-                // available here, so mc_Entity stays zero; mid-tex and tangent are derivable.
+                // OptiFine extended attributes for the vanilla-sourced path (fluids etc.). mc_Entity comes from the
+                // per-block attribution runs recorded during meshing; mid-tex and tangent are derivable here.
                 float midU = 0.0f, midV = 0.0f;
                 if (sprite != null) {
                     midU = (sprite.getMinU() + sprite.getMaxU()) * 0.5f;
@@ -181,8 +247,8 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
                     vertex.midTexU = midU;
                     vertex.midTexV = midV;
                     vertex.tangent = tangent;
-                    vertex.blockId = 0;
-                    vertex.blockData = 0;
+                    vertex.blockId = runId;
+                    vertex.blockData = runAux;
                 }
             }
             ModelQuadFacing facing = QuadUtil.findNormalFace(trueNormal);

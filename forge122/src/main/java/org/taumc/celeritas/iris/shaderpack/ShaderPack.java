@@ -4,11 +4,14 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.taumc.celeritas.iris.gl.shader.ShaderMacros;
 import org.taumc.celeritas.iris.shaderpack.include.AbsolutePackPath;
 import org.taumc.celeritas.iris.shaderpack.include.IncludeProcessor;
 import org.taumc.celeritas.iris.shaderpack.loading.ProgramArrayId;
 import org.taumc.celeritas.iris.shaderpack.loading.ProgramId;
+import org.taumc.celeritas.iris.shaderpack.materialmap.IdMap;
 import org.taumc.celeritas.iris.shaderpack.option.ShaderPackOptions;
+import org.taumc.celeritas.iris.shaderpack.preprocessor.PropertiesPreprocessor;
 import org.taumc.celeritas.iris.shaderpack.texture.CustomTextureData;
 import org.taumc.celeritas.iris.shaderpack.texture.TextureFilteringData;
 import org.taumc.celeritas.iris.shaderpack.texture.TextureStage;
@@ -46,6 +49,8 @@ public final class ShaderPack {
     private final IncludeProcessor includeProcessor;
     private final ShaderProperties properties;
     private final ProgramSet baseProgramSet;
+    /** The pack's ID maps (block/item/entity.properties), preprocessed with the active option values. */
+    private final IdMap idMap;
 
     // --- Custom textures (Iris ShaderPack parity) ---
     /** {@code texture.noise} resolved to data, or {@code null} for the generated noisetex. */
@@ -76,24 +81,32 @@ public final class ShaderPack {
         this.sources = Collections.unmodifiableMap(new HashMap<>(sources));
         this.binaries = Collections.unmodifiableMap(new HashMap<>(binaries));
 
-        // Parse the properties file from the raw (unedited) source — it is configuration, not GLSL, so option edits
-        // must never touch it.
-        String propertiesContents = this.sources.get(PROPERTIES_PATH);
-        this.properties = propertiesContents != null
-                ? ShaderProperties.parse(propertiesContents)
-                : ShaderProperties.empty();
-
-        // Discover options across every source file except the properties file, and apply the changed values. The
+        // Discover options across every source file except the properties file, and apply the changed values. Must
+        // run FIRST: the properties/ID-map preprocessing below needs the resolved option values as macros. The
         // include processor then flattens the EDITED sources so that option toggles/values are already baked in.
         Map<AbsolutePackPath, String> optionSources = new HashMap<>(this.sources);
         optionSources.remove(PROPERTIES_PATH);
         this.shaderPackOptions = new ShaderPackOptions(optionSources, changedConfigs);
+
+        // The macro environment Iris feeds its PropertiesPreprocessor: MC_* environment defines plus the pack's
+        // option values (enabled booleans as flag macros, string options as value macros).
+        Map<String, String> propertiesDefines = buildPropertiesDefines();
+
+        // Iris parity: pipeline directives read from the PREPROCESSED contents (so #if MC_VERSION/option gates
+        // resolve), menu-layout directives from the original. Option EDITS still never touch this file.
+        String propertiesContents = this.sources.get(PROPERTIES_PATH);
+        this.properties = propertiesContents != null
+                ? ShaderProperties.parse(propertiesContents,
+                        PropertiesPreprocessor.preprocess(propertiesContents, propertiesDefines))
+                : ShaderProperties.empty();
 
         Map<AbsolutePackPath, String> flattenSources = new HashMap<>(this.sources);
         flattenSources.putAll(this.shaderPackOptions.getEditedSources());
         this.includeProcessor = new IncludeProcessor(flattenSources);
 
         this.baseProgramSet = buildProgramSet();
+
+        this.idMap = new IdMap(this.sources, propertiesDefines);
 
         // Resolve the custom-texture directives to data, exactly like Iris's ShaderPack constructor: a texture that
         // fails to read is logged and dropped (the sampler then sees the normal render target / generated noise).
@@ -184,6 +197,27 @@ public final class ShaderPack {
         }
 
         return new CustomTextureData.PngData(new TextureFilteringData(blur, clamp), content);
+    }
+
+    /**
+     * The macro set for preprocessing the pack's {@code *.properties} files: the GL-free {@code MC_*} environment
+     * macros plus the pack's current option values, mirroring what Iris passes to its PropertiesPreprocessor.
+     */
+    private Map<String, String> buildPropertiesDefines() {
+        Map<String, String> defines = ShaderMacros.standard();
+        this.shaderPackOptions.getOptionSet().getBooleanOptions().forEach((name, option) -> {
+            if (this.shaderPackOptions.getOptionValues().getBooleanValueOrDefault(name)) {
+                defines.put(name, "");
+            }
+        });
+        this.shaderPackOptions.getOptionSet().getStringOptions().forEach((name, option) ->
+                defines.put(name, this.shaderPackOptions.getOptionValues().getStringValueOrDefault(name)));
+        return defines;
+    }
+
+    /** The pack's parsed block/item/entity ID maps. */
+    public IdMap getIdMap() {
+        return this.idMap;
     }
 
     /** {@code texture.noise} resolved to PNG data, or {@code null} when the pack keeps the generated noisetex. */
