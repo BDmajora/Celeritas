@@ -39,7 +39,7 @@ public final class ShaderPackLoader {
      * Java 9+ library APIs like {@code Set.of} are unavailable even though Jabel allows modern syntax.
      */
     private static final Set<String> TEXT_EXTENSIONS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-            "vsh", "fsh", "gsh", "tcs", "tes", "glsl", "inc", "properties", "txt", "lang")));
+            "vsh", "fsh", "gsh", "tcs", "tes", "csh", "glsl", "inc", "properties", "txt", "lang")));
 
     /**
      * File extensions read as raw bytes for the custom-texture directives ({@code texture.<stage>.<sampler>},

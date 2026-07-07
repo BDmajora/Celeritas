@@ -92,7 +92,10 @@ public class IrisRenderingPipeline {
      * above every reserved unit and within the 32 fragment texture-image units the supported GPUs expose.
      */
     private static final int CUSTOM_TEX_FIRST_UNIT = 25;
-    private static final int CUSTOM_TEX_LAST_UNIT = 31;
+    private static final int CUSTOM_TEX_LAST_UNIT = 28;
+    /** Sampler units for the custom images' paired samplers (voxel/floodfill volumes). */
+    private static final int IMAGE_SAMPLER_FIRST_UNIT = 29;
+    private static final int IMAGE_SAMPLER_LAST_UNIT = 31;
     /** Draw-buffer mask for fixed-function content with no pack program: plain color into colortex0 only. */
     private static final int[] FIXED_FUNCTION_MASK = {0};
 
@@ -173,6 +176,29 @@ public class IrisRenderingPipeline {
     private final GbufferPrograms gbufferPrograms;
     /** The pack's custom textures ({@code texture.*}/{@code customTexture.*} directives) and their unit overrides. */
     private final CustomTextureManager customTextureManager;
+    /** The pack's writable custom images ({@code image.*} directives — Complementary's colored-lighting volumes). */
+    private final CustomImageManager customImageManager;
+    /** Compute passes (shadowcomp {@code .csh}), dispatched right after the shadow map renders. */
+    private final List<ComputePass> computePasses = new ArrayList<>();
+
+    /** One compute dispatch: the linked program, its uniforms, and the work-group counts. */
+    private static final class ComputePass {
+        final String name;
+        final GlProgram program;
+        final ProgramUniforms uniforms;
+        final int groupsX;
+        final int groupsY;
+        final int groupsZ;
+
+        ComputePass(String name, GlProgram program, ProgramUniforms uniforms, int groupsX, int groupsY, int groupsZ) {
+            this.name = name;
+            this.program = program;
+            this.uniforms = uniforms;
+            this.groupsX = groupsX;
+            this.groupsY = groupsY;
+            this.groupsZ = groupsZ;
+        }
+    }
     /**
      * The gbuffers/shadow-stage sampler overrides of the <em>active</em> pipeline, consulted by the static
      * {@link #assignSamplerUnitsToBoundProgram} that the Embeddium terrain/shadow overrides call (their program
@@ -252,15 +278,18 @@ public class IrisRenderingPipeline {
             org.taumc.celeritas.iris.material.WorldRenderingSettings.setBlockStateIds(
                     org.taumc.celeritas.iris.material.BlockMaterialMapping.createBlockStateIdTable(pack.getIdMap()));
 
-            // Custom textures must exist before any program compiles: sampler-unit assignment consults the overrides.
+            // Custom images/textures must exist before any program compiles: sampler-unit assignment consults
+            // the overrides (image uniforms are plain glUniform1i assignments like samplers).
+            this.customImageManager = new CustomImageManager(pack.getProperties().getIrisCustomImages(),
+                    IMAGE_SAMPLER_FIRST_UNIT, IMAGE_SAMPLER_LAST_UNIT);
             this.customTextureManager = new CustomTextureManager(pack, SAMPLER_UNITS,
                     CUSTOM_TEX_FIRST_UNIT, CUSTOM_TEX_LAST_UNIT);
-            activeGbufferSamplerOverrides =
-                    this.customTextureManager.getOverrides(TextureStage.GBUFFERS_AND_SHADOW);
+            activeGbufferSamplerOverrides = mergedStageOverrides(TextureStage.GBUFFERS_AND_SHADOW);
 
             this.gbufferPrograms = new GbufferPrograms(pack, SAMPLER_UNITS, gbufferSamplerOverrideUnits());
             this.gbufferAttachments = computeGbufferAttachments(pack, terrainDrawBuffers(pack));
             this.shadowRenderer = createShadowRenderer(pack);
+            buildComputePasses(pack);
             BufferFlipper flipper = this.renderTargets.getBufferFlipper();
 
             // Bake both frame parities. The flipper accumulates continuously: parity 0 is built from the reset state,
@@ -360,12 +389,17 @@ public class IrisRenderingPipeline {
      * and {@code shadowDistance} parsed from the OptiFine const directives anywhere in the pack sources.
      */
     private IrisShadowRenderer createShadowRenderer(ShaderPack pack) {
+        // Const directives may live in ANY source (packs put them in shared includes flattened into every program),
+        // so scan the gbuffer programs and the whole fullscreen chain.
         StringBuilder allSources = new StringBuilder();
         for (ProgramId id : new ProgramId[]{ProgramId.Shadow, ProgramId.Terrain, ProgramId.Water, ProgramId.Final}) {
             pack.getProgramSet().get(id).ifPresent(source -> {
                 source.getVertexSource().ifPresent(allSources::append);
                 source.getFragmentSource().ifPresent(allSources::append);
             });
+        }
+        for (ProgramSource source : collectFullscreenSources(pack)) {
+            source.getFragmentSource().ifPresent(allSources::append);
         }
         String text = allSources.toString();
 
@@ -381,8 +415,19 @@ public class IrisRenderingPipeline {
         }
         int resolution = parseConstInt(text, "shadowMapResolution", 1024);
         float distance = parseConstFloat(text, "shadowDistance", 120.0f);
+        // OptiFine's hardware-compare contract: `const bool shadowHardwareFiltering` covers both shadow depth
+        // textures; the 0/1 forms cover one each. LIGHT declares ...Filtering0, Complementary the both-textures form.
+        boolean hwBoth = parseConstBool(text, "shadowHardwareFiltering");
+        boolean[] hardwareFiltering = {
+                hwBoth || parseConstBool(text, "shadowHardwareFiltering0"),
+                hwBoth || parseConstBool(text, "shadowHardwareFiltering1")
+        };
+        // The FF shadow program (entities/block entities) belongs to the gbuffers custom-texture stage.
+        Map<String, Integer> shadowSamplerUnits = new LinkedHashMap<>(SAMPLER_UNITS);
+        shadowSamplerUnits.putAll(gbufferSamplerOverrideUnits());
         try {
-            return new IrisShadowRenderer(resolution, distance, sunPathRotation);
+            return new IrisShadowRenderer(resolution, distance, sunPathRotation,
+                    shadowSource.get(), shadowSamplerUnits, hardwareFiltering);
         } catch (Exception e) {
             LOGGER.error("[Iris] Failed to create the shadow renderer; shadows disabled", e);
             return null;
@@ -392,6 +437,10 @@ public class IrisRenderingPipeline {
     private static int parseConstInt(String text, String name, int fallback) {
         Matcher matcher = Pattern.compile("const\\s+int\\s+" + name + "\\s*=\\s*(\\d+)").matcher(text);
         return matcher.find() ? Integer.parseInt(matcher.group(1)) : fallback;
+    }
+
+    private static boolean parseConstBool(String text, String name) {
+        return Pattern.compile("const\\s+bool\\s+" + name + "\\s*=\\s*true").matcher(text).find();
     }
 
     private static float parseConstFloat(String text, String name, float fallback) {
@@ -579,8 +628,13 @@ public class IrisRenderingPipeline {
             String vsh;
             String fsh;
             if (modern) {
-                vsh = ModernPackTransformer.transform(vshRaw);
-                fsh = ModernPackTransformer.transform(fshRaw);
+                // Modern sources rely on the driver preprocessor for their #if trees; the MC_*/IRIS_FEATURE_* macro
+                // environment has to be present for those gates (colored lighting checks IRIS_FEATURE_CUSTOM_IMAGES).
+                Map<String, String> macros = org.taumc.celeritas.iris.gl.shader.ShaderMacros.standard();
+                vsh = ModernPackTransformer.transform(
+                        org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(vshRaw, macros));
+                fsh = ModernPackTransformer.transform(
+                        org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(fshRaw, macros));
             } else {
                 vsh = FullscreenTransformer.transformVertexShader(vshRaw);
                 fsh = FullscreenTransformer.transformFragmentShader(fshRaw);
@@ -621,7 +675,7 @@ public class IrisRenderingPipeline {
      */
     private void assignSamplerUnits(GlProgram program, TextureStage stage) {
         program.bind();
-        assignSamplerUnits(program.getGlId(), this.customTextureManager.getOverrides(stage), this.flippedAtLeastOnce);
+        assignSamplerUnits(program.getGlId(), mergedStageOverrides(stage), this.flippedAtLeastOnce);
         program.unbind();
     }
 
@@ -667,7 +721,20 @@ public class IrisRenderingPipeline {
                 : this.customTextureManager.getOverrides(TextureStage.GBUFFERS_AND_SHADOW).entrySet()) {
             units.put(entry.getKey(), entry.getValue().unit);
         }
+        units.putAll(this.customImageManager.getUniformOverrides());
         return units;
+    }
+
+    /**
+     * The stage's custom-texture overrides plus the (stage-independent) custom-image uniform assignments, in the
+     * Override form {@link #assignSamplerUnits} consumes. Image entries never deactivate (colorTarget -1).
+     */
+    private Map<String, CustomTextureManager.Override> mergedStageOverrides(TextureStage stage) {
+        Map<String, CustomTextureManager.Override> merged =
+                new LinkedHashMap<>(this.customTextureManager.getOverrides(stage));
+        this.customImageManager.getUniformOverrides().forEach((name, unit) ->
+                merged.put(name, new CustomTextureManager.Override(unit, -1)));
+        return merged;
     }
 
     private static ProgramUniforms buildUniforms(String name, IrisProgram program) {
@@ -768,6 +835,9 @@ public class IrisRenderingPipeline {
         // The pack's custom textures (texture.<stage>.<sampler> / customTexture.<name>) live on dedicated units for
         // the whole frame; the per-stage program sampler assignments point at them.
         this.customTextureManager.bindAll();
+        // Custom images: zero the per-frame ones (voxel volume), then bind image units + paired samplers.
+        this.customImageManager.clearAll();
+        this.customImageManager.bindAll();
 
         // Default PBR maps on the gbuffer-stage normals/specular units (2/3, so through GlStateManager to keep its
         // cache coherent). The composite stage overwrites these units with colortex2/3 when it runs.
@@ -865,16 +935,19 @@ public class IrisRenderingPipeline {
             return;
         }
         this.shadowRenderer.render();
+        dispatchComputePasses();
 
         this.currentGbuffer.bind();
         LWJGL.glViewport(0, 0, this.renderTargets.getWidth(), this.renderTargets.getHeight());
 
-        for (int unit : new int[]{SHADOW_TEX_0_UNIT, SHADOW_TEX_1_UNIT}) {
-            LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + unit);
-            LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, this.shadowRenderer.getDepthTextureId());
-        }
+        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + SHADOW_TEX_0_UNIT);
+        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, this.shadowRenderer.getDepthTextureId());
+        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + SHADOW_TEX_1_UNIT);
+        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, this.shadowRenderer.getDepthTextureNoTranslucentsId());
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + SHADOW_COLOR_0_UNIT);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, this.shadowRenderer.getColorTextureId());
+        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + SHADOW_COLOR_1_UNIT);
+        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, this.shadowRenderer.getColorTexture1Id());
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
     }
 
@@ -1013,6 +1086,87 @@ public class IrisRenderingPipeline {
 
     public boolean isWorldRenderingActive() {
         return this.worldRenderingActive;
+    }
+
+    /**
+     * Compiles the pack's shadowcomp compute passes ({@code .csh}, Iris extension — Complementary's floodfill light
+     * propagation). The dispatch size is the first 3D custom image's dimensions divided by the shader's declared
+     * {@code local_size} (exactly the {@code const ivec3 workGroups} Complementary declares per volume size).
+     */
+    private void buildComputePasses(ShaderPack pack) {
+        int[] volume = this.customImageManager.getFirst3DImageSize();
+        for (int i = 0; i < ProgramArrayId.ShadowComposite.getNumPrograms(); i++) {
+            Optional<ProgramSource> source = pack.getProgramSet().get(ProgramArrayId.ShadowComposite, i);
+            if (!source.isPresent() || !source.get().getComputeSource().isPresent()) {
+                continue;
+            }
+            String name = source.get().getName();
+            try {
+                String csh = org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(
+                        source.get().getComputeSource().get(),
+                        org.taumc.celeritas.iris.gl.shader.ShaderMacros.standard());
+                int[] localSize = parseLocalSize(csh);
+                if (volume == null || localSize == null) {
+                    LOGGER.warn("[Iris] Compute pass '{}' skipped (no 3D custom image / local_size declaration)", name);
+                    continue;
+                }
+                GlShader shader = new GlShader(ShaderType.COMPUTE, name + ".csh", csh);
+                GlProgram program;
+                try {
+                    program = ProgramBuilder.begin(name).attach(shader).link();
+                } finally {
+                    shader.destroy();
+                }
+                program.bind();
+                assignSamplerUnits(program.getGlId(),
+                        mergedStageOverrides(TextureStage.SHADOWCOMP), java.util.Collections.<Integer>emptySet());
+                program.unbind();
+                ProgramUniforms.Builder uniforms = ProgramUniforms.builder(name, program.getGlId());
+                CommonUniforms.addCommonUniforms(uniforms);
+                MatrixUniforms.addMatrixUniforms(uniforms);
+                int groupsX = Math.max(1, volume[0] / localSize[0]);
+                int groupsY = Math.max(1, volume[1] / localSize[1]);
+                int groupsZ = Math.max(1, volume[2] / localSize[2]);
+                this.computePasses.add(new ComputePass(name, program, uniforms.buildUniforms(),
+                        groupsX, groupsY, groupsZ));
+                LOGGER.info("[Iris] Compute pass '{}' ready: dispatch {}x{}x{} (local {}x{}x{})",
+                        name, groupsX, groupsY, groupsZ, localSize[0], localSize[1], localSize[2]);
+            } catch (Exception e) {
+                LOGGER.error("[Iris] Failed to build compute pass '{}'; it will be skipped: {}", name, e.getMessage());
+            }
+        }
+    }
+
+    private static int[] parseLocalSize(String source) {
+        Matcher matcher = Pattern.compile(
+                "local_size_x\\s*=\\s*(\\d+)(?:\\s*,\\s*local_size_y\\s*=\\s*(\\d+))?(?:\\s*,\\s*local_size_z\\s*=\\s*(\\d+))?")
+                .matcher(source);
+        if (!matcher.find()) {
+            return null;
+        }
+        int x = Integer.parseInt(matcher.group(1));
+        int y = matcher.group(2) != null ? Integer.parseInt(matcher.group(2)) : 1;
+        int z = matcher.group(3) != null ? Integer.parseInt(matcher.group(3)) : 1;
+        return new int[]{x, y, z};
+    }
+
+    /**
+     * Runs the shadowcomp compute chain: a full barrier makes the shadow pass's imageStore voxelization visible,
+     * each pass dispatches, and a closing barrier publishes the results to every later sampler read.
+     */
+    private void dispatchComputePasses() {
+        if (this.computePasses.isEmpty()) {
+            return;
+        }
+        LWJGL.glMemoryBarrier(org.taumc.celeritas.lwjgl.GL42.GL_ALL_BARRIER_BITS);
+        for (ComputePass pass : this.computePasses) {
+            pass.program.bind();
+            pass.uniforms.update();
+            LWJGL.glDispatchCompute(pass.groupsX, pass.groupsY, pass.groupsZ);
+            // Each floodfill iteration reads the previous one's writes.
+            LWJGL.glMemoryBarrier(org.taumc.celeritas.lwjgl.GL42.GL_ALL_BARRIER_BITS);
+        }
+        LWJGL.glUseProgram(0);
     }
 
     /** Captures the block-atlas dimensions for the {@code atlasSize}/{@code terrainTextureSize} uniforms. */
@@ -1167,6 +1321,7 @@ public class IrisRenderingPipeline {
 
     private void restoreTextureUnits() {
         this.customTextureManager.unbindAll();
+        this.customImageManager.unbindAll();
         for (int unit = DEPTH_TEX_0_UNIT; unit <= DEPTH_TEX_2_UNIT; unit++) {
             LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + unit);
             LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
@@ -1207,8 +1362,15 @@ public class IrisRenderingPipeline {
         }
         activeGbufferSamplerOverrides = java.util.Collections.emptyMap();
         org.taumc.celeritas.iris.material.WorldRenderingSettings.setBlockStateIds(null);
+        for (ComputePass pass : this.computePasses) {
+            pass.program.destroy();
+        }
+        this.computePasses.clear();
         if (this.customTextureManager != null) {
             this.customTextureManager.destroy();
+        }
+        if (this.customImageManager != null) {
+            this.customImageManager.destroy();
         }
         // Programs/uniforms are shared between the two schedules — destroy them once here, not per-pass.
         for (IrisProgram program : this.compiledPrograms.values()) {

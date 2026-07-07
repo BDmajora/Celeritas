@@ -28,6 +28,8 @@ public final class CapturedRenderingState {
     private final Vector2i atlasSize = new Vector2i();
 
     private float tickDelta;
+    /** Iris {@code renderStage} uniform value: the current WorldRenderingPhase ordinal (MC_RENDER_STAGE_*). */
+    private int renderStage;
     private float currentAlphaTest;
     private int currentRenderedBlockEntity = -1;
     private int currentRenderedEntity = -1;
@@ -112,6 +114,14 @@ public final class CapturedRenderingState {
         this.previousGbufferModelView.set(this.gbufferModelView);
         this.previousGbufferProjection.set(this.gbufferProjection);
         this.previousCameraPosition.set(this.cameraPosition);
+    }
+
+    public int getRenderStage() {
+        return this.renderStage;
+    }
+
+    public void setRenderStage(int renderStage) {
+        this.renderStage = renderStage;
     }
 
     public float getTickDelta() {

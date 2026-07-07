@@ -17,6 +17,7 @@ public final class ProgramSource {
     private final String tessControlSource;
     private final String tessEvalSource;
     private final String fragmentSource;
+    private final String computeSource;
 
     public ProgramSource(String name,
                          String vertexSource,
@@ -24,12 +25,23 @@ public final class ProgramSource {
                          String tessControlSource,
                          String tessEvalSource,
                          String fragmentSource) {
+        this(name, vertexSource, geometrySource, tessControlSource, tessEvalSource, fragmentSource, null);
+    }
+
+    public ProgramSource(String name,
+                         String vertexSource,
+                         String geometrySource,
+                         String tessControlSource,
+                         String tessEvalSource,
+                         String fragmentSource,
+                         String computeSource) {
         this.name = name;
         this.vertexSource = vertexSource;
         this.geometrySource = geometrySource;
         this.tessControlSource = tessControlSource;
         this.tessEvalSource = tessEvalSource;
         this.fragmentSource = fragmentSource;
+        this.computeSource = computeSource;
     }
 
     public String getName() {
@@ -56,11 +68,17 @@ public final class ProgramSource {
         return Optional.ofNullable(this.fragmentSource);
     }
 
+    /** The compute stage ({@code .csh}), used by shadowcomp/composite compute passes (Iris extension). */
+    public Optional<String> getComputeSource() {
+        return Optional.ofNullable(this.computeSource);
+    }
+
     /**
      * A program is only usable if it has at least a vertex and a fragment stage. OptiFine treats a program with only
      * one of the two as malformed, falling back to the parent program.
      */
     public boolean isValid() {
-        return this.vertexSource != null && this.fragmentSource != null;
+        // A compute-only program (shadowcomp.csh) is valid without vertex/fragment stages (Iris extension).
+        return (this.vertexSource != null && this.fragmentSource != null) || this.computeSource != null;
     }
 }

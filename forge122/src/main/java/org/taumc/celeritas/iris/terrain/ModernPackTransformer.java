@@ -49,10 +49,27 @@ public final class ModernPackTransformer {
         Matcher matcher = VERSION.matcher(source);
         if (matcher.find()) {
             return source.substring(0, matcher.start())
-                    + "#version 330 compatibility"
+                    + "#version " + targetVersion(source) + " compatibility"
                     + source.substring(matcher.end());
         }
         // No #version at all — prepend one so the driver doesn't default to 110.
-        return "#version 330 compatibility\n" + source;
+        return "#version " + targetVersion(source) + " compatibility\n" + source;
+    }
+
+    /**
+     * The compatibility version to compile at: at least 330 (the lift this transformer performs), never lower than
+     * the pack's own declaration (Complementary's shadow stub declares 400), and 430 when the source uses image
+     * load/store (colored-lighting voxelization) or compute-adjacent features that 330 lacks.
+     */
+    private static int targetVersion(String source) {
+        int version = 330;
+        java.util.regex.Matcher declared = VERSION.matcher(source);
+        if (declared.find()) {
+            version = Math.max(version, Integer.parseInt(declared.group(1)));
+        }
+        if (source.contains("imageStore") || source.contains("imageLoad") || source.contains("imageAtomic")) {
+            version = Math.max(version, 430);
+        }
+        return version;
     }
 }

@@ -51,6 +51,9 @@ public final class ShaderProperties {
     private final Map<TextureStage, Map<String, String>> customTextures = new EnumMap<>(TextureStage.class);
     /** {@code customTexture.<name> = <path>} — pack-defined named samplers, bound in every stage. */
     private final Map<String, String> irisCustomTextures = new LinkedHashMap<>();
+    /** {@code image.<name> = ...} — writable custom images (imageStore), declaration order. */
+    private final List<org.taumc.celeritas.iris.shaderpack.texture.CustomImageDefinition> irisCustomImages =
+            new ArrayList<>();
 
     private ShaderProperties(Map<String, String> preprocessed, Map<String, String> original) {
         this.raw = preprocessed;
@@ -163,6 +166,13 @@ public final class ShaderProperties {
                 this.customTextures
                         .computeIfAbsent(stage.get(), s -> new LinkedHashMap<>())
                         .put(samplerName, value);
+            } else if (key.startsWith("image.")) {
+                String name = key.substring("image.".length());
+                org.taumc.celeritas.iris.shaderpack.texture.CustomImageDefinition definition =
+                        org.taumc.celeritas.iris.shaderpack.texture.CustomImageDefinition.parse(name, value);
+                if (definition != null) {
+                    this.irisCustomImages.add(definition);
+                }
             } else if (key.startsWith("customTexture.")) {
                 String name = key.substring("customTexture.".length());
                 if (name.isEmpty()) {
@@ -268,6 +278,11 @@ public final class ShaderProperties {
     /** {@code customTexture.<name>} definitions: sampler name → pack path / resource location (all stages). */
     public Map<String, String> getIrisCustomTextures() {
         return Collections.unmodifiableMap(this.irisCustomTextures);
+    }
+
+    /** {@code image.<name>} definitions in declaration order (Iris custom writable images). */
+    public List<org.taumc.celeritas.iris.shaderpack.texture.CustomImageDefinition> getIrisCustomImages() {
+        return Collections.unmodifiableList(this.irisCustomImages);
     }
 
     /**

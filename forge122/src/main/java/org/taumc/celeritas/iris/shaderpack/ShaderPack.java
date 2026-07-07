@@ -286,13 +286,14 @@ public final class ShaderPack {
     private ProgramSource readProgram(String sourceName) {
         String vertex = readStage(sourceName, "vsh");
         String fragment = readStage(sourceName, "fsh");
-        if (vertex == null && fragment == null) {
+        String compute = readStage(sourceName, "csh");
+        if (vertex == null && fragment == null && compute == null) {
             return null;
         }
         String geometry = readStage(sourceName, "gsh");
         String tessControl = readStage(sourceName, "tcs");
         String tessEval = readStage(sourceName, "tes");
-        return new ProgramSource(sourceName, vertex, geometry, tessControl, tessEval, fragment);
+        return new ProgramSource(sourceName, vertex, geometry, tessControl, tessEval, fragment, compute);
     }
 
     private String readStage(String sourceName, String extension) {

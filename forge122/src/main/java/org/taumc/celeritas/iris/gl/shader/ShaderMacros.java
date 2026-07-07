@@ -27,6 +27,39 @@ public final class ShaderMacros {
         macros.put("MC_RENDER_QUALITY", "1.0");
         macros.put("MC_SHADOW_QUALITY", "1.0");
         macros.put("MC_HAND_DEPTH", "0.125");
+        // Iris feature flags for the subset of Iris extensions this port implements. Packs declare what they can
+        // use via `iris.features.optional` and gate on `#ifdef IRIS_FEATURE_<NAME>` (Complementary gates its
+        // colored lighting on CUSTOM_IMAGES).
+        macros.put("IRIS_FEATURE_CUSTOM_IMAGES", "");
+        // Iris identity define: packs gate their Iris-exclusive uniform DECLARATIONS on this (Complementary's
+        // uniforms.glsl declares renderStage/is_invisible behind #ifdef IS_IRIS). Everything that block declares at
+        // MC_VERSION 11202 is provided by CommonUniforms.
+        macros.put("IS_IRIS", "");
+        // Iris render-stage constants (WorldRenderingPhase ordinals, exact Iris order) for the renderStage uniform.
+        macros.put("MC_RENDER_STAGE_NONE", "0");
+        macros.put("MC_RENDER_STAGE_SKY", "1");
+        macros.put("MC_RENDER_STAGE_SUNSET", "2");
+        macros.put("MC_RENDER_STAGE_CUSTOM_SKY", "3");
+        macros.put("MC_RENDER_STAGE_SUN", "4");
+        macros.put("MC_RENDER_STAGE_MOON", "5");
+        macros.put("MC_RENDER_STAGE_STARS", "6");
+        macros.put("MC_RENDER_STAGE_VOID", "7");
+        macros.put("MC_RENDER_STAGE_TERRAIN_SOLID", "8");
+        macros.put("MC_RENDER_STAGE_TERRAIN_CUTOUT_MIPPED", "9");
+        macros.put("MC_RENDER_STAGE_TERRAIN_CUTOUT", "10");
+        macros.put("MC_RENDER_STAGE_ENTITIES", "11");
+        macros.put("MC_RENDER_STAGE_BLOCK_ENTITIES", "12");
+        macros.put("MC_RENDER_STAGE_DESTROY", "13");
+        macros.put("MC_RENDER_STAGE_OUTLINE", "14");
+        macros.put("MC_RENDER_STAGE_DEBUG", "15");
+        macros.put("MC_RENDER_STAGE_HAND_SOLID", "16");
+        macros.put("MC_RENDER_STAGE_TERRAIN_TRANSLUCENT", "17");
+        macros.put("MC_RENDER_STAGE_TRIPWIRE", "18");
+        macros.put("MC_RENDER_STAGE_PARTICLES", "19");
+        macros.put("MC_RENDER_STAGE_CLOUDS", "20");
+        macros.put("MC_RENDER_STAGE_RAIN_SNOW", "21");
+        macros.put("MC_RENDER_STAGE_WORLD_BORDER", "22");
+        macros.put("MC_RENDER_STAGE_HAND_TRANSLUCENT", "23");
         return macros;
     }
 
@@ -50,6 +83,31 @@ public final class ShaderMacros {
         if (rendererMacro != null) {
             macros.put(rendererMacro, "");
         }
+    }
+
+    /**
+     * Inserts {@code #define} lines for the given macros right after the {@code #version} directive (or at the top
+     * when there is none). Used by the fullscreen/terrain/compute paths, which do not go through
+     * {@code ShaderProgramCompiler}'s define application.
+     */
+    public static String injectDefines(String source, Map<String, String> macros) {
+        StringBuilder defines = new StringBuilder();
+        for (Map.Entry<String, String> macro : macros.entrySet()) {
+            defines.append("#define ").append(macro.getKey());
+            if (!macro.getValue().isEmpty()) {
+                defines.append(' ').append(macro.getValue());
+            }
+            defines.append('\n');
+        }
+        int versionStart = source.indexOf("#version");
+        if (versionStart < 0) {
+            return defines + source;
+        }
+        int lineEnd = source.indexOf('\n', versionStart);
+        if (lineEnd < 0) {
+            return source + "\n" + defines;
+        }
+        return source.substring(0, lineEnd + 1) + defines + source.substring(lineEnd + 1);
     }
 
     private static String osMacro() {

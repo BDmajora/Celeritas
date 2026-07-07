@@ -142,6 +142,14 @@ public interface LWJGLService {
     void glDepthRange(double zNear, double zFar);
     void glPixelStorei(int pname, int param);
     void glTexImage2D(int target, int level, int internalformat, int width, int height, int border, int format, int type, ByteBuffer pixels);
+    void glTexImage3D(int target, int level, int internalformat, int width, int height, int depth, int border, int format, int type, ByteBuffer pixels);
+
+    // ===================== IMAGE LOAD/STORE + COMPUTE (GL 4.2/4.3/4.4) =====================
+
+    void glBindImageTexture(int unit, int texture, int level, boolean layered, int layer, int access, int format);
+    void glMemoryBarrier(int barriers);
+    void glDispatchCompute(int numGroupsX, int numGroupsY, int numGroupsZ);
+    void glClearTexImage(int texture, int level, int format, int type, ByteBuffer data);
     void glTexParameteri(int target, int pname, int param);
     void glTexParameterf(int target, int pname, float param);
 

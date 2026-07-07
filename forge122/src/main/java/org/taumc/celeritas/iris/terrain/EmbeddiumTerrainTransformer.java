@@ -182,13 +182,13 @@ public final class EmbeddiumTerrainTransformer {
         // Delete the pack's mc_Entity/mc_midTexCoord/at_tangent attribute declarations; the prologue #defines those
         // names onto its own decoded globals, so the pack's declarations would become illegal redeclarations.
         body = dropAttributeStorageQualifier(body);
-        return compat(VERTEX_PROLOGUE) + body + vertexMain("");
+        return compatFor(VERTEX_PROLOGUE, source) + body + vertexMain("");
     }
 
     public static String transformFragmentShaderModern(String source) {
         String body = stripVersion(source);
         body = renameMain(body);
-        return compat(FRAGMENT_PROLOGUE) + body
+        return compatFor(FRAGMENT_PROLOGUE, source) + body
                 + "\nvoid main() {\n    irisMain();\n"
                 + "    if (iris_FragData[0].a < iris_AlphaCutoff) { discard; }\n}\n";
     }
@@ -196,6 +196,13 @@ public final class EmbeddiumTerrainTransformer {
     /** The shared prologue targets 330 core; modern packs need 330 compatibility (legacy built-ins + modern intrinsics). */
     private static String compat(String prologue) {
         return prologue.replaceFirst("#version 330 core", "#version 330 compatibility");
+    }
+
+    /** Image load/store (colored-lighting voxelization) needs 430; plain modern sources keep 330. */
+    private static String compatFor(String prologue, String packBody) {
+        String version = (packBody.contains("imageStore") || packBody.contains("imageLoad")
+                || packBody.contains("imageAtomic")) ? "#version 430 compatibility" : "#version 330 compatibility";
+        return prologue.replaceFirst("#version 330 core", version);
     }
 
     private static String stripVersion(String source) {

@@ -102,10 +102,14 @@ public final class IrisTerrainProgramOverride {
             // Chocapic family (LIGHT) keeps the full rewrite.
             boolean modern = ModernPackTransformer.isModernSource(fshSource);
             String vsh = modern
-                    ? EmbeddiumTerrainTransformer.transformVertexShaderModern(vshSource)
+                    ? EmbeddiumTerrainTransformer.transformVertexShaderModern(
+                            org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(vshSource,
+                                    org.taumc.celeritas.iris.gl.shader.ShaderMacros.standard()))
                     : EmbeddiumTerrainTransformer.transformVertexShader(vshSource);
             String fsh = modern
-                    ? EmbeddiumTerrainTransformer.transformFragmentShaderModern(fshSource)
+                    ? EmbeddiumTerrainTransformer.transformFragmentShaderModern(
+                            org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(fshSource,
+                                    org.taumc.celeritas.iris.gl.shader.ShaderMacros.standard()))
                     : EmbeddiumTerrainTransformer.transformFragmentShader(fshSource);
             org.taumc.celeritas.iris.pipeline.IrisDebugDump.dumpText(
                     "src_" + programId.getSourceName() + ".vsh", vsh);

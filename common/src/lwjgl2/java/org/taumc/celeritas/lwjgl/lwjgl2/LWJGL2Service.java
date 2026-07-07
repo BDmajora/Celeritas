@@ -731,6 +731,31 @@ public record LWJGL2Service(
     }
 
     @Override
+    public void glTexImage3D(int target, int level, int internalformat, int width, int height, int depth, int border, int format, int type, ByteBuffer pixels) {
+        org.lwjgl.opengl.GL12.glTexImage3D(target, level, internalformat, width, height, depth, border, format, type, pixels);
+    }
+
+    @Override
+    public void glBindImageTexture(int unit, int texture, int level, boolean layered, int layer, int access, int format) {
+        org.lwjgl.opengl.GL42.glBindImageTexture(unit, texture, level, layered, layer, access, format);
+    }
+
+    @Override
+    public void glMemoryBarrier(int barriers) {
+        org.lwjgl.opengl.GL42.glMemoryBarrier(barriers);
+    }
+
+    @Override
+    public void glDispatchCompute(int numGroupsX, int numGroupsY, int numGroupsZ) {
+        GL43.glDispatchCompute(numGroupsX, numGroupsY, numGroupsZ);
+    }
+
+    @Override
+    public void glClearTexImage(int texture, int level, int format, int type, ByteBuffer data) {
+        org.lwjgl.opengl.GL44.glClearTexImage(texture, level, format, type, data);
+    }
+
+    @Override
     public void glTexParameteri(int target, int pname, int param) {
         GL11.glTexParameteri(target, pname, param);
     }

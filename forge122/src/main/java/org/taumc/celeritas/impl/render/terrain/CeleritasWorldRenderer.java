@@ -77,6 +77,16 @@ public class CeleritasWorldRenderer extends SimpleWorldRenderer<WorldClient, Vin
      * Performs a render pass for the given {@link BlockRenderLayer} and draws all visible chunks for it.
      */
     public void drawChunkLayer(BlockRenderLayer renderLayer, double x, double y, double z) {
+        // Iris renderStage uniform: packs gate voxelization on MC_RENDER_STAGE_TERRAIN_* (ordinals 8/9/10/17).
+        int stage;
+        switch (renderLayer) {
+            case SOLID: stage = 8; break;
+            case CUTOUT_MIPPED: stage = 9; break;
+            case CUTOUT: stage = 10; break;
+            case TRANSLUCENT: stage = 17; break;
+            default: stage = 0; break;
+        }
+        org.taumc.celeritas.iris.uniforms.CapturedRenderingState.INSTANCE.setRenderStage(stage);
         super.drawChunkLayer(renderLayer, x, y, z);
 
         GlStateManager.resetColor();

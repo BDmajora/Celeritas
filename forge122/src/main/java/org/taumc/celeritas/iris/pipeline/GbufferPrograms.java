@@ -110,7 +110,8 @@ public class GbufferPrograms {
         }
     }
 
-    private static Entry compile(ProgramSource source, Map<String, String> defines, Map<String, Integer> samplerUnits) {
+    /** Also used by {@link IrisShadowRenderer} to compile the fixed-function flavor of the {@code shadow} program. */
+    static Entry compile(ProgramSource source, Map<String, String> defines, Map<String, Integer> samplerUnits) {
         try {
             IrisProgram program = ShaderProgramCompiler.compile(source.getName(), source, defines);
 

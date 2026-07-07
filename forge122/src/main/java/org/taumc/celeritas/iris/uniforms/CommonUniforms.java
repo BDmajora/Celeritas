@@ -42,6 +42,10 @@ public final class CommonUniforms {
                 .uniform1i(UniformUpdateFrequency.PER_FRAME, "isEyeInWater", CommonUniforms::isEyeInWater)
                 .uniform1i(UniformUpdateFrequency.PER_FRAME, "blindness", CommonUniforms::getBlindness)
                 .uniform1i(UniformUpdateFrequency.PER_FRAME, "nightVision", CommonUniforms::getNightVision)
+                .uniform1i(UniformUpdateFrequency.PER_FRAME, "renderStage",
+                        CapturedRenderingState.INSTANCE::getRenderStage)
+                // Iris-exclusive: whether the player is invisible (spectator/potion). Not tracked yet.
+                .uniform1i(UniformUpdateFrequency.PER_FRAME, "is_invisible", () -> 0)
                 .uniform1i(UniformUpdateFrequency.PER_TICK, "worldTime", CommonUniforms::getWorldTime)
                 .uniform1i(UniformUpdateFrequency.PER_TICK, "worldDay", CommonUniforms::getWorldDay)
                 .uniform1i(UniformUpdateFrequency.PER_TICK, "moonPhase", CommonUniforms::getMoonPhase)
