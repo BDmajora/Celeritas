@@ -70,7 +70,11 @@ public class GbufferPrograms {
     private final Map<ProgramId, Entry> byPhase = new EnumMap<>(ProgramId.class);
     private final List<Entry> ownedEntries = new ArrayList<>();
 
-    GbufferPrograms(ShaderPack pack, Map<String, Integer> samplerUnits) {
+    /**
+     * @param samplerOverrides the pack's gbuffers-stage custom-texture units (sampler name → dedicated unit), applied
+     *                         over the standard table so e.g. {@code texture.gbuffers.gaux4} redirects that sampler.
+     */
+    GbufferPrograms(ShaderPack pack, Map<String, Integer> samplerUnits, Map<String, Integer> samplerOverrides) {
         Map<String, String> defines = ShaderMacros.standard();
         // Fixed-function stages sample the bound atlas/lightmap on the vanilla units, plus OptiFine's aux slots.
         Map<String, Integer> gbufferSamplers = new HashMap<>(samplerUnits);
@@ -79,6 +83,8 @@ public class GbufferPrograms {
         gbufferSamplers.put("lightmap", 1);
         gbufferSamplers.put("normals", 2);
         gbufferSamplers.put("specular", 3);
+        // Custom-texture overrides win over everything, including the vanilla-unit additions above.
+        gbufferSamplers.putAll(samplerOverrides);
 
         Map<String, Entry> bySourceName = new HashMap<>();
         for (ProgramId phase : PHASES) {

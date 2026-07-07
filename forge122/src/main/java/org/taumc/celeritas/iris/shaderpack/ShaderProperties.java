@@ -1,7 +1,12 @@
 package org.taumc.celeritas.iris.shaderpack;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.taumc.celeritas.iris.shaderpack.texture.TextureStage;
+
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,6 +27,8 @@ import java.util.OptionalInt;
  * surprises, which matter because GLSL-adjacent values occasionally contain {@code \}.
  */
 public final class ShaderProperties {
+    private static final Logger LOGGER = LogManager.getLogger("Celeritas/Iris");
+
     private final Map<String, String> raw;
 
     // --- Option-menu layout directives (parsed from the raw, non-preprocessed file) ---
@@ -32,9 +39,18 @@ public final class ShaderProperties {
     private Integer mainScreenColumnCount = null;
     private final Map<String, Integer> subScreenColumnCount = new HashMap<>();
 
+    // --- Custom texture directives (Iris ShaderProperties parity) ---
+    /** {@code texture.noise = <path>} — replaces the generated noisetex. */
+    private String noiseTexturePath = null;
+    /** {@code texture.<stage>.<sampler> = <path>} — per-stage sampler overrides, keyed by stage then sampler name. */
+    private final Map<TextureStage, Map<String, String>> customTextures = new EnumMap<>(TextureStage.class);
+    /** {@code customTexture.<name> = <path>} — pack-defined named samplers, bound in every stage. */
+    private final Map<String, String> irisCustomTextures = new LinkedHashMap<>();
+
     private ShaderProperties(Map<String, String> raw) {
         this.raw = raw;
         parseMenuDirectives();
+        parseCustomTextureDirectives();
     }
 
     public static ShaderProperties empty() {
@@ -84,6 +100,59 @@ public final class ShaderProperties {
                 this.mainScreenOptions = splitWhitespace(value);
             } else if (key.startsWith("screen.")) {
                 this.subScreenOptions.put(key.substring("screen.".length()), splitWhitespace(value));
+            }
+        });
+    }
+
+    /**
+     * Parses the custom-texture directives, mirroring Iris's {@code ShaderProperties} handling:
+     * <ul>
+     * <li>{@code texture.noise = <path>};</li>
+     * <li>{@code texture.<stage>.<sampler> = <path>} — the sampler segment may carry a {@code .N} suffix (OptiFine
+     * mip-level syntax); like Iris, only the base name before the first {@code .} is kept;</li>
+     * <li>{@code customTexture.<name> = <path>} — Iris-exclusive named samplers, available in every stage.</li>
+     * </ul>
+     * Multi-token values are Iris raw-texture definitions ({@code <path> <type> <format> ...}); those are logged and
+     * skipped — no OptiFine-format 1.12.2 pack uses them.
+     */
+    private void parseCustomTextureDirectives() {
+        this.raw.forEach((key, value) -> {
+            if (key.equals("texture.noise")) {
+                this.noiseTexturePath = value;
+            } else if (key.startsWith("texture.")) {
+                String rest = key.substring("texture.".length());
+                int dot = rest.indexOf('.');
+                if (dot <= 0 || dot == rest.length() - 1) {
+                    LOGGER.warn("[Iris] Malformed custom texture directive, ignoring: {}", key);
+                    return;
+                }
+                String stageName = rest.substring(0, dot);
+                // OptiFine allows a trailing ".N" mip-level suffix; Iris keeps only the base sampler name.
+                String samplerName = rest.substring(dot + 1).split("\\.")[0];
+                Optional<TextureStage> stage = TextureStage.parse(stageName);
+                if (!stage.isPresent()) {
+                    LOGGER.warn("[Iris] Unknown texture stage \"{}\", ignoring custom texture directive for {}",
+                            stageName, key);
+                    return;
+                }
+                if (value.trim().split("\\s+").length > 1) {
+                    LOGGER.warn("[Iris] Raw custom texture definitions are not supported, ignoring: {} = {}", key, value);
+                    return;
+                }
+                this.customTextures
+                        .computeIfAbsent(stage.get(), s -> new LinkedHashMap<>())
+                        .put(samplerName, value);
+            } else if (key.startsWith("customTexture.")) {
+                String name = key.substring("customTexture.".length());
+                if (name.isEmpty()) {
+                    LOGGER.warn("[Iris] Malformed custom texture directive, ignoring: {}", key);
+                    return;
+                }
+                if (value.trim().split("\\s+").length > 1) {
+                    LOGGER.warn("[Iris] Raw custom texture definitions are not supported, ignoring: {} = {}", key, value);
+                    return;
+                }
+                this.irisCustomTextures.put(name, value.trim());
             }
         });
     }
@@ -163,6 +232,21 @@ public final class ShaderProperties {
     /** {@code clouds} = off | fast | fancy, if specified. */
     public Optional<String> getCloudMode() {
         return get("clouds").map(s -> s.toLowerCase(Locale.ROOT));
+    }
+
+    /** {@code texture.noise} — pack path of the PNG that replaces the generated noisetex, if specified. */
+    public Optional<String> getNoiseTexturePath() {
+        return Optional.ofNullable(this.noiseTexturePath);
+    }
+
+    /** {@code texture.<stage>.<sampler>} overrides: stage → (sampler name → pack path / resource location). */
+    public Map<TextureStage, Map<String, String>> getCustomTextures() {
+        return Collections.unmodifiableMap(this.customTextures);
+    }
+
+    /** {@code customTexture.<name>} definitions: sampler name → pack path / resource location (all stages). */
+    public Map<String, String> getIrisCustomTextures() {
+        return Collections.unmodifiableMap(this.irisCustomTextures);
     }
 
     /**

@@ -3,6 +3,7 @@ package org.taumc.celeritas.iris.shaderpack;
 import org.taumc.celeritas.iris.shaderpack.include.AbsolutePackPath;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -26,9 +27,9 @@ import java.util.zip.ZipInputStream;
  * Reads a shader pack from disk (a folder or a {@code .zip}) into the in-memory representation consumed by
  * {@link ShaderPack}. Minecraft-free: uses only {@code java.nio} and {@code java.util.zip}.
  * <p>
- * Only text stages relevant to compilation are read (GLSL stages, includes, {@code shaders.properties}). Binary
- * assets such as {@code _n.png}/{@code _s.png} normal/specular maps are intentionally ignored here — atlas stitching
- * is a later phase. All keys are made relative to the pack's {@code shaders/} directory.
+ * Text stages relevant to compilation (GLSL stages, includes, {@code shaders.properties}) are read as strings.
+ * Binary assets the custom-texture directives can point at ({@code .png}, plus their {@code .mcmeta} sidecars) are
+ * read as raw bytes into a separate map. All keys are made relative to the pack's {@code shaders/} directory.
  */
 public final class ShaderPackLoader {
     /**
@@ -40,8 +41,18 @@ public final class ShaderPackLoader {
     private static final Set<String> TEXT_EXTENSIONS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "vsh", "fsh", "gsh", "tcs", "tes", "glsl", "inc", "properties", "txt", "lang")));
 
+    /**
+     * File extensions read as raw bytes for the custom-texture directives ({@code texture.<stage>.<sampler>},
+     * {@code texture.noise}, {@code customTexture.<name>}) and their {@code .mcmeta} filtering sidecars.
+     */
+    private static final Set<String> BINARY_EXTENSIONS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+            "png", "mcmeta")));
+
     /** Guard against accidentally slurping a huge file as a string. */
     private static final long MAX_TEXT_FILE_BYTES = 8L * 1024 * 1024;
+
+    /** Guard against accidentally slurping a huge binary asset (largest known pack LUTs are a few MB). */
+    private static final long MAX_BINARY_FILE_BYTES = 32L * 1024 * 1024;
 
     private ShaderPackLoader() {
     }
@@ -60,6 +71,7 @@ public final class ShaderPackLoader {
         }
 
         Map<AbsolutePackPath, String> sources = new HashMap<>();
+        Map<AbsolutePackPath, byte[]> binaries = new HashMap<>();
         Files.walkFileTree(shadersDir, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
@@ -67,12 +79,14 @@ public final class ShaderPackLoader {
                 if (isTextPath(relative) && attrs.size() <= MAX_TEXT_FILE_BYTES) {
                     sources.put(AbsolutePackPath.fromAbsolutePath(relative),
                             new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+                } else if (isBinaryPath(relative) && attrs.size() <= MAX_BINARY_FILE_BYTES) {
+                    binaries.put(AbsolutePackPath.fromAbsolutePath(relative), Files.readAllBytes(file));
                 }
                 return FileVisitResult.CONTINUE;
             }
         });
 
-        return new ShaderPack(sources, changedConfigs);
+        return new ShaderPack(sources, changedConfigs, binaries);
     }
 
     /**
@@ -85,6 +99,7 @@ public final class ShaderPackLoader {
 
     public static ShaderPack loadFromZip(Path zipFile, Map<String, String> changedConfigs) throws IOException {
         Map<AbsolutePackPath, String> sources = new HashMap<>();
+        Map<AbsolutePackPath, byte[]> binaries = new HashMap<>();
         try (ZipInputStream zip = new ZipInputStream(Files.newInputStream(zipFile))) {
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {
@@ -97,12 +112,19 @@ public final class ShaderPackLoader {
                     continue;
                 }
                 String relative = "/" + name.substring(idx + "shaders/".length());
-                if (relative.equals("/") || !isTextPath(relative)) {
+                if (relative.equals("/")) {
                     continue;
                 }
-                String contents = readEntry(zip);
-                if (contents != null) {
-                    sources.put(AbsolutePackPath.fromAbsolutePath(relative), contents);
+                if (isTextPath(relative)) {
+                    String contents = readEntry(zip);
+                    if (contents != null) {
+                        sources.put(AbsolutePackPath.fromAbsolutePath(relative), contents);
+                    }
+                } else if (isBinaryPath(relative)) {
+                    byte[] contents = readBinaryEntry(zip);
+                    if (contents != null) {
+                        binaries.put(AbsolutePackPath.fromAbsolutePath(relative), contents);
+                    }
                 }
                 zip.closeEntry();
             }
@@ -111,7 +133,7 @@ public final class ShaderPackLoader {
         if (sources.isEmpty()) {
             throw new IOException("Shader pack zip contained no shaders/ entries: " + zipFile);
         }
-        return new ShaderPack(sources, changedConfigs);
+        return new ShaderPack(sources, changedConfigs, binaries);
     }
 
     private static boolean isTextPath(String relative) {
@@ -120,6 +142,14 @@ public final class ShaderPackLoader {
             return false;
         }
         return TEXT_EXTENSIONS.contains(relative.substring(dot + 1).toLowerCase(Locale.ROOT));
+    }
+
+    private static boolean isBinaryPath(String relative) {
+        int dot = relative.lastIndexOf('.');
+        if (dot < 0) {
+            return false;
+        }
+        return BINARY_EXTENSIONS.contains(relative.substring(dot + 1).toLowerCase(Locale.ROOT));
     }
 
     private static String readEntry(ZipInputStream zip) throws IOException {
@@ -137,6 +167,21 @@ public final class ShaderPackLoader {
             sb.append(buffer, 0, read);
         }
         return sb.toString();
+    }
+
+    private static byte[] readBinaryEntry(ZipInputStream zip) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        long total = 0;
+        int read;
+        while ((read = zip.read(buffer)) != -1) {
+            total += read;
+            if (total > MAX_BINARY_FILE_BYTES) {
+                return null;
+            }
+            out.write(buffer, 0, read);
+        }
+        return out.toByteArray();
     }
 
     /** Wraps a stream so that {@code close()} is a no-op (the underlying {@link ZipInputStream} is reused per entry). */

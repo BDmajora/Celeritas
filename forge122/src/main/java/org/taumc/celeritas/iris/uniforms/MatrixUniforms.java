@@ -20,13 +20,13 @@ public final class MatrixUniforms {
         CapturedRenderingState state = CapturedRenderingState.INSTANCE;
         uniforms
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "gbufferModelView", state::getGbufferModelView)
-                .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "gbufferModelViewInverse", () -> {
-                    Matrix4f inv = new Matrix4f(state.getGbufferModelView()).invert();
-                    // Forge 1.12.2 gbufferModelView = [R | -R*C], so its inverse has [R^T | C] in the last column.
-                    // Modern packs expect camera-relative positions from ViewToPlayer (R^T * viewPos without +C).
-                    // Zeroing the translation column makes ViewToPlayer return P - C instead of P.
-                    return inv.m03(0).m13(0).m23(0);
-                })
+                // Plain inverse, no translation surgery: OptiFine 1.12.2 uploads the raw inverse of the modelview it
+                // captured after setupCameraTransform (Shaders.setCamera), and the 1.12.2 modelview at that point has
+                // no world translation (camera rotation + small eye offsets only), so the inverse is already the
+                // ViewToPlayer matrix packs expect. (The earlier m30/m31/m32 zeroing deviated from OptiFine; the
+                // m03/m13/m23 variant zeroed the always-zero bottom row — JOML's mCR is column-row — i.e. a no-op.)
+                .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "gbufferModelViewInverse",
+                        () -> new Matrix4f(state.getGbufferModelView()).invert())
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "gbufferProjection", state::getGbufferProjection)
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "gbufferProjectionInverse",
                         () -> new Matrix4f(state.getGbufferProjection()).invert())

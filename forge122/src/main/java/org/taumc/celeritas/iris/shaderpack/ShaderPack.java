@@ -1,13 +1,24 @@
 package org.taumc.celeritas.iris.shaderpack;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.taumc.celeritas.iris.shaderpack.include.AbsolutePackPath;
 import org.taumc.celeritas.iris.shaderpack.include.IncludeProcessor;
 import org.taumc.celeritas.iris.shaderpack.loading.ProgramArrayId;
 import org.taumc.celeritas.iris.shaderpack.loading.ProgramId;
 import org.taumc.celeritas.iris.shaderpack.option.ShaderPackOptions;
+import org.taumc.celeritas.iris.shaderpack.texture.CustomTextureData;
+import org.taumc.celeritas.iris.shaderpack.texture.TextureFilteringData;
+import org.taumc.celeritas.iris.shaderpack.texture.TextureStage;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -27,23 +38,43 @@ public final class ShaderPack {
     /** Overworld override directory checked before the pack root. */
     private static final String OVERWORLD_DIR = "/world0";
 
+    private static final Logger LOGGER = LogManager.getLogger("Celeritas/Iris");
+
     private final Map<AbsolutePackPath, String> sources;
+    private final Map<AbsolutePackPath, byte[]> binaries;
     private final ShaderPackOptions shaderPackOptions;
     private final IncludeProcessor includeProcessor;
     private final ShaderProperties properties;
     private final ProgramSet baseProgramSet;
 
+    // --- Custom textures (Iris ShaderPack parity) ---
+    /** {@code texture.noise} resolved to data, or {@code null} for the generated noisetex. */
+    private final CustomTextureData customNoiseTexture;
+    /** {@code texture.<stage>.<sampler>} directives resolved to data, keyed by stage then sampler name. */
+    private final Map<TextureStage, Map<String, CustomTextureData>> customTextureDataMap =
+            new EnumMap<>(TextureStage.class);
+    /** {@code customTexture.<name>} directives resolved to data, keyed by sampler name. */
+    private final Map<String, CustomTextureData> irisCustomTextureDataMap = new LinkedHashMap<>();
+
     public ShaderPack(Map<AbsolutePackPath, String> sources) {
         this(sources, Collections.emptyMap());
+    }
+
+    public ShaderPack(Map<AbsolutePackPath, String> sources, Map<String, String> changedConfigs) {
+        this(sources, changedConfigs, Collections.emptyMap());
     }
 
     /**
      * @param sources        the raw source files of the pack (keyed relative to {@code shaders/}).
      * @param changedConfigs option values that differ from pack defaults, loaded from {@code <pack>.txt} and/or the
      *                       in-game menu. Applied to the sources before {@code #include} flattening.
+     * @param binaries       the pack's binary assets ({@code .png} custom textures and their {@code .mcmeta}
+     *                       sidecars), keyed relative to {@code shaders/} like {@code sources}.
      */
-    public ShaderPack(Map<AbsolutePackPath, String> sources, Map<String, String> changedConfigs) {
+    public ShaderPack(Map<AbsolutePackPath, String> sources, Map<String, String> changedConfigs,
+                      Map<AbsolutePackPath, byte[]> binaries) {
         this.sources = Collections.unmodifiableMap(new HashMap<>(sources));
+        this.binaries = Collections.unmodifiableMap(new HashMap<>(binaries));
 
         // Parse the properties file from the raw (unedited) source — it is configuration, not GLSL, so option edits
         // must never touch it.
@@ -63,6 +94,111 @@ public final class ShaderPack {
         this.includeProcessor = new IncludeProcessor(flattenSources);
 
         this.baseProgramSet = buildProgramSet();
+
+        // Resolve the custom-texture directives to data, exactly like Iris's ShaderPack constructor: a texture that
+        // fails to read is logged and dropped (the sampler then sees the normal render target / generated noise).
+        this.customNoiseTexture = this.properties.getNoiseTexturePath().map(path -> {
+            try {
+                return readTexture(path);
+            } catch (IOException e) {
+                LOGGER.error("[Iris] Unable to read the custom noise texture at {}: {}", path, e.getMessage());
+                return null;
+            }
+        }).orElse(null);
+
+        this.properties.getCustomTextures().forEach((stage, texturePropertiesMap) -> {
+            Map<String, CustomTextureData> innerCustomTextureDataMap = new LinkedHashMap<>();
+            texturePropertiesMap.forEach((samplerName, path) -> {
+                try {
+                    innerCustomTextureDataMap.put(samplerName, readTexture(path));
+                } catch (IOException e) {
+                    LOGGER.error("[Iris] Unable to read the custom texture at {}: {}", path, e.getMessage());
+                }
+            });
+            this.customTextureDataMap.put(stage, innerCustomTextureDataMap);
+        });
+
+        this.properties.getIrisCustomTextures().forEach((name, path) -> {
+            try {
+                this.irisCustomTextureDataMap.put(name, readTexture(path));
+            } catch (IOException e) {
+                LOGGER.error("[Iris] Unable to read the custom texture at {}: {}", path, e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * Resolves one custom-texture directive value, mirroring Iris's {@code ShaderPack.readTexture}:
+     * <ul>
+     * <li>{@code namespace:path} → a resource-location texture looked up in the game's TextureManager at bind time
+     * (with {@code minecraft:dynamic/lightmap_1} marking the live lightmap);</li>
+     * <li>anything else → a PNG inside the pack (leading {@code /} tolerated, like Continuum 2.0.4), with
+     * {@code blur}/{@code clamp} flags from the {@code <path>.mcmeta} sidecar (both default {@code false}).</li>
+     * </ul>
+     */
+    private CustomTextureData readTexture(String path) throws IOException {
+        if (path.contains(":")) {
+            String[] parts = path.split(":");
+            if (parts.length > 2) {
+                LOGGER.warn("[Iris] Resource location {} contained more than two parts?", path);
+            }
+            if (parts[0].equals("minecraft")
+                    && (parts[1].equals("dynamic/lightmap_1") || parts[1].equals("dynamic/light_map_1"))) {
+                return new CustomTextureData.LightmapMarker();
+            }
+            return new CustomTextureData.ResourceData(parts[0], parts[1]);
+        }
+
+        // NB: like Iris, this does not guarantee the path stays inside the pack; the leading-slash strip just fixes
+        // packs that write "/lib/..." instead of "lib/...".
+        if (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+
+        AbsolutePackPath texturePath = AbsolutePackPath.fromAbsolutePath("/" + path);
+        byte[] content = this.binaries.get(texturePath);
+        if (content == null) {
+            throw new IOException("Texture file not found in pack: " + path);
+        }
+
+        boolean blur = false;
+        boolean clamp = false;
+        byte[] mcMeta = this.binaries.get(AbsolutePackPath.fromAbsolutePath("/" + path + ".mcmeta"));
+        if (mcMeta != null) {
+            try {
+                JsonObject meta = new JsonParser()
+                        .parse(new String(mcMeta, StandardCharsets.UTF_8)).getAsJsonObject();
+                if (meta.get("texture") != null) {
+                    JsonObject texture = meta.get("texture").getAsJsonObject();
+                    if (texture.get("blur") != null) {
+                        blur = texture.get("blur").getAsBoolean();
+                    }
+                    if (texture.get("clamp") != null) {
+                        clamp = texture.get("clamp").getAsBoolean();
+                    }
+                }
+            } catch (RuntimeException e) {
+                LOGGER.error("[Iris] Unable to read the custom texture mcmeta at {}.mcmeta, ignoring: {}",
+                        path, e.getMessage());
+            }
+        }
+
+        return new CustomTextureData.PngData(new TextureFilteringData(blur, clamp), content);
+    }
+
+    /** {@code texture.noise} resolved to PNG data, or {@code null} when the pack keeps the generated noisetex. */
+    public CustomTextureData getCustomNoiseTexture() {
+        return this.customNoiseTexture;
+    }
+
+    /** {@code texture.<stage>.<sampler>} overrides resolved to data: stage → (sampler name → texture data). */
+    public Map<TextureStage, Map<String, CustomTextureData>> getCustomTextureDataMap() {
+        return Collections.unmodifiableMap(this.customTextureDataMap);
+    }
+
+    /** {@code customTexture.<name>} definitions resolved to data: sampler name → texture data (all stages). */
+    public Map<String, CustomTextureData> getIrisCustomTextureDataMap() {
+        return Collections.unmodifiableMap(this.irisCustomTextureDataMap);
     }
 
     public ShaderPackOptions getShaderPackOptions() {

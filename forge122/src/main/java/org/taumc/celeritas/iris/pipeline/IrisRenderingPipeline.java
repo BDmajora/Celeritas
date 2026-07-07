@@ -22,6 +22,7 @@ import org.taumc.celeritas.iris.shaderpack.ProgramSource;
 import org.taumc.celeritas.iris.shaderpack.ShaderPack;
 import org.taumc.celeritas.iris.shaderpack.loading.ProgramArrayId;
 import org.taumc.celeritas.iris.shaderpack.loading.ProgramId;
+import org.taumc.celeritas.iris.shaderpack.texture.TextureStage;
 import org.taumc.celeritas.iris.targets.BufferFlipper;
 import org.taumc.celeritas.iris.targets.DepthTexture;
 import org.taumc.celeritas.iris.targets.IrisRenderTarget;
@@ -86,6 +87,12 @@ public class IrisRenderingPipeline {
     private static final int GBUFFER_ATTACHMENT_LIMIT = 8;
     /** High texture unit used transiently for depth-copy binds so no sampler or vanilla-tracked unit is disturbed. */
     private static final int DEPTH_COPY_SCRATCH_UNIT = 24;
+    /**
+     * Dedicated units for the pack's custom textures ({@code texture.<stage>.<sampler>}/{@code customTexture.<name>}),
+     * above every reserved unit and within the 32 fragment texture-image units the supported GPUs expose.
+     */
+    private static final int CUSTOM_TEX_FIRST_UNIT = 25;
+    private static final int CUSTOM_TEX_LAST_UNIT = 31;
     /** Draw-buffer mask for fixed-function content with no pack program: plain color into colortex0 only. */
     private static final int[] FIXED_FUNCTION_MASK = {0};
 
@@ -164,6 +171,21 @@ public class IrisRenderingPipeline {
     private final java.util.Map<String, ProgramUniforms> compiledUniforms = new java.util.HashMap<>();
     /** The pack's fixed-function gbuffer programs (sky/entities/particles/weather/clouds/hand), phase-switched. */
     private final GbufferPrograms gbufferPrograms;
+    /** The pack's custom textures ({@code texture.*}/{@code customTexture.*} directives) and their unit overrides. */
+    private final CustomTextureManager customTextureManager;
+    /**
+     * The gbuffers/shadow-stage sampler overrides of the <em>active</em> pipeline, consulted by the static
+     * {@link #assignSamplerUnitsToBoundProgram} that the Embeddium terrain/shadow overrides call (their program
+     * objects are Embeddium's, built lazily outside this class). Set on construction, cleared on destroy.
+     */
+    private static volatile Map<String, CustomTextureManager.Override> activeGbufferSamplerOverrides =
+            java.util.Collections.emptyMap();
+    /**
+     * Color targets written (flipped) by at least one earlier pass while the composite/deferred chain is being built.
+     * Iris parity: a custom-texture override on a colortex deactivates once a pass has written that buffer — later
+     * passes must read the chain's content, not the custom texture. Only mutated during construction.
+     */
+    private final TreeSet<Integer> flippedAtLeastOnce = new TreeSet<>();
     /** Every color index attached to the gbuffer FBOs: the union of all gbuffer-stage DRAWBUFFERS masks, sorted. */
     private final int[] gbufferAttachments;
     /** The gbuffer FBO the world is currently rendering into (switches after the deferred chain runs). */
@@ -225,7 +247,13 @@ public class IrisRenderingPipeline {
             applyPackFormatDirectives(fullscreenSources);
             materializeSampledTargets(fullscreenSources);
 
-            this.gbufferPrograms = new GbufferPrograms(pack, SAMPLER_UNITS);
+            // Custom textures must exist before any program compiles: sampler-unit assignment consults the overrides.
+            this.customTextureManager = new CustomTextureManager(pack, SAMPLER_UNITS,
+                    CUSTOM_TEX_FIRST_UNIT, CUSTOM_TEX_LAST_UNIT);
+            activeGbufferSamplerOverrides =
+                    this.customTextureManager.getOverrides(TextureStage.GBUFFERS_AND_SHADOW);
+
+            this.gbufferPrograms = new GbufferPrograms(pack, SAMPLER_UNITS, gbufferSamplerOverrideUnits());
             this.gbufferAttachments = computeGbufferAttachments(pack, terrainDrawBuffers(pack));
             this.shadowRenderer = createShadowRenderer(pack);
             BufferFlipper flipper = this.renderTargets.getBufferFlipper();
@@ -475,7 +503,9 @@ public class IrisRenderingPipeline {
         if (this.compiledPrograms.containsKey(name)) {
             return this.compiledPrograms.get(name);
         }
-        IrisProgram program = compileFullscreenProgram(source);
+        // deferredN belongs to the "deferred" custom-texture stage; compositeN and final to "composite".
+        TextureStage stage = name.startsWith("deferred") ? TextureStage.DEFERRED : TextureStage.COMPOSITE_AND_FINAL;
+        IrisProgram program = compileFullscreenProgram(source, stage);
         this.compiledPrograms.put(name, program);
         if (program != null) {
             this.compiledUniforms.put(name, buildUniforms(name, program));
@@ -497,6 +527,8 @@ public class IrisRenderingPipeline {
             IrisFramebuffer framebuffer = this.renderTargets.createColorFramebuffer(drawBuffers);
             for (int buffer : drawBuffers) {
                 flipper.flip(buffer);
+                // Later passes' colortex custom-texture overrides deactivate for buffers a pass has written.
+                this.flippedAtLeastOnce.add(buffer);
             }
 
             return new FullscreenPass(name, program, this.compiledUniforms.get(name), framebuffer, colorSamplers);
@@ -524,7 +556,7 @@ public class IrisRenderingPipeline {
         }
     }
 
-    private IrisProgram compileFullscreenProgram(ProgramSource source) {
+    private IrisProgram compileFullscreenProgram(ProgramSource source, TextureStage stage) {
         String vshRaw = source.getVertexSource().orElse(null);
         String fshRaw = source.getFragmentSource().orElse(null);
         if (vshRaw == null || fshRaw == null) {
@@ -565,7 +597,7 @@ public class IrisRenderingPipeline {
             }
             GlProgram program = builder.link();
 
-            assignSamplerUnits(program);
+            assignSamplerUnits(program, stage);
             return new IrisProgram(program, DrawBuffers.parse(fshRaw));
         } finally {
             if (vertex != null) {
@@ -577,24 +609,60 @@ public class IrisRenderingPipeline {
         }
     }
 
-    /** Points every sampler uniform the program declares at its fixed texture unit (OptiFine's setProgramUniform1i). */
-    private static void assignSamplerUnits(GlProgram program) {
+    /**
+     * Points every sampler uniform the program declares at its fixed texture unit (OptiFine's setProgramUniform1i),
+     * with the pack's custom-texture overrides for the program's stage applied — a colortex override is skipped once
+     * an earlier pass in the chain has written (flipped) that buffer, matching Iris's deactivation rule.
+     */
+    private void assignSamplerUnits(GlProgram program, TextureStage stage) {
         program.bind();
-        assignSamplerUnitsToBoundProgram(program.getGlId());
+        assignSamplerUnits(program.getGlId(), this.customTextureManager.getOverrides(stage), this.flippedAtLeastOnce);
         program.unbind();
     }
 
     /**
-     * Assigns the standard sampler-unit mapping on the <em>currently bound</em> program (raw GL id). Used by the
-     * Embeddium terrain override, whose program object is Embeddium's rather than ours.
+     * Assigns the standard sampler-unit mapping on the <em>currently bound</em> program (raw GL id), with the active
+     * pipeline's gbuffers/shadow-stage custom-texture overrides. Used by the Embeddium terrain and shadow overrides,
+     * whose program objects are Embeddium's rather than ours — both belong to the {@code gbuffers} texture stage.
      */
     public static void assignSamplerUnitsToBoundProgram(int programId) {
+        assignSamplerUnits(programId, activeGbufferSamplerOverrides, java.util.Collections.<Integer>emptySet());
+    }
+
+    private static void assignSamplerUnits(int programId, Map<String, CustomTextureManager.Override> overrides,
+                                           java.util.Set<Integer> flippedAtLeastOnce) {
         for (Map.Entry<String, Integer> entry : SAMPLER_UNITS.entrySet()) {
             int location = LWJGL.glGetUniformLocation(programId, entry.getKey());
+            if (location == -1) {
+                continue;
+            }
+            int unit = entry.getValue();
+            CustomTextureManager.Override override = overrides.get(entry.getKey());
+            if (override != null && (override.colorTarget < 0 || !flippedAtLeastOnce.contains(override.colorTarget))) {
+                unit = override.unit;
+            }
+            LWJGL.glUniform1i(location, unit);
+        }
+        // Pack-declared sampler names with no standard unit (customTexture.<name> directives).
+        for (Map.Entry<String, CustomTextureManager.Override> entry : overrides.entrySet()) {
+            if (SAMPLER_UNITS.containsKey(entry.getKey())) {
+                continue;
+            }
+            int location = LWJGL.glGetUniformLocation(programId, entry.getKey());
             if (location != -1) {
-                LWJGL.glUniform1i(location, entry.getValue());
+                LWJGL.glUniform1i(location, entry.getValue().unit);
             }
         }
+    }
+
+    /** The gbuffers-stage overrides flattened to name → unit, for {@link GbufferPrograms}' sampler table. */
+    private Map<String, Integer> gbufferSamplerOverrideUnits() {
+        Map<String, Integer> units = new LinkedHashMap<>();
+        for (Map.Entry<String, CustomTextureManager.Override> entry
+                : this.customTextureManager.getOverrides(TextureStage.GBUFFERS_AND_SHADOW).entrySet()) {
+            units.put(entry.getKey(), entry.getValue().unit);
+        }
+        return units;
     }
 
     private static ProgramUniforms buildUniforms(String name, IrisProgram program) {
@@ -680,15 +748,21 @@ public class IrisRenderingPipeline {
         }
 
 
-        // noisetex (unit 15) and the stub shadow maps (units 13/14) ride along for the whole frame (gbuffer +
-        // fullscreen stages); vanilla never binds units above 1, and GlStateManager's 8-slot cache can't address them.
+        // noisetex and the stub shadow maps ride along for the whole frame (gbuffer + fullscreen stages) on their
+        // fixed units; vanilla never binds units above 1, and GlStateManager's 8-slot cache can't address them.
+        // A pack-supplied texture.noise replaces the generated noise (Iris CustomTextureManager parity).
+        int customNoise = this.customTextureManager.getNoiseTextureId();
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + NOISE_TEX_UNIT);
-        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, this.noiseTexture.getTextureId());
+        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, customNoise != -1 ? customNoise : this.noiseTexture.getTextureId());
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + SHADOW_TEX_0_UNIT);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, this.stubShadowMap.getTextureId());
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + SHADOW_TEX_1_UNIT);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, this.stubShadowMap.getTextureId());
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+
+        // The pack's custom textures (texture.<stage>.<sampler> / customTexture.<name>) live on dedicated units for
+        // the whole frame; the per-stage program sampler assignments point at them.
+        this.customTextureManager.bindAll();
 
         // Default PBR maps on the gbuffer-stage normals/specular units (2/3, so through GlStateManager to keep its
         // cache coherent). The composite stage overwrites these units with colortex2/3 when it runs.
@@ -1081,6 +1155,7 @@ public class IrisRenderingPipeline {
     }
 
     private void restoreTextureUnits() {
+        this.customTextureManager.unbindAll();
         for (int unit = DEPTH_TEX_0_UNIT; unit <= DEPTH_TEX_2_UNIT; unit++) {
             LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + unit);
             LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
@@ -1118,6 +1193,10 @@ public class IrisRenderingPipeline {
         }
         if (this.gbufferPrograms != null) {
             this.gbufferPrograms.destroy();
+        }
+        activeGbufferSamplerOverrides = java.util.Collections.emptyMap();
+        if (this.customTextureManager != null) {
+            this.customTextureManager.destroy();
         }
         // Programs/uniforms are shared between the two schedules — destroy them once here, not per-pass.
         for (IrisProgram program : this.compiledPrograms.values()) {
