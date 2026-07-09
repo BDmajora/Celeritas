@@ -46,6 +46,18 @@ public final class CommonUniforms {
                         CapturedRenderingState.INSTANCE::getRenderStage)
                 // Iris-exclusive: whether the player is invisible (spectator/potion). Not tracked yet.
                 .uniform1i(UniformUpdateFrequency.PER_FRAME, "is_invisible", () -> 0)
+                // Complementary's custom uniform `uniform.float.framemod2 = frameCounter % 2` (shaders.properties).
+                // The general custom-uniform expression system is unimplemented; this one drives the colored-lighting
+                // floodfill ping-pong (shadowcomp reads one volume and writes the other by frame parity), so leaving
+                // it at a constant breaks light accumulation and flickers. Provided as a built-in until then.
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "framemod2",
+                        () -> (float) (SystemTimeUniforms.COUNTER.getFrameCounter() & 1))
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "framemod4",
+                        () -> (float) (SystemTimeUniforms.COUNTER.getFrameCounter() & 3))
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "framemod8",
+                        () -> (float) (SystemTimeUniforms.COUNTER.getFrameCounter() & 7))
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "framemod600",
+                        () -> (float) (SystemTimeUniforms.COUNTER.getFrameCounter() % 600))
                 .uniform1i(UniformUpdateFrequency.PER_TICK, "worldTime", CommonUniforms::getWorldTime)
                 .uniform1i(UniformUpdateFrequency.PER_TICK, "worldDay", CommonUniforms::getWorldDay)
                 .uniform1i(UniformUpdateFrequency.PER_TICK, "moonPhase", CommonUniforms::getMoonPhase)

@@ -70,7 +70,7 @@ public final class ShaderProgramCompiler {
             bindOptifineAttributes(builder, vertexSource);
 
             GlProgram program = builder.link();
-            int[] drawBuffers = DrawBuffers.parse(fragmentSource);
+            int[] drawBuffers = DrawBuffers.parseActive(fragmentSource);
             return new IrisProgram(program, drawBuffers);
         } finally {
             // The stage objects are no longer needed once the program is linked (or if linking failed).

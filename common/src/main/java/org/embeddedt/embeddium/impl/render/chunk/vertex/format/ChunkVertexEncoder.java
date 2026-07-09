@@ -38,6 +38,16 @@ public interface ChunkVertexEncoder {
         public int blockData;
         /** {@code at_tangent} — packed tangent (xyz signed bytes + handedness), same packing as a normal. */
         public int tangent;
+        /**
+         * {@code at_midBlock} — offset from this vertex to the CENTER of the block it belongs to, in block units
+         * (range roughly -0.5..0.5 for a full block). Iris/OptiFine shaders read {@code at_midBlock.xyz / 64.0}, so the
+         * encoder scales these by 64 into signed bytes. Colored-lighting voxelization depends on this: sampling at the
+         * block center (an X.5,Y.5,Z.5 world position) keeps the voxel-grid lookup off cell boundaries, where it would
+         * otherwise flip between cells under sub-voxel precision noise and make the light volume shimmer.
+         */
+        public float midBlockX;
+        public float midBlockY;
+        public float midBlockZ;
 
         public static Vertex[] uninitializedQuad() {
             Vertex[] vertices = new Vertex[4];

@@ -65,11 +65,6 @@ public class CustomImageManager {
                         definition.name, MAX_IMAGE_UNITS);
                 continue;
             }
-            if (nextSamplerUnit > lastSamplerUnit) {
-                LOGGER.error("[Iris] Out of texture units for image sampler {}; ignoring image.{}",
-                        definition.samplerName, definition.name);
-                continue;
-            }
             int internalFormat = glInternalFormat(definition.internalFormat);
             int format = glFormat(definition.format);
             int pixelType = glPixelType(definition.pixelType);
@@ -99,16 +94,32 @@ public class CustomImageManager {
                         0, format, pixelType, (ByteBuffer) null);
             }
             LWJGL.glBindTexture(target, 0);
+            // Zero-initialize regardless of the per-frame clear flag: glTexImage with null data is UNDEFINED memory,
+            // and packs deliberately skip writing some texels (Complementary's behind-player floodfill optimization),
+            // so creation-time garbage would otherwise survive — and flicker once the ping-pong alternates sides.
+            LWJGL.glClearTexImage(texture, 0, format, pixelType, (ByteBuffer) null);
 
             int imageUnit = this.images.size();
-            int samplerUnit = nextSamplerUnit++;
+            int samplerUnit = -1;
+            if (definition.samplerName != null && !definition.samplerName.isEmpty()) {
+                if (nextSamplerUnit <= lastSamplerUnit) {
+                    samplerUnit = nextSamplerUnit++;
+                } else {
+                    LOGGER.error("[Iris] Out of texture units for image sampler {}; image.{} remains writable on image unit {}",
+                            definition.samplerName, definition.name, imageUnit);
+                }
+            }
             this.images.add(new Image(definition, texture, target, imageUnit, samplerUnit,
                     internalFormat, format, pixelType));
             this.uniformOverrides.put(definition.name, imageUnit);
-            this.uniformOverrides.put(definition.samplerName, samplerUnit);
-            LOGGER.info("[Iris] Custom image '{}' ({}x{}x{} {}) on image unit {}, sampler '{}' on unit {}",
+            if (samplerUnit >= 0) {
+                this.uniformOverrides.put(definition.samplerName, samplerUnit);
+            }
+            LOGGER.info("[Iris] Custom image '{}' ({}x{}x{} {}) on image unit {}{}",
                     definition.name, definition.sizeX, definition.sizeY, definition.sizeZ,
-                    definition.internalFormat, imageUnit, definition.samplerName, samplerUnit);
+                    definition.internalFormat, imageUnit,
+                    samplerUnit >= 0 ? ", sampler '" + definition.samplerName + "' on unit " + samplerUnit
+                            : ", sampler '" + definition.samplerName + "' unbound");
         }
     }
 
@@ -181,16 +192,20 @@ public class CustomImageManager {
         for (Image image : this.images) {
             LWJGL.glBindImageTexture(image.imageUnit, image.texture, 0, true, 0,
                     GL15.GL_READ_WRITE, image.glInternalFormat);
-            LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + image.samplerUnit);
-            LWJGL.glBindTexture(image.target, image.texture);
+            if (image.samplerUnit >= 0) {
+                LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + image.samplerUnit);
+                LWJGL.glBindTexture(image.target, image.texture);
+            }
         }
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
     }
 
     public void unbindAll() {
         for (Image image : this.images) {
-            LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + image.samplerUnit);
-            LWJGL.glBindTexture(image.target, 0);
+            if (image.samplerUnit >= 0) {
+                LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + image.samplerUnit);
+                LWJGL.glBindTexture(image.target, 0);
+            }
         }
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
     }

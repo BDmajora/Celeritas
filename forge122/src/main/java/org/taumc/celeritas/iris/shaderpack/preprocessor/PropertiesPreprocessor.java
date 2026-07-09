@@ -30,6 +30,10 @@ public final class PropertiesPreprocessor {
     public static String preprocess(String source, Map<String, String> defines) {
         List<String> logicalLines = joinContinuations(source);
         StringBuilder out = new StringBuilder(source.length());
+        // Track #define/#undef in ACTIVE regions so cascading defines (GLSL settings files, option macros that
+        // derive other macros) feed later #if evaluation — required when this runs over shader sources to pick the
+        // ACTIVE DRAWBUFFERS/RENDERTARGETS variant the way Iris's preprocessed-source directive extraction does.
+        defines = new java.util.HashMap<>(defines);
 
         // Each conditional nesting level: [0] = this branch active, [1] = any branch so far taken.
         Deque<boolean[]> stack = new ArrayDeque<>();
@@ -37,7 +41,7 @@ public final class PropertiesPreprocessor {
         for (String line : logicalLines) {
             String trimmed = line.trim();
             if (trimmed.startsWith("#")) {
-                String directive = trimmed.substring(1).trim();
+                String directive = stripDirectiveComments(trimmed.substring(1)).trim();
                 if (directive.startsWith("if ") || directive.startsWith("if(")) {
                     boolean value = parentActive(stack) && evaluate(directive.substring(2), defines);
                     stack.push(new boolean[]{value, value});
@@ -66,6 +70,26 @@ public final class PropertiesPreprocessor {
                     stack.pop();
                     boolean value = !frame[1] && parentActive(stack);
                     stack.push(new boolean[]{value, true});
+                } else if (directive.startsWith("define ")) {
+                    if (parentActive(stack) && (stack.isEmpty() || stack.peek()[0])) {
+                        String body = directive.substring("define ".length()).trim();
+                        int space = body.indexOf(' ');
+                        int paren = body.indexOf('(');
+                        if (paren >= 0 && (space < 0 || paren < space)) {
+                            // Function-like macro: track presence only (defined() checks), value unusable in #if.
+                            defines.put(body.substring(0, paren), "");
+                        } else if (space < 0) {
+                            defines.put(body, "");
+                        } else {
+                            defines.put(body.substring(0, space), body.substring(space + 1).trim());
+                        }
+                    }
+                    continue;
+                } else if (directive.startsWith("undef ")) {
+                    if (parentActive(stack) && (stack.isEmpty() || stack.peek()[0])) {
+                        defines.remove(directive.substring("undef ".length()).trim());
+                    }
+                    continue;
                 } else if (directive.equals("endif")) {
                     if (stack.isEmpty()) {
                         LOGGER.warn("[Iris] #endif without #if in properties file; ignoring");
@@ -84,6 +108,37 @@ public final class PropertiesPreprocessor {
 
         if (!stack.isEmpty()) {
             LOGGER.warn("[Iris] Unterminated #if in properties file ({} level(s) open at EOF)", stack.size());
+        }
+        return out.toString();
+    }
+
+    /**
+     * JCPP ignores comments before it evaluates preprocessor directives. Shader-pack properties commonly use
+     * {@code #if OPTION // label} and {@code #endif // label}; feeding the comments into the expression parser makes
+     * otherwise-valid packs look unterminated.
+     */
+    private static String stripDirectiveComments(String directive) {
+        StringBuilder out = new StringBuilder(directive.length());
+        for (int i = 0; i < directive.length(); i++) {
+            char c = directive.charAt(i);
+            if (c == '/' && i + 1 < directive.length()) {
+                char next = directive.charAt(i + 1);
+                if (next == '/') {
+                    break;
+                }
+                if (next == '*') {
+                    i += 2;
+                    while (i + 1 < directive.length()
+                            && !(directive.charAt(i) == '*' && directive.charAt(i + 1) == '/')) {
+                        i++;
+                    }
+                    if (i + 1 < directive.length()) {
+                        i++;
+                    }
+                    continue;
+                }
+            }
+            out.append(c);
         }
         return out.toString();
     }

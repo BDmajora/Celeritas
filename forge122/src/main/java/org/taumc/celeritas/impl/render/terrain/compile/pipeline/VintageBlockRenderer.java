@@ -224,6 +224,13 @@ public class VintageBlockRenderer {
 
             out.vanillaNormal = vanillaNormal;
             out.trueNormal = trueNormal;
+
+            // at_midBlock: offset from this vertex to the center of its block. quad.getX/Y/Z(srcIndex) is the vertex's
+            // position within the block model, so (0.5 - that) points at the block center regardless of chunk/region
+            // offset. Colored-lighting voxelization samples at the block center to stay off voxel-cell boundaries.
+            out.midBlockX = 0.5f - quad.getX(srcIndex);
+            out.midBlockY = 0.5f - quad.getY(srcIndex);
+            out.midBlockZ = 0.5f - quad.getZ(srcIndex);
         }
 
         if (IrisTerrainProgramOverride.areShadersActive()) {

@@ -20,6 +20,34 @@ public final class DrawBuffers {
     private DrawBuffers() {
     }
 
+    /**
+     * Parses the directive from the source with its preprocessor conditionals EVALUATED first (using the standard
+     * macro environment; pack option values are already baked into the source by the option system). Iris parity:
+     * it extracts directives from the JCPP-preprocessed source, so option-gated variants (Complementary's deferred1
+     * declares five DRAWBUFFERS/RENDERTARGETS variants across its colored-lighting gates) resolve to the ACTIVE one.
+     * Raw-source {@link #parse} takes the first textual match, which desynchronizes the ping-pong flip accounting
+     * from what the GPU actually writes whenever the active variant is not the first.
+     */
+    public static int[] parseActive(String fragmentSource) {
+        if (fragmentSource == null) {
+            return DEFAULT.clone();
+        }
+        int[] raw = parse(fragmentSource);
+        try {
+            String evaluated = org.taumc.celeritas.iris.shaderpack.preprocessor.PropertiesPreprocessor.preprocess(
+                    fragmentSource, org.taumc.celeritas.iris.gl.shader.ShaderMacros.standard());
+            int[] active = parse(evaluated);
+            // FAIL-SAFE: the conditional evaluator cannot expand chained/function-like macros, so a wrongly-dead
+            // branch can swallow the only directive. Trust the evaluated result only when it actually found one;
+            // a source whose directives all disappeared falls back to the raw first-match (previous behavior).
+            boolean evaluatedFound = !java.util.Arrays.equals(active, DEFAULT)
+                    || (evaluated.contains("DRAWBUFFERS:0") || evaluated.contains("RENDERTARGETS: 0"));
+            return evaluatedFound ? active : raw;
+        } catch (RuntimeException e) {
+            return raw;
+        }
+    }
+
     public static int[] parse(String fragmentSource) {
         if (fragmentSource == null) {
             return DEFAULT.clone();

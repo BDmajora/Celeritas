@@ -37,6 +37,7 @@ public final class EmbeddiumTerrainTransformer {
             "in vec4 iris_Tangent;",     // at_tangent, w = handedness
             "in vec2 iris_MidTexCoord;", // sprite center in atlas UV
             "in vec2 iris_BlockInfo;",   // (block id, metadata)
+            "in vec4 iris_MidBlock;",    // at_midBlock: offset-to-block-center * 64 (see IrisChunkVertexType)
             "uniform mat4 u_ModelViewMatrix;",
             "uniform mat4 u_ProjectionMatrix;",
             "uniform vec3 u_RegionOffset;",
@@ -74,6 +75,7 @@ public final class EmbeddiumTerrainTransformer {
             "#define gl_MultiTexCoord3 iris_MultiTexCoord3",
             "#define gl_Normal (iris_Normal.xyz)",
             "#define at_tangent iris_Tangent",
+            "#define at_midBlock (iris_MidBlock.xyz)",
             "#define mc_midTexCoord iris_MidTexFull",
             "#define mc_Entity iris_EntityFull",
             "#define gl_ModelViewMatrix u_ModelViewMatrix",
@@ -232,7 +234,7 @@ public final class EmbeddiumTerrainTransformer {
         // mc_Entity / mc_midTexCoord / at_tangent are now REAL attributes fed by IrisChunkVertexType; the prologue
         // #defines those names onto its own inputs, so the pack's declarations must be deleted outright (the define
         // would otherwise rewrite them into duplicate declarations of the prologue globals).
-        source = source.replaceAll("(?m)^\\s*attribute\\s+\\w+\\s+(mc_Entity|mc_midTexCoord|at_tangent)\\s*;\\s*$", "");
+        source = source.replaceAll("(?m)^\\s*attribute\\s+\\w+\\s+(mc_Entity|mc_midTexCoord|at_tangent|at_midBlock)\\s*;\\s*$", "");
         // Any other attribute becomes an explicitly zero-initialized global — an uninitialized global is undefined.
         source = source.replaceAll("(?m)^(\\s*)attribute\\s+(\\w+)\\s+(\\w+)\\s*;", "$1$2 $3 = $2(0.0);");
         // Fallback for forms the initializer rewrite doesn't cover (e.g. multiple declarators): just drop the keyword.

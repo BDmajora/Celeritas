@@ -186,6 +186,11 @@ public class CustomTextureManager {
         return this.nextUnit++;
     }
 
+    /** First texture unit still free after all custom-texture directives have been assigned. */
+    public int getNextAvailableUnit() {
+        return this.nextUnit;
+    }
+
     /** Turns texture data into a per-frame texture-id supplier, creating/owning a GL texture for PNG data. */
     private IntSupplier createTexture(String name, CustomTextureData data) {
         if (data instanceof CustomTextureData.PngData) {

@@ -21,13 +21,14 @@ import static org.taumc.celeritas.lwjgl.LWJGLServiceProvider.LWJGL;
 public class IrisChunkVertexType implements ChunkVertexType {
     public static final IrisChunkVertexType INSTANCE = new IrisChunkVertexType();
 
-    public static final int STRIDE = 52;
+    public static final int STRIDE = 56;
 
     // Offsets after the 28-byte vanilla-like base.
     private static final int OFFSET_NORMAL = 28;   // NormI8-packed face normal (4 normalized signed bytes)
     private static final int OFFSET_TANGENT = 32;  // NormI8-packed tangent, w = handedness
     private static final int OFFSET_MID_TEX = 36;  // 2 x float, sprite center in atlas UV space
     private static final int OFFSET_ENTITY = 44;   // 2 x float, mc_Entity.xy (see class doc)
+    private static final int OFFSET_MID_BLOCK = 52; // at_midBlock: 3 signed bytes (offset-to-block-center * 64) + 1 pad
 
     public static final GlVertexFormat VERTEX_FORMAT = GlVertexFormat.builder(STRIDE)
             .addElement("a_PosId", 0, GlVertexAttributeFormat.FLOAT, 3, false, false)
@@ -38,6 +39,9 @@ public class IrisChunkVertexType implements ChunkVertexType {
             .addElement("iris_Tangent", OFFSET_TANGENT, GlVertexAttributeFormat.BYTE, 4, true, false)
             .addElement("iris_MidTexCoord", OFFSET_MID_TEX, GlVertexAttributeFormat.FLOAT, 2, false, false)
             .addElement("iris_BlockInfo", OFFSET_ENTITY, GlVertexAttributeFormat.FLOAT, 2, false, false)
+            // at_midBlock: raw (un-normalized) signed bytes, so the shader reads the *64-scaled offset directly and
+            // divides by 64 to recover block units. Feeds Complementary's colored-lighting voxelization.
+            .addElement("iris_MidBlock", OFFSET_MID_BLOCK, GlVertexAttributeFormat.BYTE, 4, false, false)
             .build();
 
     private IrisChunkVertexType() {
@@ -83,8 +87,18 @@ public class IrisChunkVertexType implements ChunkVertexType {
             LWJGL.memPutFloat(ptr + OFFSET_ENTITY, vertex.blockId);
             LWJGL.memPutFloat(ptr + OFFSET_ENTITY + 4, vertex.blockData);
 
+            // at_midBlock: offset-to-block-center (block units) * 64, packed as three signed bytes (w padding = 0).
+            int mbx = clampByte(Math.round(vertex.midBlockX * 64.0f));
+            int mby = clampByte(Math.round(vertex.midBlockY * 64.0f));
+            int mbz = clampByte(Math.round(vertex.midBlockZ * 64.0f));
+            LWJGL.memPutInt(ptr + OFFSET_MID_BLOCK, (mbx & 0xFF) | ((mby & 0xFF) << 8) | ((mbz & 0xFF) << 16));
+
             return ptr + STRIDE;
         };
+    }
+
+    private static int clampByte(int value) {
+        return value < -128 ? -128 : (value > 127 ? 127 : value);
     }
 
     private static int encodeDrawParameters(int materialBits, int sectionIndex) {

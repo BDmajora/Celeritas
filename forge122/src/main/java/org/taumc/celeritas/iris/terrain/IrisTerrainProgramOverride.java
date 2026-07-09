@@ -129,7 +129,7 @@ public final class IrisTerrainProgramOverride {
             // k-th digit of the pack's DRAWBUFFERS directive, which is how the gbuffer FBO orders its attachments.
             builder.bindFragmentData("iris_FragData", 0);
             int[] drawBuffers = IrisRenderingPipeline.sanitizeDrawBuffers(
-                    programId.getSourceName(), DrawBuffers.parse(fshSource));
+                    programId.getSourceName(), DrawBuffers.parseActive(fshSource));
             IrisRenderingPipeline.drainGlError();
             GlProgram<ChunkShaderInterface> program =
                     builder.link(context -> new IrisTerrainShaderInterface(context, drawBuffers));

@@ -470,6 +470,11 @@ public record LWJGL2Service(
     }
 
     @Override
+    public void glUniform3i(int location, int v0, int v1, int v2) {
+        GL20.glUniform3i(location, v0, v1, v2);
+    }
+
+    @Override
     public void glUniform2f(int location, float v0, float v1) {
         GL20.glUniform2f(location, v0, v1);
     }

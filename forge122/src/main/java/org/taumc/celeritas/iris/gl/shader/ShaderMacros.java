@@ -35,6 +35,15 @@ public final class ShaderMacros {
         // uniforms.glsl declares renderStage/is_invisible behind #ifdef IS_IRIS). Everything that block declares at
         // MC_VERSION 11202 is provided by CommonUniforms.
         macros.put("IS_IRIS", "");
+        // Iris version, encoded major*10000 + minor*100 + bugfix (StandardMacros.getFormattedIrisVersion). Packs gate
+        // real behavior on this: Complementary's common.glsl takes `cameraPositionBestFract = cameraPositionFract`
+        // (the precise double-derived split we now upload) at `IRIS_VERSION >= 10800`, instead of the OptiFine
+        // `fract(cameraPosition)` path whose float precision loss makes the colored-lighting voxel grid — and thus
+        // block-edge lighting — shimmer at world coordinates far from origin. 10805 is the lowest value that both
+        // enables that path AND leaves every legacy `IRIS_VERSION < N` workaround exactly where undefined(=0) left it
+        // (the 10800..10804 skybasic moon-discard stays off; the <10902 skytextured sun fallback stays on — that
+        // geometric fallback is more reliable than our still-partial fixed-function renderStage mapping).
+        macros.put("IRIS_VERSION", "10805");
         // Iris render-stage constants (WorldRenderingPhase ordinals, exact Iris order) for the renderStage uniform.
         macros.put("MC_RENDER_STAGE_NONE", "0");
         macros.put("MC_RENDER_STAGE_SKY", "1");

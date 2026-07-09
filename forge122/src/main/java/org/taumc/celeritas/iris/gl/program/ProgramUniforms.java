@@ -3,6 +3,7 @@ package org.taumc.celeritas.iris.gl.program;
 import org.joml.Matrix4fc;
 import org.joml.Vector2i;
 import org.joml.Vector3f;
+import org.joml.Vector3i;
 import org.joml.Vector4f;
 import org.taumc.celeritas.iris.gl.uniform.FloatSupplier;
 import org.taumc.celeritas.iris.gl.uniform.FloatUniform;
@@ -11,6 +12,7 @@ import org.taumc.celeritas.iris.gl.uniform.MatrixUniform;
 import org.taumc.celeritas.iris.gl.uniform.Uniform;
 import org.taumc.celeritas.iris.gl.uniform.UniformUpdateFrequency;
 import org.taumc.celeritas.iris.gl.uniform.Vector2IntUniform;
+import org.taumc.celeritas.iris.gl.uniform.Vector3IntUniform;
 import org.taumc.celeritas.iris.gl.uniform.Vector3Uniform;
 import org.taumc.celeritas.iris.gl.uniform.Vector4Uniform;
 
@@ -110,6 +112,14 @@ public class ProgramUniforms {
             int location = location(uniformName);
             if (location != -1) {
                 add(frequency, new Vector3Uniform(location, value));
+            }
+            return this;
+        }
+
+        public Builder uniform3i(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector3i> value) {
+            int location = location(uniformName);
+            if (location != -1) {
+                add(frequency, new Vector3IntUniform(location, value));
             }
             return this;
         }
