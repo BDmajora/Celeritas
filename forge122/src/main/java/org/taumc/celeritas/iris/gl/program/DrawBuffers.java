@@ -1,5 +1,8 @@
 package org.taumc.celeritas.iris.gl.program;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -36,12 +39,11 @@ public final class DrawBuffers {
         try {
             String evaluated = org.taumc.celeritas.iris.shaderpack.preprocessor.PropertiesPreprocessor.preprocess(
                     fragmentSource, org.taumc.celeritas.iris.gl.shader.ShaderMacros.standard());
-            int[] active = parse(evaluated);
+            int[] active = parseLastDirective(evaluated);
             // FAIL-SAFE: the conditional evaluator cannot expand chained/function-like macros, so a wrongly-dead
             // branch can swallow the only directive. Trust the evaluated result only when it actually found one;
             // a source whose directives all disappeared falls back to the raw first-match (previous behavior).
-            boolean evaluatedFound = !java.util.Arrays.equals(active, DEFAULT)
-                    || (evaluated.contains("DRAWBUFFERS:0") || evaluated.contains("RENDERTARGETS: 0"));
+            boolean evaluatedFound = hasDirective(evaluated);
             return evaluatedFound ? active : raw;
         } catch (RuntimeException e) {
             return raw;
@@ -74,5 +76,60 @@ public final class DrawBuffers {
         }
 
         return DEFAULT.clone();
+    }
+
+    /**
+     * Preprocessed shader source can legitimately still contain multiple target directives when the pack layers
+     * nested option gates (Complementary's water/lava path does this for colored lighting and reflections). Iris
+     * extracts directives from preprocessed source order, so use the last surviving directive instead of the first
+     * fallback directive that appears before the active optional writes.
+     */
+    private static int[] parseLastDirective(String fragmentSource) {
+        List<Directive> directives = directives(fragmentSource);
+        if (directives.isEmpty()) {
+            return DEFAULT.clone();
+        }
+        return directives.get(directives.size() - 1).buffers.clone();
+    }
+
+    private static boolean hasDirective(String fragmentSource) {
+        return !directives(fragmentSource).isEmpty();
+    }
+
+    private static List<Directive> directives(String fragmentSource) {
+        List<Directive> directives = new ArrayList<>();
+
+        Matcher rt = RENDERTARGETS.matcher(fragmentSource);
+        while (rt.find()) {
+            String[] parts = rt.group(1).trim().split("\\s*,\\s*");
+            int[] buffers = new int[parts.length];
+            for (int i = 0; i < parts.length; i++) {
+                buffers[i] = Integer.parseInt(parts[i].trim());
+            }
+            directives.add(new Directive(rt.start(), buffers));
+        }
+
+        Matcher db = DRAWBUFFERS.matcher(fragmentSource);
+        while (db.find()) {
+            String digits = db.group(1);
+            int[] buffers = new int[digits.length()];
+            for (int i = 0; i < digits.length(); i++) {
+                buffers[i] = Character.digit(digits.charAt(i), 16);
+            }
+            directives.add(new Directive(db.start(), buffers));
+        }
+
+        directives.sort(Comparator.comparingInt(directive -> directive.offset));
+        return directives;
+    }
+
+    private static final class Directive {
+        private final int offset;
+        private final int[] buffers;
+
+        private Directive(int offset, int[] buffers) {
+            this.offset = offset;
+            this.buffers = buffers;
+        }
     }
 }

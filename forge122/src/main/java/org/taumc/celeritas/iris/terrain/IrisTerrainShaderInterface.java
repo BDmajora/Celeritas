@@ -11,6 +11,7 @@ import org.embeddedt.embeddium.impl.render.chunk.shader.ChunkShaderTextureSlot;
 import org.embeddedt.embeddium.impl.render.chunk.terrain.TerrainRenderPass;
 import org.joml.Matrix4fc;
 import org.taumc.celeritas.iris.Iris;
+import org.taumc.celeritas.iris.gl.blending.ProgramBlendState;
 import org.taumc.celeritas.iris.gl.program.ProgramUniforms;
 import org.taumc.celeritas.iris.pipeline.IrisRenderingPipeline;
 
@@ -30,6 +31,7 @@ public class IrisTerrainShaderInterface implements ChunkShaderInterface {
     private final Map<ChunkShaderTextureSlot, GlUniformInt> uTextures = new EnumMap<>(ChunkShaderTextureSlot.class);
     /** The program's sanitized {@code DRAWBUFFERS} mask, applied to the gbuffer FBO whenever this program binds. */
     private final int[] drawBuffers;
+    private final ProgramBlendState blendState;
     /**
      * The pack's OptiFine uniform set ({@code gbufferModelView(Inverse)}, {@code cameraPosition}, time…), uploaded on
      * every bind. Without these the pack's world-space round-trip (through {@code gbufferModelViewInverse}) multiplies
@@ -39,8 +41,9 @@ public class IrisTerrainShaderInterface implements ChunkShaderInterface {
 
     private GlPrimitiveType primitiveType = GlPrimitiveType.TRIANGLES;
 
-    public IrisTerrainShaderInterface(ShaderBindingContext context, int[] drawBuffers) {
+    public IrisTerrainShaderInterface(ShaderBindingContext context, int[] drawBuffers, ProgramBlendState blendState) {
         this.drawBuffers = drawBuffers;
+        this.blendState = blendState;
         this.uModelViewMatrix = context.bindUniformIfPresent("u_ModelViewMatrix", GlUniformMatrix4f::new);
         this.uProjectionMatrix = context.bindUniformIfPresent("u_ProjectionMatrix", GlUniformMatrix4f::new);
         this.uRegionOffset = context.bindUniformIfPresent("u_RegionOffset", GlUniformFloat3v::new);
@@ -78,7 +81,10 @@ public class IrisTerrainShaderInterface implements ChunkShaderInterface {
         // onTerrainDraw would rebind the gbuffer over the shadow framebuffer.)
         IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
         if (pipeline != null && !org.taumc.celeritas.iris.pipeline.IrisShadowRenderer.isShadowPass()) {
-            pipeline.onTerrainDraw(this.drawBuffers);
+            pipeline.onTerrainDraw(this.drawBuffers, this.blendState);
+        }
+        if (pipeline != null) {
+            pipeline.bindCustomImages();
         }
         // ShaderChunkRenderer.begin binds the program before setupState, so uniform uploads land on this program.
         if (this.uniforms != null) {

@@ -8,6 +8,7 @@ import org.embeddedt.embeddium.impl.gl.shader.ShaderType;
 import org.embeddedt.embeddium.impl.render.chunk.shader.ChunkShaderInterface;
 import org.embeddedt.embeddium.impl.render.chunk.shader.ChunkShaderOptions;
 import org.taumc.celeritas.iris.Iris;
+import org.taumc.celeritas.iris.gl.blending.ProgramBlendState;
 import org.taumc.celeritas.iris.gl.program.DrawBuffers;
 import org.taumc.celeritas.iris.gl.program.ProgramUniforms;
 import org.taumc.celeritas.iris.pipeline.IrisRenderingPipeline;
@@ -17,6 +18,7 @@ import org.taumc.celeritas.iris.shaderpack.loading.ProgramId;
 import org.taumc.celeritas.iris.uniforms.CommonUniforms;
 import org.taumc.celeritas.iris.uniforms.MatrixUniforms;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -130,9 +132,12 @@ public final class IrisTerrainProgramOverride {
             builder.bindFragmentData("iris_FragData", 0);
             int[] drawBuffers = IrisRenderingPipeline.sanitizeDrawBuffers(
                     programId.getSourceName(), DrawBuffers.parseActive(fshSource));
+            LOGGER.info("[Iris] {} resolved DRAWBUFFERS {}", programId.getSourceName(),
+                    Arrays.toString(drawBuffers));
+            ProgramBlendState blendState = ProgramBlendState.from(pack.getProperties(), source.getName());
             IrisRenderingPipeline.drainGlError();
             GlProgram<ChunkShaderInterface> program =
-                    builder.link(context -> new IrisTerrainShaderInterface(context, drawBuffers));
+                    builder.link(context -> new IrisTerrainShaderInterface(context, drawBuffers, blendState));
             IrisRenderingPipeline.reportGlError("terrain '" + programId.getSourceName() + "' link");
 
             // The pack program needs the full OptiFine uniform set: shaders like LIGHT round-trip positions through

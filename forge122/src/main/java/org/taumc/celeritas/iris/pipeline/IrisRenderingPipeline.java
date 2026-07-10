@@ -9,6 +9,7 @@ import org.apache.logging.log4j.Logger;
 import org.joml.Matrix4f;
 import org.taumc.celeritas.iris.gl.framebuffer.IrisFramebuffer;
 import org.taumc.celeritas.iris.gl.program.DrawBuffers;
+import org.taumc.celeritas.iris.gl.blending.ProgramBlendState;
 import org.taumc.celeritas.iris.gl.program.GlProgram;
 import org.taumc.celeritas.iris.gl.program.IrisProgram;
 import org.taumc.celeritas.iris.gl.program.ProgramBuilder;
@@ -83,17 +84,18 @@ public class IrisRenderingPipeline {
     private static final int SHADOW_COLOR_0_UNIT = 21;
     private static final int SHADOW_COLOR_1_UNIT = 22;
     private static final int NOISE_TEX_UNIT = 23;
-    /** Highest attachment point the gbuffer FBO uses (natural points 0..7); the composite chain packs densely instead. */
-    private static final int GBUFFER_ATTACHMENT_LIMIT = 8;
-    /** High texture unit used transiently for depth-copy binds so no sampler or vanilla-tracked unit is disturbed. */
+    /** Highest logical colortex index shader-pack gbuffer stages may address. FBO attachment points are packed. */
+    private static final int GBUFFER_ATTACHMENT_LIMIT = IrisRenderTargets.MAX_COLOR_BUFFERS;
+    /** High texture unit used transiently for depth-copy binds so no vanilla-tracked unit is disturbed. */
     private static final int DEPTH_COPY_SCRATCH_UNIT = 24;
     /**
-     * Dedicated units for the pack's custom textures and image samplers, above every reserved unit. The upper bound is
-     * queried from {@code GL_MAX_TEXTURE_IMAGE_UNITS}; hard-capping this at 31 drops Complementary's WSR images and
-     * leaves their image uniforms aliased to image unit 0.
+     * Dedicated units for the pack's custom textures and image samplers, above every reserved sampler. Unit 24 is
+     * shared only by transient depth-copy/capture helpers; custom textures are rebound after those scratch uses.
      */
-    private static final int CUSTOM_TEX_FIRST_UNIT = 25;
+    private static final int CUSTOM_TEX_FIRST_UNIT = DEPTH_COPY_SCRATCH_UNIT;
     private static final int GL_MAX_TEXTURE_IMAGE_UNITS = 0x8872;
+    private static final int GL_BACK_BUFFER = 0x0405;
+    private static final int SHADER_PACK_RESOURCE_BARRIERS = 0x00000020 | 0x00000008 | 0x00002000;
     /** Draw-buffer mask for fixed-function content with no pack program: plain color into colortex0 only. */
     private static final int[] FIXED_FUNCTION_MASK = {0};
 
@@ -133,14 +135,19 @@ public class IrisRenderingPipeline {
         final IrisFramebuffer framebuffer;
         /** Per color buffer, the texture to bind as {@code colortexN} when this pass runs (0 = target not in use). */
         final int[] colorSamplers;
+        /** Logical render targets in shader output-slot order, used for per-target blend directives. */
+        final int[] drawBuffers;
+        final ProgramBlendState blendState;
 
         FullscreenPass(String name, IrisProgram program, ProgramUniforms uniforms, IrisFramebuffer framebuffer,
-                       int[] colorSamplers) {
+                       int[] colorSamplers, int[] drawBuffers, ProgramBlendState blendState) {
             this.name = name;
             this.program = program;
             this.uniforms = uniforms;
             this.framebuffer = framebuffer;
             this.colorSamplers = colorSamplers;
+            this.drawBuffers = drawBuffers;
+            this.blendState = blendState;
         }
     }
 
@@ -166,6 +173,15 @@ public class IrisRenderingPipeline {
     private final List<FullscreenPass> passes = new ArrayList<>();
     private IrisFramebuffer blitSourceFramebuffer;
     private final List<SwapPass> swapPasses = new ArrayList<>();
+    /** Per-render-target clear directives parsed from the pack sources. Iris defaults every colortex to clear=true. */
+    private final boolean[] colorBufferClears = new boolean[IrisRenderTargets.MAX_COLOR_BUFFERS];
+    /** Explicit colortexNClearColor values; null means Iris's default color for that buffer. */
+    private final float[][] colorBufferClearColors = new float[IrisRenderTargets.MAX_COLOR_BUFFERS][];
+    /** Regular per-frame clears: only buffers whose colortexNClear directive is true, both main and alt sides. */
+    private final List<ClearPass> clearPasses = new ArrayList<>();
+    /** First-frame / resized-storage clears: every materialized buffer, both main and alt sides. */
+    private final List<ClearPass> fullClearPasses = new ArrayList<>();
+    private boolean fullClearRequired = true;
     /**
      * Fullscreen programs + their uniforms, compiled once and cached by name. A name mapping to {@code null} means
      * that program failed to compile. Owns the GL programs — they are destroyed here, not per-pass.
@@ -214,6 +230,8 @@ public class IrisRenderingPipeline {
     private final TreeSet<Integer> flippedAtLeastOnce = new TreeSet<>();
     /** Every color index attached to the gbuffer FBOs: the union of all gbuffer-stage DRAWBUFFERS masks, sorted. */
     private final int[] gbufferAttachments;
+    /** Logical colortex index -> physical gbuffer attachment point. */
+    private final Map<Integer, Integer> gbufferAttachmentPoints = new LinkedHashMap<>();
     /** The gbuffer FBO the world is currently rendering into (switches after the deferred chain runs). */
     private IrisFramebuffer currentGbuffer;
     /** The shadow-map pass, or {@code null} when the pack declares no {@code shadow} program. */
@@ -232,6 +250,16 @@ public class IrisRenderingPipeline {
             this.index = index;
             this.from = from;
             this.targetTexture = targetTexture;
+        }
+    }
+
+    private static final class ClearPass {
+        final IrisFramebuffer framebuffer;
+        final float[] color;
+
+        ClearPass(IrisFramebuffer framebuffer, float[] color) {
+            this.framebuffer = framebuffer;
+            this.color = color;
         }
     }
 
@@ -254,6 +282,7 @@ public class IrisRenderingPipeline {
     public IrisRenderingPipeline(ShaderPack pack) {
         Minecraft mc = Minecraft.getMinecraft();
         this.renderTargets = new IrisRenderTargets(mc.displayWidth, mc.displayHeight);
+        java.util.Arrays.fill(this.colorBufferClears, true);
 
         boolean initialized = false;
         try {
@@ -282,6 +311,9 @@ public class IrisRenderingPipeline {
 
             this.gbufferPrograms = new GbufferPrograms(pack, SAMPLER_UNITS, gbufferSamplerOverrideUnits());
             this.gbufferAttachments = computeGbufferAttachments(pack, terrainDrawBuffers(pack));
+            for (int i = 0; i < this.gbufferAttachments.length; i++) {
+                this.gbufferAttachmentPoints.put(this.gbufferAttachments[i], i);
+            }
             this.shadowRenderer = createShadowRenderer(pack);
             buildComputePasses(pack);
             BufferFlipper flipper = this.renderTargets.getBufferFlipper();
@@ -291,6 +323,7 @@ public class IrisRenderingPipeline {
             // baked FBOs and sampler snapshots are valid again without any per-frame parity.
             buildSchedule(pack, flipper);
             buildSwapPasses(flipper);
+            buildClearPasses();
 
             LOGGER.info("[Iris] Rendering pipeline ready: {} deferred + {} composite/final pass(es){}, {} swap(s), gbuffer {}x{}",
                     this.deferredPasses.size(), this.passes.size(),
@@ -330,14 +363,16 @@ public class IrisRenderingPipeline {
      * their tonemapping input is clamped and highlights blow out.
      */
     private void applyPackFormatDirectives(List<ProgramSource> sources) {
-        Pattern directive = Pattern.compile("const\\s+int\\s+(\\w+?)Format\\s*=\\s*(\\w+)\\s*;");
+        Pattern formatDirective = Pattern.compile("const\\s+int\\s+(\\w+?)Format\\s*=\\s*(\\w+)\\s*;");
+        Pattern clearDirective = Pattern.compile("const\\s+bool\\s+(\\w+?)Clear\\s*=\\s*(true|false)\\s*;");
+        Pattern clearColorDirective = Pattern.compile("const\\s+vec4\\s+(\\w+?)ClearColor\\s*=\\s*vec4\\s*\\(([^)]*)\\)\\s*;");
         for (ProgramSource source : sources) {
             String[] stages = {source.getFragmentSource().orElse(null), source.getVertexSource().orElse(null)};
             for (String stage : stages) {
                 if (stage == null) {
                     continue;
                 }
-                Matcher matcher = directive.matcher(stage);
+                Matcher matcher = formatDirective.matcher(stage);
                 while (matcher.find()) {
                     Integer index = SAMPLER_UNITS.get(matcher.group(1));
                     if (index == null || index >= IrisRenderTargets.MAX_COLOR_BUFFERS) {
@@ -356,8 +391,54 @@ public class IrisRenderingPipeline {
                         LOGGER.warn("[Iris] Format directive for colortex{} came after the target was created", index);
                     }
                 }
+                Matcher clearMatcher = clearDirective.matcher(stage);
+                while (clearMatcher.find()) {
+                    Integer index = SAMPLER_UNITS.get(clearMatcher.group(1));
+                    if (index != null && index < IrisRenderTargets.MAX_COLOR_BUFFERS) {
+                        this.colorBufferClears[index] = Boolean.parseBoolean(clearMatcher.group(2));
+                    }
+                }
+                Matcher clearColorMatcher = clearColorDirective.matcher(stage);
+                while (clearColorMatcher.find()) {
+                    Integer index = SAMPLER_UNITS.get(clearColorMatcher.group(1));
+                    if (index != null && index < IrisRenderTargets.MAX_COLOR_BUFFERS) {
+                        float[] color = parseVec4(clearColorMatcher.group(2));
+                        if (color != null) {
+                            this.colorBufferClearColors[index] = color;
+                        }
+                    }
+                }
             }
         }
+    }
+
+    private static float[] parseVec4(String value) {
+        String[] parts = value.split(",");
+        try {
+            if (parts.length == 1) {
+                float scalar = parseFloatLiteral(parts[0]);
+                return new float[]{scalar, scalar, scalar, scalar};
+            }
+            if (parts.length != 4) {
+                return null;
+            }
+            return new float[]{
+                    parseFloatLiteral(parts[0]),
+                    parseFloatLiteral(parts[1]),
+                    parseFloatLiteral(parts[2]),
+                    parseFloatLiteral(parts[3])
+            };
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static float parseFloatLiteral(String value) {
+        String cleaned = value.trim();
+        if (cleaned.endsWith("f") || cleaned.endsWith("F")) {
+            cleaned = cleaned.substring(0, cleaned.length() - 1);
+        }
+        return Float.parseFloat(cleaned);
     }
 
     /**
@@ -425,7 +506,7 @@ public class IrisRenderingPipeline {
         shadowSamplerUnits.putAll(gbufferSamplerOverrideUnits());
         try {
             return new IrisShadowRenderer(resolution, distance, sunPathRotation,
-                    shadowSource.get(), shadowSamplerUnits, hardwareFiltering);
+                    shadowSource.get(), shadowSamplerUnits, hardwareFiltering, this::bindShaderPackResources);
         } catch (Exception e) {
             LOGGER.error("[Iris] Failed to create the shadow renderer; shadows disabled", e);
             return null;
@@ -484,6 +565,7 @@ public class IrisRenderingPipeline {
         for (int buffer : attachments) {
             result[i++] = buffer;
         }
+        LOGGER.info("[Iris] Gbuffer attachments {}", java.util.Arrays.toString(result));
         return result;
     }
 
@@ -494,12 +576,28 @@ public class IrisRenderingPipeline {
      */
     private IrisFramebuffer createGbufferFramebuffer(BufferFlipper flipper) {
         IrisFramebuffer framebuffer = new IrisFramebuffer();
-        for (int index : this.gbufferAttachments) {
-            framebuffer.addColorAttachment(index, frontTexture(flipper, index));
+        for (Map.Entry<Integer, Integer> entry : this.gbufferAttachmentPoints.entrySet()) {
+            int logicalIndex = entry.getKey();
+            int attachmentPoint = entry.getValue();
+            framebuffer.addColorAttachment(logicalIndex, attachmentPoint, frontTexture(flipper, logicalIndex));
         }
         framebuffer.addDepthAttachment(this.renderTargets.getDepthTexture().getTextureId());
-        framebuffer.drawBuffers(FIXED_FUNCTION_MASK);
+        drawGbufferBuffers(framebuffer, FIXED_FUNCTION_MASK);
         return framebuffer;
+    }
+
+    private void drawGbufferBuffers(IrisFramebuffer framebuffer, int[] logicalDrawBuffers) {
+        int[] physicalDrawBuffers = new int[logicalDrawBuffers.length];
+        for (int i = 0; i < logicalDrawBuffers.length; i++) {
+            Integer attachmentPoint = this.gbufferAttachmentPoints.get(logicalDrawBuffers[i]);
+            if (attachmentPoint == null) {
+                LOGGER.warn("[Iris] Gbuffer draw buffer colortex{} is not attached; routing output slot {} to colortex0",
+                        logicalDrawBuffers[i], i);
+                attachmentPoint = this.gbufferAttachmentPoints.get(0);
+            }
+            physicalDrawBuffers[i] = attachmentPoint == null ? 0 : attachmentPoint;
+        }
+        framebuffer.drawBuffers(physicalDrawBuffers);
     }
 
     /** Bakes one frame's ping-pong schedule from the flipper's current state, advancing the flipper as it goes. */
@@ -511,7 +609,7 @@ public class IrisRenderingPipeline {
             if (!source.isPresent()) {
                 continue;
             }
-            FullscreenPass pass = buildCompositePass(source.get(), flipper);
+            FullscreenPass pass = buildCompositePass(pack, source.get(), flipper);
             if (pass != null) {
                 this.deferredPasses.add(pass);
             }
@@ -524,7 +622,7 @@ public class IrisRenderingPipeline {
             if (!source.isPresent()) {
                 continue;
             }
-            FullscreenPass pass = buildCompositePass(source.get(), flipper);
+            FullscreenPass pass = buildCompositePass(pack, source.get(), flipper);
             if (pass != null) {
                 this.passes.add(pass);
             }
@@ -549,7 +647,7 @@ public class IrisRenderingPipeline {
      */
     private void buildSwapPasses(BufferFlipper flipper) {
         for (int i = 0; i < IrisRenderTargets.MAX_COLOR_BUFFERS; i++) {
-            if (!flipper.isFlipped(i) || this.renderTargets.get(i) == null || isGbufferAttachment(i)) {
+            if (!flipper.isFlipped(i) || this.renderTargets.get(i) == null || this.colorBufferClears[i]) {
                 continue;
             }
             IrisRenderTarget target = this.renderTargets.get(i);
@@ -561,13 +659,36 @@ public class IrisRenderingPipeline {
         }
     }
 
-    private boolean isGbufferAttachment(int index) {
-        for (int attachment : this.gbufferAttachments) {
-            if (attachment == index) {
-                return true;
+    private void buildClearPasses() {
+        for (int i = 0; i < IrisRenderTargets.MAX_COLOR_BUFFERS; i++) {
+            if (this.renderTargets.get(i) == null) {
+                continue;
+            }
+            float[] color = defaultClearColor(i);
+            this.fullClearPasses.add(new ClearPass(
+                    this.renderTargets.createClearFramebuffer(false, new int[]{i}), color));
+            this.fullClearPasses.add(new ClearPass(
+                    this.renderTargets.createClearFramebuffer(true, new int[]{i}), color));
+            if (this.colorBufferClears[i]) {
+                this.clearPasses.add(new ClearPass(
+                        this.renderTargets.createClearFramebuffer(false, new int[]{i}), color));
+                this.clearPasses.add(new ClearPass(
+                        this.renderTargets.createClearFramebuffer(true, new int[]{i}), color));
             }
         }
-        return false;
+    }
+
+    private float[] defaultClearColor(int index) {
+        if (this.colorBufferClearColors[index] != null) {
+            return this.colorBufferClearColors[index];
+        }
+        if (index == 0) {
+            return null; // Iris clears colortex0 to the current fog color by default.
+        }
+        if (index == 1) {
+            return new float[]{1.0f, 1.0f, 1.0f, 1.0f};
+        }
+        return new float[]{0.0f, 0.0f, 0.0f, 0.0f};
     }
 
     /**
@@ -589,7 +710,7 @@ public class IrisRenderingPipeline {
         return program;
     }
 
-    private FullscreenPass buildCompositePass(ProgramSource source, BufferFlipper flipper) {
+    private FullscreenPass buildCompositePass(ShaderPack pack, ProgramSource source, BufferFlipper flipper) {
         String name = source.getName();
         try {
             IrisProgram program = cachedProgram(source);
@@ -607,7 +728,8 @@ public class IrisRenderingPipeline {
                 this.flippedAtLeastOnce.add(buffer);
             }
 
-            return new FullscreenPass(name, program, this.compiledUniforms.get(name), framebuffer, colorSamplers);
+            return new FullscreenPass(name, program, this.compiledUniforms.get(name), framebuffer, colorSamplers,
+                    drawBuffers, ProgramBlendState.from(pack.getProperties(), name));
         } catch (Exception e) {
             LOGGER.error("[Iris] Failed to build pass '{}'; it will be skipped: {}", name, e.getMessage());
             return null;
@@ -625,7 +747,9 @@ public class IrisRenderingPipeline {
             if (program == null) {
                 return null;
             }
-            return new FullscreenPass(name, program, this.compiledUniforms.get(name), null, snapshotFrontTextures(flipper));
+            return new FullscreenPass(name, program, this.compiledUniforms.get(name), null,
+                    snapshotFrontTextures(flipper), DrawBuffers.DEFAULT.clone(),
+                    ProgramBlendState.from(pack.getProperties(), name));
         } catch (Exception e) {
             LOGGER.error("[Iris] Failed to build final pass; falling back to colortex0 blit: {}", e.getMessage());
             return null;
@@ -781,8 +905,8 @@ public class IrisRenderingPipeline {
     }
 
     /**
-     * Gbuffer-program draw buffers: the shared gbuffer FBO uses natural attachment points, so cap at the first 8
-     * (every current pack's gbuffer stages fit). Called by the terrain override and gbuffer phase compiler.
+     * Gbuffer-program draw buffers: shader packs address logical colortex indices, while the shared gbuffer FBO maps
+     * those logical targets onto dense physical attachment points. Called by the terrain override and phase compiler.
      */
     public static int[] sanitizeDrawBuffers(String name, int[] drawBuffers) {
         return sanitizeDrawBuffers(name, drawBuffers, GBUFFER_ATTACHMENT_LIMIT);
@@ -815,6 +939,21 @@ public class IrisRenderingPipeline {
 
     // ------------------------------------------------------------------ per-frame hooks
 
+    private void runClearPasses(List<ClearPass> passes) {
+        for (ClearPass pass : passes) {
+            pass.framebuffer.bind();
+            LWJGL.glViewport(0, 0, this.renderTargets.getWidth(), this.renderTargets.getHeight());
+            float[] color = pass.color;
+            if (color == null) {
+                org.joml.Vector3f fog = CapturedRenderingState.INSTANCE.getFogColor();
+                GlStateManager.clearColor(fog.x, fog.y, fog.z, 1.0f);
+            } else {
+                GlStateManager.clearColor(color[0], color[1], color[2], color[3]);
+            }
+            LWJGL.glClear(GL11.GL_COLOR_BUFFER_BIT);
+        }
+    }
+
     /**
      * renderWorld HEAD: redirect the frame into the gbuffer. Vanilla's own fog-colored clear inside
      * {@code renderWorldPass} then clears our attachments, and every world draw lands in the render targets.
@@ -826,6 +965,7 @@ public class IrisRenderingPipeline {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.displayWidth != this.renderTargets.getWidth() || mc.displayHeight != this.renderTargets.getHeight()) {
             this.renderTargets.resize(mc.displayWidth, mc.displayHeight);
+            this.fullClearRequired = true;
         }
 
         SystemTimeUniforms.COUNTER.beginFrame(System.nanoTime());
@@ -854,12 +994,9 @@ public class IrisRenderingPipeline {
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, this.stubShadowMap.getTextureId());
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
 
-        // The pack's custom textures (texture.<stage>.<sampler> / customTexture.<name>) live on dedicated units for
-        // the whole frame; the per-stage program sampler assignments point at them.
-        this.customTextureManager.bindAll();
         // Custom images: zero the per-frame ones (voxel volume), then bind image units + paired samplers.
         this.customImageManager.clearAll();
-        this.customImageManager.bindAll();
+        bindShaderPackResources();
 
         // Default PBR maps on the gbuffer-stage normals/specular units (2/3, so through GlStateManager to keep its
         // cache coherent). The composite stage overwrites these units with colortex2/3 when it runs.
@@ -871,16 +1008,10 @@ public class IrisRenderingPipeline {
 
         IrisFramebuffer gbuffer = this.gbufferFramebuffer;
         this.currentGbuffer = gbuffer;
+        runClearPasses(this.fullClearRequired ? this.fullClearPasses : this.clearPasses);
+        this.fullClearRequired = false;
         gbuffer.bind();
-        // Clear every attached color target to transparent black once (OptiFine's clearRenderBuffers); vanilla's own
-        // fog-colored clear inside renderWorldPass then covers colortex0 + depth. GlStateManager.clearColor keeps the
-        // vanilla clear-color cache coherent so updateFogColor's subsequent set is not skipped. NB: buffers the gbuffer
-        // stage does not attach (e.g. the composite-only TAA history colortex2) are deliberately never cleared, so
-        // their contents persist across frames for temporal accumulation.
-        gbuffer.drawBuffers(this.gbufferAttachments);
-        GlStateManager.clearColor(0.0f, 0.0f, 0.0f, 0.0f);
-        LWJGL.glClear(GL11.GL_COLOR_BUFFER_BIT);
-        gbuffer.drawBuffers(FIXED_FUNCTION_MASK);
+        drawGbufferBuffers(gbuffer, FIXED_FUNCTION_MASK);
         if (this.skyAtFarPlane) {
             LWJGL.glDepthRange(0.0, 1.0);
             this.skyAtFarPlane = false;
@@ -916,11 +1047,13 @@ public class IrisRenderingPipeline {
         GbufferPrograms.Entry entry = phase == null ? null : this.gbufferPrograms.get(phase);
         if (entry == null) {
             LWJGL.glUseProgram(0);
-            this.currentGbuffer.drawBuffers(FIXED_FUNCTION_MASK);
+            drawGbufferBuffers(this.currentGbuffer, FIXED_FUNCTION_MASK);
         } else {
             entry.getProgram().bind();
+            bindShaderPackResources();
             entry.getUniforms().update();
-            this.currentGbuffer.drawBuffers(entry.getDrawBuffers());
+            drawGbufferBuffers(this.currentGbuffer, entry.getDrawBuffers());
+            entry.getBlendState().apply(entry.getDrawBuffers());
         }
     }
 
@@ -928,11 +1061,12 @@ public class IrisRenderingPipeline {
      * Called when the Embeddium terrain override program binds ({@code IrisTerrainShaderInterface.setupState}): points
      * the gbuffer's draw-buffer mask at the terrain/water program's {@code DRAWBUFFERS} directive.
      */
-    public void onTerrainDraw(int[] drawBuffers) {
+    public void onTerrainDraw(int[] drawBuffers, ProgramBlendState blendState) {
         if (!this.worldRenderingActive) {
             return;
         }
-        this.currentGbuffer.drawBuffers(drawBuffers);
+        drawGbufferBuffers(this.currentGbuffer, drawBuffers);
+        blendState.apply(drawBuffers);
     }
 
     /**
@@ -995,7 +1129,7 @@ public class IrisRenderingPipeline {
             bindDepthSamplers();
             // Re-establish the custom image/sampler bindings (Iris binds images at every program use; the shadow
             // pass's out-of-band FF/TESR rendering may have disturbed the high texture units).
-            this.customImageManager.bindAll();
+            bindShaderPackResources();
             for (FullscreenPass pass : this.deferredPasses) {
                 runPass(pass, mc);
             }
@@ -1106,8 +1240,6 @@ public class IrisRenderingPipeline {
                     cam.x, cam.y, cam.z, prevCam.x, prevCam.y, prevCam.z, offX, offY, offZ);
         }
 
-        // Re-establish the custom image/sampler bindings for the composite chain (Iris parity: bind at use).
-        this.customImageManager.bindAll();
         for (FullscreenPass pass : this.passes) {
             runPass(pass, mc);
         }
@@ -1146,6 +1278,7 @@ public class IrisRenderingPipeline {
         // Hand control back to vanilla: its framebuffer bound, no program/VAO, texture units cleaned up.
         LWJGL.glUseProgram(0);
         bindMainRenderTarget(mc);
+        restoreMainDrawReadBuffers(mc);
         restoreTextureUnits();
         GlStateManager.depthMask(true);
         GlStateManager.enableDepth();
@@ -1156,6 +1289,10 @@ public class IrisRenderingPipeline {
 
     public boolean isWorldRenderingActive() {
         return this.worldRenderingActive;
+    }
+
+    public boolean shouldDisableVanillaEntityShadows() {
+        return this.shadowRenderer != null;
     }
 
     /**
@@ -1175,6 +1312,7 @@ public class IrisRenderingPipeline {
                 String csh = org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(
                         source.get().getComputeSource().get(),
                         org.taumc.celeritas.iris.gl.shader.ShaderMacros.standard());
+                IrisDebugDump.dumpText("src_" + name + ".csh", csh);
                 int[] localSize = parseLocalSize(csh);
                 if (volume == null || localSize == null) {
                     LOGGER.warn("[Iris] Compute pass '{}' skipped (no 3D custom image / local_size declaration)", name);
@@ -1232,10 +1370,11 @@ public class IrisRenderingPipeline {
         // Embeddium shadow-terrain draw that just voxelized runs through managed code that can reset texture/image
         // units, so re-establish the voxel/floodfill bindings here rather than trusting the frame-start bindAll to
         // survive it — otherwise the compute could read/write the wrong (or unbound) volume.
-        this.customImageManager.bindAll();
+        bindShaderPackResources();
         LWJGL.glMemoryBarrier(org.taumc.celeritas.lwjgl.GL42.GL_ALL_BARRIER_BITS);
         for (ComputePass pass : this.computePasses) {
             pass.program.bind();
+            bindShaderPackResources();
             pass.uniforms.update();
             LWJGL.glDispatchCompute(pass.groupsX, pass.groupsY, pass.groupsZ);
             // Each floodfill iteration reads the previous one's writes.
@@ -1251,13 +1390,14 @@ public class IrisRenderingPipeline {
         if (atlas == null) {
             return;
         }
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + DEPTH_COPY_SCRATCH_UNIT);
-        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, atlas.getGlTextureId());
-        int width = LWJGL.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
-        int height = LWJGL.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
-        CapturedRenderingState.INSTANCE.setAtlasSize(width, height);
-        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        int previousTexture = bindScratchTexture2D(atlas.getGlTextureId());
+        try {
+            int width = LWJGL.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
+            int height = LWJGL.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
+            CapturedRenderingState.INSTANCE.setAtlasSize(width, height);
+        } finally {
+            restoreScratchTexture2D(previousTexture);
+        }
     }
 
     // ------------------------------------------------------------------ state helpers
@@ -1269,9 +1409,13 @@ public class IrisRenderingPipeline {
             LWJGL.glViewport(0, 0, this.renderTargets.getWidth(), this.renderTargets.getHeight());
         } else {
             bindMainRenderTarget(mc);
+            restoreMainDrawReadBuffers(mc);
         }
+        GlStateManager.disableBlend();
+        pass.blendState.apply(pass.drawBuffers);
         bindColorSamplers(pass);
         pass.program.bind();
+        bindShaderPackResources();
         pass.uniforms.update();
         boolean probe = this.glErrorProbeFrames > 0;
         if (probe) {
@@ -1346,11 +1490,25 @@ public class IrisRenderingPipeline {
      * {@code depthtex1}/{@code depthtex2}. Runs on a scratch texture unit so no vanilla-tracked binding is disturbed.
      */
     private void copyDepthTexture(DepthTexture destination) {
+        int previousTexture = bindScratchTexture2D(destination.getTextureId());
+        try {
+            LWJGL.glCopyTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 0, 0,
+                    this.renderTargets.getWidth(), this.renderTargets.getHeight());
+        } finally {
+            restoreScratchTexture2D(previousTexture);
+        }
+        bindShaderPackResources();
+    }
+
+    private static int bindScratchTexture2D(int texture) {
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + DEPTH_COPY_SCRATCH_UNIT);
-        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, destination.getTextureId());
-        LWJGL.glCopyTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 0, 0,
-                this.renderTargets.getWidth(), this.renderTargets.getHeight());
-        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+        int previousTexture = LWJGL.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+        return previousTexture;
+    }
+
+    private static void restoreScratchTexture2D(int texture) {
+        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture);
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
     }
 
@@ -1360,6 +1518,16 @@ public class IrisRenderingPipeline {
         } else {
             LWJGL.glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
             LWJGL.glViewport(0, 0, mc.displayWidth, mc.displayHeight);
+        }
+    }
+
+    private static void restoreMainDrawReadBuffers(Minecraft mc) {
+        if (OpenGlHelper.isFramebufferEnabled()) {
+            LWJGL.glDrawBuffers(GL30.GL_COLOR_ATTACHMENT0);
+            LWJGL.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
+        } else {
+            LWJGL.glDrawBuffers(GL_BACK_BUFFER);
+            LWJGL.glReadBuffer(GL_BACK_BUFFER);
         }
     }
 
@@ -1401,7 +1569,7 @@ public class IrisRenderingPipeline {
             LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + unit);
             LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
         }
-        for (int unit : new int[]{SHADOW_COLOR_0_UNIT, SHADOW_TEX_0_UNIT, SHADOW_TEX_1_UNIT, NOISE_TEX_UNIT}) {
+        for (int unit : new int[]{SHADOW_COLOR_0_UNIT, SHADOW_COLOR_1_UNIT, SHADOW_TEX_0_UNIT, SHADOW_TEX_1_UNIT, NOISE_TEX_UNIT}) {
             LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + unit);
             LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
         }
@@ -1417,6 +1585,25 @@ public class IrisRenderingPipeline {
             GlStateManager.bindTexture(0);
         }
         GlStateManager.setActiveTexture(OpenGlHelper.defaultTexUnit);
+    }
+
+    private void bindShaderPackResources() {
+        if (this.destroyed) {
+            return;
+        }
+        if (this.customImageManager != null && !this.customImageManager.isEmpty()) {
+            LWJGL.glMemoryBarrier(SHADER_PACK_RESOURCE_BARRIERS);
+        }
+        if (this.customTextureManager != null) {
+            this.customTextureManager.bindAll();
+        }
+        if (this.customImageManager != null) {
+            this.customImageManager.bindAll();
+        }
+    }
+
+    public void bindCustomImages() {
+        bindShaderPackResources();
     }
 
     // ------------------------------------------------------------------ teardown

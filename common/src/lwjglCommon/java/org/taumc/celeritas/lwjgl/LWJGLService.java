@@ -175,8 +175,20 @@ public interface LWJGLService {
 
     void glEnable(int cap);
     void glDisable(int cap);
+    default boolean supportsBufferBlending() {
+        return false;
+    }
+    default void glEnablei(int target, int index) {
+        throw new UnsupportedOperationException("Indexed GL enable is not supported");
+    }
+    default void glDisablei(int target, int index) {
+        throw new UnsupportedOperationException("Indexed GL disable is not supported");
+    }
     void glBlendFunc(int sfactor, int dfactor);
     void glBlendFuncSeparate(int srcRGB, int dstRGB, int srcAlpha, int dstAlpha);
+    default void glBlendFuncSeparatei(int buffer, int srcRGB, int dstRGB, int srcAlpha, int dstAlpha) {
+        throw new UnsupportedOperationException("Per-buffer blending is not supported");
+    }
     void glDepthFunc(int func);
     void glDepthMask(boolean flag);
     void glColorMask(boolean red, boolean green, boolean blue, boolean alpha);

@@ -18,8 +18,7 @@ import java.util.List;
  * format via {@link #setColorFormat(int, InternalTextureFormat)} before first use.
  */
 public class IrisRenderTargets {
-    /** colortex0..15, matching modern Iris. Targets past 7 are created lazily only when referenced. Composite/deferred
-     *  passes attach them via dense packing (Iris's scheme); the gbuffer stays on the first 8 attachment points. */
+    /** colortex0..15, matching modern Iris. Targets past 7 are created lazily only when referenced. */
     public static final int MAX_COLOR_BUFFERS = 16;
 
     private final IrisRenderTarget[] targets = new IrisRenderTarget[MAX_COLOR_BUFFERS];
@@ -118,10 +117,32 @@ public class IrisRenderTargets {
             densePoints[i] = i;
             IrisRenderTarget target = getOrCreate(drawBuffers[i]);
             int texture = this.flipper.isFlipped(drawBuffers[i]) ? target.getMainTexture() : target.getAltTexture();
-            framebuffer.addColorAttachment(i, texture);
+            framebuffer.addColorAttachment(drawBuffers[i], i, texture);
         }
 
         framebuffer.addDepthAttachment(this.depthTexture.getTextureId());
+        framebuffer.drawBuffers(densePoints);
+        return framebuffer;
+    }
+
+    /**
+     * Builds an FBO for clearing one side of the requested color buffers. Attachments are packed densely just like
+     * composite FBOs: draw buffer k clears colortex[clearBuffers[k]].
+     */
+    public IrisFramebuffer createClearFramebuffer(boolean alt, int[] clearBuffers) {
+        requireValid();
+        if (clearBuffers.length == 0) {
+            throw new IllegalArgumentException("Framebuffer must have at least one clear buffer");
+        }
+        IrisFramebuffer framebuffer = new IrisFramebuffer();
+        this.ownedFramebuffers.add(framebuffer);
+
+        int[] densePoints = new int[clearBuffers.length];
+        for (int i = 0; i < clearBuffers.length; i++) {
+            densePoints[i] = i;
+            IrisRenderTarget target = getOrCreate(clearBuffers[i]);
+            framebuffer.addColorAttachment(clearBuffers[i], i, alt ? target.getAltTexture() : target.getMainTexture());
+        }
         framebuffer.drawBuffers(densePoints);
         return framebuffer;
     }

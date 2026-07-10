@@ -7,6 +7,7 @@ import org.taumc.celeritas.iris.gl.program.IrisProgram;
 import org.taumc.celeritas.iris.gl.program.ProgramUniforms;
 import org.taumc.celeritas.iris.gl.program.ShaderProgramCompiler;
 import org.taumc.celeritas.iris.gl.shader.ShaderMacros;
+import org.taumc.celeritas.iris.gl.blending.ProgramBlendState;
 import org.taumc.celeritas.iris.shaderpack.ProgramSource;
 import org.taumc.celeritas.iris.shaderpack.ShaderPack;
 import org.taumc.celeritas.iris.shaderpack.loading.ProgramId;
@@ -47,11 +48,13 @@ public class GbufferPrograms {
         final IrisProgram program;
         final ProgramUniforms uniforms;
         final int[] drawBuffers;
+        final ProgramBlendState blendState;
 
-        Entry(IrisProgram program, ProgramUniforms uniforms, int[] drawBuffers) {
+        Entry(IrisProgram program, ProgramUniforms uniforms, int[] drawBuffers, ProgramBlendState blendState) {
             this.program = program;
             this.uniforms = uniforms;
             this.drawBuffers = drawBuffers;
+            this.blendState = blendState;
         }
 
         public IrisProgram getProgram() {
@@ -64,6 +67,10 @@ public class GbufferPrograms {
 
         public int[] getDrawBuffers() {
             return this.drawBuffers;
+        }
+
+        public ProgramBlendState getBlendState() {
+            return this.blendState;
         }
     }
 
@@ -97,7 +104,8 @@ public class GbufferPrograms {
             if (bySourceName.containsKey(sourceName)) {
                 entry = bySourceName.get(sourceName); // may be null: a failed compile is not retried
             } else {
-                entry = compile(source.get(), defines, gbufferSamplers);
+                entry = compile(source.get(), defines, gbufferSamplers,
+                        ProgramBlendState.from(pack.getProperties(), sourceName));
                 bySourceName.put(sourceName, entry);
                 if (entry != null) {
                     this.ownedEntries.add(entry);
@@ -112,6 +120,11 @@ public class GbufferPrograms {
 
     /** Also used by {@link IrisShadowRenderer} to compile the fixed-function flavor of the {@code shadow} program. */
     static Entry compile(ProgramSource source, Map<String, String> defines, Map<String, Integer> samplerUnits) {
+        return compile(source, defines, samplerUnits, ProgramBlendState.empty());
+    }
+
+    static Entry compile(ProgramSource source, Map<String, String> defines, Map<String, Integer> samplerUnits,
+                         ProgramBlendState blendState) {
         try {
             IrisProgram program = ShaderProgramCompiler.compile(source.getName(), source, defines);
 
@@ -129,7 +142,7 @@ public class GbufferPrograms {
             CommonUniforms.addCommonUniforms(builder);
             MatrixUniforms.addMatrixUniforms(builder);
             int[] drawBuffers = IrisRenderingPipeline.sanitizeDrawBuffers(source.getName(), program.getDrawBuffers());
-            return new Entry(program, builder.buildUniforms(), drawBuffers);
+            return new Entry(program, builder.buildUniforms(), drawBuffers, blendState);
         } catch (Exception e) {
             LOGGER.error("[Iris] Failed to compile gbuffer program '{}'; its phases render vanilla-style: {}",
                     source.getName(), e.getMessage());

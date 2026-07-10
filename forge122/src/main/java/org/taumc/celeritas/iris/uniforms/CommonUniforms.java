@@ -9,8 +9,12 @@ import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.MobEffects;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
+import net.minecraft.world.biome.Biome;
+import org.joml.Vector2i;
+import org.joml.Vector3d;
 import org.joml.Vector3f;
 import org.taumc.celeritas.iris.gl.program.ProgramUniforms;
 import org.taumc.celeritas.iris.gl.uniform.UniformUpdateFrequency;
@@ -23,12 +27,34 @@ import static org.taumc.celeritas.lwjgl.LWJGLServiceProvider.LWJGL;
  * All formulas are faithful to OptiFine's {@code Shaders} and every Minecraft accessor here was checked against the
  * build's own deobfuscated sources (MCP {@code stable_39}) rather than assumed.
  * <p>
- * Deliberately omitted for now (each needs temporal accumulation or a captured GL matrix that only exists once the
- * render hooks land, and guessing them risks silently-wrong output): {@code wetness}, {@code eyeBrightness(Smooth)},
- * {@code centerDepthSmooth}, and the gbuffer/shadow matrix uniforms (those come from {@link CapturedRenderingState}
- * and are registered by the matrix-uniform provider in a later phase).
+ * The matrix, camera, and previous-frame uniforms come from {@link CapturedRenderingState} and are registered by the
+ * matrix-uniform provider.
  */
 public final class CommonUniforms {
+    private static final float DEFAULT_FRAME_TIME = 1.0f / 60.0f;
+
+    private static final SmoothedValue eyeInCave = new SmoothedValue();
+    private static final SmoothedValue inDry = new SmoothedValue();
+    private static final SmoothedValue inRainy = new SmoothedValue();
+    private static final SmoothedValue inSnowy = new SmoothedValue();
+    private static final SmoothedValue moved = new SmoothedValue();
+    private static final SmoothedValue starter = new SmoothedValue();
+    private static final SmoothedValue frameTimeSmooth = new SmoothedValue(DEFAULT_FRAME_TIME);
+    private static final SmoothedValue eyeBrightnessM = new SmoothedValue();
+    private static final SmoothedValue eyeBrightnessM2 = new SmoothedValue();
+    private static final SmoothedValue rainFactor = new SmoothedValue();
+
+    private static int complementaryUniformFrame = Integer.MIN_VALUE;
+    private static float cachedEyeInCave;
+    private static float cachedInDry;
+    private static float cachedInRainy;
+    private static float cachedInSnowy;
+    private static float cachedStarter;
+    private static float cachedFrameTimeSmooth = DEFAULT_FRAME_TIME;
+    private static float cachedEyeBrightnessM;
+    private static float cachedEyeBrightnessM2;
+    private static float cachedRainFactor;
+
     private CommonUniforms() {
     }
 
@@ -58,6 +84,21 @@ public final class CommonUniforms {
                         () -> (float) (SystemTimeUniforms.COUNTER.getFrameCounter() & 7))
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "framemod600",
                         () -> (float) (SystemTimeUniforms.COUNTER.getFrameCounter() % 600))
+                // Complementary's remaining custom uniforms from shaders.properties. Real Iris evaluates these with
+                // its custom-uniform expression system; until that lands here, provide the hardcoded Iris-compatible
+                // values that are unsafe to leave at GLSL's default 0.
+                .uniform1i(UniformUpdateFrequency.PER_FRAME, "biome_precipitation",
+                        CommonUniforms::getBiomePrecipitation)
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "isEyeInCave", CommonUniforms::getIsEyeInCave)
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "inDry", CommonUniforms::getInDry)
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "inRainy", CommonUniforms::getInRainy)
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "inSnowy", CommonUniforms::getInSnowy)
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "starter", CommonUniforms::getStarter)
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "frameTimeSmooth",
+                        CommonUniforms::getFrameTimeSmooth)
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "eyeBrightnessM", CommonUniforms::getEyeBrightnessM)
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "eyeBrightnessM2", CommonUniforms::getEyeBrightnessM2)
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "rainFactor", CommonUniforms::getRainFactor)
                 .uniform1i(UniformUpdateFrequency.PER_TICK, "worldTime", CommonUniforms::getWorldTime)
                 .uniform1i(UniformUpdateFrequency.PER_TICK, "worldDay", CommonUniforms::getWorldDay)
                 .uniform1i(UniformUpdateFrequency.PER_TICK, "moonPhase", CommonUniforms::getMoonPhase)
@@ -86,6 +127,123 @@ public final class CommonUniforms {
                         () -> Minecraft.getMinecraft().gameSettings.gammaSetting)
                 .uniform2i(UniformUpdateFrequency.PER_FRAME, "atlasSize", CapturedRenderingState.INSTANCE::getAtlasSize)
                 .uniform2i(UniformUpdateFrequency.PER_FRAME, "terrainTextureSize", CapturedRenderingState.INSTANCE::getAtlasSize);
+    }
+
+    private static float getIsEyeInCave() {
+        updateComplementaryCustomUniforms();
+        return isEyeInWater() == 0 ? cachedEyeInCave : 0.0f;
+    }
+
+    private static float getInDry() {
+        updateComplementaryCustomUniforms();
+        return cachedInDry;
+    }
+
+    private static float getInRainy() {
+        updateComplementaryCustomUniforms();
+        return cachedInRainy;
+    }
+
+    private static float getInSnowy() {
+        updateComplementaryCustomUniforms();
+        return cachedInSnowy;
+    }
+
+    private static float getStarter() {
+        updateComplementaryCustomUniforms();
+        return cachedStarter;
+    }
+
+    private static float getFrameTimeSmooth() {
+        updateComplementaryCustomUniforms();
+        return cachedFrameTimeSmooth;
+    }
+
+    private static float getEyeBrightnessM() {
+        updateComplementaryCustomUniforms();
+        return cachedEyeBrightnessM;
+    }
+
+    private static float getEyeBrightnessM2() {
+        updateComplementaryCustomUniforms();
+        return cachedEyeBrightnessM2;
+    }
+
+    private static float getRainFactor() {
+        updateComplementaryCustomUniforms();
+        return cachedRainFactor;
+    }
+
+    private static void updateComplementaryCustomUniforms() {
+        int frame = SystemTimeUniforms.COUNTER.getFrameCounter();
+        if (frame == complementaryUniformFrame) {
+            return;
+        }
+        complementaryUniformFrame = frame;
+
+        float deltaSeconds = Math.max(getSafeFrameTime(), 0.0f);
+        float skyBrightness = getEyeSkyBrightness();
+        int precipitation = getBiomePrecipitation();
+
+        cachedEyeInCave = eyeInCave.update(getRawEyeInCave(skyBrightness), 6.0f, 12.0f, deltaSeconds);
+        cachedInDry = inDry.update(precipitation == 0 ? 1.0f : 0.0f, 20.0f, 10.0f, deltaSeconds);
+        cachedInRainy = inRainy.update(precipitation == 1 ? 1.0f : 0.0f, 20.0f, 10.0f, deltaSeconds);
+        cachedInSnowy = inSnowy.update(precipitation == 2 ? 1.0f : 0.0f, 20.0f, 10.0f, deltaSeconds);
+
+        float moving = getMoving();
+        float movedValue = moved.update(moving, 0.0f, 31536000.0f, deltaSeconds);
+        cachedStarter = starter.update(movedValue, 20.0f, 20.0f, deltaSeconds);
+
+        cachedFrameTimeSmooth = Math.max(DEFAULT_FRAME_TIME / 4.0f,
+                frameTimeSmooth.update(getSafeFrameTime(), 5.0f, 5.0f, deltaSeconds));
+        cachedEyeBrightnessM = eyeBrightnessM.update(skyBrightness, 5.0f, 5.0f, deltaSeconds);
+        cachedEyeBrightnessM2 = eyeBrightnessM2.update(skyBrightness > 239.0f / 240.0f ? 1.0f : 0.0f,
+                2.0f, 2.0f, deltaSeconds);
+        cachedRainFactor = rainFactor.update(getRainStrength(), 3.0f, 3.0f, deltaSeconds);
+    }
+
+    private static float getRawEyeInCave(float skyBrightness) {
+        return getEyeAltitude() < 5.0f ? 1.0f - skyBrightness : 0.0f;
+    }
+
+    private static float getEyeSkyBrightness() {
+        Vector2i brightness = EyeBrightnessTracker.getEyeBrightness();
+        return clamp(brightness.y / 240.0f, 0.0f, 1.0f);
+    }
+
+    private static float getSafeFrameTime() {
+        float frameTime = SystemTimeUniforms.COUNTER.getLastFrameTime();
+        return frameTime > 0.0f ? Math.min(frameTime, 0.25f) : DEFAULT_FRAME_TIME;
+    }
+
+    private static float getMoving() {
+        Vector3d current = CapturedRenderingState.INSTANCE.getCameraPosition();
+        Vector3d previous = CapturedRenderingState.INSTANCE.getPreviousCameraPosition();
+        double diffSum = Math.abs(current.x - previous.x)
+                + Math.abs(current.y - previous.y)
+                + Math.abs(current.z - previous.z);
+        return diffSum > 0.0 && diffSum < 1.0 ? 1.0f : 0.0f;
+    }
+
+    private static int getBiomePrecipitation() {
+        World world = world();
+        Entity camera = Minecraft.getMinecraft().getRenderViewEntity();
+        if (world == null || camera == null) {
+            return 0;
+        }
+
+        Biome biome = world.getBiome(new BlockPos(camera));
+        if (biome == null) {
+            return 0;
+        }
+        if (biome.getEnableSnow()) {
+            return 2;
+        }
+        return biome.canRain() ? 1 : 0;
+    }
+
+    private static float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     /**
@@ -210,5 +368,40 @@ public final class CommonUniforms {
     private static float getFar() {
         int renderDistanceChunks = Minecraft.getMinecraft().gameSettings.renderDistanceChunks;
         return renderDistanceChunks * 16.0f;
+    }
+
+    private static final class SmoothedValue {
+        private static final double LOG_2 = Math.log(2.0);
+
+        private boolean initialized;
+        private float accumulator;
+
+        private SmoothedValue() {
+        }
+
+        private SmoothedValue(float initialValue) {
+            this.initialized = true;
+            this.accumulator = initialValue;
+        }
+
+        private float update(float target, float halfLifeUp, float halfLifeDown, float deltaSeconds) {
+            if (!this.initialized) {
+                this.initialized = true;
+                this.accumulator = target;
+                return target;
+            }
+
+            float halfLife = target > this.accumulator ? halfLifeUp : halfLifeDown;
+            if (halfLife <= 0.0f) {
+                this.accumulator = target;
+                return target;
+            }
+
+            float scaledHalfLife = halfLife * 0.1f;
+            float decay = (float) (LOG_2 / scaledHalfLife);
+            float smoothingFactor = 1.0f - (float) Math.exp(-decay * deltaSeconds);
+            this.accumulator += (target - this.accumulator) * smoothingFactor;
+            return this.accumulator;
+        }
     }
 }

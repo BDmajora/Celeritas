@@ -28,7 +28,12 @@ import static org.taumc.celeritas.lwjgl.LWJGLServiceProvider.LWJGL;
  */
 public class CustomImageManager {
     private static final Logger LOGGER = LogManager.getLogger("Celeritas/Iris");
-    private static final int MAX_IMAGE_UNITS = 8;
+    private static final int MAX_DECLARED_IMAGES = 16;
+    private static final int GL_MAX_IMAGE_UNITS = 0x8D57;
+    private static final int GL_TEXTURE_MIN_LOD = 0x813A;
+    private static final int GL_TEXTURE_MAX_LOD = 0x813B;
+    private static final int GL_TEXTURE_MAX_LEVEL = 0x813D;
+    private static final int GL_TEXTURE_LOD_BIAS = 0x8501;
 
     private static final class Image {
         final CustomImageDefinition definition;
@@ -56,13 +61,18 @@ public class CustomImageManager {
     private final List<Image> images = new ArrayList<>();
     /** Image uniform name → image unit AND sampler name → texture unit, for program uniform assignment. */
     private final Map<String, Integer> uniformOverrides = new LinkedHashMap<>();
+    private final ByteBuffer zeroClearValue = ByteBuffer.allocateDirect(16);
 
     public CustomImageManager(List<CustomImageDefinition> definitions, int firstSamplerUnit, int lastSamplerUnit) {
+        int reportedImageUnits = LWJGL.glGetInteger(GL_MAX_IMAGE_UNITS);
+        int imageUnitLimit = reportedImageUnits > 0
+                ? Math.min(MAX_DECLARED_IMAGES, reportedImageUnits)
+                : MAX_DECLARED_IMAGES;
         int nextSamplerUnit = firstSamplerUnit;
         for (CustomImageDefinition definition : definitions) {
-            if (this.images.size() >= MAX_IMAGE_UNITS) {
+            if (this.images.size() >= imageUnitLimit) {
                 LOGGER.error("[Iris] Out of image units for image.{} (max {}); ignoring it",
-                        definition.name, MAX_IMAGE_UNITS);
+                        definition.name, imageUnitLimit);
                 continue;
             }
             int internalFormat = glInternalFormat(definition.internalFormat);
@@ -85,6 +95,12 @@ public class CustomImageManager {
             LWJGL.glTexParameteri(target, GL11.GL_TEXTURE_MAG_FILTER, filter);
             LWJGL.glTexParameteri(target, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
             LWJGL.glTexParameteri(target, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
+            // Iris' GlImage pins custom images to mip level 0. Letting a 3D floodfill texture inherit any mip/LOD
+            // state makes sampler3D lookups read undefined levels, which shows up as every-other-frame colored noise.
+            LWJGL.glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, 0);
+            LWJGL.glTexParameteri(target, GL_TEXTURE_MIN_LOD, 0);
+            LWJGL.glTexParameteri(target, GL_TEXTURE_MAX_LOD, 0);
+            LWJGL.glTexParameterf(target, GL_TEXTURE_LOD_BIAS, 0.0f);
             if (is3D) {
                 LWJGL.glTexParameteri(target, GL12.GL_TEXTURE_WRAP_R, GL12.GL_CLAMP_TO_EDGE);
                 LWJGL.glTexImage3D(target, 0, internalFormat, definition.sizeX, definition.sizeY, definition.sizeZ,
@@ -97,7 +113,7 @@ public class CustomImageManager {
             // Zero-initialize regardless of the per-frame clear flag: glTexImage with null data is UNDEFINED memory,
             // and packs deliberately skip writing some texels (Complementary's behind-player floodfill optimization),
             // so creation-time garbage would otherwise survive — and flicker once the ping-pong alternates sides.
-            LWJGL.glClearTexImage(texture, 0, format, pixelType, (ByteBuffer) null);
+            clearTexture(texture, format, pixelType);
 
             int imageUnit = this.images.size();
             int samplerUnit = -1;
@@ -182,9 +198,14 @@ public class CustomImageManager {
     public void clearAll() {
         for (Image image : this.images) {
             if (image.definition.clear) {
-                LWJGL.glClearTexImage(image.texture, 0, image.glFormat, image.glPixelType, (ByteBuffer) null);
+                clearTexture(image.texture, image.glFormat, image.glPixelType);
             }
         }
+    }
+
+    private void clearTexture(int texture, int format, int pixelType) {
+        this.zeroClearValue.clear();
+        LWJGL.glClearTexImage(texture, 0, format, pixelType, this.zeroClearValue);
     }
 
     /** Binds every image on its image unit (READ_WRITE) and its texture on the paired sampler unit. */

@@ -1,5 +1,7 @@
 package org.taumc.celeritas.iris.gl.program;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.taumc.celeritas.iris.gl.shader.GlShader;
 import org.taumc.celeritas.iris.gl.shader.ShaderType;
 import org.taumc.celeritas.iris.shaderpack.ProgramSource;
@@ -22,6 +24,8 @@ import java.util.Map;
  * shaders on failure rather than crash.
  */
 public final class ShaderProgramCompiler {
+    private static final Logger LOGGER = LogManager.getLogger("Celeritas/Iris");
+
     private ShaderProgramCompiler() {
     }
 
@@ -71,6 +75,7 @@ public final class ShaderProgramCompiler {
 
             GlProgram program = builder.link();
             int[] drawBuffers = DrawBuffers.parseActive(fragmentSource);
+            LOGGER.info("[Iris] {} resolved DRAWBUFFERS {}", name, Arrays.toString(drawBuffers));
             return new IrisProgram(program, drawBuffers);
         } finally {
             // The stage objects are no longer needed once the program is linked (or if linking failed).

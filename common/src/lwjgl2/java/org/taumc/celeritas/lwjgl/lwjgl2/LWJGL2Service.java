@@ -12,6 +12,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.lwjgl.opengl.APPLEVertexArrayObject;
 import org.lwjgl.opengl.ARBBufferStorage;
+import org.lwjgl.opengl.ARBDrawBuffersBlend;
 import org.lwjgl.opengl.ARBTimerQuery;
 import org.lwjgl.opengl.ARBVertexArrayObject;
 import org.lwjgl.opengl.ContextCapabilities;
@@ -222,6 +223,12 @@ public record LWJGL2Service(
             case ARB_base_instance -> caps.GL_ARB_base_instance;
             case ARB_compatibility -> caps.GL_ARB_compatibility;
         };
+    }
+
+    @Override
+    public boolean supportsBufferBlending() {
+        ContextCapabilities caps = GLContext.getCapabilities();
+        return caps.OpenGL40 || caps.GL_ARB_draw_buffers_blend;
     }
 
     @Override
@@ -855,6 +862,16 @@ public record LWJGL2Service(
     }
 
     @Override
+    public void glEnablei(int target, int index) {
+        GL30.glEnablei(target, index);
+    }
+
+    @Override
+    public void glDisablei(int target, int index) {
+        GL30.glDisablei(target, index);
+    }
+
+    @Override
     public void glBlendFunc(int sfactor, int dfactor) {
         GL11.glBlendFunc(sfactor, dfactor);
     }
@@ -862,6 +879,11 @@ public record LWJGL2Service(
     @Override
     public void glBlendFuncSeparate(int srcRGB, int dstRGB, int srcAlpha, int dstAlpha) {
         GL14.glBlendFuncSeparate(srcRGB, dstRGB, srcAlpha, dstAlpha);
+    }
+
+    @Override
+    public void glBlendFuncSeparatei(int buffer, int srcRGB, int dstRGB, int srcAlpha, int dstAlpha) {
+        ARBDrawBuffersBlend.glBlendFuncSeparateiARB(buffer, srcRGB, dstRGB, srcAlpha, dstAlpha);
     }
 
     @Override

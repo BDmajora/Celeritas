@@ -48,6 +48,8 @@ public interface ChunkVertexEncoder {
         public float midBlockX;
         public float midBlockY;
         public float midBlockZ;
+        /** {@code at_midBlock.w} — block light emission, matching Iris' Sodium terrain extension. */
+        public int blockEmission;
 
         public static Vertex[] uninitializedQuad() {
             Vertex[] vertices = new Vertex[4];

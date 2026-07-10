@@ -9,6 +9,7 @@ import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.BlockRenderLayer;
+import net.minecraft.util.math.BlockPos;
 import org.embeddedt.embeddium.impl.model.quad.properties.ModelQuadFacing;
 import org.embeddedt.embeddium.impl.render.chunk.RenderPassConfiguration;
 import org.embeddedt.embeddium.impl.render.chunk.compile.ChunkBuildBuffers;
@@ -37,11 +38,13 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
     private final boolean[] usedWorldRenderers = new boolean[LAYERS.length];
     /**
      * Per layer, the block attribution of the vanilla-sourced quads (fluids and other non-model renders) as runs of
-     * int triples {@code (quadEndExclusive, mcEntityId, mcEntityAux)}, recorded while a shader pack is active so
-     * {@code mc_Entity} survives the vanilla BufferBuilder round-trip. See {@link #recordVanillaBlockAttribution}.
+     * {@code (quadEndExclusive, mcEntityId, mcEntityAux, blockEmission, localX, localY, localZ)}, recorded while a
+     * shader pack is active so {@code mc_Entity} and {@code at_midBlock} survive the vanilla BufferBuilder round-trip.
+     * See {@link #recordVanillaBlockAttribution}.
      */
     private final it.unimi.dsi.fastutil.ints.IntArrayList[] vanillaBlockRuns =
             new it.unimi.dsi.fastutil.ints.IntArrayList[LAYERS.length];
+    private static final int VANILLA_BLOCK_RUN_STRIDE = 7;
     @Getter
     private int offX, offY, offZ;
     @Getter
@@ -89,11 +92,11 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
 
     /**
      * Records which block the vanilla-buffered quads emitted since the last call belong to, so
-     * {@link #copyBlockData} can fill {@code mc_Entity} for the vanilla-sourced path (fluids and other non-model
-     * renders). Call right after every {@code dispatcher.renderBlock} into {@link #getBufferForLayer}'s builder.
-     * No-op when no shader pack is active.
+     * {@link #copyBlockData} can fill {@code mc_Entity}, {@code at_midBlock}, and block emission for the
+     * vanilla-sourced path (fluids and other non-model renders). Call right after every {@code dispatcher.renderBlock}
+     * into {@link #getBufferForLayer}'s builder. No-op when no shader pack is active.
      */
-    public void recordVanillaBlockAttribution(BlockRenderLayer layer, net.minecraft.block.state.IBlockState state) {
+    public void recordVanillaBlockAttribution(BlockRenderLayer layer, net.minecraft.block.state.IBlockState state, BlockPos pos) {
         if (!org.taumc.celeritas.iris.terrain.IrisTerrainProgramOverride.areShadersActive()) {
             return;
         }
@@ -108,7 +111,7 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
             this.vanillaBlockRuns[i] = runs;
         }
         int quadCount = builder.getVertexCount() / 4;
-        int lastEnd = runs.isEmpty() ? 0 : runs.getInt(runs.size() - 3);
+        int lastEnd = runs.isEmpty() ? 0 : runs.getInt(runs.size() - VANILLA_BLOCK_RUN_STRIDE);
         if (quadCount <= lastEnd) {
             return; // the block emitted nothing into this layer
         }
@@ -127,6 +130,10 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
         runs.add(quadCount);
         runs.add(id);
         runs.add(aux);
+        runs.add(clampBlockEmission(state.getLightValue(this.worldSlice, pos)));
+        runs.add(pos.getX() & 15);
+        runs.add(pos.getY() & 15);
+        runs.add(pos.getZ() & 15);
     }
 
     public void convertVanillaDataToCeleritasData(ChunkBuildBuffers buffers) {
@@ -193,17 +200,27 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
         int runCursor = 0;
         int runId = 0;
         int runAux = 0;
+        int runEmission = 0;
+        int runLocalX = 0;
+        int runLocalY = 0;
+        int runLocalZ = 0;
         for(int q = 0; q < numQuads; q++) {
+            boolean hasRun = false;
             if (blockRuns != null) {
                 while (runCursor < blockRuns.size() && q >= blockRuns.getInt(runCursor)) {
-                    runCursor += 3;
+                    runCursor += VANILLA_BLOCK_RUN_STRIDE;
                 }
                 if (runCursor < blockRuns.size()) {
+                    hasRun = true;
                     runId = blockRuns.getInt(runCursor + 1);
                     runAux = blockRuns.getInt(runCursor + 2);
+                    runEmission = blockRuns.getInt(runCursor + 3);
+                    runLocalX = blockRuns.getInt(runCursor + 4);
+                    runLocalY = blockRuns.getInt(runCursor + 5);
+                    runLocalZ = blockRuns.getInt(runCursor + 6);
                 }
             }
-            float uSum = 0, vSum = 0;
+            float uSum = 0, vSum = 0, xSum = 0, ySum = 0, zSum = 0;
             for(int v = 0; v < 4; v++) {
                 var vertex = quad[v];
                 vertex.x = LWJGL.memGetFloat(ptr);
@@ -214,6 +231,9 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
                 vertex.v = LWJGL.memGetFloat(ptr + 20);
                 uSum += vertex.u;
                 vSum += vertex.v;
+                xSum += vertex.x;
+                ySum += vertex.y;
+                zSum += vertex.z;
                 vertex.light = LWJGL.memGetInt(ptr + 24);
                 ptr += vsize;
             }
@@ -242,18 +262,36 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
                         quad[0].x, quad[0].y, quad[0].z, quad[0].u, quad[0].v,
                         quad[1].x, quad[1].y, quad[1].z, quad[1].u, quad[1].v,
                         quad[2].x, quad[2].y, quad[2].z, quad[2].u, quad[2].v);
+                int localX = hasRun ? runLocalX : clampSectionCoord((int)Math.floor(xSum * 0.25f));
+                int localY = hasRun ? runLocalY : clampSectionCoord((int)Math.floor(ySum * 0.25f));
+                int localZ = hasRun ? runLocalZ : clampSectionCoord((int)Math.floor(zSum * 0.25f));
+                int id = hasRun ? runId : 0;
+                int aux = hasRun ? runAux : 0;
+                int emission = hasRun ? runEmission : 0;
                 for (int v = 0; v < 4; v++) {
                     var vertex = quad[v];
                     vertex.midTexU = midU;
                     vertex.midTexV = midV;
                     vertex.tangent = tangent;
-                    vertex.blockId = runId;
-                    vertex.blockData = runAux;
+                    vertex.blockId = id;
+                    vertex.blockData = aux;
+                    vertex.blockEmission = emission;
+                    vertex.midBlockX = localX + 0.5f - vertex.x;
+                    vertex.midBlockY = localY + 0.5f - vertex.y;
+                    vertex.midBlockZ = localZ + 0.5f - vertex.z;
                 }
             }
             ModelQuadFacing facing = QuadUtil.findNormalFace(trueNormal);
             Material correctMaterial = selectMaterial(material, sprite);
             buffers.get(correctMaterial).getVertexBuffer(facing).push(quad, correctMaterial);
         }
+    }
+
+    private static int clampBlockEmission(int value) {
+        return value < 0 ? 0 : (value > 255 ? 255 : value);
+    }
+
+    private static int clampSectionCoord(int value) {
+        return value < 0 ? 0 : (value > 15 ? 15 : value);
     }
 }

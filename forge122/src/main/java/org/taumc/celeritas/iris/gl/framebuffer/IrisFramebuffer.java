@@ -14,8 +14,8 @@ import static org.taumc.celeritas.lwjgl.LWJGLServiceProvider.LWJGL;
 /**
  * An Iris-owned framebuffer object used by the shader pipeline (gbuffer, shadow, composite, and final passes). This is
  * deliberately <em>not</em> {@code net.minecraft.client.renderer.Framebuffer} — vanilla's wrapper only supports a
- * single color + depth attachment, while shader packs need up to 8 color attachments with independent draw-buffer
- * masks.
+ * single color + depth attachment, while shader packs need multiple logical color attachments with independent
+ * draw-buffer masks. Logical colortex indices may be packed onto different physical attachment points.
  * <p>
  * All operations go through the LWJGL abstraction. Because the abstraction exposes no DSA entry points, attachment and
  * draw/read-buffer changes bind this FBO to {@code GL_FRAMEBUFFER} as a side effect.
@@ -45,9 +45,14 @@ public class IrisFramebuffer extends GlResource {
     }
 
     public void addColorAttachment(int index, int texture) {
+        addColorAttachment(index, index, texture);
+    }
+
+    public void addColorAttachment(int logicalIndex, int attachmentIndex, int texture) {
         bind();
-        LWJGL.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0 + index, GL11.GL_TEXTURE_2D, texture, 0);
-        this.colorAttachments.put(index, texture);
+        LWJGL.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0 + attachmentIndex,
+                GL11.GL_TEXTURE_2D, texture, 0);
+        this.colorAttachments.put(logicalIndex, texture);
     }
 
     public void addDepthAttachment(int texture) {

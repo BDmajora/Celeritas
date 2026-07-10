@@ -76,6 +76,7 @@ public class IrisShadowRenderer {
     private static final int[] CLEAR_MASK = {0, 1};
     /** The pack's shadow DRAWBUFFERS mask (only shadowcolor0/1 exist), applied for the geometry draws. */
     private final int[] shadowDrawBuffers;
+    private final Runnable shaderPackResourceRestorer;
     /**
      * The fixed-function flavor of the pack's {@code shadow} program, for entities/block entities (immediate-mode
      * geometry — the Embeddium-format terrain shadow program cannot consume it). {@code null} if it failed to compile;
@@ -100,10 +101,11 @@ public class IrisShadowRenderer {
      */
     public IrisShadowRenderer(int resolution, float shadowDistance, float sunPathRotation,
                               ProgramSource shadowSource, Map<String, Integer> samplerUnits,
-                              boolean[] hardwareFiltering) {
+                              boolean[] hardwareFiltering, Runnable shaderPackResourceRestorer) {
         this.resolution = resolution;
         this.halfPlaneLength = shadowDistance;
         this.sunPathRotation = sunPathRotation;
+        this.shaderPackResourceRestorer = shaderPackResourceRestorer;
 
         this.depthTexture = createShadowDepthTexture(resolution, hardwareFiltering[0]);
         this.depthTextureNoTranslucents = createShadowDepthTexture(resolution, hardwareFiltering[1]);
@@ -305,7 +307,9 @@ public class IrisShadowRenderer {
             TileEntityRendererDispatcher.instance.prepare(world, mc.getTextureManager(), mc.fontRenderer,
                     viewEntity, mc.objectMouseOver, partialTicks);
 
+            this.shaderPackResourceRestorer.run();
             this.entityShadowProgram.getProgram().getProgram().bind();
+            this.shaderPackResourceRestorer.run();
             this.entityShadowProgram.getUniforms().update();
 
             for (Entity entity : world.loadedEntityList) {
@@ -353,6 +357,9 @@ public class IrisShadowRenderer {
         LWJGL.glCopyTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 0, 0, this.resolution, this.resolution);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        // Unit 31 can belong to a custom texture or custom-image sampler on 32-unit drivers. Iris rebinds these
+        // resources per program use; restore them before translucent shadow terrain/voxelization continues.
+        this.shaderPackResourceRestorer.run();
     }
 
     /**

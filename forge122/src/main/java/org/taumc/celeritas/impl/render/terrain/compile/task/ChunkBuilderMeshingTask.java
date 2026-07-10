@@ -121,8 +121,8 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                                 } else {
                                     var buffer = buildContext.getBufferForLayer(layer);
                                     dispatcher.renderBlock(blockState, blockPos, slice, buffer);
-                                    // Attribute the emitted quads to this block for mc_Entity (fluids take this path).
-                                    buildContext.recordVanillaBlockAttribution(layer, blockState);
+                                    // Attribute the emitted quads to this block for Iris terrain attributes.
+                                    buildContext.recordVanillaBlockAttribution(layer, blockState, blockPos);
                                 }
                             }
                         }
@@ -132,7 +132,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                             // The compat hook picks its own layer(s) internally; sweep all of them — recording is a
                             // no-op for layers whose quad count did not change.
                             for (BlockRenderLayer layer : VintageChunkBuildContext.LAYERS) {
-                                buildContext.recordVanillaBlockAttribution(layer, blockState);
+                                buildContext.recordVanillaBlockAttribution(layer, blockState, blockPos);
                             }
                         }
 

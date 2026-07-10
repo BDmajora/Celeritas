@@ -180,7 +180,7 @@ public class VintageBlockRenderer {
             var quadMaterial = BakedQuadGroupAnalyzer.chooseOptimalMaterial(this.currentQuadRenderingFlags, material, config, BakedQuadView.of(quad));
             ChunkModelBuilder buffer = (quadMaterial == material) ? defaultBuffer : buffers.get(quadMaterial);
 
-            this.writeGeometry(localX, localY, localZ, buffer, offset, quadMaterial,
+            this.writeGeometry(localX, localY, localZ, buffer, offset, quadMaterial, pos,
                     quadView, colors, light, orientation);
 
             TextureAtlasSprite sprite = (TextureAtlasSprite)quadView.celeritas$getSprite();
@@ -195,6 +195,7 @@ public class VintageBlockRenderer {
     private void writeGeometry(int localX, int localY, int localZ, ChunkModelBuilder builder,
                                Vec3d offset,
                                Material material,
+                               BlockPos pos,
                                BakedQuadView quad,
                                int[] colors,
                                QuadLightData light,
@@ -234,7 +235,7 @@ public class VintageBlockRenderer {
         }
 
         if (IrisTerrainProgramOverride.areShadersActive()) {
-            populateIrisVertexData(vertices, quad, trueNormal);
+            populateIrisVertexData(vertices, quad, trueNormal, pos);
         }
 
         var vertexBuffer = builder.getVertexBuffer(normalFace);
@@ -245,7 +246,7 @@ public class VintageBlockRenderer {
      * Fills the OptiFine per-vertex attributes ({@code mc_midTexCoord}, {@code at_tangent}, {@code mc_Entity}) that
      * {@code IrisChunkVertexType} encodes while a shader pack is active. All four vertices of a quad share the values.
      */
-    private void populateIrisVertexData(ChunkVertexEncoder.Vertex[] vertices, BakedQuadView quad, int trueNormal) {
+    private void populateIrisVertexData(ChunkVertexEncoder.Vertex[] vertices, BakedQuadView quad, int trueNormal, BlockPos pos) {
         float midU = 0.0f, midV = 0.0f;
         TextureAtlasSprite sprite = (TextureAtlasSprite) quad.celeritas$getSprite();
         if (sprite != null) {
@@ -264,6 +265,7 @@ public class VintageBlockRenderer {
 
         int blockId = 0;
         int blockData = 0;
+        int blockEmission = 0;
         IBlockState state = this.currentState;
         if (state != null) {
             int[] idTable = org.taumc.celeritas.iris.material.WorldRenderingSettings.getBlockStateIds();
@@ -276,6 +278,9 @@ public class VintageBlockRenderer {
                 blockId = Block.getIdFromBlock(state.getBlock());
                 blockData = state.getBlock().getMetaFromState(state);
             }
+            if (this.currentBlockAccess != null) {
+                blockEmission = clampBlockEmission(state.getLightValue(this.currentBlockAccess, pos));
+            }
         }
 
         for (int i = 0; i < 4; i++) {
@@ -285,6 +290,11 @@ public class VintageBlockRenderer {
             out.tangent = tangent;
             out.blockId = blockId;
             out.blockData = blockData;
+            out.blockEmission = blockEmission;
         }
+    }
+
+    private static int clampBlockEmission(int value) {
+        return value < 0 ? 0 : (value > 255 ? 255 : value);
     }
 }
