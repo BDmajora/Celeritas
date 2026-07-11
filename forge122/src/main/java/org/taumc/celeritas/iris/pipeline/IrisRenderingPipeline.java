@@ -43,6 +43,8 @@ import org.taumc.celeritas.lwjgl.GL30;
 import org.taumc.celeritas.mixin.core.terrain.ActiveRenderInfoAccessor;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.BitSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -98,17 +100,29 @@ public class IrisRenderingPipeline {
     private static final int SHADER_PACK_RESOURCE_BARRIERS = 0x00000020 | 0x00000008 | 0x00002000;
     /** Draw-buffer mask for fixed-function content with no pack program: plain color into colortex0 only. */
     private static final int[] FIXED_FUNCTION_MASK = {0};
+    private static final int FLICKER_PROBE_DELAY_FRAMES =
+            Math.max(0, Integer.getInteger("celeritas.iris.flickerProbeDelayFrames", 120));
+    private static final int FLICKER_PROBE_FRAMES =
+            Math.min(2, Math.max(0, Integer.getInteger("celeritas.iris.flickerProbeFrames", 2)));
+    private static final int[] FLICKER_PROBE_TARGETS = {0, 1, 2, 3, 4, 7, 8};
+    private static final int GL_CURRENT_PROGRAM = 0x8B8D;
+    private static final int GL_FRAMEBUFFER_BINDING = 0x8CA6;
+    private static final int GL_READ_FRAMEBUFFER_BINDING = 0x8CAA;
+    private static final int GL_DRAW_FRAMEBUFFER_BINDING = 0x8CA6;
+    private static final String[] LEGACY_COLOR_TARGETS =
+            {"gcolor", "gdepth", "gnormal", "composite", "gaux1", "gaux2", "gaux3", "gaux4"};
+    private static final Pattern MIPMAP_DIRECTIVE =
+            Pattern.compile("const\\s+bool\\s+(\\w+?)MipmapEnabled\\s*=\\s*(true|false)\\s*;");
 
     /** Sampler name → texture unit, covering both the modern names and the OptiFine legacy aliases. */
     private static final Map<String, Integer> SAMPLER_UNITS = new LinkedHashMap<>();
 
     static {
         // Legacy OptiFine aliases only exist for the first 8 targets (colortex0..7); colortex8..15 have no alias.
-        String[] legacyColor = {"gcolor", "gdepth", "gnormal", "composite", "gaux1", "gaux2", "gaux3", "gaux4"};
         for (int i = 0; i < IrisRenderTargets.MAX_COLOR_BUFFERS; i++) {
             SAMPLER_UNITS.put("colortex" + i, i);
-            if (i < legacyColor.length) {
-                SAMPLER_UNITS.put(legacyColor[i], i);
+            if (i < LEGACY_COLOR_TARGETS.length) {
+                SAMPLER_UNITS.put(LEGACY_COLOR_TARGETS[i], i);
             }
         }
         SAMPLER_UNITS.put("depthtex0", DEPTH_TEX_0_UNIT);
@@ -138,9 +152,13 @@ public class IrisRenderingPipeline {
         /** Logical render targets in shader output-slot order, used for per-target blend directives. */
         final int[] drawBuffers;
         final ProgramBlendState blendState;
+        final BitSet flipsBefore;
+        final BitSet flipsAfter;
+        final BitSet mipmappedBuffers;
 
         FullscreenPass(String name, IrisProgram program, ProgramUniforms uniforms, IrisFramebuffer framebuffer,
-                       int[] colorSamplers, int[] drawBuffers, ProgramBlendState blendState) {
+                       int[] colorSamplers, int[] drawBuffers, ProgramBlendState blendState,
+                       BitSet flipsBefore, BitSet flipsAfter, BitSet mipmappedBuffers) {
             this.name = name;
             this.program = program;
             this.uniforms = uniforms;
@@ -148,6 +166,9 @@ public class IrisRenderingPipeline {
             this.colorSamplers = colorSamplers;
             this.drawBuffers = drawBuffers;
             this.blendState = blendState;
+            this.flipsBefore = flipsBefore;
+            this.flipsAfter = flipsAfter;
+            this.mipmappedBuffers = mipmappedBuffers;
         }
     }
 
@@ -271,8 +292,11 @@ public class IrisRenderingPipeline {
      * model-view/projection/texture matrices (see {@link #runPass}).
      */
     private boolean modernPack;
-    /** One-shot debug dump of the render targets, ~4s after the pipeline builds (0 = fired). */
-    private int debugDumpCountdown = 240;
+    /** Multi-frame flicker probe: after a warmup, dump/log consecutive frames for temporal target debugging. */
+    private int debugProbeDelayFrames = FLICKER_PROBE_DELAY_FRAMES;
+    private int debugProbeFramesRemaining = FLICKER_PROBE_FRAMES;
+    private int debugProbeFrameIndex;
+    private String activeProbeSuffix;
     /**
      * Frames left to probe {@code glGetError} around each composite pass (0 = off). Pinpoints which pass/step raises
      * the {@code 1282 Invalid operation} Minecraft's "Post render" check reports. Counts down over the opening frames.
@@ -324,6 +348,7 @@ public class IrisRenderingPipeline {
             buildSchedule(pack, flipper);
             buildSwapPasses(flipper);
             buildClearPasses();
+            logRenderTargetSchedule(flipper);
 
             LOGGER.info("[Iris] Rendering pipeline ready: {} deferred + {} composite/final pass(es){}, {} swap(s), gbuffer {}x{}",
                     this.deferredPasses.size(), this.passes.size(),
@@ -583,7 +608,16 @@ public class IrisRenderingPipeline {
         }
         framebuffer.addDepthAttachment(this.renderTargets.getDepthTexture().getTextureId());
         drawGbufferBuffers(framebuffer, FIXED_FUNCTION_MASK);
+        checkFramebufferComplete(framebuffer, "gbuffer", this.gbufferAttachments);
         return framebuffer;
+    }
+
+    private static void checkFramebufferComplete(IrisFramebuffer framebuffer, String purpose, int[] buffers) {
+        int status = framebuffer.getStatus();
+        if (status != GL30.GL_FRAMEBUFFER_COMPLETE) {
+            throw new IllegalStateException("Incomplete Iris " + purpose + " framebuffer for buffers "
+                    + Arrays.toString(buffers) + ": status=" + status);
+        }
     }
 
     private void drawGbufferBuffers(IrisFramebuffer framebuffer, int[] logicalDrawBuffers) {
@@ -636,26 +670,32 @@ public class IrisRenderingPipeline {
             this.blitSourceFramebuffer = new IrisFramebuffer();
             this.blitSourceFramebuffer.addColorAttachment(0, frontTexture(flipper, 0));
             this.blitSourceFramebuffer.readBuffer(0);
+            checkFramebufferComplete(this.blitSourceFramebuffer, "fallback blit", new int[]{0});
         }
     }
 
     /**
      * Iris {@code FinalPassRenderer.SwapPass}: every buffer the chain leaves odd-flipped ends the frame with its
-     * latest content on the ALT side, so copy alt→main after the final pass. Buffers attached to the gbuffer FBO are
-     * skipped — they are cleared and fully rewritten from the main side every frame, so carrying their content over
-     * is pointless (Iris likewise skips its to-be-cleared buffers).
+     * latest content on the ALT side, so copy alt->main after the final pass. Buffers cleared at frame start are
+     * skipped, matching Iris. Do not special-case gbuffer attachments here: packs such as Complementary deliberately
+     * mark some gbuffer-written targets (for example colortex4) as clear=false so their temporal contents survive.
      */
     private void buildSwapPasses(BufferFlipper flipper) {
         for (int i = 0; i < IrisRenderTargets.MAX_COLOR_BUFFERS; i++) {
             if (!flipper.isFlipped(i) || this.renderTargets.get(i) == null || this.colorBufferClears[i]) {
+                if (flipper.isFlipped(i) && this.renderTargets.get(i) != null) {
+                    LOGGER.info("[Iris] colortex{} ends odd-flipped but is clear=true; no swap copy is needed", i);
+                }
                 continue;
             }
             IrisRenderTarget target = this.renderTargets.get(i);
             IrisFramebuffer from = new IrisFramebuffer();
             from.addColorAttachment(0, target.getAltTexture());
             from.readBuffer(0);
+            checkFramebufferComplete(from, "swap colortex" + i, new int[]{i});
             this.swapPasses.add(new SwapPass(i, from, target.getMainTexture()));
-            LOGGER.debug("[Iris] colortex{} ends the frame odd-flipped; swap pass (alt->main copy) added", i);
+            LOGGER.info("[Iris] colortex{} ends the frame odd-flipped and clear=false; swap pass (alt->main copy) added",
+                    i);
         }
     }
 
@@ -678,6 +718,10 @@ public class IrisRenderingPipeline {
         }
     }
 
+    private boolean isGbufferAttachment(int index) {
+        return this.gbufferAttachmentPoints.containsKey(index);
+    }
+
     private float[] defaultClearColor(int index) {
         if (this.colorBufferClearColors[index] != null) {
             return this.colorBufferClearColors[index];
@@ -689,6 +733,53 @@ public class IrisRenderingPipeline {
             return new float[]{1.0f, 1.0f, 1.0f, 1.0f};
         }
         return new float[]{0.0f, 0.0f, 0.0f, 0.0f};
+    }
+
+    private void logRenderTargetSchedule(BufferFlipper flipper) {
+        LOGGER.info("[Iris] Flicker probe config: delayFrames={}, frames={}, targets={}",
+                FLICKER_PROBE_DELAY_FRAMES, FLICKER_PROBE_FRAMES, Arrays.toString(FLICKER_PROBE_TARGETS));
+        LOGGER.info("[Iris] End-of-schedule flipped buffers: {}", formatBitSet(flipper.snapshot()));
+        for (int i = 0; i < IrisRenderTargets.MAX_COLOR_BUFFERS; i++) {
+            IrisRenderTarget target = this.renderTargets.get(i);
+            if (target == null) {
+                continue;
+            }
+            LOGGER.info("[Iris] Target colortex{}: format={}, clearAtFrameStart={}, gbufferAttachment={}, flippedAtEnd={}, mainTex={}, altTex={}, defaultClear={}",
+                    i, target.getInternalFormat(), this.colorBufferClears[i], isGbufferAttachment(i),
+                    flipper.isFlipped(i), target.getMainTexture(), target.getAltTexture(),
+                    formatClearColor(defaultClearColor(i)));
+        }
+        for (SwapPass swap : this.swapPasses) {
+            LOGGER.info("[Iris] Swap copy scheduled: colortex{} alt/readFbo -> mainTex{}", swap.index, swap.targetTexture);
+        }
+    }
+
+    private static String formatBitSet(BitSet bitSet) {
+        List<Integer> values = new ArrayList<>();
+        for (int bit = bitSet.nextSetBit(0); bit >= 0; bit = bitSet.nextSetBit(bit + 1)) {
+            values.add(bit);
+        }
+        return values.toString();
+    }
+
+    private static String formatClearColor(float[] color) {
+        return color == null ? "fog" : Arrays.toString(color);
+    }
+
+    private static String summarizeSamplers(int[] samplers) {
+        StringBuilder builder = new StringBuilder("[");
+        boolean first = true;
+        for (int i = 0; i < samplers.length; i++) {
+            if (samplers[i] == 0) {
+                continue;
+            }
+            if (!first) {
+                builder.append(", ");
+            }
+            builder.append("colortex").append(i).append("->tex").append(samplers[i]);
+            first = false;
+        }
+        return builder.append(']').toString();
     }
 
     /**
@@ -718,6 +809,8 @@ public class IrisRenderingPipeline {
                 return null;
             }
             int[] drawBuffers = sanitizeCompositeDrawBuffers(name, program.getDrawBuffers());
+            BitSet flipsBefore = flipper.snapshot();
+            BitSet mipmappedBuffers = parseMipmappedBuffers(source);
 
             // Reads see the current "front" side; the FBO writes the back side; then the written buffers flip.
             int[] colorSamplers = snapshotFrontTextures(flipper);
@@ -727,9 +820,14 @@ public class IrisRenderingPipeline {
                 // Later passes' colortex custom-texture overrides deactivate for buffers a pass has written.
                 this.flippedAtLeastOnce.add(buffer);
             }
+            BitSet flipsAfter = flipper.snapshot();
+            LOGGER.info("[Iris] Scheduled pass '{}': drawBuffers={}, flipsBefore={}, flipsAfter={}, mipmaps={}, samplerSummary={}",
+                    name, Arrays.toString(drawBuffers), formatBitSet(flipsBefore), formatBitSet(flipsAfter),
+                    formatBitSet(mipmappedBuffers), summarizeSamplers(colorSamplers));
 
             return new FullscreenPass(name, program, this.compiledUniforms.get(name), framebuffer, colorSamplers,
-                    drawBuffers, ProgramBlendState.from(pack.getProperties(), name));
+                    drawBuffers, ProgramBlendState.from(pack.getProperties(), name), flipsBefore, flipsAfter,
+                    mipmappedBuffers);
         } catch (Exception e) {
             LOGGER.error("[Iris] Failed to build pass '{}'; it will be skipped: {}", name, e.getMessage());
             return null;
@@ -747,13 +845,57 @@ public class IrisRenderingPipeline {
             if (program == null) {
                 return null;
             }
+            BitSet flips = flipper.snapshot();
+            BitSet mipmappedBuffers = parseMipmappedBuffers(source.get());
+            int[] colorSamplers = snapshotFrontTextures(flipper);
+            LOGGER.info("[Iris] Scheduled final pass '{}': flips={}, mipmaps={}, samplerSummary={}",
+                    name, formatBitSet(flips), formatBitSet(mipmappedBuffers), summarizeSamplers(colorSamplers));
             return new FullscreenPass(name, program, this.compiledUniforms.get(name), null,
-                    snapshotFrontTextures(flipper), DrawBuffers.DEFAULT.clone(),
-                    ProgramBlendState.from(pack.getProperties(), name));
+                    colorSamplers, DrawBuffers.DEFAULT.clone(),
+                    ProgramBlendState.from(pack.getProperties(), name), flips, (BitSet) flips.clone(),
+                    mipmappedBuffers);
         } catch (Exception e) {
             LOGGER.error("[Iris] Failed to build final pass; falling back to colortex0 blit: {}", e.getMessage());
             return null;
         }
+    }
+
+    private static BitSet parseMipmappedBuffers(ProgramSource source) {
+        BitSet mipmappedBuffers = new BitSet(IrisRenderTargets.MAX_COLOR_BUFFERS);
+        Optional<String> fragmentSource = source.getFragmentSource();
+        if (!fragmentSource.isPresent()) {
+            return mipmappedBuffers;
+        }
+
+        Matcher matcher = MIPMAP_DIRECTIVE.matcher(fragmentSource.get());
+        while (matcher.find()) {
+            Integer index = colorTargetIndex(matcher.group(1));
+            if (index == null || index >= IrisRenderTargets.MAX_COLOR_BUFFERS) {
+                continue;
+            }
+            if (Boolean.parseBoolean(matcher.group(2))) {
+                mipmappedBuffers.set(index);
+            } else {
+                mipmappedBuffers.clear(index);
+            }
+        }
+        return mipmappedBuffers;
+    }
+
+    private static Integer colorTargetIndex(String name) {
+        if (name.startsWith("colortex")) {
+            try {
+                return Integer.parseInt(name.substring("colortex".length()));
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        for (int i = 0; i < LEGACY_COLOR_TARGETS.length; i++) {
+            if (LEGACY_COLOR_TARGETS[i].equals(name)) {
+                return i;
+            }
+        }
+        return null;
     }
 
     private IrisProgram compileFullscreenProgram(ProgramSource source, TextureStage stage) {
@@ -969,6 +1111,7 @@ public class IrisRenderingPipeline {
         }
 
         SystemTimeUniforms.COUNTER.beginFrame(System.nanoTime());
+        this.activeProbeSuffix = nextFlickerProbeSuffix();
         EyeBrightnessTracker.update();
         CapturedRenderingState.INSTANCE.setTickDelta(partialTicks);
         captureAtlasSize(mc);
@@ -1121,6 +1264,13 @@ public class IrisRenderingPipeline {
         Minecraft mc = Minecraft.getMinecraft();
 
         if (!this.deferredPasses.isEmpty()) {
+            String probeSuffix = this.activeProbeSuffix;
+            boolean probeThisFrame = probeSuffix != null;
+            if (probeThisFrame) {
+                LOGGER.info("[Iris] Flicker probe {} entering deferred chain: passCount={} gl={}",
+                        probeSuffix, this.deferredPasses.size(), currentGlSummary());
+                dumpFlickerProbeTargets(probeSuffix, "pre_deferred");
+            }
             GlStateManager.disableBlend();
             GlStateManager.disableDepth();
             GlStateManager.depthMask(false);
@@ -1131,7 +1281,16 @@ public class IrisRenderingPipeline {
             // pass's out-of-band FF/TESR rendering may have disturbed the high texture units).
             bindShaderPackResources();
             for (FullscreenPass pass : this.deferredPasses) {
+                if (probeThisFrame) {
+                    logPassProbe(probeSuffix, pass, "before-deferred");
+                }
                 runPass(pass, mc);
+                if (probeThisFrame) {
+                    logPassProbe(probeSuffix, pass, "after-deferred");
+                }
+            }
+            if (probeThisFrame) {
+                dumpFlickerProbeTargets(probeSuffix, "post_deferred");
             }
 
             LWJGL.glUseProgram(0);
@@ -1182,74 +1341,28 @@ public class IrisRenderingPipeline {
 
         bindDepthSamplers();
 
-        // Flicker debugging: the last TWO countdown frames dump as suffix _A then _B, so consecutive frames of the
-        // same buffers can be diffed offline — anything alternating per frame (TAA jitter, dither parity, floodfill
-        // ping-pong) shows up as the A/B difference. The one-shot extras (shadow map, noise) dump on frame A only.
-        String dumpSuffix = null;
-        if (this.debugDumpCountdown > 0) {
-            this.debugDumpCountdown--;
-            if (this.debugDumpCountdown == 1) {
-                dumpSuffix = "_A";
-            } else if (this.debugDumpCountdown == 0) {
-                dumpSuffix = "_B";
+        String probeSuffix = this.activeProbeSuffix;
+        boolean probeThisFrame = probeSuffix != null;
+        if (probeThisFrame) {
+            logFlickerProbeFrame(probeSuffix);
+            dumpFlickerProbeTargets(probeSuffix, "pre_composite");
+            if (this.debugProbeFrameIndex == 1) {
+                dumpFlickerProbeExtras(probeSuffix);
             }
-        }
-        boolean dumpThisFrame = dumpSuffix != null;
-        boolean dumpExtras = "_A".equals(dumpSuffix);
-        if (dumpThisFrame) {
-            int width = this.renderTargets.getWidth();
-            int height = this.renderTargets.getHeight();
-            // BOTH ping-pong sides of the flicker-relevant targets, so offline diffs can compare fresh against
-            // stale content regardless of each buffer's flip state at dump time.
-            IrisDebugDump.dumpColorTexture("colortex0_main" + dumpSuffix, this.renderTargets.getOrCreate(0).getMainTexture(), width, height);
-            IrisDebugDump.dumpColorTexture("colortex0_alt" + dumpSuffix, this.renderTargets.getOrCreate(0).getAltTexture(), width, height);
-            IrisDebugDump.dumpColorTexture("colortex2_main" + dumpSuffix, this.renderTargets.getOrCreate(2).getMainTexture(), width, height);
-            IrisDebugDump.dumpColorTexture("colortex2_alt" + dumpSuffix, this.renderTargets.getOrCreate(2).getAltTexture(), width, height);
-            if (dumpExtras) {
-                IrisDebugDump.dumpColorTexture("colortex1_gbuffer", this.renderTargets.getOrCreate(1).getMainTexture(), width, height);
-                IrisDebugDump.dumpDepthTexture("depthtex0", this.renderTargets.getDepthTexture().getTextureId(), width, height);
-                if (this.shadowRenderer != null) {
-                    int resolution = this.shadowRenderer.getResolution();
-                    IrisDebugDump.dumpDepthTexture("shadowtex0", this.shadowRenderer.getDepthTextureId(), resolution, resolution);
-                    IrisDebugDump.dumpColorTexture("shadowcolor0", this.shadowRenderer.getColorTextureId(), resolution, resolution);
-                }
-                IrisDebugDump.dumpColorTexture("noisetex", this.noiseTexture.getTextureId(),
-                        NoiseTexture.DEFAULT_RESOLUTION, NoiseTexture.DEFAULT_RESOLUTION);
-                // Numeric state for the celestial/ambient debugging: the composite VSH derives its day factors from these.
-                org.joml.Vector3f sun = org.taumc.celeritas.iris.uniforms.CelestialUniforms.getSunPosition();
-                org.joml.Vector3f up = org.taumc.celeritas.iris.uniforms.CelestialUniforms.getUpPosition();
-                float sdotu = new org.joml.Vector3f(sun).normalize().dot(new org.joml.Vector3f(up).normalize());
-                LOGGER.info("[Iris] Debug state: sunPosition={} upPosition={} SdotU={} celestialAngle={} eyeBrightnessSmooth={} fogColor={}",
-                        sun, up, sdotu,
-                        org.taumc.celeritas.iris.uniforms.CelestialUniforms.getCelestialAngle(),
-                        EyeBrightnessTracker.getEyeBrightnessSmooth(),
-                        CapturedRenderingState.INSTANCE.getFogColor());
-            }
-            // Colored-lighting floodfill convergence check: the shadowcomp compute scrolls the voxel volume every
-            // frame by posOffset = floor(previousCameraPosition) - floor(cameraPosition). If that is anything but
-            // (0,0,0) on a still camera (e.g. camera Y jittering across an integer while standing on a snow layer),
-            // the volume re-scrolls each frame and the floodfill never converges -> block-edge pulsation.
-            org.joml.Vector3d cam = CapturedRenderingState.INSTANCE.getCameraPosition();
-            org.joml.Vector3d prevCam = CapturedRenderingState.INSTANCE.getPreviousCameraPosition();
-            long offX = (long) Math.floor(prevCam.x) - (long) Math.floor(cam.x);
-            long offY = (long) Math.floor(prevCam.y) - (long) Math.floor(cam.y);
-            long offZ = (long) Math.floor(prevCam.z) - (long) Math.floor(cam.z);
-            LOGGER.info("[Iris] Flicker probe frame {}: frameCounter={} framemod8={} cam=({},{},{}) prevCam=({},{},{}) voxelScroll=({},{},{})",
-                    dumpSuffix, SystemTimeUniforms.COUNTER.getFrameCounter(),
-                    SystemTimeUniforms.COUNTER.getFrameCounter() & 7,
-                    cam.x, cam.y, cam.z, prevCam.x, prevCam.y, prevCam.z, offX, offY, offZ);
         }
 
         for (FullscreenPass pass : this.passes) {
+            if (probeThisFrame) {
+                logPassProbe(probeSuffix, pass, "before");
+            }
             runPass(pass, mc);
+            if (probeThisFrame) {
+                logPassProbe(probeSuffix, pass, "after");
+            }
         }
 
-        if (dumpThisFrame && !this.passes.isEmpty()) {
-            FullscreenPass lastPass = this.passes.get(this.passes.size() - 1);
-            int colortex4 = lastPass.colorSamplers[4] != 0
-                    ? lastPass.colorSamplers[4] : this.renderTargets.getOrCreate(4).getMainTexture();
-            IrisDebugDump.dumpColorTexture("colortex4_postcomposite" + dumpSuffix, colortex4,
-                    this.renderTargets.getWidth(), this.renderTargets.getHeight());
+        if (probeThisFrame) {
+            dumpFlickerProbeTargets(probeSuffix, "post_composite");
         }
 
         if (this.blitSourceFramebuffer != null) {
@@ -1261,11 +1374,17 @@ public class IrisRenderingPipeline {
                     GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
         }
 
+        resetRenderTargetMipmaps();
+
         // Iris FinalPassRenderer.SwapPass: buffers the chain leaves odd-flipped carry this frame's data on their
         // ALT side — copy it back to MAIN so next frame's baked FBOs and sampler snapshots read fresh data. NB:
         // glCopyTexSubImage2D reads the GL_READ_BUFFER of the framebuffer bound to GL_FRAMEBUFFER (bind(), not
         // bindAsReadBuffer() — Iris hit TAA breakage on many drivers with the read-framebuffer binding).
         for (SwapPass swap : this.swapPasses) {
+            if (probeThisFrame) {
+                LOGGER.info("[Iris] Flicker probe {} swap colortex{}: copying alt -> mainTex{}",
+                        probeSuffix, swap.index, swap.targetTexture);
+            }
             swap.from.bind();
             LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, swap.targetTexture);
             LWJGL.glCopyTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 0, 0,
@@ -1273,6 +1392,9 @@ public class IrisRenderingPipeline {
         }
         if (!this.swapPasses.isEmpty()) {
             LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+        }
+        if (probeThisFrame) {
+            dumpFlickerProbeTargets(probeSuffix, "post_swap");
         }
 
         // Hand control back to vanilla: its framebuffer bound, no program/VAO, texture units cleaned up.
@@ -1285,6 +1407,95 @@ public class IrisRenderingPipeline {
         GlStateManager.enableAlpha();
 
         CapturedRenderingState.INSTANCE.rollOverPreviousFrame();
+        this.activeProbeSuffix = null;
+    }
+
+    private String nextFlickerProbeSuffix() {
+        if (this.debugProbeFramesRemaining <= 0) {
+            return null;
+        }
+        if (this.debugProbeDelayFrames > 0) {
+            this.debugProbeDelayFrames--;
+            return null;
+        }
+        String suffix = String.format("_f%02d", this.debugProbeFrameIndex);
+        this.debugProbeFrameIndex++;
+        this.debugProbeFramesRemaining--;
+        return suffix;
+    }
+
+    private void logFlickerProbeFrame(String suffix) {
+        org.joml.Vector3d cam = CapturedRenderingState.INSTANCE.getCameraPosition();
+        org.joml.Vector3d prevCam = CapturedRenderingState.INSTANCE.getPreviousCameraPosition();
+        long offX = (long) Math.floor(prevCam.x) - (long) Math.floor(cam.x);
+        long offY = (long) Math.floor(prevCam.y) - (long) Math.floor(cam.y);
+        long offZ = (long) Math.floor(prevCam.z) - (long) Math.floor(cam.z);
+        org.joml.Vector3f sun = CelestialUniforms.getSunPosition();
+        org.joml.Vector3f up = CelestialUniforms.getUpPosition();
+        float sdotu = new org.joml.Vector3f(sun).normalize().dot(new org.joml.Vector3f(up).normalize());
+        LOGGER.info("[Iris] Flicker probe {} begin: frameCounter={} framemod2={} framemod4={} framemod8={} remaining={} cam=({},{},{}) prevCam=({},{},{}) voxelScroll=({},{},{}) fogColor={} eyeBrightnessSmooth={} sun={} up={} SdotU={} celestialAngle={} gl={}",
+                suffix, SystemTimeUniforms.COUNTER.getFrameCounter(),
+                SystemTimeUniforms.COUNTER.getFrameCounter() & 1,
+                SystemTimeUniforms.COUNTER.getFrameCounter() & 3,
+                SystemTimeUniforms.COUNTER.getFrameCounter() & 7,
+                this.debugProbeFramesRemaining,
+                cam.x, cam.y, cam.z, prevCam.x, prevCam.y, prevCam.z, offX, offY, offZ,
+                CapturedRenderingState.INSTANCE.getFogColor(), EyeBrightnessTracker.getEyeBrightnessSmooth(),
+                sun, up, sdotu, CelestialUniforms.getCelestialAngle(), currentGlSummary());
+    }
+
+    private void logPassProbe(String suffix, FullscreenPass pass, String phase) {
+        LOGGER.info("[Iris] Flicker probe {} pass {} '{}': drawBuffers={} flipsBefore={} flipsAfter={} samplerSummary={} target={} gl={}",
+                suffix, phase, pass.name, Arrays.toString(pass.drawBuffers),
+                formatBitSet(pass.flipsBefore), formatBitSet(pass.flipsAfter), summarizeSamplers(pass.colorSamplers),
+                pass.framebuffer == null ? "main-framebuffer" : "iris-framebuffer", currentGlSummary());
+    }
+
+    private String currentGlSummary() {
+        return "program=" + LWJGL.glGetInteger(GL_CURRENT_PROGRAM)
+                + ", framebuffer=" + LWJGL.glGetInteger(GL_FRAMEBUFFER_BINDING)
+                + ", readFramebuffer=" + LWJGL.glGetInteger(GL_READ_FRAMEBUFFER_BINDING)
+                + ", drawFramebuffer=" + LWJGL.glGetInteger(GL_DRAW_FRAMEBUFFER_BINDING)
+                + ", tex2d=" + LWJGL.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+    }
+
+    private void dumpFlickerProbeTargets(String suffix, String stage) {
+        int width = this.renderTargets.getWidth();
+        int height = this.renderTargets.getHeight();
+        for (int index : FLICKER_PROBE_TARGETS) {
+            IrisRenderTarget target = this.renderTargets.get(index);
+            if (target == null) {
+                LOGGER.info("[Iris] Flicker probe {} {}: colortex{} was not materialized", suffix, stage, index);
+                continue;
+            }
+            LOGGER.info("[Iris] Flicker probe {} {}: dumping colortex{} mainTex={} altTex={} clear={} gbufferAttachment={}",
+                    suffix, stage, index, target.getMainTexture(), target.getAltTexture(),
+                    this.colorBufferClears[index], isGbufferAttachment(index));
+            IrisDebugDump.dumpColorTexture("probe" + suffix + "_" + stage + "_colortex" + index + "_main",
+                    target.getMainTexture(), width, height);
+            IrisDebugDump.dumpColorTexture("probe" + suffix + "_" + stage + "_colortex" + index + "_alt",
+                    target.getAltTexture(), width, height);
+        }
+    }
+
+    private void dumpFlickerProbeExtras(String suffix) {
+        int width = this.renderTargets.getWidth();
+        int height = this.renderTargets.getHeight();
+        IrisDebugDump.dumpDepthTexture("probe" + suffix + "_depthtex0",
+                this.renderTargets.getDepthTexture().getTextureId(), width, height);
+        IrisDebugDump.dumpDepthTexture("probe" + suffix + "_depthtex1",
+                this.renderTargets.getDepthTextureNoTranslucents().getTextureId(), width, height);
+        IrisDebugDump.dumpDepthTexture("probe" + suffix + "_depthtex2",
+                this.renderTargets.getDepthTextureNoHand().getTextureId(), width, height);
+        if (this.shadowRenderer != null) {
+            int resolution = this.shadowRenderer.getResolution();
+            IrisDebugDump.dumpDepthTexture("probe" + suffix + "_shadowtex0",
+                    this.shadowRenderer.getDepthTextureId(), resolution, resolution);
+            IrisDebugDump.dumpColorTexture("probe" + suffix + "_shadowcolor0",
+                    this.shadowRenderer.getColorTextureId(), resolution, resolution);
+        }
+        IrisDebugDump.dumpColorTexture("probe" + suffix + "_noisetex", this.noiseTexture.getTextureId(),
+                NoiseTexture.DEFAULT_RESOLUTION, NoiseTexture.DEFAULT_RESOLUTION);
     }
 
     public boolean isWorldRenderingActive() {
@@ -1413,6 +1624,7 @@ public class IrisRenderingPipeline {
         }
         GlStateManager.disableBlend();
         pass.blendState.apply(pass.drawBuffers);
+        setupMipmappedBuffers(pass);
         bindColorSamplers(pass);
         pass.program.bind();
         bindShaderPackResources();
@@ -1443,6 +1655,31 @@ public class IrisRenderingPipeline {
                 reportGlError(pass.name + " draw");
             }
         }
+    }
+
+    private void setupMipmappedBuffers(FullscreenPass pass) {
+        if (pass.mipmappedBuffers.nextSetBit(0) < 0) {
+            return;
+        }
+        GlStateManager.setActiveTexture(GL13.GL_TEXTURE0);
+        for (int index = pass.mipmappedBuffers.nextSetBit(0); index >= 0;
+             index = pass.mipmappedBuffers.nextSetBit(index + 1)) {
+            IrisRenderTarget target = this.renderTargets.get(index);
+            if (target != null) {
+                target.generateMipmaps(pass.flipsBefore.get(index));
+            }
+        }
+    }
+
+    private void resetRenderTargetMipmaps() {
+        GlStateManager.setActiveTexture(GL13.GL_TEXTURE0);
+        for (int i = 0; i < IrisRenderTargets.MAX_COLOR_BUFFERS; i++) {
+            IrisRenderTarget target = this.renderTargets.get(i);
+            if (target != null) {
+                target.resetMipmaps();
+            }
+        }
+        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
     }
 
     public static void drainGlError() {

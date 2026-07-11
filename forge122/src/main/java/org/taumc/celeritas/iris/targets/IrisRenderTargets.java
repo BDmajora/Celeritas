@@ -4,8 +4,10 @@ import org.taumc.celeritas.iris.gl.framebuffer.IrisFramebuffer;
 import org.taumc.celeritas.iris.gl.texture.InternalTextureFormat;
 import org.taumc.celeritas.lwjgl.GL11;
 import org.taumc.celeritas.lwjgl.GL14;
+import org.taumc.celeritas.lwjgl.GL30;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -122,6 +124,7 @@ public class IrisRenderTargets {
 
         framebuffer.addDepthAttachment(this.depthTexture.getTextureId());
         framebuffer.drawBuffers(densePoints);
+        checkFramebufferComplete(framebuffer, "color", drawBuffers);
         return framebuffer;
     }
 
@@ -144,7 +147,16 @@ public class IrisRenderTargets {
             framebuffer.addColorAttachment(clearBuffers[i], i, alt ? target.getAltTexture() : target.getMainTexture());
         }
         framebuffer.drawBuffers(densePoints);
+        checkFramebufferComplete(framebuffer, "clear", clearBuffers);
         return framebuffer;
+    }
+
+    private static void checkFramebufferComplete(IrisFramebuffer framebuffer, String purpose, int[] drawBuffers) {
+        int status = framebuffer.getStatus();
+        if (status != GL30.GL_FRAMEBUFFER_COMPLETE) {
+            throw new IllegalStateException("Incomplete Iris " + purpose + " framebuffer for draw buffers "
+                    + Arrays.toString(drawBuffers) + ": status=" + status);
+        }
     }
 
     public void resize(int newWidth, int newHeight) {
