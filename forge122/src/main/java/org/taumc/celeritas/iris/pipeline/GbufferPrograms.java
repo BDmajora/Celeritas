@@ -2,6 +2,7 @@ package org.taumc.celeritas.iris.pipeline;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.taumc.celeritas.iris.gl.program.DrawBuffers;
 import org.taumc.celeritas.iris.gl.program.GlProgram;
 import org.taumc.celeritas.iris.gl.program.IrisProgram;
 import org.taumc.celeritas.iris.gl.program.ProgramUniforms;
@@ -53,7 +54,7 @@ public class GbufferPrograms {
         Entry(IrisProgram program, ProgramUniforms uniforms, int[] drawBuffers, ProgramBlendState blendState) {
             this.program = program;
             this.uniforms = uniforms;
-            this.drawBuffers = drawBuffers;
+            this.drawBuffers = drawBuffers == null ? DrawBuffers.DEFAULT.clone() : drawBuffers.clone();
             this.blendState = blendState;
         }
 
@@ -66,7 +67,7 @@ public class GbufferPrograms {
         }
 
         public int[] getDrawBuffers() {
-            return this.drawBuffers;
+            return this.drawBuffers.clone();
         }
 
         public ProgramBlendState getBlendState() {

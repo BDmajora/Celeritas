@@ -1,5 +1,7 @@
 package org.taumc.celeritas.iris.terrain;
 
+import org.taumc.celeritas.iris.gl.program.DrawBuffers;
+
 import java.util.regex.Pattern;
 
 /**
@@ -67,7 +69,7 @@ public final class FullscreenTransformer {
 
     private static final String FRAGMENT_PROLOGUE = String.join("\n",
             "#version 330 core",
-            "out vec4 iris_FragData[8];",
+            "layout(location = 0) out vec4 iris_FragData[16];",
             "#define gl_FragColor iris_FragData[0]",
             "#define gl_FragData iris_FragData",
             "in vec4 iris_TexCoord[4];",
@@ -108,13 +110,18 @@ public final class FullscreenTransformer {
     );
 
     public static String transformFragmentShader(String source) {
+        return transformFragmentShader(source, DrawBuffers.DEFAULT);
+    }
+
+    public static String transformFragmentShader(String source, int[] drawBuffers) {
         String body = strip(source);
         body = renameMain(body);
         body = convertVaryings(body, "in");
         body = modernize(body);
         GlslGlobalInitHoister.Result hoist = GlslGlobalInitHoister.hoist(body);
-        return FRAGMENT_PROLOGUE + hoist.body
+        String transformed = FRAGMENT_PROLOGUE + hoist.body
                 + FRAGMENT_EPILOGUE.replace("    irisMain();", hoist.hoistedAssignments + "    irisMain();");
+        return DrawBuffers.rewriteFragmentOutputs(transformed, drawBuffers);
     }
 
     private static String strip(String source) {

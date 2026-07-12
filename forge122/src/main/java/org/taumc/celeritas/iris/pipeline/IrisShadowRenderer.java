@@ -15,6 +15,7 @@ import org.joml.Matrix4f;
 import org.joml.Vector3d;
 import org.taumc.celeritas.impl.render.terrain.CeleritasWorldRenderer;
 import org.taumc.celeritas.iris.gl.framebuffer.IrisFramebuffer;
+import org.taumc.celeritas.iris.gl.program.DrawBuffers;
 import org.taumc.celeritas.iris.gl.shader.ShaderMacros;
 import org.taumc.celeritas.iris.shaderpack.ProgramSource;
 import org.taumc.celeritas.iris.targets.DepthTexture;
@@ -123,9 +124,8 @@ public class IrisShadowRenderer {
         // The shadow program's DRAWBUFFERS (0, or 01 when it also writes shadowcolor1); indices past the two
         // shadowcolor attachments would make the FBO mask reference missing images, so they are dropped.
         this.shadowDrawBuffers = shadowSource.getFragmentSource()
-                .map(org.taumc.celeritas.iris.gl.program.DrawBuffers::parse)
-                .map(buffers -> java.util.Arrays.stream(buffers).filter(b -> b <= 1).toArray())
-                .filter(buffers -> buffers.length > 0)
+                .map(DrawBuffers::parseActive)
+                .map(buffers -> DrawBuffers.sanitize(buffers, 2))
                 .orElse(new int[]{0});
 
         this.entityShadowProgram = GbufferPrograms.compile(shadowSource, ShaderMacros.standard(), samplerUnits);

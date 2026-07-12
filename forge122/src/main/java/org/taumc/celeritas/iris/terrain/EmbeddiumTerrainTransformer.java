@@ -1,5 +1,7 @@
 package org.taumc.celeritas.iris.terrain;
 
+import org.taumc.celeritas.iris.gl.program.DrawBuffers;
+
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -15,9 +17,8 @@ import java.util.regex.Pattern;
  * the Embeddium vertex into globals that {@code #define}d built-ins ({@code gl_Vertex}, {@code gl_ModelViewMatrix},
  * {@code gl_MultiTexCoord0}, …) point at.
  * <p>
- * <b>Status: iteration 1.</b> It handles the common built-ins/keywords that OptiFine 1.12.2 terrain shaders use; getting
- * a specific pack pixel-correct will need in-game refinement (this is inherently iterative — modern Iris uses a full
- * GLSL parser for the same job). Kept deliberately conservative and well-scoped so each built-in mapping is auditable.
+ * The generated fragment output array is wide enough for Iris's logical color targets, while draw-buffer routing
+ * rewrites sparse shader-pack target writes to the dense slots that the framebuffer enables.
  */
 public final class EmbeddiumTerrainTransformer {
     private static final Pattern VERSION = Pattern.compile("^\\s*#version[^\\n]*\\n", Pattern.MULTILINE);
@@ -123,7 +124,7 @@ public final class EmbeddiumTerrainTransformer {
     private static final String FRAGMENT_PROLOGUE = String.join("\n",
             "#version 330 core",
             "// ---- Celeritas/Iris terrain bridge (generated) ----",
-            "out vec4 iris_FragData[8];",
+            "layout(location = 0) out vec4 iris_FragData[16];",
             "#define gl_FragColor iris_FragData[0]",
             "#define gl_FragData iris_FragData",
             "vec4 iris_shadow2D(sampler2DShadow s, vec3 p) { return vec4(texture(s, p)); }",
@@ -156,14 +157,19 @@ public final class EmbeddiumTerrainTransformer {
     }
 
     public static String transformFragmentShader(String source) {
+        return transformFragmentShader(source, DrawBuffers.DEFAULT);
+    }
+
+    public static String transformFragmentShader(String source, int[] drawBuffers) {
         String body = stripVersion(source);
         body = renameMain(body);
         body = convertVaryings(body, "in");
         body = modernizeCommon(body);
         GlslGlobalInitHoister.Result hoist = GlslGlobalInitHoister.hoist(body);
-        return FRAGMENT_PROLOGUE + hoist.body
+        String transformed = FRAGMENT_PROLOGUE + hoist.body
                 + "\nvoid main() {\n" + hoist.hoistedAssignments + "    irisMain();\n"
                 + "    if (iris_FragData[0].a < iris_AlphaCutoff) { discard; }\n}\n";
+        return DrawBuffers.rewriteFragmentOutputs(transformed, drawBuffers);
     }
 
     // ------------------------------------------------------------------ modern (#version 130+) terrain
@@ -188,11 +194,16 @@ public final class EmbeddiumTerrainTransformer {
     }
 
     public static String transformFragmentShaderModern(String source) {
+        return transformFragmentShaderModern(source, DrawBuffers.DEFAULT);
+    }
+
+    public static String transformFragmentShaderModern(String source, int[] drawBuffers) {
         String body = stripVersion(source);
         body = renameMain(body);
-        return compatFor(FRAGMENT_PROLOGUE, source) + body
+        String transformed = compatFor(FRAGMENT_PROLOGUE, source) + body
                 + "\nvoid main() {\n    irisMain();\n"
                 + "    if (iris_FragData[0].a < iris_AlphaCutoff) { discard; }\n}\n";
+        return DrawBuffers.rewriteFragmentOutputs(transformed, drawBuffers);
     }
 
     /** The shared prologue targets 330 core; modern packs need 330 compatibility (legacy built-ins + modern intrinsics). */

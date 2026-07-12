@@ -12,6 +12,7 @@ import org.embeddedt.embeddium.impl.render.chunk.terrain.TerrainRenderPass;
 import org.joml.Matrix4fc;
 import org.taumc.celeritas.iris.Iris;
 import org.taumc.celeritas.iris.gl.blending.ProgramBlendState;
+import org.taumc.celeritas.iris.gl.program.DrawBuffers;
 import org.taumc.celeritas.iris.gl.program.ProgramUniforms;
 import org.taumc.celeritas.iris.pipeline.IrisRenderingPipeline;
 
@@ -42,7 +43,7 @@ public class IrisTerrainShaderInterface implements ChunkShaderInterface {
     private GlPrimitiveType primitiveType = GlPrimitiveType.TRIANGLES;
 
     public IrisTerrainShaderInterface(ShaderBindingContext context, int[] drawBuffers, ProgramBlendState blendState) {
-        this.drawBuffers = drawBuffers;
+        this.drawBuffers = drawBuffers == null ? DrawBuffers.DEFAULT.clone() : drawBuffers.clone();
         this.blendState = blendState;
         this.uModelViewMatrix = context.bindUniformIfPresent("u_ModelViewMatrix", GlUniformMatrix4f::new);
         this.uProjectionMatrix = context.bindUniformIfPresent("u_ProjectionMatrix", GlUniformMatrix4f::new);

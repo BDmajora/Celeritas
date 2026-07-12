@@ -87,7 +87,11 @@ public class CeleritasWorldRenderer extends SimpleWorldRenderer<WorldClient, Vin
             default: stage = 0; break;
         }
         org.taumc.celeritas.iris.uniforms.CapturedRenderingState.INSTANCE.setRenderStage(stage);
-        super.drawChunkLayer(renderLayer, x, y, z);
+        try {
+            super.drawChunkLayer(renderLayer, x, y, z);
+        } finally {
+            org.taumc.celeritas.iris.uniforms.CapturedRenderingState.INSTANCE.setRenderStage(0);
+        }
 
         GlStateManager.resetColor();
     }

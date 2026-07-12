@@ -4,8 +4,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.taumc.celeritas.iris.gl.shader.GlShader;
 import org.taumc.celeritas.iris.gl.shader.ShaderType;
+import org.taumc.celeritas.iris.pipeline.IrisRenderingPipeline;
 import org.taumc.celeritas.iris.shaderpack.ProgramSource;
 import org.taumc.celeritas.iris.shaderpack.preprocessor.GlslPreprocessor;
+import org.taumc.celeritas.iris.targets.IrisRenderTargets;
 import org.taumc.celeritas.iris.terrain.ModernPackTransformer;
 import org.taumc.celeritas.iris.vertices.IrisVertexAttributes;
 
@@ -43,7 +45,10 @@ public final class ShaderProgramCompiler {
         // paths. Without this these gbuffer programs fail to compile and their phases fall back to vanilla-style
         // rendering; for gbuffers_clouds that means drawing the vanilla cloud plane the pack explicitly discards
         // (gl_Position = vec4(-1.0) + discard when CLOUD_STYLE != 50), which is the "clouds move with the player" bug.
-        // GLSL-120 packs (LIGHT) are not modern, so they are untouched.
+        // GLSL-120 packs (LIGHT) do not need the version transform, but they still share the same dense draw-buffer
+        // routing as modern packs.
+        int[] drawBuffers = DrawBuffers.sanitize(
+                DrawBuffers.parseActive(fragmentSource, defines), IrisRenderTargets.MAX_COLOR_BUFFERS);
         if (ModernPackTransformer.isModernSource(fragmentSource)) {
             vertexSource = ModernPackTransformer.transform(vertexSource);
             fragmentSource = ModernPackTransformer.transform(fragmentSource);
@@ -51,9 +56,12 @@ public final class ShaderProgramCompiler {
                 geometrySource = ModernPackTransformer.transform(geometrySource);
             }
         }
+        fragmentSource = DrawBuffers.rewriteFragmentOutputs(fragmentSource, drawBuffers);
 
-        String processedVertex = applyDefines(vertexSource, defines);
-        String processedFragment = applyDefines(fragmentSource, defines);
+        String processedVertex = IrisRenderingPipeline.stabilizeColoredLightingSource(name,
+                applyDefines(vertexSource, defines));
+        String processedFragment = IrisRenderingPipeline.stabilizeColoredLightingSource(name,
+                applyDefines(fragmentSource, defines));
 
         GlShader vertexShader = null;
         GlShader fragmentShader = null;
@@ -67,14 +75,15 @@ public final class ShaderProgramCompiler {
                     .attach(fragmentShader);
 
             if (geometrySource != null) {
-                geometryShader = new GlShader(ShaderType.GEOMETRY, name + ".gsh", applyDefines(geometrySource, defines));
+                geometryShader = new GlShader(ShaderType.GEOMETRY, name + ".gsh",
+                        IrisRenderingPipeline.stabilizeColoredLightingSource(name,
+                                applyDefines(geometrySource, defines)));
                 builder.attach(geometryShader);
             }
 
             bindOptifineAttributes(builder, vertexSource);
 
             GlProgram program = builder.link();
-            int[] drawBuffers = DrawBuffers.parseActive(fragmentSource);
             LOGGER.info("[Iris] {} resolved DRAWBUFFERS {}", name, Arrays.toString(drawBuffers));
             return new IrisProgram(program, drawBuffers);
         } finally {

@@ -7,8 +7,7 @@ import java.util.Map;
 /**
  * The OptiFine {@code MC_*} preprocessor macros injected into every shader stage.
  * <p>
- * 1.12.2 packs branch on these (e.g. {@code #ifdef MC_GL_VENDOR_NVIDIA}, {@code #if MC_VERSION >= 11202}); a pack that
- * does not find them simply takes its {@code #else} path, so the set here is intentionally conservative. The
+ * 1.12.2 packs branch on these (e.g. {@code #ifdef MC_GL_VENDOR_NVIDIA}, {@code #if MC_VERSION >= 11202}). The
  * GL-dependent vendor/renderer macros require a live context and are added via {@link #withGlInfo} once the render
  * thread is up; {@link #standard()} holds everything computable without GL.
  */

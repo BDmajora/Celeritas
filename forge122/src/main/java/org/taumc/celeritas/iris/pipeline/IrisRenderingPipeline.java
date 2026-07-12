@@ -103,8 +103,7 @@ public class IrisRenderingPipeline {
     private static final int FLICKER_PROBE_DELAY_FRAMES =
             Math.max(0, Integer.getInteger("celeritas.iris.flickerProbeDelayFrames", 120));
     private static final int FLICKER_PROBE_FRAMES =
-            Math.min(2, Math.max(0, Integer.getInteger("celeritas.iris.flickerProbeFrames", 2)));
-    private static final int[] FLICKER_PROBE_TARGETS = {0, 1, 2, 3, 4, 7, 8};
+            Math.max(0, Integer.getInteger("celeritas.iris.flickerProbeFrames", 0));
     private static final int GL_CURRENT_PROGRAM = 0x8B8D;
     private static final int GL_FRAMEBUFFER_BINDING = 0x8CA6;
     private static final int GL_READ_FRAMEBUFFER_BINDING = 0x8CAA;
@@ -113,6 +112,14 @@ public class IrisRenderingPipeline {
             {"gcolor", "gdepth", "gnormal", "composite", "gaux1", "gaux2", "gaux3", "gaux4"};
     private static final Pattern MIPMAP_DIRECTIVE =
             Pattern.compile("const\\s+bool\\s+(\\w+?)MipmapEnabled\\s*=\\s*(true|false)\\s*;");
+    private static final Pattern COLORED_LIGHT_HALF_RATE_DEFINE =
+            Pattern.compile("(?m)^[\\t ]*#[\\t ]*define[\\t ]+OPTIMIZATION_ACT_HALF_RATE_SPREADING\\b[^\\r\\n]*");
+    private static final Pattern COLORED_LIGHT_VOLUME_PARITY_READ = Pattern.compile(
+            "(?s)if\\s*\\(\\s*int\\s*\\(\\s*framemod2\\s*\\)\\s*==\\s*0\\s*\\)\\s*\\{\\s*"
+                    + "lightVolume\\s*=\\s*GetComplexLightVolume\\s*\\(\\s*pos\\s*,\\s*floodfill_sampler_copy\\s*\\)\\s*;\\s*"
+                    + "\\}\\s*else\\s*\\{\\s*"
+                    + "lightVolume\\s*=\\s*GetComplexLightVolume\\s*\\(\\s*pos\\s*,\\s*floodfill_sampler\\s*\\)\\s*;\\s*"
+                    + "\\}");
 
     /** Sampler name → texture unit, covering both the modern names and the OptiFine legacy aliases. */
     private static final Map<String, Integer> SAMPLER_UNITS = new LinkedHashMap<>();
@@ -259,7 +266,7 @@ public class IrisRenderingPipeline {
     private final IrisShadowRenderer shadowRenderer;
 
     /**
-     * End-of-frame alt→main copy-back for a buffer the chain left odd-flipped (Iris FinalPassRenderer.SwapPass).
+     * End-of-frame alt->main copy-back for a buffer the chain left odd-flipped (Iris FinalPassRenderer.SwapPass).
      * {@code from} is a read framebuffer over the buffer's ALT texture; the copy target is its MAIN texture.
      */
     private static final class SwapPass {
@@ -736,8 +743,8 @@ public class IrisRenderingPipeline {
     }
 
     private void logRenderTargetSchedule(BufferFlipper flipper) {
-        LOGGER.info("[Iris] Flicker probe config: delayFrames={}, frames={}, targets={}",
-                FLICKER_PROBE_DELAY_FRAMES, FLICKER_PROBE_FRAMES, Arrays.toString(FLICKER_PROBE_TARGETS));
+        LOGGER.info("[Iris] Flicker probe config: delayFrames={}, frames={}",
+                FLICKER_PROBE_DELAY_FRAMES, FLICKER_PROBE_FRAMES);
         LOGGER.info("[Iris] End-of-schedule flipped buffers: {}", formatBitSet(flipper.snapshot()));
         for (int i = 0; i < IrisRenderTargets.MAX_COLOR_BUFFERS; i++) {
             IrisRenderTarget target = this.renderTargets.get(i);
@@ -909,23 +916,26 @@ public class IrisRenderingPipeline {
         GlShader vertex = null;
         GlShader fragment = null;
         try {
-            // Modern packs (#version 130+ single-source, e.g. Complementary) get the minimal-touch transform; the
-            // GLSL-120 Chocapic family (LIGHT) keeps the full 330-core rewrite. Detect off the fragment source.
+            // Modern packs (#version 130+ single-source, e.g. Complementary) use the compatibility stage normalizer;
+            // the GLSL-120 Chocapic family (LIGHT) keeps the full 330-core rewrite. Detect off the fragment source.
             boolean modern = ModernPackTransformer.isModernSource(fshRaw);
             this.modernPack |= modern;
+            Map<String, String> macros = org.taumc.celeritas.iris.gl.shader.ShaderMacros.standard();
+            int[] drawBuffers = sanitizeCompositeDrawBuffers(source.getName(), DrawBuffers.parseActive(fshRaw, macros));
             String vsh;
             String fsh;
             if (modern) {
                 // Modern sources rely on the driver preprocessor for their #if trees; the MC_*/IRIS_FEATURE_* macro
                 // environment has to be present for those gates (colored lighting checks IRIS_FEATURE_CUSTOM_IMAGES).
-                Map<String, String> macros = org.taumc.celeritas.iris.gl.shader.ShaderMacros.standard();
-                vsh = ModernPackTransformer.transform(
-                        org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(vshRaw, macros));
-                fsh = ModernPackTransformer.transform(
-                        org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(fshRaw, macros));
+                vsh = ModernPackTransformer.transform(stabilizeColoredLightingSource(source.getName(),
+                        org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(vshRaw, macros)));
+                fsh = DrawBuffers.rewriteFragmentOutputs(ModernPackTransformer.transform(
+                        stabilizeColoredLightingSource(source.getName(),
+                                org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(fshRaw, macros))),
+                        drawBuffers);
             } else {
                 vsh = FullscreenTransformer.transformVertexShader(vshRaw);
-                fsh = FullscreenTransformer.transformFragmentShader(fshRaw);
+                fsh = FullscreenTransformer.transformFragmentShader(fshRaw, drawBuffers);
             }
             IrisDebugDump.dumpText("src_" + source.getName() + ".vsh", vsh);
             IrisDebugDump.dumpText("src_" + source.getName() + ".fsh", fsh);
@@ -938,14 +948,14 @@ public class IrisRenderingPipeline {
                     .bindAttributeLocation(FullscreenQuadRenderer.POSITION_SLOT, "a_Position")
                     .bindAttributeLocation(FullscreenQuadRenderer.TEXCOORD_SLOT, "a_TexCoord");
             if (!modern) {
-                // The 330-core LIGHT path writes to an explicit out array; modern packs use the compatibility
-                // gl_FragData[] built-in, which the driver already maps to draw buffers 0..n.
+                // The generated 330-core path writes to an explicit out array. Sparse shader-pack outputs have
+                // already been rewritten to the dense draw-buffer slots before linking.
                 builder.bindFragmentDataLocation(0, "iris_FragData");
             }
             GlProgram program = builder.link();
 
             assignSamplerUnits(program, stage);
-            return new IrisProgram(program, DrawBuffers.parseActive(fshRaw));
+            return new IrisProgram(program, drawBuffers);
         } finally {
             if (vertex != null) {
                 vertex.destroy();
@@ -1060,23 +1070,10 @@ public class IrisRenderingPipeline {
     }
 
     private static int[] sanitizeDrawBuffers(String name, int[] drawBuffers, int maxExclusive) {
-        List<Integer> valid = new ArrayList<>();
-        for (int buffer : drawBuffers) {
-            if (buffer >= 0 && buffer < maxExclusive) {
-                valid.add(buffer);
-            } else {
-                LOGGER.debug("[Iris] '{}' declares draw buffer {} (max {} here; usually an inactive #ifdef path); ignoring it",
-                        name, buffer, maxExclusive - 1);
-            }
-        }
-        if (valid.isEmpty()) {
-            return DrawBuffers.DEFAULT.clone();
-        }
-        int[] result = new int[valid.size()];
-        for (int i = 0; i < result.length; i++) {
-            result[i] = valid.get(i);
-        }
-        return result;
+        return DrawBuffers.sanitize(drawBuffers, maxExclusive,
+                buffer -> LOGGER.debug(
+                        "[Iris] '{}' declares draw buffer {} (max {} here; usually an inactive #ifdef path); ignoring it",
+                        name, buffer, maxExclusive - 1));
     }
 
     // ------------------------------------------------------------------ per-frame hooks
@@ -1137,7 +1134,7 @@ public class IrisRenderingPipeline {
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, this.stubShadowMap.getTextureId());
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
 
-        // Custom images: zero the per-frame ones (voxel volume), then bind image units + paired samplers.
+        // Custom images: honor the pack-declared clears, then bind image units + paired samplers.
         this.customImageManager.clearAll();
         bindShaderPackResources();
 
@@ -1195,8 +1192,9 @@ public class IrisRenderingPipeline {
             entry.getProgram().bind();
             bindShaderPackResources();
             entry.getUniforms().update();
-            drawGbufferBuffers(this.currentGbuffer, entry.getDrawBuffers());
-            entry.getBlendState().apply(entry.getDrawBuffers());
+            int[] drawBuffers = DrawBuffers.sanitize(entry.getDrawBuffers(), GBUFFER_ATTACHMENT_LIMIT);
+            drawGbufferBuffers(this.currentGbuffer, drawBuffers);
+            entry.getBlendState().apply(drawBuffers);
         }
     }
 
@@ -1208,8 +1206,9 @@ public class IrisRenderingPipeline {
         if (!this.worldRenderingActive) {
             return;
         }
-        drawGbufferBuffers(this.currentGbuffer, drawBuffers);
-        blendState.apply(drawBuffers);
+        int[] sanitizedDrawBuffers = DrawBuffers.sanitize(drawBuffers, GBUFFER_ATTACHMENT_LIMIT);
+        drawGbufferBuffers(this.currentGbuffer, sanitizedDrawBuffers);
+        blendState.apply(sanitizedDrawBuffers);
     }
 
     /**
@@ -1269,7 +1268,6 @@ public class IrisRenderingPipeline {
             if (probeThisFrame) {
                 LOGGER.info("[Iris] Flicker probe {} entering deferred chain: passCount={} gl={}",
                         probeSuffix, this.deferredPasses.size(), currentGlSummary());
-                dumpFlickerProbeTargets(probeSuffix, "pre_deferred");
             }
             GlStateManager.disableBlend();
             GlStateManager.disableDepth();
@@ -1289,10 +1287,6 @@ public class IrisRenderingPipeline {
                     logPassProbe(probeSuffix, pass, "after-deferred");
                 }
             }
-            if (probeThisFrame) {
-                dumpFlickerProbeTargets(probeSuffix, "post_deferred");
-            }
-
             LWJGL.glUseProgram(0);
             restoreTextureUnits();
             GlStateManager.enableDepth();
@@ -1345,10 +1339,6 @@ public class IrisRenderingPipeline {
         boolean probeThisFrame = probeSuffix != null;
         if (probeThisFrame) {
             logFlickerProbeFrame(probeSuffix);
-            dumpFlickerProbeTargets(probeSuffix, "pre_composite");
-            if (this.debugProbeFrameIndex == 1) {
-                dumpFlickerProbeExtras(probeSuffix);
-            }
         }
 
         for (FullscreenPass pass : this.passes) {
@@ -1359,10 +1349,6 @@ public class IrisRenderingPipeline {
             if (probeThisFrame) {
                 logPassProbe(probeSuffix, pass, "after");
             }
-        }
-
-        if (probeThisFrame) {
-            dumpFlickerProbeTargets(probeSuffix, "post_composite");
         }
 
         if (this.blitSourceFramebuffer != null) {
@@ -1393,10 +1379,6 @@ public class IrisRenderingPipeline {
         if (!this.swapPasses.isEmpty()) {
             LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
         }
-        if (probeThisFrame) {
-            dumpFlickerProbeTargets(probeSuffix, "post_swap");
-        }
-
         // Hand control back to vanilla: its framebuffer bound, no program/VAO, texture units cleaned up.
         LWJGL.glUseProgram(0);
         bindMainRenderTarget(mc);
@@ -1459,45 +1441,6 @@ public class IrisRenderingPipeline {
                 + ", tex2d=" + LWJGL.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
     }
 
-    private void dumpFlickerProbeTargets(String suffix, String stage) {
-        int width = this.renderTargets.getWidth();
-        int height = this.renderTargets.getHeight();
-        for (int index : FLICKER_PROBE_TARGETS) {
-            IrisRenderTarget target = this.renderTargets.get(index);
-            if (target == null) {
-                LOGGER.info("[Iris] Flicker probe {} {}: colortex{} was not materialized", suffix, stage, index);
-                continue;
-            }
-            LOGGER.info("[Iris] Flicker probe {} {}: dumping colortex{} mainTex={} altTex={} clear={} gbufferAttachment={}",
-                    suffix, stage, index, target.getMainTexture(), target.getAltTexture(),
-                    this.colorBufferClears[index], isGbufferAttachment(index));
-            IrisDebugDump.dumpColorTexture("probe" + suffix + "_" + stage + "_colortex" + index + "_main",
-                    target.getMainTexture(), width, height);
-            IrisDebugDump.dumpColorTexture("probe" + suffix + "_" + stage + "_colortex" + index + "_alt",
-                    target.getAltTexture(), width, height);
-        }
-    }
-
-    private void dumpFlickerProbeExtras(String suffix) {
-        int width = this.renderTargets.getWidth();
-        int height = this.renderTargets.getHeight();
-        IrisDebugDump.dumpDepthTexture("probe" + suffix + "_depthtex0",
-                this.renderTargets.getDepthTexture().getTextureId(), width, height);
-        IrisDebugDump.dumpDepthTexture("probe" + suffix + "_depthtex1",
-                this.renderTargets.getDepthTextureNoTranslucents().getTextureId(), width, height);
-        IrisDebugDump.dumpDepthTexture("probe" + suffix + "_depthtex2",
-                this.renderTargets.getDepthTextureNoHand().getTextureId(), width, height);
-        if (this.shadowRenderer != null) {
-            int resolution = this.shadowRenderer.getResolution();
-            IrisDebugDump.dumpDepthTexture("probe" + suffix + "_shadowtex0",
-                    this.shadowRenderer.getDepthTextureId(), resolution, resolution);
-            IrisDebugDump.dumpColorTexture("probe" + suffix + "_shadowcolor0",
-                    this.shadowRenderer.getColorTextureId(), resolution, resolution);
-        }
-        IrisDebugDump.dumpColorTexture("probe" + suffix + "_noisetex", this.noiseTexture.getTextureId(),
-                NoiseTexture.DEFAULT_RESOLUTION, NoiseTexture.DEFAULT_RESOLUTION);
-    }
-
     public boolean isWorldRenderingActive() {
         return this.worldRenderingActive;
     }
@@ -1508,8 +1451,8 @@ public class IrisRenderingPipeline {
 
     /**
      * Compiles the pack's shadowcomp compute passes ({@code .csh}, Iris extension — Complementary's floodfill light
-     * propagation). The dispatch size is the first 3D custom image's dimensions divided by the shader's declared
-     * {@code local_size} (exactly the {@code const ivec3 workGroups} Complementary declares per volume size).
+     * propagation). Iris dispatches compute programs with the pack-declared {@code workGroups}; only fall back to the
+     * custom-image volume size when the declaration is absent.
      */
     private void buildComputePasses(ShaderPack pack) {
         int[] volume = this.customImageManager.getFirst3DImageSize();
@@ -1523,11 +1466,34 @@ public class IrisRenderingPipeline {
                 String csh = org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(
                         source.get().getComputeSource().get(),
                         org.taumc.celeritas.iris.gl.shader.ShaderMacros.standard());
+                csh = stabilizeColoredLightingSource(name, csh);
                 IrisDebugDump.dumpText("src_" + name + ".csh", csh);
                 int[] localSize = parseLocalSize(csh);
-                if (volume == null || localSize == null) {
-                    LOGGER.warn("[Iris] Compute pass '{}' skipped (no 3D custom image / local_size declaration)", name);
-                    continue;
+                int[] fallbackWorkGroups = (volume != null && localSize != null)
+                        ? new int[]{
+                                ceilDiv(volume[0], localSize[0]),
+                                ceilDiv(volume[1], localSize[1]),
+                                ceilDiv(volume[2], localSize[2])
+                        }
+                        : null;
+                int[] workGroups = parseWorkGroups(csh);
+                if (workGroups != null && fallbackWorkGroups != null
+                        && !coversVolume(workGroups, localSize, volume)) {
+                    LOGGER.warn("[Iris] Compute pass '{}' declared dispatch {}x{}x{} does not cover custom image volume {}x{}x{} with local {}x{}x{}; using {}x{}x{}",
+                            name,
+                            workGroups[0], workGroups[1], workGroups[2],
+                            volume[0], volume[1], volume[2],
+                            localSize[0], localSize[1], localSize[2],
+                            fallbackWorkGroups[0], fallbackWorkGroups[1], fallbackWorkGroups[2]);
+                    workGroups = fallbackWorkGroups;
+                }
+                if (workGroups == null) {
+                    if (fallbackWorkGroups == null) {
+                        LOGGER.warn("[Iris] Compute pass '{}' skipped (no workGroups declaration and no 3D custom image/local_size fallback)",
+                                name);
+                        continue;
+                    }
+                    workGroups = fallbackWorkGroups;
                 }
                 GlShader shader = new GlShader(ShaderType.COMPUTE, name + ".csh", csh);
                 GlProgram program;
@@ -1543,23 +1509,117 @@ public class IrisRenderingPipeline {
                 ProgramUniforms.Builder uniforms = ProgramUniforms.builder(name, program.getGlId());
                 CommonUniforms.addCommonUniforms(uniforms);
                 MatrixUniforms.addMatrixUniforms(uniforms);
-                int groupsX = Math.max(1, volume[0] / localSize[0]);
-                int groupsY = Math.max(1, volume[1] / localSize[1]);
-                int groupsZ = Math.max(1, volume[2] / localSize[2]);
                 this.computePasses.add(new ComputePass(name, program, uniforms.buildUniforms(),
-                        groupsX, groupsY, groupsZ));
-                LOGGER.info("[Iris] Compute pass '{}' ready: dispatch {}x{}x{} (local {}x{}x{})",
-                        name, groupsX, groupsY, groupsZ, localSize[0], localSize[1], localSize[2]);
+                        workGroups[0], workGroups[1], workGroups[2]));
+                LOGGER.info("[Iris] Compute pass '{}' ready: dispatch {}x{}x{}{}",
+                        name, workGroups[0], workGroups[1], workGroups[2],
+                        localSize == null ? "" : " (local " + localSize[0] + "x" + localSize[1] + "x" + localSize[2] + ")");
             } catch (Exception e) {
                 LOGGER.error("[Iris] Failed to build compute pass '{}'; it will be skipped: {}", name, e.getMessage());
             }
         }
     }
 
+    public static String stabilizeColoredLightingSource(String name, String source) {
+        if (!isColoredLightingFloodfillSource(source)) {
+            return source;
+        }
+
+        source = stabilizeColoredLightingVolumeRead(name, source);
+        if (!isColoredLightingFloodfillCompute(source)) {
+            return source;
+        }
+
+        Matcher halfRateDefine = COLORED_LIGHT_HALF_RATE_DEFINE.matcher(source);
+        if (!halfRateDefine.find()) {
+            return source;
+        }
+
+        LOGGER.warn("[Iris] Compute pass '{}' uses colored-light floodfill; disabling half-rate spreading to prevent frame-parity pulsing",
+                name);
+        return halfRateDefine.replaceAll(Matcher.quoteReplacement(
+                "// #define OPTIMIZATION_ACT_HALF_RATE_SPREADING // disabled: full-rate colored-light floodfill"));
+    }
+
+    private static String stabilizeColoredLightingVolumeRead(String name, String source) {
+        Matcher parityRead = COLORED_LIGHT_VOLUME_PARITY_READ.matcher(source);
+        if (!parityRead.find()) {
+            return source;
+        }
+
+        LOGGER.warn("[Iris] Program '{}' samples colored-light floodfill by frame parity; blending both history volumes to prevent pulsing",
+                name);
+        return parityRead.replaceAll(Matcher.quoteReplacement(
+                "lightVolume = 0.5 * (GetComplexLightVolume(pos, floodfill_sampler_copy) + GetComplexLightVolume(pos, floodfill_sampler));"));
+    }
+
+    private static boolean isColoredLightingFloodfillCompute(String source) {
+        return source.contains("floodfill_img")
+                && source.contains("floodfill_img_copy")
+                && isColoredLightingFloodfillSource(source);
+    }
+
+    private static boolean isColoredLightingFloodfillSource(String source) {
+        return source.contains("floodfill_sampler")
+                && source.contains("floodfill_sampler_copy")
+                && source.contains("framemod2");
+    }
+
+    private static int[] parseWorkGroups(String source) {
+        String active = preprocessActiveShaderSource(source);
+        int[] workGroups = parseWorkGroupsDirect(active);
+        return workGroups != null ? workGroups : parseWorkGroupsDirect(source);
+    }
+
+    private static String preprocessActiveShaderSource(String source) {
+        try {
+            return org.taumc.celeritas.iris.shaderpack.preprocessor.PropertiesPreprocessor.preprocess(
+                    source, org.taumc.celeritas.iris.gl.shader.ShaderMacros.standard());
+        } catch (RuntimeException e) {
+            return source;
+        }
+    }
+
+    private static int[] parseWorkGroupsDirect(String source) {
+        String stripped = stripGlslComments(source);
+        Matcher vector = Pattern.compile(
+                "const\\s+(?:u?ivec|vec)([234])\\s+workGroups\\s*=\\s*(?:u?ivec|vec)\\d\\s*\\(([^)]*)\\)")
+                .matcher(stripped);
+        if (vector.find()) {
+            int dimensions = Integer.parseInt(vector.group(1));
+            String[] values = vector.group(2).split(",");
+            if (values.length == dimensions || values.length == 1) {
+                int[] groups = {1, 1, 1};
+                for (int i = 0; i < Math.min(3, dimensions); i++) {
+                    Integer value = parsePositiveInt(values.length == 1 ? values[0] : values[i]);
+                    if (value == null) {
+                        return null;
+                    }
+                    groups[i] = value;
+                }
+                return groups;
+            }
+        }
+
+        int x = parseNamedWorkGroup(stripped, "X");
+        int y = parseNamedWorkGroup(stripped, "Y");
+        int z = parseNamedWorkGroup(stripped, "Z");
+        if (x > 0 || y > 0 || z > 0) {
+            return new int[]{Math.max(1, x), Math.max(1, y), Math.max(1, z)};
+        }
+        return null;
+    }
+
+    private static boolean coversVolume(int[] workGroups, int[] localSize, int[] volume) {
+        return workGroups[0] * localSize[0] >= volume[0]
+                && workGroups[1] * localSize[1] >= volume[1]
+                && workGroups[2] * localSize[2] >= volume[2];
+    }
+
     private static int[] parseLocalSize(String source) {
         Matcher matcher = Pattern.compile(
                 "local_size_x\\s*=\\s*(\\d+)(?:\\s*,\\s*local_size_y\\s*=\\s*(\\d+))?(?:\\s*,\\s*local_size_z\\s*=\\s*(\\d+))?")
-                .matcher(source);
+                .matcher(stripGlslComments(source));
         if (!matcher.find()) {
             return null;
         }
@@ -1567,6 +1627,29 @@ public class IrisRenderingPipeline {
         int y = matcher.group(2) != null ? Integer.parseInt(matcher.group(2)) : 1;
         int z = matcher.group(3) != null ? Integer.parseInt(matcher.group(3)) : 1;
         return new int[]{x, y, z};
+    }
+
+    private static int parseNamedWorkGroup(String source, String axis) {
+        Matcher matcher = Pattern.compile("const\\s+int\\s+workGroups" + axis + "\\s*=\\s*(\\d+)\\s*;")
+                .matcher(source);
+        return matcher.find() ? Integer.parseInt(matcher.group(1)) : 0;
+    }
+
+    private static Integer parsePositiveInt(String raw) {
+        try {
+            int value = Integer.parseInt(raw.trim());
+            return value > 0 ? value : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static int ceilDiv(int value, int divisor) {
+        return Math.max(1, (value + divisor - 1) / divisor);
+    }
+
+    private static String stripGlslComments(String source) {
+        return source.replaceAll("(?s)/\\*.*?\\*/", "").replaceAll("(?m)//.*$", "");
     }
 
     /**

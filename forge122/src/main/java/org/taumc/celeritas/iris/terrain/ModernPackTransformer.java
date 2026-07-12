@@ -4,7 +4,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * A deliberately minimal transform for <em>modern</em> shader packs (Complementary, BSL, …) — the ones written as
+ * Shader-stage normalization for <em>modern</em> shader packs (Complementary, BSL, …) — the ones written as
  * {@code #version 130+} single-source files that are compiled as both stages, selected by {@code #define VERTEX_SHADER}
  * / {@code #define FRAGMENT_SHADER} in the {@code .vsh}/{@code .fsh} entry points and gated with
  * {@code #ifdef VERTEX_SHADER}/{@code FRAGMENT_SHADER}.
@@ -18,9 +18,8 @@ import java.util.regex.Pattern;
  * every legacy feature while allowing the modern intrinsics — {@code texelFetch}, {@code textureLod}, … — these packs
  * also use), and leave the (already include-flattened) body exactly as the pack author wrote it.
  * <p>
- * <b>Phase 1 of the modern-pack port.</b> This gets the fullscreen passes (composite/deferred/final) to preprocess and
- * compile against the pack's own option defaults; the option-override menu, the Embeddium terrain vertex bridge, and
- * the extra uniforms are later phases.
+ * The draw-buffer routing and fragment output locations are handled outside this class so every terrain and fullscreen
+ * path uses the same Iris-style target mapping.
  */
 public final class ModernPackTransformer {
     private static final Pattern VERSION = Pattern.compile("(?m)^\\s*#version\\s+(\\d+)(?:\\s+\\w+)?\\s*$");

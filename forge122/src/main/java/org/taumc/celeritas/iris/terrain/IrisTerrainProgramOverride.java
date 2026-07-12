@@ -100,19 +100,23 @@ public final class IrisTerrainProgramOverride {
                 return null;
             }
 
-            // Modern (#version 130+) dual-stage packs (Complementary) get the minimal-surgery bridge; the GLSL-120
-            // Chocapic family (LIGHT) keeps the full rewrite.
+            // Modern (#version 130+) dual-stage packs (Complementary) use the compatibility stage normalizer; the
+            // GLSL-120 Chocapic family (LIGHT) keeps the full rewrite.
             boolean modern = ModernPackTransformer.isModernSource(fshSource);
+            Map<String, String> macros = org.taumc.celeritas.iris.gl.shader.ShaderMacros.standard();
+            int[] drawBuffers = IrisRenderingPipeline.sanitizeDrawBuffers(
+                    programId.getSourceName(), DrawBuffers.parseActive(fshSource, macros));
             String vsh = modern
                     ? EmbeddiumTerrainTransformer.transformVertexShaderModern(
-                            org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(vshSource,
-                                    org.taumc.celeritas.iris.gl.shader.ShaderMacros.standard()))
+                            IrisRenderingPipeline.stabilizeColoredLightingSource(programId.getSourceName(),
+                                    org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(vshSource, macros)))
                     : EmbeddiumTerrainTransformer.transformVertexShader(vshSource);
             String fsh = modern
                     ? EmbeddiumTerrainTransformer.transformFragmentShaderModern(
-                            org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(fshSource,
-                                    org.taumc.celeritas.iris.gl.shader.ShaderMacros.standard()))
-                    : EmbeddiumTerrainTransformer.transformFragmentShader(fshSource);
+                            IrisRenderingPipeline.stabilizeColoredLightingSource(programId.getSourceName(),
+                                    org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(fshSource, macros)),
+                            drawBuffers)
+                    : EmbeddiumTerrainTransformer.transformFragmentShader(fshSource, drawBuffers);
             org.taumc.celeritas.iris.pipeline.IrisDebugDump.dumpText(
                     "src_" + programId.getSourceName() + ".vsh", vsh);
             org.taumc.celeritas.iris.pipeline.IrisDebugDump.dumpText(
@@ -127,11 +131,6 @@ public final class IrisTerrainProgramOverride {
             for (var attribute : options.pass().vertexType().getVertexFormat().getAttributes()) {
                 builder.bindAttribute(attribute.getName(), index++);
             }
-            // Pin the fragment output array to location 0 so iris_FragData[k] maps to draw-buffer slot k — i.e. the
-            // k-th digit of the pack's DRAWBUFFERS directive, which is how the gbuffer FBO orders its attachments.
-            builder.bindFragmentData("iris_FragData", 0);
-            int[] drawBuffers = IrisRenderingPipeline.sanitizeDrawBuffers(
-                    programId.getSourceName(), DrawBuffers.parseActive(fshSource));
             LOGGER.info("[Iris] {} resolved DRAWBUFFERS {}", programId.getSourceName(),
                     Arrays.toString(drawBuffers));
             ProgramBlendState blendState = ProgramBlendState.from(pack.getProperties(), source.getName());

@@ -194,11 +194,17 @@ public final class PropertiesPreprocessor {
     private static final class ExpressionParser {
         private final String text;
         private final Map<String, String> defines;
+        private final int defineDepth;
         private int pos;
 
         ExpressionParser(String text, Map<String, String> defines) {
+            this(text, defines, 0);
+        }
+
+        private ExpressionParser(String text, Map<String, String> defines, int defineDepth) {
             this.text = text;
             this.defines = defines;
+            this.defineDepth = defineDepth;
         }
 
         long parse() {
@@ -353,17 +359,26 @@ public final class PropertiesPreprocessor {
                     }
                     return this.defines.containsKey(ident) ? 1 : 0;
                 }
-                String value = this.defines.get(name);
-                if (value == null || value.isEmpty()) {
-                    return 0;
-                }
+                return resolveDefine(name);
+            }
+            throw new IllegalArgumentException("Unexpected character '" + c + "'");
+        }
+
+        private long resolveDefine(String name) {
+            String value = this.defines.get(name);
+            if (value == null || value.isEmpty() || this.defineDepth >= 8) {
+                return 0;
+            }
+            String trimmed = value.trim();
+            try {
+                return Long.decode(trimmed);
+            } catch (NumberFormatException ignored) {
                 try {
-                    return Long.decode(value.trim());
-                } catch (NumberFormatException e) {
+                    return new ExpressionParser(trimmed, this.defines, this.defineDepth + 1).parse();
+                } catch (IllegalArgumentException e) {
                     return 0;
                 }
             }
-            throw new IllegalArgumentException("Unexpected character '" + c + "'");
         }
 
         /** Consumes the operator if present. Guards {@code <}/{@code >} against their {@code <=}/{@code >=} forms. */

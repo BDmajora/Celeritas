@@ -11,7 +11,7 @@ public class IrisProgram {
 
     public IrisProgram(GlProgram program, int[] drawBuffers) {
         this.program = program;
-        this.drawBuffers = drawBuffers;
+        this.drawBuffers = drawBuffers == null ? DrawBuffers.DEFAULT.clone() : drawBuffers.clone();
     }
 
     public GlProgram getProgram() {
@@ -19,7 +19,7 @@ public class IrisProgram {
     }
 
     public int[] getDrawBuffers() {
-        return this.drawBuffers;
+        return this.drawBuffers.clone();
     }
 
     public void bind() {

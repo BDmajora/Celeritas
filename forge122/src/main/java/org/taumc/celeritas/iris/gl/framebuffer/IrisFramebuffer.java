@@ -22,6 +22,8 @@ import static org.taumc.celeritas.lwjgl.LWJGLServiceProvider.LWJGL;
  */
 public class IrisFramebuffer extends GlResource {
     private final Map<Integer, Integer> colorAttachments = new HashMap<>();
+    private final Map<Integer, Integer> logicalAttachmentPoints = new HashMap<>();
+    private final Map<Integer, Integer> attachmentLogicalIndices = new HashMap<>();
     private final int maxDrawBuffers;
     private final int maxColorAttachments;
     private boolean hasDepthAttachment;
@@ -49,10 +51,26 @@ public class IrisFramebuffer extends GlResource {
     }
 
     public void addColorAttachment(int logicalIndex, int attachmentIndex, int texture) {
+        if (logicalIndex < 0) {
+            throw new IllegalArgumentException("Logical color attachment index must be non-negative: " + logicalIndex);
+        }
+        validateColorAttachmentIndex(attachmentIndex);
+        Integer previousAttachment = this.logicalAttachmentPoints.get(logicalIndex);
+        if (previousAttachment != null && previousAttachment != attachmentIndex) {
+            throw new IllegalArgumentException("Logical color attachment index " + logicalIndex
+                    + " is already bound to physical attachment " + previousAttachment);
+        }
+        Integer previousLogical = this.attachmentLogicalIndices.get(attachmentIndex);
+        if (previousLogical != null && previousLogical != logicalIndex) {
+            throw new IllegalArgumentException("Physical color attachment " + attachmentIndex
+                    + " is already bound to logical colortex" + previousLogical);
+        }
         bind();
         LWJGL.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0 + attachmentIndex,
                 GL11.GL_TEXTURE_2D, texture, 0);
         this.colorAttachments.put(logicalIndex, texture);
+        this.logicalAttachmentPoints.put(logicalIndex, attachmentIndex);
+        this.attachmentLogicalIndices.put(attachmentIndex, logicalIndex);
     }
 
     public void addDepthAttachment(int texture) {
@@ -66,8 +84,14 @@ public class IrisFramebuffer extends GlResource {
         LWJGL.glDrawBuffers(GL11.GL_NONE);
     }
 
-    /** Sets the draw-buffer mask from a list of color attachment indices (translated to {@code GL_COLOR_ATTACHMENTn}). */
+    /**
+     * Sets the draw-buffer mask from color attachment indices. A negative entry disables that output slot with
+     * {@code GL_NONE}, preserving the shader's dense slot numbering when an optional target is unavailable.
+     */
     public void drawBuffers(int[] colorIndices) {
+        if (colorIndices == null) {
+            colorIndices = new int[0];
+        }
         if (colorIndices.length > this.maxDrawBuffers) {
             throw new IllegalArgumentException("Cannot write to more than " + this.maxDrawBuffers + " draw buffers on this GPU");
         }
@@ -78,11 +102,19 @@ public class IrisFramebuffer extends GlResource {
         }
         try (MemoryStack stack = LWJGL.stackPush()) {
             IntBuffer buffer = stack.mallocInt(colorIndices.length);
+            boolean[] seen = new boolean[this.maxColorAttachments];
             for (int colorIndex : colorIndices) {
-                if (colorIndex >= this.maxColorAttachments) {
-                    throw new IllegalArgumentException("Color attachment index " + colorIndex
-                            + " exceeds GPU limit of " + this.maxColorAttachments);
+                if (colorIndex < 0) {
+                    buffer.put(GL11.GL_NONE);
+                    continue;
                 }
+                validateColorAttachmentIndex(colorIndex);
+                if (seen[colorIndex]) {
+                    throw new IllegalArgumentException("Color attachment index " + colorIndex
+                            + " appears more than once in one draw-buffer mask");
+                }
+                seen[colorIndex] = true;
+                validateAttachedColorAttachmentIndex(colorIndex);
                 buffer.put(GL30.GL_COLOR_ATTACHMENT0 + colorIndex);
             }
             buffer.flip();
@@ -91,8 +123,26 @@ public class IrisFramebuffer extends GlResource {
     }
 
     public void readBuffer(int colorIndex) {
+        validateColorAttachmentIndex(colorIndex);
+        validateAttachedColorAttachmentIndex(colorIndex);
         bind();
         LWJGL.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0 + colorIndex);
+    }
+
+    private void validateColorAttachmentIndex(int colorIndex) {
+        if (colorIndex < 0) {
+            throw new IllegalArgumentException("Color attachment index must be non-negative: " + colorIndex);
+        }
+        if (colorIndex >= this.maxColorAttachments) {
+            throw new IllegalArgumentException("Color attachment index " + colorIndex
+                    + " exceeds GPU limit of " + this.maxColorAttachments);
+        }
+    }
+
+    private void validateAttachedColorAttachmentIndex(int colorIndex) {
+        if (!this.attachmentLogicalIndices.containsKey(colorIndex)) {
+            throw new IllegalArgumentException("No color texture is attached to physical color attachment " + colorIndex);
+        }
     }
 
     public int getColorAttachment(int index) {

@@ -23,8 +23,8 @@ import static org.taumc.celeritas.lwjgl.LWJGLServiceProvider.LWJGL;
  * bound READ_WRITE every frame) and its paired sampler name a dedicated texture unit, so programs address both by
  * plain {@code glUniform1i} like every other sampler in this pipeline.
  * <p>
- * Images with {@code clear = true} are zeroed at the start of each frame via {@code glClearTexImage} (GL 4.4).
- * Integer formats sample NEAREST (required); float formats LINEAR. All clamp to edge.
+ * Image contents persist exactly as the shaderpack declares. Complementary's colored-lighting floodfill ping-pongs
+ * through 3D images, so forcing extra clears destroys the history buffer every other frame.
  */
 public class CustomImageManager {
     private static final Logger LOGGER = LogManager.getLogger("Celeritas/Iris");
@@ -34,6 +34,13 @@ public class CustomImageManager {
     private static final int GL_TEXTURE_MAX_LOD = 0x813B;
     private static final int GL_TEXTURE_MAX_LEVEL = 0x813D;
     private static final int GL_TEXTURE_LOD_BIAS = 0x8501;
+    private static final int GL_TEXTURE_FETCH_BARRIER_BIT = 0x00000008;
+    private static final int GL_SHADER_IMAGE_ACCESS_BARRIER_BIT = 0x00000020;
+    private static final int GL_TEXTURE_UPDATE_BARRIER_BIT = 0x00000100;
+    private static final int CLEAR_VISIBILITY_BARRIERS =
+            GL_TEXTURE_UPDATE_BARRIER_BIT
+                    | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT
+                    | GL_TEXTURE_FETCH_BARRIER_BIT;
 
     private static final class Image {
         final CustomImageDefinition definition;
@@ -194,12 +201,17 @@ public class CustomImageManager {
         return null;
     }
 
-    /** Zeroes every {@code clear = true} image (start of frame). */
+    /** Start-of-frame reset for the shaderpack-declared clearable images. */
     public void clearAll() {
+        boolean cleared = false;
         for (Image image : this.images) {
             if (image.definition.clear) {
                 clearTexture(image.texture, image.glFormat, image.glPixelType);
+                cleared = true;
             }
+        }
+        if (cleared) {
+            LWJGL.glMemoryBarrier(CLEAR_VISIBILITY_BARRIERS);
         }
     }
 
@@ -211,8 +223,9 @@ public class CustomImageManager {
     /** Binds every image on its image unit (READ_WRITE) and its texture on the paired sampler unit. */
     public void bindAll() {
         for (Image image : this.images) {
-            LWJGL.glBindImageTexture(image.imageUnit, image.texture, 0, true, 0,
-                    GL15.GL_READ_WRITE, image.glInternalFormat);
+            // Iris binds custom images as layered for every texture target.
+            LWJGL.glBindImageTexture(image.imageUnit, image.texture, 0, true, 0, GL15.GL_READ_WRITE,
+                    image.glInternalFormat);
             if (image.samplerUnit >= 0) {
                 LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + image.samplerUnit);
                 LWJGL.glBindTexture(image.target, image.texture);
