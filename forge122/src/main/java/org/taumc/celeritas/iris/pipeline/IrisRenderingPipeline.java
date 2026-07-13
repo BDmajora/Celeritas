@@ -103,8 +103,10 @@ public class IrisRenderingPipeline {
     private static final int[] FIXED_FUNCTION_MASK = {0};
     private static final int FLICKER_PROBE_DELAY_FRAMES =
             Math.max(0, Integer.getInteger("celeritas.iris.flickerProbeDelayFrames", 120));
+    // Default 0: the probes (volume readbacks + screen readback) stall the pipeline for a frame per burst. Set
+    // -Dceleritas.iris.flickerProbeFrames=12 to re-enable the recurring diagnostic bursts.
     private static final int FLICKER_PROBE_FRAMES =
-            Math.max(0, Integer.getInteger("celeritas.iris.flickerProbeFrames", 12));
+            Math.max(0, Integer.getInteger("celeritas.iris.flickerProbeFrames", 0));
     private static final int GL_CURRENT_PROGRAM = 0x8B8D;
     private static final int GL_FRAMEBUFFER_BINDING = 0x8CA6;
     private static final int GL_READ_FRAMEBUFFER_BINDING = 0x8CAA;
@@ -1621,8 +1623,16 @@ public class IrisRenderingPipeline {
     /** A/B switch: single-volume reader sampling (see {@link #stabilizeColoredLightingSource}). */
     private static final boolean ACL_SINGLE_VOLUME_READ =
             Boolean.parseBoolean(System.getProperty("celeritas.iris.aclSingleVolumeRead", "true"));
-    private static final Pattern TEMPORAL_DITHER_OFFSET = Pattern.compile(
-            "dither\\s*=\\s*fract\\(dither\\s*\\+\\s*goldenRatio\\s*\\*\\s*mod\\(float\\(frameCounter\\),\\s*3600\\.0\\)\\);");
+    /** {@code X = fract(X + goldenRatio * mod(float(frameCounter), 3600.0));} — the pack's standard per-frame
+     *  dither re-roll (fog march, SSAO, reflections, shadow-filter rotation, ...). */
+    private static final Pattern TEMPORAL_DITHER_ASSIGN = Pattern.compile(
+            "(\\w+)\\s*=\\s*fract\\(\\1\\s*\\+\\s*goldenRatio\\s*\\*\\s*mod\\(float\\(frameCounter\\),\\s*3600\\.0\\)\\);");
+    /** {@code return fract(n + goldenRatio * ...);} — same idiom as a return (shadow sampling, clouds). */
+    private static final Pattern TEMPORAL_DITHER_RETURN = Pattern.compile(
+            "return\\s+fract\\((\\w+)\\s*\\+\\s*goldenRatio\\s*\\*\\s*mod\\(float\\(frameCounter\\),\\s*3600\\.0\\)\\);");
+    /** {@code fract(dither + frameCounter * 0.618)} — deferred1's WSR reflection-march re-roll. */
+    private static final Pattern TEMPORAL_DITHER_WSR = Pattern.compile(
+            "fract\\((\\w+)\\s*\\+\\s*frameCounter\\s*\\*\\s*0\\.618\\)");
     private static final boolean ACL_PIN_FOG_DITHER =
             Boolean.parseBoolean(System.getProperty("celeritas.iris.aclPinFogDither", "true"));
 
@@ -1659,19 +1669,32 @@ public class IrisRenderingPipeline {
                         "lightVolume = GetComplexLightVolume(pos, floodfill_sampler);"));
             }
         }
-        // THE measured flicker mechanism (screen probe: aperiodic per-frame deltas, ACL-only): the colored-light
-        // fog pass ray-marches the light volume with a dither that is RE-ROLLED EVERY FRAME under `#ifdef TAA`
-        // (goldenRatio * frameCounter), and even adds `(dither-0.5)*0.02` straight into the fog output — noise the
-        // pack expects TAA accumulation to average away. Until our TAA converges that well, pin the temporal
-        // offset in the fog-bearing program: the blue-noise stays spatial-only, so the fog is stable instead of
-        // strobing. Applied only where GetColoredLightFog lives (composite1), never the compute.
-        if (ACL_PIN_FOG_DITHER && source.contains("GetColoredLightFog")) {
-            Matcher temporalDither = TEMPORAL_DITHER_OFFSET.matcher(source);
-            if (temporalDither.find()) {
-                LOGGER.info("[Iris] Program '{}': pinning colored-light fog dither (temporal re-roll disabled; TAA does not converge it here)",
-                        name);
-                source = temporalDither.replaceAll(
-                        "/* dither temporal re-roll pinned by Celeritas (ACL fog strobe) */;");
+        // THE measured flicker mechanism (screen probe: aperiodic per-frame deltas): the pack RE-ROLLS its dither
+        // EVERY FRAME under `#ifdef TAA` — the colored-light fog march, SSAO, block reflections (a second idiom:
+        // `frameCounter * 0.618` in deferred1's WSR march), shadow-filter rotation, cloud dithering — and even adds
+        // `(dither-0.5)*0.02` straight into the fog output. All of it is noise the pack expects TAA accumulation to
+        // average away; until our TAA converges that well, pin every temporal re-roll so the blue-noise stays
+        // spatial-only. Stable image, static (invisible) dither patterns instead of strobing. Never the compute.
+        if (ACL_PIN_FOG_DITHER && !source.contains("gl_GlobalInvocationID")) {
+            int pinned = 0;
+            Matcher assign = TEMPORAL_DITHER_ASSIGN.matcher(source);
+            if (assign.find()) {
+                source = assign.replaceAll("/* dither re-roll pinned (Celeritas) */;");
+                pinned++;
+            }
+            Matcher returned = TEMPORAL_DITHER_RETURN.matcher(source);
+            if (returned.find()) {
+                source = returned.replaceAll("return fract($1); /* re-roll pinned (Celeritas) */");
+                pinned++;
+            }
+            Matcher wsr = TEMPORAL_DITHER_WSR.matcher(source);
+            if (wsr.find()) {
+                source = wsr.replaceAll("fract($1) /* re-roll pinned (Celeritas) */");
+                pinned++;
+            }
+            if (pinned > 0) {
+                LOGGER.info("[Iris] Program '{}': pinned {} temporal dither re-roll idiom(s) (TAA does not converge them here)",
+                        name, pinned);
             }
         }
         return source;
