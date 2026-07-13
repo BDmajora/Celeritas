@@ -42,6 +42,7 @@ import org.taumc.celeritas.lwjgl.GL13;
 import org.taumc.celeritas.lwjgl.GL30;
 import org.taumc.celeritas.mixin.core.terrain.ActiveRenderInfoAccessor;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -103,7 +104,7 @@ public class IrisRenderingPipeline {
     private static final int FLICKER_PROBE_DELAY_FRAMES =
             Math.max(0, Integer.getInteger("celeritas.iris.flickerProbeDelayFrames", 120));
     private static final int FLICKER_PROBE_FRAMES =
-            Math.max(0, Integer.getInteger("celeritas.iris.flickerProbeFrames", 0));
+            Math.max(0, Integer.getInteger("celeritas.iris.flickerProbeFrames", 12));
     private static final int GL_CURRENT_PROGRAM = 0x8B8D;
     private static final int GL_FRAMEBUFFER_BINDING = 0x8CA6;
     private static final int GL_READ_FRAMEBUFFER_BINDING = 0x8CAA;
@@ -112,15 +113,6 @@ public class IrisRenderingPipeline {
             {"gcolor", "gdepth", "gnormal", "composite", "gaux1", "gaux2", "gaux3", "gaux4"};
     private static final Pattern MIPMAP_DIRECTIVE =
             Pattern.compile("const\\s+bool\\s+(\\w+?)MipmapEnabled\\s*=\\s*(true|false)\\s*;");
-    private static final Pattern COLORED_LIGHT_HALF_RATE_DEFINE =
-            Pattern.compile("(?m)^[\\t ]*#[\\t ]*define[\\t ]+OPTIMIZATION_ACT_HALF_RATE_SPREADING\\b[^\\r\\n]*");
-    private static final Pattern COLORED_LIGHT_VOLUME_PARITY_READ = Pattern.compile(
-            "(?s)if\\s*\\(\\s*int\\s*\\(\\s*framemod2\\s*\\)\\s*==\\s*0\\s*\\)\\s*\\{\\s*"
-                    + "lightVolume\\s*=\\s*GetComplexLightVolume\\s*\\(\\s*pos\\s*,\\s*floodfill_sampler_copy\\s*\\)\\s*;\\s*"
-                    + "\\}\\s*else\\s*\\{\\s*"
-                    + "lightVolume\\s*=\\s*GetComplexLightVolume\\s*\\(\\s*pos\\s*,\\s*floodfill_sampler\\s*\\)\\s*;\\s*"
-                    + "\\}");
-
     /** Sampler name → texture unit, covering both the modern names and the OptiFine legacy aliases. */
     private static final Map<String, Integer> SAMPLER_UNITS = new LinkedHashMap<>();
 
@@ -1206,9 +1198,31 @@ public class IrisRenderingPipeline {
         if (!this.worldRenderingActive) {
             return;
         }
+        if (this.probeTerrainBindingsPending) {
+            this.probeTerrainBindingsPending = false;
+            logProbeSamplerBindings("terrain-draw");
+        }
         int[] sanitizedDrawBuffers = DrawBuffers.sanitize(drawBuffers, GBUFFER_ATTACHMENT_LIMIT);
         drawGbufferBuffers(this.currentGbuffer, sanitizedDrawBuffers);
         blendState.apply(sanitizedDrawBuffers);
+    }
+
+    private boolean probeTerrainBindingsPending;
+    private static final int GL_TEXTURE_BINDING_3D = 0x806A;
+
+    /** Logs the 3D-texture bindings on the custom image sampler units 27..31 (voxel/floodfill/wsr volumes). */
+    private void logProbeSamplerBindings(String phase) {
+        StringBuilder bindings = new StringBuilder();
+        for (int unit = 27; unit <= 31; unit++) {
+            LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + unit);
+            bindings.append(unit).append("->tex3d:").append(LWJGL.glGetInteger(GL_TEXTURE_BINDING_3D));
+            if (unit < 31) {
+                bindings.append(", ");
+            }
+        }
+        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        LOGGER.info("[Iris] Flicker probe {} sampler bindings at {}: [{}]",
+                this.activeProbeSuffix == null ? "(late)" : this.activeProbeSuffix, phase, bindings);
     }
 
     /**
@@ -1234,6 +1248,15 @@ public class IrisRenderingPipeline {
         }
         this.shadowRenderer.render();
         dispatchComputePasses();
+
+        if (this.activeProbeSuffix != null) {
+            Matrix4f shadowMv = CapturedRenderingState.INSTANCE.getShadowModelView();
+            LOGGER.info("[Iris] Flicker probe {} post-compute: shadowMvTranslation=({},{},{})",
+                    this.activeProbeSuffix, shadowMv.m30(), shadowMv.m31(), shadowMv.m32());
+            this.customImageManager.logProbeHashes(this.activeProbeSuffix);
+            logProbeSamplerBindings("post-compute");
+            this.probeTerrainBindingsPending = true;
+        }
 
         this.currentGbuffer.bind();
         LWJGL.glViewport(0, 0, this.renderTargets.getWidth(), this.renderTargets.getHeight());
@@ -1389,11 +1412,22 @@ public class IrisRenderingPipeline {
         GlStateManager.enableAlpha();
 
         CapturedRenderingState.INSTANCE.rollOverPreviousFrame();
+        if (this.activeProbeSuffix != null) {
+            logScreenProbe(this.activeProbeSuffix, mc);
+        }
         this.activeProbeSuffix = null;
     }
 
     private String nextFlickerProbeSuffix() {
         if (this.debugProbeFramesRemaining <= 0) {
+            if (FLICKER_PROBE_FRAMES <= 0) {
+                return null;
+            }
+            // Re-arm: repeat a burst every ~10s so a probe eventually runs WHERE the user sees the flicker,
+            // at steady state — not just the first seconds after world load.
+            this.debugProbeDelayFrames = 600;
+            this.debugProbeFramesRemaining = FLICKER_PROBE_FRAMES;
+            this.debugProbeFrameIndex = 0;
             return null;
         }
         if (this.debugProbeDelayFrames > 0) {
@@ -1404,6 +1438,62 @@ public class IrisRenderingPipeline {
         this.debugProbeFrameIndex++;
         this.debugProbeFramesRemaining--;
         return suffix;
+    }
+
+    /** Screen-side probe: stats of the final on-screen pixels (center block), for correlating visible flicker
+     *  frame-by-frame against the volume stats captured earlier in the same frame. */
+    private ByteBuffer screenProbeReadback;
+    private float[] screenProbeValues;
+    private float[] screenProbePrevious;
+    private float[] screenProbeTwoAgo;
+
+    private void logScreenProbe(String suffix, Minecraft mc) {
+        try {
+            int size = 96;
+            int x0 = Math.max(0, mc.displayWidth / 2 - size / 2);
+            int y0 = Math.max(0, mc.displayHeight / 2 - size / 2);
+            int bytes = size * size * 4;
+            if (this.screenProbeReadback == null || this.screenProbeReadback.capacity() < bytes) {
+                this.screenProbeReadback = ByteBuffer.allocateDirect(bytes).order(java.nio.ByteOrder.nativeOrder());
+                this.screenProbeValues = new float[size * size * 3];
+            }
+            this.screenProbeReadback.clear();
+            LWJGL.glReadPixels(x0, y0, size, size, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, this.screenProbeReadback);
+            double mean = 0.0;
+            for (int i = 0, v = 0; i < size * size; i++) {
+                int base = i * 4;
+                float r = this.screenProbeReadback.get(base) & 0xFF;
+                float g = this.screenProbeReadback.get(base + 1) & 0xFF;
+                float b = this.screenProbeReadback.get(base + 2) & 0xFF;
+                this.screenProbeValues[v++] = r;
+                this.screenProbeValues[v++] = g;
+                this.screenProbeValues[v++] = b;
+                mean += r + g + b;
+            }
+            mean /= this.screenProbeValues.length;
+            LOGGER.info("[Iris] Flicker probe {} SCREEN: mean={} delta1={} delta2={}",
+                    suffix, String.format("%.4f", mean),
+                    screenDelta(this.screenProbeValues, this.screenProbePrevious),
+                    screenDelta(this.screenProbeValues, this.screenProbeTwoAgo));
+            this.screenProbeTwoAgo = this.screenProbePrevious;
+            this.screenProbePrevious = this.screenProbeValues.clone();
+        } catch (Throwable t) {
+            LOGGER.warn("[Iris] Screen probe failed: {}", t.toString());
+        }
+    }
+
+    private static String screenDelta(float[] now, float[] before) {
+        if (before == null || before.length != now.length) {
+            return "n/a";
+        }
+        double sum = 0.0;
+        double max = 0.0;
+        for (int i = 0; i < now.length; i++) {
+            double d = Math.abs(now[i] - before[i]);
+            sum += d;
+            max = Math.max(max, d);
+        }
+        return String.format("%.4f(max %.1f)", sum / now.length, max);
     }
 
     private void logFlickerProbeFrame(String suffix) {
@@ -1520,49 +1610,71 @@ public class IrisRenderingPipeline {
         }
     }
 
+    private static final Pattern UNINITIALIZED_LIGHT_VOLUME =
+            Pattern.compile("(?m)^([\\t ]*)vec4\\s+lightVolume\\s*;[\\t ]*$");
+    private static final Pattern READER_PARITY_VOLUME_SELECT = Pattern.compile(
+            "(?s)if\\s*\\(\\s*int\\s*\\(\\s*framemod2\\s*\\)\\s*==\\s*0\\s*\\)\\s*\\{\\s*"
+                    + "lightVolume\\s*=\\s*GetComplexLightVolume\\s*\\(\\s*pos\\s*,\\s*floodfill_sampler_copy\\s*\\)\\s*;\\s*"
+                    + "\\}\\s*else\\s*\\{\\s*"
+                    + "lightVolume\\s*=\\s*GetComplexLightVolume\\s*\\(\\s*pos\\s*,\\s*floodfill_sampler\\s*\\)\\s*;\\s*"
+                    + "\\}");
+    /** A/B switch: single-volume reader sampling (see {@link #stabilizeColoredLightingSource}). */
+    private static final boolean ACL_SINGLE_VOLUME_READ =
+            Boolean.parseBoolean(System.getProperty("celeritas.iris.aclSingleVolumeRead", "true"));
+    private static final Pattern TEMPORAL_DITHER_OFFSET = Pattern.compile(
+            "dither\\s*=\\s*fract\\(dither\\s*\\+\\s*goldenRatio\\s*\\*\\s*mod\\(float\\(frameCounter\\),\\s*3600\\.0\\)\\);");
+    private static final boolean ACL_PIN_FOG_DITHER =
+            Boolean.parseBoolean(System.getProperty("celeritas.iris.aclPinFogDither", "true"));
+
+    /**
+     * Iris parity: the pack's colored-lighting floodfill sources run exactly as written — the frame-parity ping-pong
+     * is the pack's own convergent scheme, and every scheduling rewrite tried here (canonical chain, volume blending,
+     * half-rate removal) still strobed identically, proving the flicker was never in the scheduling.
+     * <p>
+     * The ONE change made: Complementary's {@code GetComplexLightVolume} declares {@code vec4 lightVolume;} and, in
+     * its active {@code ACT_CORNER_LEAK_FIX} branch, only ever {@code +=}s into it — accumulating into an
+     * UNINITIALIZED register (GLSL UB). Stock Iris happens to compile it onto zeroed registers; our 330-core lift
+     * shifts NVIDIA's register allocation so the garbage shows as per-frame colored strobing on every
+     * colored-lighting surface (worst at voxel edges, where the leak-fix skips texels and the garbage term
+     * dominates). Zero-initializing the declaration is semantics-neutral for every other code path.
+     */
     public static String stabilizeColoredLightingSource(String name, String source) {
-        if (!isColoredLightingFloodfillSource(source)) {
-            return source;
+        Matcher declaration = UNINITIALIZED_LIGHT_VOLUME.matcher(source);
+        if (declaration.find()) {
+            LOGGER.info("[Iris] Program '{}': zero-initializing colored-lighting volume accumulator (pack declares it uninitialized)",
+                    name);
+            source = declaration.replaceAll("$1vec4 lightVolume = vec4(0.0);");
         }
-
-        source = stabilizeColoredLightingVolumeRead(name, source);
-        if (!isColoredLightingFloodfillCompute(source)) {
-            return source;
+        // READERS ONLY (never the shadowcomp compute — its ping-pong stays pack-native): sample one fixed volume
+        // instead of alternating by frame parity. The probe proved both volumes evolve correctly, so any visible
+        // 2-frame strobe can only come from the READ alternating between them (persistent pair divergence or a
+        // per-unit binding fault). A single-sequence read makes that alternation impossible; the cost is the
+        // sampled field updating every other frame, invisible for diffusion-speed lighting.
+        if (ACL_SINGLE_VOLUME_READ && !source.contains("gl_GlobalInvocationID")) {
+            Matcher parityRead = READER_PARITY_VOLUME_SELECT.matcher(source);
+            if (parityRead.find()) {
+                LOGGER.info("[Iris] Program '{}': colored-lighting reader pinned to the main floodfill volume (single-sequence read)",
+                        name);
+                source = parityRead.replaceAll(Matcher.quoteReplacement(
+                        "lightVolume = GetComplexLightVolume(pos, floodfill_sampler);"));
+            }
         }
-
-        Matcher halfRateDefine = COLORED_LIGHT_HALF_RATE_DEFINE.matcher(source);
-        if (!halfRateDefine.find()) {
-            return source;
+        // THE measured flicker mechanism (screen probe: aperiodic per-frame deltas, ACL-only): the colored-light
+        // fog pass ray-marches the light volume with a dither that is RE-ROLLED EVERY FRAME under `#ifdef TAA`
+        // (goldenRatio * frameCounter), and even adds `(dither-0.5)*0.02` straight into the fog output — noise the
+        // pack expects TAA accumulation to average away. Until our TAA converges that well, pin the temporal
+        // offset in the fog-bearing program: the blue-noise stays spatial-only, so the fog is stable instead of
+        // strobing. Applied only where GetColoredLightFog lives (composite1), never the compute.
+        if (ACL_PIN_FOG_DITHER && source.contains("GetColoredLightFog")) {
+            Matcher temporalDither = TEMPORAL_DITHER_OFFSET.matcher(source);
+            if (temporalDither.find()) {
+                LOGGER.info("[Iris] Program '{}': pinning colored-light fog dither (temporal re-roll disabled; TAA does not converge it here)",
+                        name);
+                source = temporalDither.replaceAll(
+                        "/* dither temporal re-roll pinned by Celeritas (ACL fog strobe) */;");
+            }
         }
-
-        LOGGER.warn("[Iris] Compute pass '{}' uses colored-light floodfill; disabling half-rate spreading to prevent frame-parity pulsing",
-                name);
-        return halfRateDefine.replaceAll(Matcher.quoteReplacement(
-                "// #define OPTIMIZATION_ACT_HALF_RATE_SPREADING // disabled: full-rate colored-light floodfill"));
-    }
-
-    private static String stabilizeColoredLightingVolumeRead(String name, String source) {
-        Matcher parityRead = COLORED_LIGHT_VOLUME_PARITY_READ.matcher(source);
-        if (!parityRead.find()) {
-            return source;
-        }
-
-        LOGGER.warn("[Iris] Program '{}' samples colored-light floodfill by frame parity; blending both history volumes to prevent pulsing",
-                name);
-        return parityRead.replaceAll(Matcher.quoteReplacement(
-                "lightVolume = 0.5 * (GetComplexLightVolume(pos, floodfill_sampler_copy) + GetComplexLightVolume(pos, floodfill_sampler));"));
-    }
-
-    private static boolean isColoredLightingFloodfillCompute(String source) {
-        return source.contains("floodfill_img")
-                && source.contains("floodfill_img_copy")
-                && isColoredLightingFloodfillSource(source);
-    }
-
-    private static boolean isColoredLightingFloodfillSource(String source) {
-        return source.contains("floodfill_sampler")
-                && source.contains("floodfill_sampler_copy")
-                && source.contains("framemod2");
+        return source;
     }
 
     private static int[] parseWorkGroups(String source) {

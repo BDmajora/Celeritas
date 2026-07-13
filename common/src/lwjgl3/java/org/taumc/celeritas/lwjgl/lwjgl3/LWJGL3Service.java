@@ -721,6 +721,11 @@ public record LWJGL3Service(
     }
 
     @Override
+    public void glFramebufferTextureLayer(int target, int attachment, int texture, int level, int layer) {
+        GL30C.glFramebufferTextureLayer(target, attachment, texture, level, layer);
+    }
+
+    @Override
     public void glDrawBuffers(int buf) {
         GL20C.glDrawBuffers(buf);
     }

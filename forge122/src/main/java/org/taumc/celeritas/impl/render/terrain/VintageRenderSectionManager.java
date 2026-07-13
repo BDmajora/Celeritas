@@ -38,9 +38,20 @@ public class VintageRenderSectionManager extends RenderSectionManager {
     private final ClonedChunkSectionCache sectionCache;
 
     public VintageRenderSectionManager(RenderPassConfiguration<?> configuration, WorldClient world, int renderDistance, CommandList commandList, int minSection, int maxSection) {
-        super(configuration, () -> new VintageChunkBuildContext(world, configuration), ChunkRenderer::new, renderDistance, commandList, minSection, maxSection, CeleritasVintage.options().performance.chunkBuilderThreads);
+        super(configuration, () -> new VintageChunkBuildContext(world, configuration), ChunkRenderer::new, renderDistance, commandList, minSection, maxSection, CeleritasVintage.options().performance.chunkBuilderThreads, true);
         this.world = world;
         this.sectionCache = new ClonedChunkSectionCache(world);
+    }
+
+    /**
+     * The Iris shadow pass re-drives this render path from the sun's point of view; routing it onto the dedicated
+     * shadow render lists (instead of the main camera's culled lists) is what lets the shadow pass draw every
+     * section in range regardless of player-view frustum/occlusion culling — the stability requirement behind
+     * Complementary's {@code shadow.culling = reversed} directive.
+     */
+    @Override
+    public boolean isInShadowPass() {
+        return org.taumc.celeritas.iris.pipeline.IrisShadowRenderer.isShadowPass();
     }
 
     public static VintageRenderSectionManager create(ChunkVertexType vertexType, WorldClient world, int renderDistance, CommandList commandList) {
@@ -64,6 +75,12 @@ public class VintageRenderSectionManager extends RenderSectionManager {
 
     @Override
     protected boolean shouldUseOcclusionCulling(Viewport positionedViewport, boolean spectator) {
+        if (isInShadowPass()) {
+            // Voxelization must see a FRAME-STABLE section set: occlusion culling (especially async) lets cave
+            // interiors and other marginal sections blink in and out of the shadow draw, which makes the pack's
+            // colored-lighting floodfill chase a different voxel field every frame (permanent strobing).
+            return false;
+        }
         final boolean useOcclusionCulling;
         var camBlockPos = positionedViewport.getBlockCoord();
         BlockPos origin = new BlockPos(camBlockPos.x(), camBlockPos.y(), camBlockPos.z());

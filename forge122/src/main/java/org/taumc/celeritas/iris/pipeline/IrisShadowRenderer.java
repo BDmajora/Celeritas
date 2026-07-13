@@ -90,6 +90,8 @@ public class IrisShadowRenderer {
 
     private int failureCount;
     private boolean failed;
+    /** Monotonic frame tag for the dedicated shadow render-list graph updates (independent of the main list's). */
+    private int shadowListFrame;
     private boolean destroyed;
 
     private final Matrix4f shadowModelView = new Matrix4f();
@@ -225,6 +227,24 @@ public class IrisShadowRenderer {
             bindBlockAtlas(mc);
 
             Vector3d camera = CapturedRenderingState.INSTANCE.getCameraPosition();
+
+            // Iris `shadow.culling = reversed` parity: build the DEDICATED shadow render list containing every
+            // built section within render distance — no camera frustum, no occlusion culling (isInShadowPass()
+            // routes both this update and the draws below onto the shadow RenderListManager). Reusing the main
+            // pass's culled lists made marginal/occluded sections (cave interiors especially) blink in and out of
+            // the pack's voxelization, so the colored-lighting floodfill chased a different voxel field every
+            // frame and never converged — visible as permanent strobing on every colored-lit surface.
+            RenderDevice.enterManagedCode();
+            try {
+                worldRenderer.setupTerrain(
+                        new org.embeddedt.embeddium.impl.render.viewport.Viewport(
+                                (minX, minY, minZ, maxX, maxY, maxZ) -> true,
+                                new Vector3d(camera.x, camera.y, camera.z)),
+                        CeleritasWorldRenderer.captureCameraState(mc.getRenderPartialTicks()),
+                        ++this.shadowListFrame, false, false);
+            } finally {
+                RenderDevice.exitManagedCode();
+            }
 
             // 1) Solid + cutout terrain (Iris order). Embeddium requires draws inside its managed-device scope.
             RenderDevice.enterManagedCode();

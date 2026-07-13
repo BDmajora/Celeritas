@@ -161,6 +161,9 @@ public interface LWJGLService {
     void glBindFramebuffer(int target, int framebuffer);
     int glCheckFramebufferStatus(int target);
     void glFramebufferTexture2D(int target, int attachment, int textarget, int texture, int level);
+    default void glFramebufferTextureLayer(int target, int attachment, int texture, int level, int layer) {
+        throw new UnsupportedOperationException("Layered framebuffer attachments are not supported");
+    }
     void glDrawBuffers(int buf);
     void glDrawBuffers(IntBuffer bufs);
     void glReadBuffer(int mode);
