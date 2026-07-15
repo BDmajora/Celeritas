@@ -106,7 +106,7 @@ public class IrisRenderingPipeline {
     // Default 0: the probes (volume readbacks + screen readback) stall the pipeline for a frame per burst. Set
     // -Dceleritas.iris.flickerProbeFrames=12 to re-enable the recurring diagnostic bursts.
     private static final int FLICKER_PROBE_FRAMES =
-            Math.max(0, Integer.getInteger("celeritas.iris.flickerProbeFrames", 0));
+            Math.max(0, Integer.getInteger("celeritas.iris.flickerProbeFrames", 12));
     private static final int GL_CURRENT_PROGRAM = 0x8B8D;
     private static final int GL_FRAMEBUFFER_BINDING = 0x8CA6;
     private static final int GL_READ_FRAMEBUFFER_BINDING = 0x8CAA;
@@ -1622,7 +1622,7 @@ public class IrisRenderingPipeline {
                     + "\\}");
     /** A/B switch: single-volume reader sampling (see {@link #stabilizeColoredLightingSource}). */
     private static final boolean ACL_SINGLE_VOLUME_READ =
-            Boolean.parseBoolean(System.getProperty("celeritas.iris.aclSingleVolumeRead", "true"));
+            Boolean.parseBoolean(System.getProperty("celeritas.iris.aclSingleVolumeRead", "false"));
     /** {@code X = fract(X + goldenRatio * mod(float(frameCounter), 3600.0));} — the pack's standard per-frame
      *  dither re-roll (fog march, SSAO, reflections, shadow-filter rotation, ...). */
     private static final Pattern TEMPORAL_DITHER_ASSIGN = Pattern.compile(
@@ -1634,7 +1634,7 @@ public class IrisRenderingPipeline {
     private static final Pattern TEMPORAL_DITHER_WSR = Pattern.compile(
             "fract\\((\\w+)\\s*\\+\\s*frameCounter\\s*\\*\\s*0\\.618\\)");
     private static final boolean ACL_PIN_FOG_DITHER =
-            Boolean.parseBoolean(System.getProperty("celeritas.iris.aclPinFogDither", "true"));
+            Boolean.parseBoolean(System.getProperty("celeritas.iris.aclPinFogDither", "false"));
 
     /**
      * Iris parity: the pack's colored-lighting floodfill sources run exactly as written — the frame-parity ping-pong
