@@ -1,5 +1,6 @@
 package org.taumc.celeritas.iris.gl.program;
 
+import net.minecraft.client.Minecraft;
 import org.joml.Matrix4fc;
 import org.joml.Vector2i;
 import org.joml.Vector3f;
@@ -28,28 +29,57 @@ import static org.taumc.celeritas.lwjgl.LWJGLServiceProvider.LWJGL;
  * <p>
  * Built with {@link Builder}, which resolves each uniform's location at build time and silently drops uniforms the
  * program does not actually declare (OptiFine packs reference far more uniforms than any single program uses).
- * {@link #update()} uploads the {@code ONCE} uniforms on the first frame and everything else every frame; each
- * {@link Uniform} additionally diffs its own value so unchanged uniforms cost nothing on the GL side.
+ * {@link #update()} mirrors Iris' cadence: {@code DYNAMIC} uniforms upload on every bind, {@code ONCE} uniforms upload
+ * on first use, {@code PER_TICK} only when the world tick changes, and {@code PER_FRAME} only when {@code frameCounter}
+ * changes. This matters for previous-frame suppliers, which intentionally advance when their per-frame uniform is
+ * sampled.
  */
 public class ProgramUniforms {
+    private final List<Uniform> dynamic;
     private final List<Uniform> once;
+    private final List<Uniform> perTick;
     private final List<Uniform> perFrame;
+    private long lastTick = -1L;
+    private int lastFrame = -1;
     private boolean firstUpdate = true;
 
-    private ProgramUniforms(List<Uniform> once, List<Uniform> perFrame) {
+    private ProgramUniforms(List<Uniform> dynamic, List<Uniform> once, List<Uniform> perTick, List<Uniform> perFrame) {
+        this.dynamic = dynamic;
         this.once = once;
+        this.perTick = perTick;
         this.perFrame = perFrame;
     }
 
+    private static long currentTick() {
+        return Minecraft.getMinecraft().world == null ? 0L : Minecraft.getMinecraft().world.getTotalWorldTime();
+    }
+
+    private static void updateStage(List<Uniform> uniforms) {
+        for (int i = 0; i < uniforms.size(); i++) {
+            uniforms.get(i).update();
+        }
+    }
+
     public void update() {
+        long currentTick = currentTick();
+        int currentFrame = org.taumc.celeritas.iris.uniforms.SystemTimeUniforms.COUNTER.getFrameCounter();
+        updateStage(this.dynamic);
         if (this.firstUpdate) {
             this.firstUpdate = false;
-            for (int i = 0; i < this.once.size(); i++) {
-                this.once.get(i).update();
-            }
+            updateStage(this.once);
+            updateStage(this.perTick);
+            updateStage(this.perFrame);
+            this.lastTick = currentTick;
+            this.lastFrame = currentFrame;
+            return;
         }
-        for (int i = 0; i < this.perFrame.size(); i++) {
-            this.perFrame.get(i).update();
+        if (this.lastTick != currentTick) {
+            this.lastTick = currentTick;
+            updateStage(this.perTick);
+        }
+        if (this.lastFrame != currentFrame) {
+            this.lastFrame = currentFrame;
+            updateStage(this.perFrame);
         }
     }
 
@@ -60,7 +90,9 @@ public class ProgramUniforms {
     public static class Builder {
         private final String name;
         private final int program;
+        private final List<Uniform> dynamic = new ArrayList<>();
         private final List<Uniform> once = new ArrayList<>();
+        private final List<Uniform> perTick = new ArrayList<>();
         private final List<Uniform> perFrame = new ArrayList<>();
 
         private Builder(String name, int program) {
@@ -77,8 +109,12 @@ public class ProgramUniforms {
         }
 
         private void add(UniformUpdateFrequency frequency, Uniform uniform) {
-            if (frequency == UniformUpdateFrequency.ONCE) {
+            if (frequency == UniformUpdateFrequency.DYNAMIC) {
+                this.dynamic.add(uniform);
+            } else if (frequency == UniformUpdateFrequency.ONCE) {
                 this.once.add(uniform);
+            } else if (frequency == UniformUpdateFrequency.PER_TICK) {
+                this.perTick.add(uniform);
             } else {
                 this.perFrame.add(uniform);
             }
@@ -141,7 +177,7 @@ public class ProgramUniforms {
         }
 
         public ProgramUniforms buildUniforms() {
-            return new ProgramUniforms(this.once, this.perFrame);
+            return new ProgramUniforms(this.dynamic, this.once, this.perTick, this.perFrame);
         }
     }
 }

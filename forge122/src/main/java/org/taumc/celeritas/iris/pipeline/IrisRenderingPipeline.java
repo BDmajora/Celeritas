@@ -32,9 +32,11 @@ import org.taumc.celeritas.iris.targets.NoiseTexture;
 import org.taumc.celeritas.iris.terrain.FullscreenTransformer;
 import org.taumc.celeritas.iris.terrain.ModernPackTransformer;
 import org.taumc.celeritas.iris.uniforms.CapturedRenderingState;
+import org.taumc.celeritas.iris.uniforms.CameraUniforms;
 import org.taumc.celeritas.iris.uniforms.CelestialUniforms;
 import org.taumc.celeritas.iris.uniforms.CommonUniforms;
 import org.taumc.celeritas.iris.uniforms.EyeBrightnessTracker;
+import org.taumc.celeritas.iris.uniforms.FrameUpdateNotifier;
 import org.taumc.celeritas.iris.uniforms.MatrixUniforms;
 import org.taumc.celeritas.iris.uniforms.SystemTimeUniforms;
 import org.taumc.celeritas.lwjgl.GL11;
@@ -258,6 +260,7 @@ public class IrisRenderingPipeline {
     private IrisFramebuffer currentGbuffer;
     /** The shadow-map pass, or {@code null} when the pack declares no {@code shadow} program. */
     private final IrisShadowRenderer shadowRenderer;
+    private final FrameUpdateNotifier frameUpdateNotifier = new FrameUpdateNotifier();
 
     /**
      * End-of-frame alt->main copy-back for a buffer the chain left odd-flipped (Iris FinalPassRenderer.SwapPass).
@@ -302,12 +305,14 @@ public class IrisRenderingPipeline {
      * Frames left to probe {@code glGetError} around each composite pass (0 = off). Pinpoints which pass/step raises
      * the {@code 1282 Invalid operation} Minecraft's "Post render" check reports. Counts down over the opening frames.
      */
-    private int glErrorProbeFrames = 60;
+    private int glErrorProbeFrames =
+            Math.max(0, Integer.getInteger("celeritas.iris.glErrorProbeFrames", 0));
 
     public IrisRenderingPipeline(ShaderPack pack) {
         Minecraft mc = Minecraft.getMinecraft();
         this.renderTargets = new IrisRenderTargets(mc.displayWidth, mc.displayHeight);
         java.util.Arrays.fill(this.colorBufferClears, true);
+        CameraUniforms.attach(this.frameUpdateNotifier);
 
         boolean initialized = false;
         try {
@@ -639,6 +644,7 @@ public class IrisRenderingPipeline {
     private void buildSchedule(ShaderPack pack, BufferFlipper flipper) {
         this.gbufferFramebuffer = createGbufferFramebuffer(flipper);
 
+        applyExplicitPreFlips(pack.getProperties().getExplicitFlips("deferred_pre"), flipper, "deferred_pre");
         for (int i = 0; i < ProgramArrayId.Deferred.getNumPrograms(); i++) {
             Optional<ProgramSource> source = pack.getProgramSet().get(ProgramArrayId.Deferred, i);
             if (!source.isPresent()) {
@@ -652,6 +658,7 @@ public class IrisRenderingPipeline {
         this.translucentGbufferFramebuffer =
                 this.deferredPasses.isEmpty() ? this.gbufferFramebuffer : createGbufferFramebuffer(flipper);
 
+        applyExplicitPreFlips(pack.getProperties().getExplicitFlips("composite_pre"), flipper, "composite_pre");
         for (int i = 0; i < ProgramArrayId.Composite.getNumPrograms(); i++) {
             Optional<ProgramSource> source = pack.getProgramSet().get(ProgramArrayId.Composite, i);
             if (!source.isPresent()) {
@@ -672,6 +679,15 @@ public class IrisRenderingPipeline {
             this.blitSourceFramebuffer.addColorAttachment(0, frontTexture(flipper, 0));
             this.blitSourceFramebuffer.readBuffer(0);
             checkFramebufferComplete(this.blitSourceFramebuffer, "fallback blit", new int[]{0});
+        }
+    }
+
+    private void applyExplicitPreFlips(Map<Integer, Boolean> explicitFlips, BufferFlipper flipper, String name) {
+        for (Map.Entry<Integer, Boolean> entry : explicitFlips.entrySet()) {
+            if (entry.getValue()) {
+                flipper.flip(entry.getKey());
+                LOGGER.info("[Iris] Explicit pre-flip '{}': colortex{}", name, entry.getKey());
+            }
         }
     }
 
@@ -810,6 +826,7 @@ public class IrisRenderingPipeline {
                 return null;
             }
             int[] drawBuffers = sanitizeCompositeDrawBuffers(name, program.getDrawBuffers());
+            Map<Integer, Boolean> explicitFlips = pack.getProperties().getExplicitFlips(name);
             BitSet flipsBefore = flipper.snapshot();
             BitSet mipmappedBuffers = parseMipmappedBuffers(source);
 
@@ -817,9 +834,18 @@ public class IrisRenderingPipeline {
             int[] colorSamplers = snapshotFrontTextures(flipper);
             IrisFramebuffer framebuffer = this.renderTargets.createColorFramebuffer(drawBuffers);
             for (int buffer : drawBuffers) {
+                if (explicitFlips.get(buffer) == Boolean.FALSE) {
+                    continue;
+                }
                 flipper.flip(buffer);
                 // Later passes' colortex custom-texture overrides deactivate for buffers a pass has written.
                 this.flippedAtLeastOnce.add(buffer);
+            }
+            for (Map.Entry<Integer, Boolean> entry : explicitFlips.entrySet()) {
+                if (entry.getValue()) {
+                    flipper.flip(entry.getKey());
+                    this.flippedAtLeastOnce.add(entry.getKey());
+                }
             }
             BitSet flipsAfter = flipper.snapshot();
             LOGGER.info("[Iris] Scheduled pass '{}': drawBuffers={}, flipsBefore={}, flipsAfter={}, mipmaps={}, samplerSummary={}",
@@ -921,10 +947,10 @@ public class IrisRenderingPipeline {
             if (modern) {
                 // Modern sources rely on the driver preprocessor for their #if trees; the MC_*/IRIS_FEATURE_* macro
                 // environment has to be present for those gates (colored lighting checks IRIS_FEATURE_CUSTOM_IMAGES).
-                vsh = ModernPackTransformer.transform(stabilizeColoredLightingSource(source.getName(),
+                vsh = ModernPackTransformer.transform(stabilizeShaderSource(source.getName(),
                         org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(vshRaw, macros)));
                 fsh = DrawBuffers.rewriteFragmentOutputs(ModernPackTransformer.transform(
-                        stabilizeColoredLightingSource(source.getName(),
+                        stabilizeShaderSource(source.getName(),
                                 org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(fshRaw, macros))),
                         drawBuffers);
             } else {
@@ -1114,6 +1140,8 @@ public class IrisRenderingPipeline {
             double z = camera.lastTickPosZ + (camera.posZ - camera.lastTickPosZ) * partialTicks;
             CapturedRenderingState.INSTANCE.setCameraPosition(x, y, z);
         }
+        this.frameUpdateNotifier.onNewFrame();
+        CommonUniforms.beginFrame();
 
 
         // noisetex and the stub shadow maps ride along for the whole frame (gbuffer + fullscreen stages) on their
@@ -1413,7 +1441,6 @@ public class IrisRenderingPipeline {
         GlStateManager.enableDepth();
         GlStateManager.enableAlpha();
 
-        CapturedRenderingState.INSTANCE.rollOverPreviousFrame();
         if (this.activeProbeSuffix != null) {
             logScreenProbe(this.activeProbeSuffix, mc);
         }
@@ -1499,8 +1526,8 @@ public class IrisRenderingPipeline {
     }
 
     private void logFlickerProbeFrame(String suffix) {
-        org.joml.Vector3d cam = CapturedRenderingState.INSTANCE.getCameraPosition();
-        org.joml.Vector3d prevCam = CapturedRenderingState.INSTANCE.getPreviousCameraPosition();
+        org.joml.Vector3d cam = CameraUniforms.getCurrentCameraPosition();
+        org.joml.Vector3d prevCam = CameraUniforms.getPreviousCameraPosition();
         long offX = (long) Math.floor(prevCam.x) - (long) Math.floor(cam.x);
         long offY = (long) Math.floor(prevCam.y) - (long) Math.floor(cam.y);
         long offZ = (long) Math.floor(prevCam.z) - (long) Math.floor(cam.z);
@@ -1558,7 +1585,7 @@ public class IrisRenderingPipeline {
                 String csh = org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(
                         source.get().getComputeSource().get(),
                         org.taumc.celeritas.iris.gl.shader.ShaderMacros.standard());
-                csh = stabilizeColoredLightingSource(name, csh);
+                csh = stabilizeShaderSource(name, csh);
                 IrisDebugDump.dumpText("src_" + name + ".csh", csh);
                 int[] localSize = parseLocalSize(csh);
                 int[] fallbackWorkGroups = (volume != null && localSize != null)
@@ -1614,88 +1641,54 @@ public class IrisRenderingPipeline {
 
     private static final Pattern UNINITIALIZED_LIGHT_VOLUME =
             Pattern.compile("(?m)^([\\t ]*)vec4\\s+lightVolume\\s*;[\\t ]*$");
-    private static final Pattern READER_PARITY_VOLUME_SELECT = Pattern.compile(
-            "(?s)if\\s*\\(\\s*int\\s*\\(\\s*framemod2\\s*\\)\\s*==\\s*0\\s*\\)\\s*\\{\\s*"
-                    + "lightVolume\\s*=\\s*GetComplexLightVolume\\s*\\(\\s*pos\\s*,\\s*floodfill_sampler_copy\\s*\\)\\s*;\\s*"
-                    + "\\}\\s*else\\s*\\{\\s*"
-                    + "lightVolume\\s*=\\s*GetComplexLightVolume\\s*\\(\\s*pos\\s*,\\s*floodfill_sampler\\s*\\)\\s*;\\s*"
-                    + "\\}");
-    /** A/B switch: single-volume reader sampling (see {@link #stabilizeColoredLightingSource}). */
-    private static final boolean ACL_SINGLE_VOLUME_READ =
-            Boolean.parseBoolean(System.getProperty("celeritas.iris.aclSingleVolumeRead", "true"));
-    /** {@code X = fract(X + goldenRatio * mod(float(frameCounter), 3600.0));} — the pack's standard per-frame
-     *  dither re-roll (fog march, SSAO, reflections, shadow-filter rotation, ...). */
     private static final Pattern TEMPORAL_DITHER_ASSIGN = Pattern.compile(
             "(\\w+)\\s*=\\s*fract\\(\\1\\s*\\+\\s*goldenRatio\\s*\\*\\s*mod\\(float\\(frameCounter\\),\\s*3600\\.0\\)\\);");
-    /** {@code return fract(n + goldenRatio * ...);} — same idiom as a return (shadow sampling, clouds). */
     private static final Pattern TEMPORAL_DITHER_RETURN = Pattern.compile(
             "return\\s+fract\\((\\w+)\\s*\\+\\s*goldenRatio\\s*\\*\\s*mod\\(float\\(frameCounter\\),\\s*3600\\.0\\)\\);");
-    /** {@code fract(dither + frameCounter * 0.618)} — deferred1's WSR reflection-march re-roll. */
     private static final Pattern TEMPORAL_DITHER_WSR = Pattern.compile(
             "fract\\((\\w+)\\s*\\+\\s*frameCounter\\s*\\*\\s*0\\.618\\)");
-    private static final boolean ACL_PIN_FOG_DITHER =
-            Boolean.parseBoolean(System.getProperty("celeritas.iris.aclPinFogDither", "true"));
 
     /**
-     * Iris parity: the pack's colored-lighting floodfill sources run exactly as written — the frame-parity ping-pong
-     * is the pack's own convergent scheme, and every scheduling rewrite tried here (canonical chain, volume blending,
-     * half-rate removal) still strobed identically, proving the flicker was never in the scheduling.
+     * Source stabilizers for hazards proven by the shader pins:
      * <p>
-     * The ONE change made: Complementary's {@code GetComplexLightVolume} declares {@code vec4 lightVolume;} and, in
-     * its active {@code ACT_CORNER_LEAK_FIX} branch, only ever {@code +=}s into it — accumulating into an
-     * UNINITIALIZED register (GLSL UB). Stock Iris happens to compile it onto zeroed registers; our 330-core lift
-     * shifts NVIDIA's register allocation so the garbage shows as per-frame colored strobing on every
-     * colored-lighting surface (worst at voxel edges, where the leak-fix skips texels and the garbage term
-     * dominates). Zero-initializing the declaration is semantics-neutral for every other code path.
+     * 1. Complementary's {@code GetComplexLightVolume} can accumulate into an uninitialized {@code vec4}; zero-init is
+     *    required under our transformed sources.
+     * 2. Its TAA-era dither helpers deliberately re-roll blue-noise with {@code frameCounter}. The old dither pin
+     *    proved that this escaped our current feedback path as visible stutter, so stabilize only those reroll idioms.
+     *    Other {@code frameCounter} uses remain untouched.
      */
-    public static String stabilizeColoredLightingSource(String name, String source) {
+    public static String stabilizeShaderSource(String name, String source) {
         Matcher declaration = UNINITIALIZED_LIGHT_VOLUME.matcher(source);
         if (declaration.find()) {
             LOGGER.info("[Iris] Program '{}': zero-initializing colored-lighting volume accumulator (pack declares it uninitialized)",
                     name);
             source = declaration.replaceAll("$1vec4 lightVolume = vec4(0.0);");
         }
-        // READERS ONLY (never the shadowcomp compute — its ping-pong stays pack-native): sample one fixed volume
-        // instead of alternating by frame parity. The probe proved both volumes evolve correctly, so any visible
-        // 2-frame strobe can only come from the READ alternating between them (persistent pair divergence or a
-        // per-unit binding fault). A single-sequence read makes that alternation impossible; the cost is the
-        // sampled field updating every other frame, invisible for diffusion-speed lighting.
-        if (ACL_SINGLE_VOLUME_READ && !source.contains("gl_GlobalInvocationID")) {
-            Matcher parityRead = READER_PARITY_VOLUME_SELECT.matcher(source);
-            if (parityRead.find()) {
-                LOGGER.info("[Iris] Program '{}': colored-lighting reader pinned to the main floodfill volume (single-sequence read)",
-                        name);
-                source = parityRead.replaceAll(Matcher.quoteReplacement(
-                        "lightVolume = GetComplexLightVolume(pos, floodfill_sampler);"));
-            }
+        if (!source.contains("gl_GlobalInvocationID")) {
+            source = stabilizeTemporalDither(name, source);
         }
-        // THE measured flicker mechanism (screen probe: aperiodic per-frame deltas): the pack RE-ROLLS its dither
-        // EVERY FRAME under `#ifdef TAA` — the colored-light fog march, SSAO, block reflections (a second idiom:
-        // `frameCounter * 0.618` in deferred1's WSR march), shadow-filter rotation, cloud dithering — and even adds
-        // `(dither-0.5)*0.02` straight into the fog output. All of it is noise the pack expects TAA accumulation to
-        // average away; until our TAA converges that well, pin every temporal re-roll so the blue-noise stays
-        // spatial-only. Stable image, static (invisible) dither patterns instead of strobing. Never the compute.
-        if (ACL_PIN_FOG_DITHER && !source.contains("gl_GlobalInvocationID")) {
-            int pinned = 0;
-            Matcher assign = TEMPORAL_DITHER_ASSIGN.matcher(source);
-            if (assign.find()) {
-                source = assign.replaceAll("/* dither re-roll pinned (Celeritas) */;");
-                pinned++;
-            }
-            Matcher returned = TEMPORAL_DITHER_RETURN.matcher(source);
-            if (returned.find()) {
-                source = returned.replaceAll("return fract($1); /* re-roll pinned (Celeritas) */");
-                pinned++;
-            }
-            Matcher wsr = TEMPORAL_DITHER_WSR.matcher(source);
-            if (wsr.find()) {
-                source = wsr.replaceAll("fract($1) /* re-roll pinned (Celeritas) */");
-                pinned++;
-            }
-            if (pinned > 0) {
-                LOGGER.info("[Iris] Program '{}': pinned {} temporal dither re-roll idiom(s) (TAA does not converge them here)",
-                        name, pinned);
-            }
+        return source;
+    }
+
+    private static String stabilizeTemporalDither(String name, String source) {
+        int stabilized = 0;
+        Matcher assign = TEMPORAL_DITHER_ASSIGN.matcher(source);
+        if (assign.find()) {
+            source = assign.replaceAll("$1 = fract($1); /* Celeritas: stabilize temporal dither reroll */");
+            stabilized++;
+        }
+        Matcher returned = TEMPORAL_DITHER_RETURN.matcher(source);
+        if (returned.find()) {
+            source = returned.replaceAll("return fract($1); /* Celeritas: stabilize temporal dither reroll */");
+            stabilized++;
+        }
+        Matcher wsr = TEMPORAL_DITHER_WSR.matcher(source);
+        if (wsr.find()) {
+            source = wsr.replaceAll("fract($1) /* Celeritas: stabilize temporal dither reroll */");
+            stabilized++;
+        }
+        if (stabilized > 0) {
+            LOGGER.info("[Iris] Program '{}': stabilized {} temporal dither reroll idiom(s)", name, stabilized);
         }
         return source;
     }
@@ -1799,11 +1792,11 @@ public class IrisRenderingPipeline {
         // Embeddium shadow-terrain draw that just voxelized runs through managed code that can reset texture/image
         // units, so re-establish the voxel/floodfill bindings here rather than trusting the frame-start bindAll to
         // survive it — otherwise the compute could read/write the wrong (or unbound) volume.
-        bindShaderPackResources();
+        bindShaderPackResources(false);
         LWJGL.glMemoryBarrier(org.taumc.celeritas.lwjgl.GL42.GL_ALL_BARRIER_BITS);
         for (ComputePass pass : this.computePasses) {
             pass.program.bind();
-            bindShaderPackResources();
+            bindShaderPackResources(false);
             pass.uniforms.update();
             LWJGL.glDispatchCompute(pass.groupsX, pass.groupsY, pass.groupsZ);
             // Each floodfill iteration reads the previous one's writes.
@@ -2043,6 +2036,10 @@ public class IrisRenderingPipeline {
     }
 
     private void bindShaderPackResources() {
+        bindShaderPackResources(true);
+    }
+
+    private void bindShaderPackResources(boolean stableVisibleFloodfill) {
         if (this.destroyed) {
             return;
         }
@@ -2053,7 +2050,7 @@ public class IrisRenderingPipeline {
             this.customTextureManager.bindAll();
         }
         if (this.customImageManager != null) {
-            this.customImageManager.bindAll();
+            this.customImageManager.bindAll(stableVisibleFloodfill);
         }
     }
 

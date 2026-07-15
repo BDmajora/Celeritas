@@ -58,9 +58,9 @@ public final class ShaderProgramCompiler {
         }
         fragmentSource = DrawBuffers.rewriteFragmentOutputs(fragmentSource, drawBuffers);
 
-        String processedVertex = IrisRenderingPipeline.stabilizeColoredLightingSource(name,
+        String processedVertex = IrisRenderingPipeline.stabilizeShaderSource(name,
                 applyDefines(vertexSource, defines));
-        String processedFragment = IrisRenderingPipeline.stabilizeColoredLightingSource(name,
+        String processedFragment = IrisRenderingPipeline.stabilizeShaderSource(name,
                 applyDefines(fragmentSource, defines));
 
         GlShader vertexShader = null;
@@ -76,7 +76,7 @@ public final class ShaderProgramCompiler {
 
             if (geometrySource != null) {
                 geometryShader = new GlShader(ShaderType.GEOMETRY, name + ".gsh",
-                        IrisRenderingPipeline.stabilizeColoredLightingSource(name,
+                        IrisRenderingPipeline.stabilizeShaderSource(name,
                                 applyDefines(geometrySource, defines)));
                 builder.attach(geometryShader);
             }

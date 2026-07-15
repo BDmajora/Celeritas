@@ -19,9 +19,6 @@ public final class CapturedRenderingState {
     private final Matrix4f gbufferModelView = new Matrix4f();
     private final Matrix4f gbufferProjection = new Matrix4f();
     private final Vector3d cameraPosition = new Vector3d();
-    private final Matrix4f previousGbufferModelView = new Matrix4f();
-    private final Matrix4f previousGbufferProjection = new Matrix4f();
-    private final Vector3d previousCameraPosition = new Vector3d();
     private final Vector3f fogColor = new Vector3f();
     private final Matrix4f shadowModelView = new Matrix4f();
     private final Matrix4f shadowProjection = new Matrix4f();
@@ -61,18 +58,6 @@ public final class CapturedRenderingState {
         this.cameraPosition.set(x, y, z);
     }
 
-    public Matrix4f getPreviousGbufferModelView() {
-        return this.previousGbufferModelView;
-    }
-
-    public Matrix4f getPreviousGbufferProjection() {
-        return this.previousGbufferProjection;
-    }
-
-    public Vector3d getPreviousCameraPosition() {
-        return this.previousCameraPosition;
-    }
-
     public Matrix4f getShadowModelView() {
         return this.shadowModelView;
     }
@@ -103,17 +88,6 @@ public final class CapturedRenderingState {
 
     public void setFogColor(float red, float green, float blue) {
         this.fogColor.set(red, green, blue);
-    }
-
-    /**
-     * Copies the current matrices/camera position into the "previous frame" slots. Called once at the end of each
-     * shader frame so {@code gbufferPreviousModelView}/{@code previousCameraPosition} (used for temporal effects like
-     * motion blur and TAA) see last frame's values.
-     */
-    public void rollOverPreviousFrame() {
-        this.previousGbufferModelView.set(this.gbufferModelView);
-        this.previousGbufferProjection.set(this.gbufferProjection);
-        this.previousCameraPosition.set(this.cameraPosition);
     }
 
     public int getRenderStage() {

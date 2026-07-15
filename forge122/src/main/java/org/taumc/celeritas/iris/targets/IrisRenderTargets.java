@@ -124,6 +124,7 @@ public class IrisRenderTargets {
 
         framebuffer.addDepthAttachment(this.depthTexture.getTextureId());
         framebuffer.drawBuffers(densePoints);
+        framebuffer.readBuffer(0);
         checkFramebufferComplete(framebuffer, "color", drawBuffers);
         return framebuffer;
     }

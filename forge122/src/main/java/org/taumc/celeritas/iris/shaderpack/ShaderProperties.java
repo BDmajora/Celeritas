@@ -5,6 +5,7 @@ import org.apache.logging.log4j.Logger;
 import org.taumc.celeritas.iris.shaderpack.texture.TextureStage;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -33,6 +34,8 @@ import java.util.OptionalInt;
  */
 public final class ShaderProperties {
     private static final Logger LOGGER = LogManager.getLogger("Celeritas/Iris");
+    private static final List<String> LEGACY_RENDER_TARGETS =
+            Arrays.asList("gcolor", "gdepth", "gnormal", "composite", "gaux1", "gaux2", "gaux3", "gaux4");
 
     private final Map<String, String> raw;
 
@@ -54,6 +57,8 @@ public final class ShaderProperties {
     /** {@code image.<name> = ...} — writable custom images (imageStore), declaration order. */
     private final List<org.taumc.celeritas.iris.shaderpack.texture.CustomImageDefinition> irisCustomImages =
             new ArrayList<>();
+    /** {@code flip.<program>.<target> = true|false}, including {@code deferred_pre}/{@code composite_pre}. */
+    private final Map<String, Map<Integer, Boolean>> explicitFlips = new LinkedHashMap<>();
 
     private ShaderProperties(Map<String, String> preprocessed, Map<String, String> original) {
         this.raw = preprocessed;
@@ -143,6 +148,8 @@ public final class ShaderProperties {
         this.raw.forEach((key, value) -> {
             if (key.equals("texture.noise")) {
                 this.noiseTexturePath = value;
+            } else if (key.startsWith("flip.")) {
+                parseExplicitFlip(key, value);
             } else if (key.startsWith("texture.")) {
                 String rest = key.substring("texture.".length());
                 int dot = rest.indexOf('.');
@@ -186,6 +193,40 @@ public final class ShaderProperties {
                 this.irisCustomTextures.put(name, value.trim());
             }
         });
+    }
+
+    private void parseExplicitFlip(String key, String value) {
+        String rest = key.substring("flip.".length());
+        int dot = rest.indexOf('.');
+        if (dot <= 0 || dot == rest.length() - 1) {
+            LOGGER.warn("[Iris] Malformed explicit flip directive, ignoring: {}", key);
+            return;
+        }
+        Optional<Boolean> shouldFlip = parseBooleanValue(value);
+        if (!shouldFlip.isPresent()) {
+            LOGGER.warn("[Iris] Invalid explicit flip value, ignoring: {} = {}", key, value);
+            return;
+        }
+        Integer target = colorTargetIndex(rest.substring(dot + 1));
+        if (target == null) {
+            LOGGER.warn("[Iris] Unknown explicit flip target, ignoring: {}", key);
+            return;
+        }
+        this.explicitFlips
+                .computeIfAbsent(rest.substring(0, dot), ignored -> new LinkedHashMap<>())
+                .put(target, shouldFlip.get());
+    }
+
+    private static Integer colorTargetIndex(String name) {
+        if (name.startsWith("colortex")) {
+            try {
+                return Integer.parseInt(name.substring("colortex".length()));
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        int legacyIndex = LEGACY_RENDER_TARGETS.indexOf(name);
+        return legacyIndex >= 0 ? legacyIndex : null;
     }
 
     private static List<String> splitWhitespace(String value) {
@@ -301,6 +342,11 @@ public final class ShaderProperties {
         return getBoolean("program." + programName + ".enabled");
     }
 
+    public Map<Integer, Boolean> getExplicitFlips(String programName) {
+        Map<Integer, Boolean> flips = this.explicitFlips.get(programName);
+        return flips == null ? Collections.emptyMap() : Collections.unmodifiableMap(flips);
+    }
+
     private OptionalInt getInt(String key) {
         String value = this.raw.get(key);
         if (value == null) {
@@ -318,6 +364,10 @@ public final class ShaderProperties {
         if (value == null) {
             return Optional.empty();
         }
+        return parseBooleanValue(value);
+    }
+
+    private static Optional<Boolean> parseBooleanValue(String value) {
         String v = value.trim().toLowerCase(Locale.ROOT);
         if (v.equals("true")) {
             return Optional.of(Boolean.TRUE);

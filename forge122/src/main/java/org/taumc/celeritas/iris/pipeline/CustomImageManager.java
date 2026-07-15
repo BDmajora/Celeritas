@@ -66,6 +66,7 @@ public class CustomImageManager {
     }
 
     private final List<Image> images = new ArrayList<>();
+    private final Map<String, Image> imagesBySampler = new LinkedHashMap<>();
     /** Image uniform name → image unit AND sampler name → texture unit, for program uniform assignment. */
     private final Map<String, Integer> uniformOverrides = new LinkedHashMap<>();
     private final ByteBuffer zeroClearValue = ByteBuffer.allocateDirect(16);
@@ -137,6 +138,7 @@ public class CustomImageManager {
             this.uniformOverrides.put(definition.name, imageUnit);
             if (samplerUnit >= 0) {
                 this.uniformOverrides.put(definition.samplerName, samplerUnit);
+                this.imagesBySampler.put(definition.samplerName, this.images.get(this.images.size() - 1));
             }
             LOGGER.info("[Iris] Custom image '{}' ({}x{}x{} {}) on image unit {}{}",
                     definition.name, definition.sizeX, definition.sizeY, definition.sizeZ,
@@ -220,8 +222,14 @@ public class CustomImageManager {
         LWJGL.glClearTexImage(texture, 0, format, pixelType, this.zeroClearValue);
     }
 
-    /** Binds every image on its image unit (READ_WRITE) and its texture on the paired sampler unit. */
-    public void bindAll() {
+    /**
+     * Binds every image on its image unit (READ_WRITE) and its texture on the paired sampler unit.
+     *
+     * @param stableVisibleFloodfill when true, visible graphics programs sample one floodfill history on both
+     *                               floodfill sampler names. Compute dispatches pass false so the pack's native
+     *                               ping-pong still reads and writes the two physical volumes.
+     */
+    public void bindAll(boolean stableVisibleFloodfill) {
         for (Image image : this.images) {
             // Iris binds custom images as layered for every texture target.
             LWJGL.glBindImageTexture(image.imageUnit, image.texture, 0, true, 0, GL15.GL_READ_WRITE,
@@ -231,7 +239,22 @@ public class CustomImageManager {
                 LWJGL.glBindTexture(image.target, image.texture);
             }
         }
+        if (stableVisibleFloodfill) {
+            bindStableFloodfillReader();
+        }
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+    }
+
+    private void bindStableFloodfillReader() {
+        Image floodfill = this.imagesBySampler.get("floodfill_sampler");
+        Image copy = this.imagesBySampler.get("floodfill_sampler_copy");
+        if (floodfill == null || copy == null || floodfill.samplerUnit < 0 || copy.samplerUnit < 0) {
+            return;
+        }
+        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + floodfill.samplerUnit);
+        LWJGL.glBindTexture(floodfill.target, floodfill.texture);
+        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + copy.samplerUnit);
+        LWJGL.glBindTexture(copy.target, floodfill.texture);
     }
 
     public void unbindAll() {
@@ -253,6 +276,7 @@ public class CustomImageManager {
             this.probeFramebuffer = 0;
         }
         this.images.clear();
+        this.imagesBySampler.clear();
         this.uniformOverrides.clear();
     }
 

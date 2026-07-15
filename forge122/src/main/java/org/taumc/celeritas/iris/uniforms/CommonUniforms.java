@@ -58,6 +58,10 @@ public final class CommonUniforms {
     private CommonUniforms() {
     }
 
+    public static void beginFrame() {
+        updateComplementaryCustomUniforms();
+    }
+
     public static void addCommonUniforms(ProgramUniforms.Builder uniforms) {
         CelestialUniforms.addCelestialUniforms(uniforms);
         SystemTimeUniforms.addSystemTimeUniforms(uniforms);
@@ -68,7 +72,7 @@ public final class CommonUniforms {
                 .uniform1i(UniformUpdateFrequency.PER_FRAME, "isEyeInWater", CommonUniforms::isEyeInWater)
                 .uniform1i(UniformUpdateFrequency.PER_FRAME, "blindness", CommonUniforms::getBlindness)
                 .uniform1i(UniformUpdateFrequency.PER_FRAME, "nightVision", CommonUniforms::getNightVision)
-                .uniform1i(UniformUpdateFrequency.PER_FRAME, "renderStage",
+                .uniform1i(UniformUpdateFrequency.DYNAMIC, "renderStage",
                         CapturedRenderingState.INSTANCE::getRenderStage)
                 // Iris-exclusive: whether the player is invisible (spectator/potion). Not tracked yet.
                 .uniform1i(UniformUpdateFrequency.PER_FRAME, "is_invisible", () -> 0)
@@ -116,7 +120,7 @@ public final class CommonUniforms {
                 .uniform2i(UniformUpdateFrequency.PER_FRAME, "eyeBrightness", EyeBrightnessTracker::getEyeBrightness)
                 .uniform2i(UniformUpdateFrequency.PER_FRAME, "eyeBrightnessSmooth", EyeBrightnessTracker::getEyeBrightnessSmooth)
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "wetness", EyeBrightnessTracker::getWetness)
-                .uniform1i(UniformUpdateFrequency.PER_FRAME, "fogMode", CommonUniforms::getFogMode)
+                .uniform1i(UniformUpdateFrequency.DYNAMIC, "fogMode", CommonUniforms::getFogMode)
                 .uniform1i(UniformUpdateFrequency.PER_FRAME, "heldItemId", CommonUniforms::getHeldItemId)
                 .uniform1i(UniformUpdateFrequency.PER_FRAME, "heldBlockLightValue", CommonUniforms::getHeldBlockLightValue)
                 .uniform1i(UniformUpdateFrequency.PER_FRAME, "heldItemId2", CommonUniforms::getHeldItemId2)
@@ -217,8 +221,8 @@ public final class CommonUniforms {
     }
 
     private static float getMoving() {
-        Vector3d current = CapturedRenderingState.INSTANCE.getCameraPosition();
-        Vector3d previous = CapturedRenderingState.INSTANCE.getPreviousCameraPosition();
+        Vector3d current = CameraUniforms.getCurrentCameraPosition();
+        Vector3d previous = CameraUniforms.getPreviousCameraPosition();
         double diffSum = Math.abs(current.x - previous.x)
                 + Math.abs(current.y - previous.y)
                 + Math.abs(current.z - previous.z);

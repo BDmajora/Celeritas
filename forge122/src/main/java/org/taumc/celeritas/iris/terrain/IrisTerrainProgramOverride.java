@@ -108,12 +108,12 @@ public final class IrisTerrainProgramOverride {
                     programId.getSourceName(), DrawBuffers.parseActive(fshSource, macros));
             String vsh = modern
                     ? EmbeddiumTerrainTransformer.transformVertexShaderModern(
-                            IrisRenderingPipeline.stabilizeColoredLightingSource(programId.getSourceName(),
+                            IrisRenderingPipeline.stabilizeShaderSource(programId.getSourceName(),
                                     org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(vshSource, macros)))
                     : EmbeddiumTerrainTransformer.transformVertexShader(vshSource);
             String fsh = modern
                     ? EmbeddiumTerrainTransformer.transformFragmentShaderModern(
-                            IrisRenderingPipeline.stabilizeColoredLightingSource(programId.getSourceName(),
+                            IrisRenderingPipeline.stabilizeShaderSource(programId.getSourceName(),
                                     org.taumc.celeritas.iris.gl.shader.ShaderMacros.injectDefines(fshSource, macros)),
                             drawBuffers)
                     : EmbeddiumTerrainTransformer.transformFragmentShader(fshSource, drawBuffers);
