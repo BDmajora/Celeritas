@@ -1016,6 +1016,16 @@ public abstract class RenderSectionManager {
         list.add(String.format("G: %d/%d, I: %d/%d MiB (%d buffers)", MathUtil.toMib(deviceUsed), MathUtil.toMib(deviceAllocated), MathUtil.toMib(indexUsed), MathUtil.toMib(indexAllocated), count));
         list.add(String.format("Transfer Queue: %s", this.regions.getStagingBuffer().toString()));
 
+        var uploadEstimator = this.regions.getUploadDurationEstimator();
+        long lastUploadBytes = uploadEstimator.getLastUploadBytes();
+
+        if (lastUploadBytes > 0L) {
+            list.add(String.format("Upload Estimate: %d KiB, predicted %s, last %s",
+                    lastUploadBytes / 1024L,
+                    TimeUtil.stringifyTime(uploadEstimator.getLastUploadEstimateNanos(), TimeUnit.NANOSECONDS),
+                    TimeUtil.stringifyTime(uploadEstimator.getLastUploadDurationNanos(), TimeUnit.NANOSECONDS)));
+        }
+
         var rebuildLists = this.getCurrentRenderListManager().getRebuildLists();
 
         list.add(String.format("Chunk Queues: U=%02d (P0=%03d | P1=%03d | P2=%03d)",

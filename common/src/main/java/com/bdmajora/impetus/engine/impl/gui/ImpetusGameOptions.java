@@ -98,9 +98,15 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
         public int chunkFadeInDuration = 0;
 
         public int legacyBiomeBlendRadius = 0;
+
+        public int cloudHeight = 128;
+        public int cloudDistance = 64;
+        public int weatherEffectRadius = 10;
+        public int entityDistance = 100;
     }
 
     public static class NotificationSettings {
+        public boolean showToasts = true;
         public boolean forceDisableDonationPrompts = false;
 
         public boolean hasClearedDonationButton = false;

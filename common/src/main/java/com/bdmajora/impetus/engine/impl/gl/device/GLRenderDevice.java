@@ -1,5 +1,7 @@
 package com.bdmajora.impetus.engine.impl.gl.device;
 
+import com.bdmajora.impetus.engine.impl.gpu.device.GpuDevice;
+import com.bdmajora.impetus.engine.impl.gpu.device.OpenGlDeviceInfo;
 import com.bdmajora.impetus.engine.impl.gl.array.GlVertexArray;
 import com.bdmajora.impetus.engine.impl.gl.buffer.*;
 import com.bdmajora.impetus.engine.impl.gl.functions.DeviceFunctions;
@@ -23,6 +25,7 @@ public class GLRenderDevice implements RenderDevice {
 
     private boolean isActive;
     private GlTessellation activeTessellation;
+    private GpuDevice deviceInfo;
 
     // TODO replace this with something less ugly
     public static Runnable VANILLA_STATE_RESETTER = () -> {
@@ -46,6 +49,10 @@ public class GLRenderDevice implements RenderDevice {
 
         this.stateTracker.clear();
         this.isActive = true;
+
+        if (this.deviceInfo == null) {
+            this.deviceInfo = OpenGlDeviceInfo.capture(this.functions);
+        }
     }
 
     @Override
@@ -66,6 +73,16 @@ public class GLRenderDevice implements RenderDevice {
     @Override
     public DeviceFunctions getDeviceFunctions() {
         return this.functions;
+    }
+
+    @Override
+    public GpuDevice getGpuDevice() {
+        if (this.deviceInfo == null) {
+            this.checkDeviceActive();
+            this.deviceInfo = OpenGlDeviceInfo.capture(this.functions);
+        }
+
+        return this.deviceInfo;
     }
 
     private void checkDeviceActive() {

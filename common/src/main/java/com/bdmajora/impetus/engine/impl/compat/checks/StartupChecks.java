@@ -7,6 +7,7 @@ import com.bdmajora.impetus.engine.impl.compat.probe.GraphicsAdapterInfo;
 import com.bdmajora.impetus.engine.impl.compat.probe.GraphicsAdapterProbe;
 import com.bdmajora.impetus.engine.impl.compat.probe.GraphicsVendor;
 import com.bdmajora.impetus.engine.impl.compat.workarounds.Workarounds;
+import com.bdmajora.impetus.engine.impl.notification.ImpetusNotifications;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -93,6 +94,9 @@ public final class StartupChecks {
         warnIfOutdatedNvidiaDriver(adapters);
 
         if (Workarounds.isActive(Workarounds.Issue.NO_ERROR_CONTEXT_UNSAFE)) {
+            ImpetusNotifications.warn("Driver workaround active",
+                    "Older Intel Windows driver detected.",
+                    "No-error GL context will be avoided.");
             MessageBoxUtil.showWarning("Impetus — Driver workaround active",
                     "Impetus detected an older Intel Windows graphics driver.\n\n" +
                     "The no-error OpenGL context path is unsafe on this driver, so Impetus will avoid\n" +
@@ -110,6 +114,9 @@ public final class StartupChecks {
             return;
         }
 
+        ImpetusNotifications.warn("Unsupported launcher",
+                "PojavLauncher is not supported.",
+                "Expect severe rendering issues.");
         MessageBoxUtil.showWarning("Impetus — Unsupported launcher",
                 "PojavLauncher appears to be running.\n\n" +
                 "PojavLauncher is not supported with Impetus and is very likely to hit severe\n" +
@@ -141,6 +148,9 @@ public final class StartupChecks {
 
             DriverVersion version = DriverVersion.parseNvidia(adapter.driverVersion());
             if (version != null && version.compareTo(new DriverVersion(536, 23)) < 0) {
+                ImpetusNotifications.warn("Outdated NVIDIA driver",
+                        "Detected driver: " + adapter.driverVersion(),
+                        "Recommended: 536.23 or newer.");
                 MessageBoxUtil.showWarning("Impetus — Outdated NVIDIA driver",
                         "Your NVIDIA graphics driver appears to be out of date.\n\n" +
                         "Detected driver: " + adapter.driverVersion() + "\n" +
@@ -226,6 +236,9 @@ public final class StartupChecks {
 
             if (rtssFound) {
                 Workarounds.markActive(Workarounds.Issue.FRAME_HOOK_OVERLAY_PRESENT);
+                ImpetusNotifications.warn("Incompatible overlay detected",
+                        "RTSS appears to be running.",
+                        "Close it if rendering breaks.");
                 MessageBoxUtil.showWarning("Impetus — Incompatible software detected",
                         "RivaTuner Statistics Server (RTSS) appears to be running.\n\n" +
                         "RTSS hooks the OpenGL frame path and is known to cause crashes and rendering\n" +

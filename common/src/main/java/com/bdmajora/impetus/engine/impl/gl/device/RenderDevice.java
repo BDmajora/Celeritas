@@ -1,5 +1,6 @@
 package com.bdmajora.impetus.engine.impl.gl.device;
 
+import com.bdmajora.impetus.engine.impl.gpu.device.GpuDevice;
 import com.bdmajora.impetus.engine.impl.gl.functions.DeviceFunctions;
 
 public interface RenderDevice {
@@ -19,4 +20,6 @@ public interface RenderDevice {
     void makeInactive();
 
     DeviceFunctions getDeviceFunctions();
+
+    GpuDevice getGpuDevice();
 }

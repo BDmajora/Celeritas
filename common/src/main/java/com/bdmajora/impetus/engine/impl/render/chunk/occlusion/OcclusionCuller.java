@@ -20,14 +20,16 @@ import java.util.Objects;
 
 public class OcclusionCuller {
     private final Long2ReferenceMap<OcclusionNode> sections;
+    private final SectionTree sectionTree;
     private final int minSectionY, maxSectionY;
 
     private final DoubleBufferedQueue<OcclusionNode> queue = new DoubleBufferedQueue<>();
 
     private boolean isCameraInUnloadedSection;
 
-    public OcclusionCuller(Long2ReferenceMap<OcclusionNode> sections, int minSectionY, int maxSectionY) {
+    public OcclusionCuller(Long2ReferenceMap<OcclusionNode> sections, SectionTree sectionTree, int minSectionY, int maxSectionY) {
         this.sections = sections;
+        this.sectionTree = sectionTree;
         this.minSectionY = minSectionY;
         this.maxSectionY = maxSectionY;
     }
@@ -38,6 +40,11 @@ public class OcclusionCuller {
                             boolean useOcclusionCulling,
                             int frame)
     {
+        if (this.shouldUseSectionTree(viewport, useOcclusionCulling)) {
+            this.findVisibleWithSectionTree(visitor, viewport, searchDistance, frame);
+            return;
+        }
+
         final var queues = this.queue;
         queues.reset();
 
@@ -50,6 +57,30 @@ public class OcclusionCuller {
         while (queues.flip()) {
             processQueue(visitor, viewport, searchDistance, useOcclusionCulling, frame, queues.read(), queues.write());
         }
+    }
+
+    private boolean shouldUseSectionTree(Viewport viewport, boolean useOcclusionCulling) {
+        if (!useOcclusionCulling) {
+            return true;
+        }
+
+        var origin = viewport.getChunkCoord();
+
+        return origin.y() < this.minSectionY
+                || origin.y() >= this.maxSectionY
+                || this.getRenderSection(origin.x(), origin.y(), origin.z()) == null;
+    }
+
+    private void findVisibleWithSectionTree(Visitor visitor, Viewport viewport, float searchDistance, int frame) {
+        this.sectionTree.forEachVisible(viewport, searchDistance, section -> {
+            if (section.getLastVisibleFrame() == frame) {
+                return;
+            }
+
+            section.setLastVisibleFrame(frame);
+            section.setIncomingDirections(GraphDirectionSet.NONE);
+            visitor.visit(section, true);
+        });
     }
 
     private static void processQueue(Visitor visitor,
@@ -92,7 +123,7 @@ public class OcclusionCuller {
         }
     }
 
-    private static boolean isSectionVisible(OcclusionNode section, Viewport viewport, float maxDistance) {
+    static boolean isSectionVisible(OcclusionNode section, Viewport viewport, float maxDistance) {
         return isWithinRenderDistance(viewport.getTransform(), section, maxDistance) && isWithinFrustum(viewport, section);
     }
 

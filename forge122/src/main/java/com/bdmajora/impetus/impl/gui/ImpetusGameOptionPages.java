@@ -2,15 +2,19 @@ package com.bdmajora.impetus.impl.gui;
 
 import com.google.common.collect.ImmutableList;
 import net.minecraft.client.Minecraft;
+import net.minecraft.init.Blocks;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.client.settings.GameSettings;
 import com.bdmajora.impetus.api.options.OptionIdentifier;
 import com.bdmajora.impetus.api.options.control.ControlValueFormatter;
 import com.bdmajora.impetus.api.options.control.CyclingControl;
+import com.bdmajora.impetus.api.options.control.ReadOnlyStringControl;
 import com.bdmajora.impetus.api.options.control.SliderControl;
 import com.bdmajora.impetus.api.options.control.TickBoxControl;
+import com.bdmajora.impetus.engine.impl.common.util.NativeBuffer;
 import com.bdmajora.impetus.engine.impl.gui.ImpetusGameOptions;
 import com.bdmajora.impetus.engine.impl.gui.framework.TextComponent;
+import com.bdmajora.impetus.engine.impl.render.chunk.region.RenderRegionManager;
 import org.lwjgl.opengl.Display;
 import com.bdmajora.impetus.ImpetusVintage;
 import com.bdmajora.impetus.api.options.structure.OptionFlag;
@@ -29,9 +33,38 @@ import java.util.List;
 public class ImpetusGameOptionPages {
     private static final ImpetusGameOptions sodiumOpts = ImpetusVintage.options();
     private static final MinecraftOptionsStorage vanillaOpts = new MinecraftOptionsStorage();
+    private static final MenuState menuState = new MenuState();
+    private static final OptionStorage<MenuState> menuOpts = () -> menuState;
 
     private static int computeMaxRangeForRenderDistance(@SuppressWarnings("SameParameterValue") int injectedRenderDistance) {
         return injectedRenderDistance;
+    }
+
+    private static void applyLeavesQuality(boolean seeThrough) {
+        Blocks.LEAVES.setGraphicsLevel(seeThrough);
+        Blocks.LEAVES2.setGraphicsLevel(seeThrough);
+    }
+
+    private static OptionImpl<MenuState, String> readOnlyOption(OptionIdentifier<Void> id, TextComponent name,
+                                                                TextComponent tooltip, String value) {
+        return readOnlyOption(id, name, tooltip, value, false);
+    }
+
+    private static OptionImpl<MenuState, String> displayOnlyOption(OptionIdentifier<Void> id, TextComponent name,
+                                                                   TextComponent tooltip, String value) {
+        return readOnlyOption(id, name, tooltip, value, true);
+    }
+
+    private static OptionImpl<MenuState, String> readOnlyOption(OptionIdentifier<Void> id, TextComponent name,
+                                                                TextComponent tooltip, String value, boolean enabled) {
+        return OptionImpl.createBuilder(String.class, menuOpts)
+                .setId(id.cast())
+                .setName(name)
+                .setTooltip(tooltip)
+                .setControl(ReadOnlyStringControl::new)
+                .setBinding((state, nextValue) -> { }, state -> value)
+                .setEnabled(enabled)
+                .build();
     }
 
     public static OptionPage general() {
@@ -46,6 +79,14 @@ public class ImpetusGameOptionPages {
                         .setBinding((options, value) -> options.renderDistanceChunks = value, options -> options.renderDistanceChunks)
                         .setImpact(OptionImpact.HIGH)
                         .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
+                        .build())
+                .add(OptionImpl.createBuilder(String.class, vanillaOpts)
+                        .setId(StandardOptions.Option.SIMULATION_DISTANCE.cast())
+                        .setName(TextComponent.translatable("impetus.options.simulation_distance.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.simulation_distance.disabled_tooltip"))
+                        .setControl(ReadOnlyStringControl::new)
+                        .setBinding((opts, value) -> { }, opts -> I18n.format("options.chunks", opts.renderDistanceChunks))
+                        .setEnabled(false)
                         .build())
                 .add(OptionImpl.createBuilder(int.class, vanillaOpts)
                         .setId(StandardOptions.Option.BRIGHTNESS.cast())
@@ -88,6 +129,11 @@ public class ImpetusGameOptionPages {
                             }
                         }, (opts) -> opts.fullScreen)
                         .build())
+                .add(readOnlyOption(
+                        StandardOptions.Option.FULLSCREEN_RESOLUTION,
+                        TextComponent.translatable("impetus.options.fullscreen.resolution.name"),
+                        TextComponent.translatable("impetus.options.fullscreen.resolution.disabled_tooltip"),
+                        I18n.format("impetus.options.fullscreen.resolution.value")))
                 .add(OptionImpl.createBuilder(boolean.class, vanillaOpts)
                         .setId(StandardOptions.Option.VSYNC.cast())
                         .setName(TextComponent.translatable("options.vsync"))
@@ -110,6 +156,13 @@ public class ImpetusGameOptionPages {
 
         groups.add(OptionGroup.createBuilder()
                 .setId(StandardOptions.Group.INDICATORS)
+                .add(OptionImpl.createBuilder(boolean.class, vanillaOpts)
+                        .setId(StandardOptions.Option.VIEW_BOBBING.cast())
+                        .setName(TextComponent.translatable("options.viewBobbing"))
+                        .setTooltip(TextComponent.translatable("impetus.options.view_bobbing.tooltip"))
+                        .setControl(TickBoxControl::new)
+                        .setBinding((opts, value) -> opts.viewBobbing = value, opts -> opts.viewBobbing)
+                        .build())
                 .add(OptionImpl.createBuilder(int.class, vanillaOpts)
                         .setId(StandardOptions.Option.ATTACK_INDICATOR.cast())
                         .setName(TextComponent.translatable("options.attackIndicator"))
@@ -120,13 +173,20 @@ public class ImpetusGameOptionPages {
                                 TextComponent.translatable("options.attack.hotbar") }))
                         .setBinding((opts, value) -> opts.attackIndicator = value, (opts) -> opts.attackIndicator)
                         .build())
-                .add(OptionImpl.createBuilder(boolean.class, vanillaOpts)
-                        .setId(StandardOptions.Option.VIEW_BOBBING.cast())
-                        .setName(TextComponent.translatable("options.viewBobbing"))
-                        .setTooltip(TextComponent.translatable("impetus.options.view_bobbing.tooltip"))
-                        .setControl(TickBoxControl::new)
-                        .setBinding((opts, value) -> opts.viewBobbing = value, opts -> opts.viewBobbing)
-                        .build())
+                .add(readOnlyOption(
+                        StandardOptions.Option.AUTOSAVE_INDICATOR,
+                        TextComponent.translatable("impetus.options.autosave_indicator.name"),
+                        TextComponent.translatable("impetus.options.autosave_indicator.disabled_tooltip"),
+                        I18n.format("impetus.options.unavailable")))
+                .build());
+
+        groups.add(OptionGroup.createBuilder()
+                .setId(StandardOptions.Group.GRAPHICS)
+                .add(displayOnlyOption(
+                        StandardOptions.Option.GRAPHICS_API,
+                        TextComponent.translatable("impetus.options.graphics_api.name"),
+                        TextComponent.translatable("impetus.options.graphics_api.tooltip"),
+                        "OpenGL"))
                 .build());
 
         return new OptionPage(StandardOptions.Pages.GENERAL, TextComponent.translatable("stat.generalButton"), ImmutableList.copyOf(groups));
@@ -141,7 +201,9 @@ public class ImpetusGameOptionPages {
                         .setId(StandardOptions.Option.GRAPHICS_MODE.cast())
                         .setName(TextComponent.translatable("options.graphics"))
                         .setTooltip(TextComponent.translatable("impetus.options.graphics_quality.tooltip"))
-                        .setControl(TickBoxControl::new)
+                        .setControl(option -> new CyclingControl<>(option, new Boolean[] { false, true }, new TextComponent[] {
+                                TextComponent.translatable("options.graphics.fast"),
+                                TextComponent.translatable("options.graphics.fancy") }))
                         .setBinding((opts, value) -> opts.fancyGraphics = value, opts -> opts.fancyGraphics)
                         .setImpact(OptionImpact.HIGH)
                         .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
@@ -150,6 +212,11 @@ public class ImpetusGameOptionPages {
 
         groups.add(OptionGroup.createBuilder()
                 .setId(StandardOptions.Group.DETAILS)
+                .add(readOnlyOption(
+                        StandardOptions.Option.IMPROVED_TRANSPARENCY,
+                        TextComponent.translatable("impetus.options.improved_transparency.name"),
+                        TextComponent.translatable("impetus.options.improved_transparency.tooltip"),
+                        I18n.format("impetus.options.unavailable")))
                 .add(OptionImpl.createBuilder(int.class, vanillaOpts)
                         .setId(StandardOptions.Option.CLOUDS.cast())
                         .setName(TextComponent.translatable("options.renderClouds"))
@@ -165,6 +232,22 @@ public class ImpetusGameOptionPages {
                         })
                         .setImpact(OptionImpact.LOW)
                         .build())
+                .add(OptionImpl.createBuilder(int.class, sodiumOpts)
+                        .setId(StandardOptions.Option.CLOUD_HEIGHT.cast())
+                        .setName(TextComponent.translatable("impetus.options.cloud_height.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.cloud_height.tooltip"))
+                        .setControl(option -> new SliderControl(option, 0, 256, 1, ControlValueFormatter.translateVariable("impetus.options.cloud_height.value")))
+                        .setBinding((opts, value) -> opts.quality.cloudHeight = value, opts -> opts.quality.cloudHeight)
+                        .setImpact(OptionImpact.LOW)
+                        .build())
+                .add(OptionImpl.createBuilder(int.class, sodiumOpts)
+                        .setId(StandardOptions.Option.CLOUD_DISTANCE.cast())
+                        .setName(TextComponent.translatable("impetus.options.cloud_distance.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.cloud_distance.tooltip"))
+                        .setControl(option -> new SliderControl(option, 8, 128, 8, ControlValueFormatter.translateVariable("impetus.options.cloud_distance.value")))
+                        .setBinding((opts, value) -> opts.quality.cloudDistance = value, opts -> opts.quality.cloudDistance)
+                        .setImpact(OptionImpact.MEDIUM)
+                        .build())
                 .add(OptionImpl.createBuilder(ImpetusGameOptions.GraphicsQuality.class, sodiumOpts)
                         .setId(StandardOptions.Option.WEATHER.cast())
                         .setName(TextComponent.translatable("soundCategory.weather"))
@@ -173,12 +256,24 @@ public class ImpetusGameOptionPages {
                         .setBinding((opts, value) -> opts.quality.weatherQuality = value, opts -> opts.quality.weatherQuality)
                         .setImpact(OptionImpact.MEDIUM)
                         .build())
-                .add(OptionImpl.createBuilder(ImpetusGameOptions.GraphicsQuality.class, sodiumOpts)
-                        .setId(StandardOptions.Option.LEAVES.cast())
-                        .setName(TextComponent.translatable("impetus.options.leaves_quality.name"))
-                        .setTooltip(TextComponent.translatable("impetus.options.leaves_quality.tooltip"))
-                        .setControl(option -> new CyclingControl<>(option, ImpetusGameOptions.GraphicsQuality.class))
-                        .setBinding((opts, value) -> opts.quality.leavesQuality = value, opts -> opts.quality.leavesQuality)
+                .add(OptionImpl.createBuilder(int.class, sodiumOpts)
+                        .setId(StandardOptions.Option.WEATHER_EFFECT_RADIUS.cast())
+                        .setName(TextComponent.translatable("impetus.options.weather_effect_radius.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.weather_effect_radius.tooltip"))
+                        .setControl(option -> new SliderControl(option, 1, 32, 1, ControlValueFormatter.number()))
+                        .setBinding((opts, value) -> opts.quality.weatherEffectRadius = value, opts -> opts.quality.weatherEffectRadius)
+                        .setImpact(OptionImpact.MEDIUM)
+                        .build())
+                .add(OptionImpl.createBuilder(boolean.class, sodiumOpts)
+                        .setId(StandardOptions.Option.SEE_THROUGH_LEAVES.cast())
+                        .setName(TextComponent.translatable("impetus.options.see_through_leaves.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.see_through_leaves.tooltip"))
+                        .setControl(TickBoxControl::new)
+                        .setBinding((opts, value) -> {
+                            opts.quality.leavesQuality = value ? ImpetusGameOptions.GraphicsQuality.FANCY : ImpetusGameOptions.GraphicsQuality.FAST;
+                            applyLeavesQuality(value);
+                        },
+                                opts -> opts.quality.leavesQuality.isFancy(Minecraft.getMinecraft().gameSettings.fancyGraphics))
                         .setImpact(OptionImpact.MEDIUM)
                         .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
                         .build())
@@ -215,13 +310,12 @@ public class ImpetusGameOptionPages {
                         .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
                         .build())
                 .add(OptionImpl.createBuilder(int.class, sodiumOpts)
-                        .setId(StandardOptions.Option.CHUNK_FADE_IN_DURATION.cast())
-                        .setName(TextComponent.translatable("impetus.options.chunk_fade_in_duration.name"))
-                        .setTooltip(TextComponent.translatable("impetus.options.chunk_fade_in_duration.tooltip"))
-                        .setControl(o -> new SliderControl(o, 0, 2000, 100, ControlValueFormatter.translateVariable("impetus.options.chunk_fade_in_duration.value")))
-                        .setImpact(OptionImpact.LOW)
-                        .setBinding((opts, value) -> opts.quality.chunkFadeInDuration = value, opts -> opts.quality.chunkFadeInDuration)
-                        .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
+                        .setId(StandardOptions.Option.ENTITY_DISTANCE.cast())
+                        .setName(TextComponent.translatable("impetus.options.entity_distance.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.entity_distance.tooltip"))
+                        .setControl(option -> new SliderControl(option, 50, 500, 25, ControlValueFormatter.percentage()))
+                        .setBinding((opts, value) -> opts.quality.entityDistance = value, opts -> opts.quality.entityDistance)
+                        .setImpact(OptionImpact.MEDIUM)
                         .build())
                 .add(OptionImpl.createBuilder(boolean.class, vanillaOpts)
                         .setId(StandardOptions.Option.ENTITY_SHADOWS.cast())
@@ -239,6 +333,15 @@ public class ImpetusGameOptionPages {
                         .setBinding((opts, value) -> opts.quality.enableVignette = value, opts -> opts.quality.enableVignette)
                         .setImpact(OptionImpact.LOW)
                         .build())
+                .add(OptionImpl.createBuilder(int.class, sodiumOpts)
+                        .setId(StandardOptions.Option.CHUNK_FADE_IN_DURATION.cast())
+                        .setName(TextComponent.translatable("impetus.options.chunk_fade_in_duration.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.chunk_fade_in_duration.tooltip"))
+                        .setControl(o -> new SliderControl(o, 0, 2000, 100, ControlValueFormatter.translateVariable("impetus.options.chunk_fade_in_duration.value")))
+                        .setImpact(OptionImpact.LOW)
+                        .setBinding((opts, value) -> opts.quality.chunkFadeInDuration = value, opts -> opts.quality.chunkFadeInDuration)
+                        .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
+                        .build())
                 .build());
 
 
@@ -253,23 +356,48 @@ public class ImpetusGameOptionPages {
                         .setImpact(OptionImpact.MEDIUM)
                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
                         .build())
+                .add(displayOnlyOption(
+                        StandardOptions.Option.TEXTURE_FILTERING,
+                        TextComponent.translatable("impetus.options.texture_filtering.name"),
+                        TextComponent.translatable("impetus.options.texture_filtering.tooltip"),
+                        I18n.format("impetus.options.texture_filtering.value")))
+                .add(readOnlyOption(
+                        StandardOptions.Option.ANISOTROPIC_FILTERING,
+                        TextComponent.translatable("impetus.options.anisotropic_filtering.name"),
+                        TextComponent.translatable("impetus.options.anisotropic_filtering.tooltip"),
+                        I18n.format("options.off")))
+                .add(displayOnlyOption(
+                        StandardOptions.Option.TEXEL_INTERPOLATION,
+                        TextComponent.translatable("impetus.options.texel_interpolation.name"),
+                        TextComponent.translatable("impetus.options.texel_interpolation.tooltip"),
+                        I18n.format("impetus.options.texel_interpolation.value")))
+                .build());
+
+        groups.add(OptionGroup.createBuilder()
+                .setId(StandardOptions.Group.FLUIDS)
+                .add(displayOnlyOption(
+                        StandardOptions.Option.FLUID_CULLING,
+                        TextComponent.translatable("impetus.options.fluid_culling.name"),
+                        TextComponent.translatable("impetus.options.fluid_culling.tooltip"),
+                        I18n.format("impetus.options.fluid_culling.value")))
+                .add(displayOnlyOption(
+                        StandardOptions.Option.FLUID_SHAPING,
+                        TextComponent.translatable("impetus.options.fluid_shaping.name"),
+                        TextComponent.translatable("impetus.options.fluid_shaping.tooltip"),
+                        I18n.format("impetus.options.fluid_shaping.value")))
+                .add(displayOnlyOption(
+                        StandardOptions.Option.ENTITY_SORTING,
+                        TextComponent.translatable("impetus.options.entity_sorting.name"),
+                        TextComponent.translatable("impetus.options.entity_sorting.tooltip"),
+                        I18n.format("impetus.options.entity_sorting.value")))
                 .build());
 
         groups.add(OptionGroup.createBuilder()
                 .setId(StandardOptions.Group.SORTING)
                 .add(OptionImpl.createBuilder(boolean.class, sodiumOpts)
-                        .setId(StandardOptions.Option.TRANSLUCENT_FACE_SORTING.cast())
-                        .setName(TextComponent.translatable("impetus.options.translucent_face_sorting.name"))
-                        .setTooltip(TextComponent.translatable("impetus.options.translucent_face_sorting.tooltip"))
-                        .setControl(TickBoxControl::new)
-                        .setImpact(OptionImpact.VARIES)
-                        .setBinding((opts, value) -> opts.performance.useTranslucentFaceSorting = value, opts -> opts.performance.useTranslucentFaceSorting)
-                        .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
-                        .build())
-                .add(OptionImpl.createBuilder(boolean.class, sodiumOpts)
-                        .setId(OptionIdentifier.create("impetus", "fast_block_renderer", boolean.class))
-                        .setName(TextComponent.literal("Use Fast Block Renderer"))
-                        .setTooltip(TextComponent.literal("Enables the backported faster block renderer from modern Impetus versions, which has better performance but may look slightly different."))
+                        .setId(StandardOptions.Option.FAST_BLOCK_RENDERER.cast())
+                        .setName(TextComponent.translatable("impetus.options.fast_block_renderer.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.fast_block_renderer.tooltip"))
                         .setControl(TickBoxControl::new)
                         .setImpact(OptionImpact.MEDIUM)
                         .setBinding((opts, value) -> ChunkBuilderMeshingTask.USE_NEW_BLOCK_RENDERER = value, opts -> ChunkBuilderMeshingTask.USE_NEW_BLOCK_RENDERER)
@@ -285,6 +413,18 @@ public class ImpetusGameOptionPages {
 
         groups.add(OptionGroup.createBuilder()
                 .setId(StandardOptions.Group.CPU_SAVING)
+                .add(OptionImpl.createBuilder(boolean.class, sodiumOpts)
+                        .setId(StandardOptions.Option.PERSISTENT_MAPPING.cast())
+                        .setName(TextComponent.translatable("impetus.options.use_persistent_mapping.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.use_persistent_mapping.tooltip"))
+                        .setControl(TickBoxControl::new)
+                        .setImpact(OptionImpact.LOW)
+                        .setBinding((opts, value) -> {
+                            opts.advanced.useAdvancedStagingBuffers = value;
+                            RenderRegionManager.USE_ADVANCED_STAGING_BUFFERS = value;
+                        }, opts -> opts.advanced.useAdvancedStagingBuffers)
+                        .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
+                        .build())
                 .add(OptionImpl.createBuilder(int.class, sodiumOpts)
                         .setId(StandardOptions.Option.CPU_FRAMES_AHEAD.cast())
                         .setName(TextComponent.translatable("impetus.options.cpu_render_ahead_limit.name"))
@@ -293,6 +433,31 @@ public class ImpetusGameOptionPages {
                         .setBinding((opts, value) -> opts.advanced.cpuRenderAheadLimit = value, opts -> opts.advanced.cpuRenderAheadLimit)
                         .build()
                 )
+                .add(OptionImpl.createBuilder(boolean.class, sodiumOpts)
+                        .setId(StandardOptions.Option.MEMORY_TRACING.cast())
+                        .setName(TextComponent.translatable("impetus.options.memory_tracing.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.memory_tracing.tooltip"))
+                        .setControl(TickBoxControl::new)
+                        .setImpact(OptionImpact.MEDIUM)
+                        .setBinding((opts, value) -> {
+                            opts.advanced.enableMemoryTracing = value;
+                            NativeBuffer.ENABLE_MEMORY_TRACING = value;
+                        }, opts -> opts.advanced.enableMemoryTracing)
+                        .build())
+                .add(OptionImpl.createBuilder(boolean.class, sodiumOpts)
+                        .setId(StandardOptions.Option.SHOW_TOASTS.cast())
+                        .setName(TextComponent.translatable("impetus.options.show_toasts.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.show_toasts.tooltip"))
+                        .setControl(TickBoxControl::new)
+                        .setBinding((opts, value) -> opts.notifications.showToasts = value, opts -> opts.notifications.showToasts)
+                        .build())
+                .add(OptionImpl.createBuilder(boolean.class, sodiumOpts)
+                        .setId(StandardOptions.Option.INCOMPATIBLE_PACK_WARNINGS.cast())
+                        .setName(TextComponent.translatable("impetus.options.incompatible_pack_warnings.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.incompatible_pack_warnings.tooltip"))
+                        .setControl(TickBoxControl::new)
+                        .setBinding((opts, value) -> opts.advanced.disableIncompatibleModWarnings = !value, opts -> !opts.advanced.disableIncompatibleModWarnings)
+                        .build())
                 .build());
 
         return new OptionPage(StandardOptions.Pages.ADVANCED, TextComponent.translatable("impetus.options.pages.advanced"), ImmutableList.copyOf(groups));
@@ -304,5 +469,8 @@ public class ImpetusGameOptionPages {
 
     public static OptionStorage<ImpetusGameOptions> getSodiumOpts() {
         return sodiumOpts;
+    }
+
+    private static class MenuState {
     }
 }

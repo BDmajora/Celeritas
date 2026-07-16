@@ -3,8 +3,6 @@ package com.bdmajora.impetus;
 import com.mojang.realmsclient.gui.ChatFormatting;
 
 import java.lang.management.ManagementFactory;
-import java.util.ArrayList;
-
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.launchwrapper.Launch;
@@ -13,7 +11,6 @@ import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Loader;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.common.ModContainer;
 import net.minecraftforge.fml.common.Mod.EventHandler;
 import net.minecraftforge.fml.common.event.FMLConstructionEvent;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
@@ -27,7 +24,10 @@ import com.bdmajora.impetus.engine.impl.compat.checks.StartupChecks;
 import com.bdmajora.impetus.engine.impl.compat.environment.GlContextInfo;
 import com.bdmajora.impetus.engine.impl.gl.device.GLRenderDevice;
 import com.bdmajora.impetus.engine.impl.gui.ImpetusGameOptions;
+import com.bdmajora.impetus.engine.impl.render.chunk.region.RenderRegionManager;
 import com.bdmajora.impetus.impl.command.TogglePassCommand;
+import com.bdmajora.impetus.impl.compat.ResourcePackScanner;
+import com.bdmajora.impetus.impl.gui.overlay.ImpetusToastRenderer;
 import com.bdmajora.impetus.impl.render.terrain.ImpetusWorldRenderer;
 import com.bdmajora.impetus.impl.util.PlatformUtil;
 import com.bdmajora.impetus.iris.Iris;
@@ -60,6 +60,7 @@ public class ImpetusVintage {
         // Phase 1: load (parse only) the selected shader pack. No rendering changes happen here — if no pack is
         // selected or loading fails, Impetus renders exactly as before.
         Iris.initialize(PlatformUtil.getGameDir().toPath());
+        ResourcePackScanner.scanIfChanged(Minecraft.getMinecraft());
     }
 
     @SubscribeEvent
@@ -67,7 +68,15 @@ public class ImpetusVintage {
         // Render thread with a live GL context: build/rebuild the Iris pipeline the first frame after a pack change.
         // No-op unless a shader pack was (un)loaded. Safe when Iris is disabled.
         if (event.phase == TickEvent.Phase.START) {
+            ResourcePackScanner.tick(Minecraft.getMinecraft());
             Iris.updatePipeline();
+        }
+    }
+
+    @SubscribeEvent
+    public void onRenderOverlay(RenderGameOverlayEvent.Post event) {
+        if (event.getType() == RenderGameOverlayEvent.ElementType.ALL) {
+            ImpetusToastRenderer.render(Minecraft.getMinecraft(), event.getResolution());
         }
     }
 
@@ -117,14 +126,22 @@ public class ImpetusVintage {
 
     private static ImpetusGameOptions loadConfig() {
         try {
-            return ImpetusGameOptions.load();
+            ImpetusGameOptions config = ImpetusGameOptions.load();
+            applyRuntimeConfig(config);
+            return config;
         } catch (Exception e) {
             LOGGER.error("Failed to load configuration file", e);
             LOGGER.error("Using default configuration file in read-only mode");
             ImpetusGameOptions config = new ImpetusGameOptions();
             config.setReadOnly();
+            applyRuntimeConfig(config);
             return config;
         }
+    }
+
+    private static void applyRuntimeConfig(ImpetusGameOptions config) {
+        NativeBuffer.ENABLE_MEMORY_TRACING = config.advanced.enableMemoryTracing;
+        RenderRegionManager.USE_ADVANCED_STAGING_BUFFERS = config.advanced.useAdvancedStagingBuffers;
     }
 
     public static ImpetusGameOptions options() {

@@ -7,6 +7,7 @@ import com.bdmajora.impetus.engine.impl.render.chunk.ChunkUpdateType;
 import com.bdmajora.impetus.engine.impl.render.chunk.RenderSection;
 import java.util.ArrayDeque;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Queue;
 import com.bdmajora.impetus.engine.impl.render.chunk.occlusion.OcclusionCuller;
 import com.bdmajora.impetus.engine.impl.render.chunk.occlusion.OcclusionNode;
@@ -89,6 +90,10 @@ public class VisibleChunkCollector implements OcclusionCuller.Visitor {
 
     public SortedRenderLists createRenderLists() {
         return new SortedRenderLists(this.sortedRenderLists);
+    }
+
+    public List<ChunkRenderList> getCollectedRenderLists() {
+        return this.sortedRenderLists;
     }
 
     public ChunkRebuildLists getRebuildLists() {

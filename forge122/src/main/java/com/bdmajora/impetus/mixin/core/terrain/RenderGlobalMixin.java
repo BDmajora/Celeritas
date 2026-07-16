@@ -1,6 +1,7 @@
 package com.bdmajora.impetus.mixin.core.terrain;
 
 import com.llamalad7.mixinextras.sugar.Local;
+import net.minecraft.block.BlockLeaves;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.client.multiplayer.WorldClient;
@@ -16,6 +17,8 @@ import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.BlockRenderLayer;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
+import net.minecraft.world.WorldProvider;
+import com.bdmajora.impetus.ImpetusVintage;
 import com.bdmajora.impetus.engine.impl.gl.device.RenderDevice;
 import com.bdmajora.impetus.engine.impl.render.terrain.SimpleWorldRenderer;
 import com.bdmajora.impetus.engine.impl.render.viewport.ViewportProvider;
@@ -24,7 +27,9 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.bdmajora.impetus.impl.render.entity.EntityGatherer;
@@ -60,6 +65,11 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
     private int nullifyBuiltChunkStorage(GameSettings settings) {
         // Do not allow any resources to be allocated
         return 0;
+    }
+
+    @Redirect(method = "loadRenderers", at = @At(value = "INVOKE", target = "Lnet/minecraft/block/BlockLeaves;setGraphicsLevel(Z)V"))
+    private void useConfiguredLeavesGraphicsLevel(BlockLeaves leaves, boolean fancyGraphics) {
+        leaves.setGraphicsLevel(ImpetusVintage.options().quality.leavesQuality.isFancy(fancyGraphics));
     }
 
     @Inject(method = "<init>", at = @At("RETURN"))
@@ -174,6 +184,48 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         return true;
     }
 
+    @Redirect(method = "renderClouds", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/WorldProvider;getCloudHeight()F"))
+    private float getConfiguredFastCloudHeight(WorldProvider provider) {
+        return getConfiguredCloudHeight(provider);
+    }
+
+    @Redirect(method = "renderCloudsFancy", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/WorldProvider;getCloudHeight()F"))
+    private float getConfiguredFancyCloudHeight(WorldProvider provider) {
+        return getConfiguredCloudHeight(provider);
+    }
+
+    private float getConfiguredCloudHeight(WorldProvider provider) {
+        return ImpetusVintage.options().quality.cloudHeight;
+    }
+
+    @ModifyConstant(method = "renderClouds", constant = @Constant(intValue = -256))
+    private int getConfiguredFastCloudDistanceMin(int distance) {
+        return -getConfiguredCloudDistanceBlocks();
+    }
+
+    @ModifyConstant(method = "renderClouds", constant = @Constant(intValue = 256))
+    private int getConfiguredFastCloudDistanceMax(int distance) {
+        return getConfiguredCloudDistanceBlocks();
+    }
+
+    @ModifyConstant(method = "renderCloudsFancy", constant = @Constant(intValue = -3))
+    private int getConfiguredFancyCloudDistanceMin(int distance) {
+        return -getConfiguredCloudDistanceTiles();
+    }
+
+    @ModifyConstant(method = "renderCloudsFancy", constant = @Constant(intValue = 4), require = 0)
+    private int getConfiguredFancyCloudDistanceMax(int distance) {
+        return getConfiguredCloudDistanceTiles();
+    }
+
+    private int getConfiguredCloudDistanceBlocks() {
+        return Math.max(8, ImpetusVintage.options().quality.cloudDistance) * 16;
+    }
+
+    private int getConfiguredCloudDistanceTiles() {
+        return Math.max(2, (int)Math.ceil(getConfiguredCloudDistanceBlocks() / 96.0D));
+    }
+
     @Inject(method = "loadRenderers", at = @At("RETURN"))
     private void onReload(CallbackInfo ci) {
         RenderDevice.enterManagedCode();
@@ -243,7 +295,8 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         EntityPlayerSP player = this.mc.player;
         BlockPos.MutableBlockPos entityBlockPos = new BlockPos.MutableBlockPos();
         // Apply entity distance scaling
-        Entity.setRenderDistanceWeight(MathHelper.clamp((double)this.mc.gameSettings.renderDistanceChunks / 8.0D, 1.0D, 2.5D) * 1);
+        Entity.setRenderDistanceWeight(MathHelper.clamp((double)this.mc.gameSettings.renderDistanceChunks / 8.0D, 1.0D, 2.5D)
+                * (ImpetusVintage.options().quality.entityDistance / 100.0D));
 
         for(Entity entity : impetus$collectedEntities[pass]) {
             // Do regular vanilla checks for visibility
@@ -276,4 +329,3 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         }
     }
 }
-

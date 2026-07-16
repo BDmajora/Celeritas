@@ -1,5 +1,7 @@
 package com.bdmajora.impetus.engine.impl.gui.theme;
 
+import com.bdmajora.impetus.api.config.theme.ConfigThemeRegistry;
+
 public class DefaultColors {
     public static final int ELEMENT_ACTIVATED = 0xFF00CBCB;
     public static final int ELEMENT_ACTIVATED_DIM = 0xB000CBCB;
@@ -24,6 +26,11 @@ public class DefaultColors {
     public static int getModAccentColor(String modId) {
         if (modId == null || modId.isEmpty()) {
             return ELEMENT_ACTIVATED;
+        }
+
+        var registered = ConfigThemeRegistry.getAccentColor(modId);
+        if (registered.isPresent()) {
+            return registered.getAsInt();
         }
 
         return switch (modId) {

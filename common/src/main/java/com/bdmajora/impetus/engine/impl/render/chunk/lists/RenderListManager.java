@@ -5,11 +5,13 @@ import it.unimi.dsi.fastutil.longs.Long2ReferenceOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import lombok.Getter;
 import lombok.Setter;
+import com.bdmajora.impetus.engine.impl.render.chunk.async.ChunkCullTask;
 import com.bdmajora.impetus.engine.impl.render.chunk.RenderSection;
 import com.bdmajora.impetus.engine.impl.render.chunk.data.SectionRenderDataUnsafe;
 import com.bdmajora.impetus.engine.impl.render.chunk.occlusion.GraphDirection;
 import com.bdmajora.impetus.engine.impl.render.chunk.occlusion.OcclusionCuller;
 import com.bdmajora.impetus.engine.impl.render.chunk.occlusion.OcclusionNode;
+import com.bdmajora.impetus.engine.impl.render.chunk.occlusion.SectionTree;
 import com.bdmajora.impetus.engine.impl.render.chunk.sorting.TranslucentQuadAnalyzer;
 import com.bdmajora.impetus.engine.impl.render.chunk.terrain.TerrainRenderPass;
 import com.bdmajora.impetus.engine.impl.render.viewport.Viewport;
@@ -22,7 +24,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
 
 public class RenderListManager {
     @Getter
@@ -35,6 +36,7 @@ public class RenderListManager {
     private final OcclusionCuller occlusionCuller;
 
     private final Long2ReferenceMap<OcclusionNode> occlusionNodes = new Long2ReferenceOpenHashMap<>();
+    private final SectionTree sectionTree = new SectionTree();
 
     // Non-null for the duration of an in-progress async graph search. Acts as a flag:
     // structural mutations to occlusionNodes (attach/detach/rewire) are forbidden while set,
@@ -94,7 +96,7 @@ public class RenderListManager {
         } else {
             this.asyncGraphExecutor = null;
         }
-        this.occlusionCuller = new OcclusionCuller(this.occlusionNodes, minSectionY, maxSectionY);
+        this.occlusionCuller = new OcclusionCuller(this.occlusionNodes, this.sectionTree, minSectionY, maxSectionY);
         this.renderLists = SortedRenderLists.empty();
         this.rebuildLists = ChunkRebuildLists.EMPTY;
     }
@@ -106,17 +108,8 @@ public class RenderListManager {
 
         var visitor = new VisibleChunkCollector(frame, regionIdsLength, targetQueueSize);
 
-        Supplier<VisibleChunkCollector> occlusionTask = () -> {
-            this.occlusionCuller.findVisible(visitor, viewport, searchDistance, useOcclusionCulling, frame);
-
-            // WARNING: when asyncGraphExecutor != null, this runs on the async thread.
-            // SectionTicker.onRenderListUpdated() must be safe to call off the render thread.
-            if (this.sectionTicker != null) {
-                this.sectionTicker.onRenderListUpdated(visitor.getSortedRenderLists());
-            }
-
-            return visitor;
-        };
+        var occlusionTask = new ChunkCullTask(this.occlusionCuller, visitor, viewport, searchDistance,
+                useOcclusionCulling, frame, this.sectionTicker);
 
         this.pendingLastUpdatedFrame = frame;
 
@@ -220,6 +213,7 @@ public class RenderListManager {
 
         var node = new OcclusionNode(section);
         this.occlusionNodes.put(key, node);
+        this.sectionTree.add(node);
         this.connectNeighborNodes(node);
         this.needsUpdate = true;
     }
@@ -236,6 +230,7 @@ public class RenderListManager {
         }
 
         this.disconnectNeighborNodes(occlusionNode);
+        this.sectionTree.remove(occlusionNode);
         this.needsUpdate = true;
     }
 

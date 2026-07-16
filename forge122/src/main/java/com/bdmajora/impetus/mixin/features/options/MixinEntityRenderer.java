@@ -6,6 +6,8 @@ import net.minecraft.client.settings.GameSettings;
 import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Constant;
+import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import com.bdmajora.impetus.ImpetusVintage;
 
@@ -14,5 +16,20 @@ public class MixinEntityRenderer {
     @Redirect(method = "renderRainSnow", at = @At(value = "FIELD", target = "Lnet/minecraft/client/settings/GameSettings;fancyGraphics:Z", opcode = Opcodes.GETFIELD))
     private boolean redirectGetFancyWeather(GameSettings instance) {
         return ImpetusVintage.options().quality.weatherQuality.isFancy(Minecraft.getMinecraft().gameSettings.fancyGraphics);
+    }
+
+    @ModifyConstant(method = "renderRainSnow", constant = @Constant(intValue = 5))
+    private int useConfiguredFastWeatherRadius(int radius) {
+        return Math.max(1, ImpetusVintage.options().quality.weatherEffectRadius / 2);
+    }
+
+    @ModifyConstant(method = "renderRainSnow", constant = @Constant(intValue = 10))
+    private int useConfiguredFancyWeatherRadius(int radius) {
+        return Math.max(1, ImpetusVintage.options().quality.weatherEffectRadius);
+    }
+
+    @ModifyConstant(method = "addRainParticles", constant = @Constant(intValue = 10), require = 0)
+    private int useConfiguredRainParticleRadius(int radius) {
+        return Math.max(1, ImpetusVintage.options().quality.weatherEffectRadius);
     }
 }

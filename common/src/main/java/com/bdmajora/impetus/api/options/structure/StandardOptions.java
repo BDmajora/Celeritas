@@ -17,6 +17,8 @@ public final class StandardOptions {
         public static final OptionIdentifier<Void> CPU_SAVING = OptionIdentifier.create(IMPETUS_MOD_ID, "cpu_saving");
         public static final OptionIdentifier<Void> SORTING = OptionIdentifier.create(IMPETUS_MOD_ID, "sorting");
         public static final OptionIdentifier<Void> LIGHTING = OptionIdentifier.create(IMPETUS_MOD_ID, "lighting");
+        public static final OptionIdentifier<Void> FILTERING = OptionIdentifier.create(IMPETUS_MOD_ID, "filtering");
+        public static final OptionIdentifier<Void> FLUIDS = OptionIdentifier.create(IMPETUS_MOD_ID, "fluids");
     }
 
     public static class Pages {
@@ -40,10 +42,15 @@ public final class StandardOptions {
         public static final OptionIdentifier<Void> INACTIVITY_FPS_LIMIT = OptionIdentifier.create("minecraft", "inactivity_fps_limit");
         public static final OptionIdentifier<Void> ATTACK_INDICATOR = OptionIdentifier.create("minecraft", "attack_indicator");
         public static final OptionIdentifier<Void> AUTOSAVE_INDICATOR = OptionIdentifier.create("minecraft", "autosave_indicator");
+        public static final OptionIdentifier<Void> GRAPHICS_API = OptionIdentifier.create("minecraft", "graphics_api");
         public static final OptionIdentifier<Void> GRAPHICS_MODE = OptionIdentifier.create("minecraft", "graphics_mode");
         public static final OptionIdentifier<Void> CLOUDS = OptionIdentifier.create("minecraft", "clouds");
+        public static final OptionIdentifier<Void> CLOUD_HEIGHT = OptionIdentifier.create("minecraft", "cloud_height");
+        public static final OptionIdentifier<Void> CLOUD_DISTANCE = OptionIdentifier.create("minecraft", "cloud_distance");
         public static final OptionIdentifier<Void> WEATHER = OptionIdentifier.create("minecraft", "weather");
+        public static final OptionIdentifier<Void> WEATHER_EFFECT_RADIUS = OptionIdentifier.create("minecraft", "weather_effect_radius");
         public static final OptionIdentifier<Void> LEAVES = OptionIdentifier.create("minecraft", "leaves");
+        public static final OptionIdentifier<Void> SEE_THROUGH_LEAVES = OptionIdentifier.create("minecraft", "see_through_leaves");
         public static final OptionIdentifier<Void> PARTICLES = OptionIdentifier.create("minecraft", "particles");
         public static final OptionIdentifier<Void> SMOOTH_LIGHT = OptionIdentifier.create("minecraft", "smooth_lighting");
         public static final OptionIdentifier<Void> BIOME_BLEND = OptionIdentifier.create("minecraft", "biome_blend");
@@ -51,6 +58,9 @@ public final class StandardOptions {
         public static final OptionIdentifier<Void> ENTITY_SHADOWS = OptionIdentifier.create("minecraft", "entity_shadows");
         public static final OptionIdentifier<Void> VIGNETTE = OptionIdentifier.create("minecraft", "vignette");
         public static final OptionIdentifier<Void> MIPMAP_LEVEL = OptionIdentifier.create("minecraft", "mipmap_levels");
+        public static final OptionIdentifier<Void> TEXTURE_FILTERING = OptionIdentifier.create("minecraft", "texture_filtering");
+        public static final OptionIdentifier<Void> ANISOTROPIC_FILTERING = OptionIdentifier.create("minecraft", "anisotropic_filtering");
+        public static final OptionIdentifier<Void> TEXEL_INTERPOLATION = OptionIdentifier.create("minecraft", "texel_interpolation");
         public static final OptionIdentifier<Void> CHUNK_UPDATE_THREADS = OptionIdentifier.create(IMPETUS_MOD_ID, "chunk_update_threads");
         public static final OptionIdentifier<Void> DEFFER_CHUNK_UPDATES = OptionIdentifier.create(IMPETUS_MOD_ID, "defer_chunk_updates");
         public static final OptionIdentifier<Void> BLOCK_FACE_CULLING = OptionIdentifier.create(IMPETUS_MOD_ID, "block_face_culling");
@@ -68,5 +78,13 @@ public final class StandardOptions {
         public static final OptionIdentifier<Void> USE_FASTER_CLOUDS = OptionIdentifier.create(IMPETUS_MOD_ID, "use_faster_clouds");
         public static final OptionIdentifier<Void> ASYNC_GRAPH_SEARCH = OptionIdentifier.create(IMPETUS_MOD_ID, "async_graph_search");
         public static final OptionIdentifier<Void> CHUNK_FADE_IN_DURATION = OptionIdentifier.create(IMPETUS_MOD_ID, "chunk_fade_in_duration");
+        public static final OptionIdentifier<Void> IMPROVED_TRANSPARENCY = OptionIdentifier.create(IMPETUS_MOD_ID, "improved_transparency");
+        public static final OptionIdentifier<Void> FLUID_CULLING = OptionIdentifier.create(IMPETUS_MOD_ID, "fluid_culling");
+        public static final OptionIdentifier<Void> FLUID_SHAPING = OptionIdentifier.create(IMPETUS_MOD_ID, "fluid_shaping");
+        public static final OptionIdentifier<Void> ENTITY_SORTING = OptionIdentifier.create(IMPETUS_MOD_ID, "entity_sorting");
+        public static final OptionIdentifier<Void> FAST_BLOCK_RENDERER = OptionIdentifier.create(IMPETUS_MOD_ID, "fast_block_renderer");
+        public static final OptionIdentifier<Void> MEMORY_TRACING = OptionIdentifier.create(IMPETUS_MOD_ID, "memory_tracing");
+        public static final OptionIdentifier<Void> SHOW_TOASTS = OptionIdentifier.create(IMPETUS_MOD_ID, "show_toasts");
+        public static final OptionIdentifier<Void> INCOMPATIBLE_PACK_WARNINGS = OptionIdentifier.create(IMPETUS_MOD_ID, "incompatible_pack_warnings");
     }
 }

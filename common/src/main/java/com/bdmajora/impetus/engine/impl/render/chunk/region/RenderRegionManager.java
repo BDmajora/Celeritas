@@ -14,6 +14,7 @@ import com.bdmajora.impetus.engine.impl.render.chunk.RenderSection;
 import com.bdmajora.impetus.engine.impl.render.chunk.compile.ChunkBuildOutput;
 import com.bdmajora.impetus.engine.impl.render.chunk.compile.ChunkSortOutput;
 import com.bdmajora.impetus.engine.impl.render.chunk.compile.ChunkTaskOutput;
+import com.bdmajora.impetus.engine.impl.render.chunk.compile.estimation.UploadDurationEstimator;
 import com.bdmajora.impetus.engine.impl.render.chunk.compile.executor.ChunkJobResult;
 import com.bdmajora.impetus.engine.impl.render.chunk.data.BuiltSectionMeshParts;
 import com.bdmajora.impetus.engine.impl.render.chunk.terrain.TerrainRenderPass;
@@ -22,6 +23,8 @@ import org.jetbrains.annotations.NotNull;
 import java.util.*;
 
 public class RenderRegionManager {
+    public static boolean USE_ADVANCED_STAGING_BUFFERS = true;
+
     private final Long2ReferenceOpenHashMap<RenderRegion> regions = new Long2ReferenceOpenHashMap<>();
     private final BitSet regionIds = new BitSet();
     private int nextFreeId = 0;
@@ -29,6 +32,7 @@ public class RenderRegionManager {
     private final StagingBuffer stagingBuffer;
 
     private final RenderPassConfiguration<?> renderPassConfiguration;
+    private final UploadDurationEstimator uploadDurationEstimator = new UploadDurationEstimator();
 
     public RenderRegionManager(CommandList commandList, RenderPassConfiguration<?> renderPassConfiguration) {
         this.stagingBuffer = createStagingBuffer(commandList);
@@ -59,9 +63,20 @@ public class RenderRegionManager {
     }
 
     public void uploadMeshes(CommandList commandList, Collection<ChunkJobResult.Success<? extends ChunkTaskOutput>> results, Runnable graphUpdateTrigger) {
+        long uploadedBytes = 0L;
+        long startTime = System.nanoTime();
+
         for (var entry : this.createMeshUploadQueues(results)) {
-            new MeshUploader(commandList, entry.getKey(), graphUpdateTrigger).processResults(entry.getValue());
+            uploadedBytes += new MeshUploader(commandList, entry.getKey(), graphUpdateTrigger).processResults(entry.getValue());
         }
+
+        if (uploadedBytes > 0L) {
+            this.uploadDurationEstimator.recordUpload(uploadedBytes, System.nanoTime() - startTime);
+        }
+    }
+
+    public UploadDurationEstimator getUploadDurationEstimator() {
+        return this.uploadDurationEstimator;
     }
 
     /* Copied from fastutil 8 as we don't have access to it when limited to fastutil 7 */
@@ -120,7 +135,7 @@ public class RenderRegionManager {
             }
         }
 
-        public void processResults(Collection<? extends ChunkTaskOutput> results) {
+        public long processResults(Collection<? extends ChunkTaskOutput> results) {
             for (ChunkTaskOutput output : results) {
                 if (output instanceof ChunkBuildOutput result) {
                     processBuildResult(result);
@@ -133,10 +148,11 @@ public class RenderRegionManager {
 
             // If we have nothing to upload, abort!
             if (uploadsByFormat.isEmpty()) {
-                return;
+                return 0L;
             }
 
             boolean bufferChanged = false;
+            long uploadedBytes = this.getQueuedUploadBytes();
 
             for (var entry : uploadsByFormat.entrySet()) {
                 var resources = region.createResources(entry.getKey(), commandList);
@@ -184,7 +200,26 @@ public class RenderRegionManager {
             if (region.getPassSetUpdateCount() != previousPassCookie) {
                 graphUpdateTrigger.run();
             }
+
+            return uploadedBytes;
         }
+
+        private long getQueuedUploadBytes() {
+            long bytes = 0L;
+
+            for (var uploads : uploadsByFormat.values()) {
+                for (PendingSectionUpload upload : uploads) {
+                    bytes += getUploadLength(upload.vertexUpload());
+                    bytes += getUploadLength(upload.indexUpload());
+                }
+            }
+
+            return bytes;
+        }
+    }
+
+    private static long getUploadLength(PendingUpload upload) {
+        return upload != null ? upload.getLength() : 0L;
     }
 
     private Reference2ReferenceMap.FastEntrySet<RenderRegion, List<ChunkTaskOutput>> createMeshUploadQueues(Collection<ChunkJobResult.Success<? extends ChunkTaskOutput>> results) {
@@ -264,7 +299,7 @@ public class RenderRegionManager {
 
 
     private static StagingBuffer createStagingBuffer(CommandList commandList) {
-        if (MappedStagingBuffer.isSupported(RenderDevice.INSTANCE)) {
+        if (USE_ADVANCED_STAGING_BUFFERS && MappedStagingBuffer.isSupported(RenderDevice.INSTANCE)) {
             return new MappedStagingBuffer(commandList);
         }
 
