@@ -45,6 +45,9 @@ public class ImpetusVintage {
         VERSION = Loader.instance().getIndexedModList().get(MODID).getVersion();
         MinecraftForge.EVENT_BUS.register(this);
 
+        // Seed the engine's hot-path option snapshot from the loaded config.
+        com.bdmajora.impetus.engine.impl.ImpetusRuntimeOptions.apply(CONFIG);
+
         // Platform compatibility: GL strings must be read on the client thread (which owns the context during
         // FML construction); the adapter probe and overlay scan then continue on a background thread.
         StartupChecks.installCrashDialog();

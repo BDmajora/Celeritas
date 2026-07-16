@@ -1,7 +1,10 @@
 package com.bdmajora.impetus.mixin.core;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.settings.GameSettings;
+import com.bdmajora.impetus.engine.impl.ImpetusRuntimeOptions;
+import com.bdmajora.impetus.engine.impl.gui.ImpetusGameOptions;
 import com.bdmajora.impetus.engine.impl.render.frame.RenderAheadManager;
 import org.lwjgl.LWJGLException;
 import org.lwjgl.opengl.Display;
@@ -40,6 +43,31 @@ public class MinecraftMixin {
     @Inject(method = "runTick", at = @At("RETURN"))
     private void postRender(CallbackInfo ci) {
         impetus$renderAheadManager.endFrame();
+    }
+
+    /**
+     * Inactivity frame-rate limiting: caps the frame rate hard when the window is minimized, and (in AFK mode)
+     * when it is merely unfocused. Modern Sodium exposes the same behaviour as its "Inactivity FPS Limit" option.
+     */
+    @ModifyReturnValue(method = "getLimitFramerate", at = @At("RETURN"))
+    private int impetus$applyInactivityFpsLimit(int limit) {
+        ImpetusGameOptions.InactivityFpsLimit mode = ImpetusRuntimeOptions.inactivityFpsLimit;
+
+        if (mode == ImpetusGameOptions.InactivityFpsLimit.NO_LIMIT) {
+            return limit;
+        }
+
+        if (!Display.isVisible()) {
+            // Minimized window: both AFK and MINIMIZED modes clamp hard.
+            return Math.min(limit, 10);
+        }
+
+        if (mode == ImpetusGameOptions.InactivityFpsLimit.AFK && !Display.isActive()) {
+            // Unfocused window in AFK mode.
+            return Math.min(limit, 30);
+        }
+
+        return limit;
     }
 
     @Redirect(method = "createDisplay", at = @At(value = "INVOKE", target = "Lorg/lwjgl/opengl/Display;create()V", remap = false))

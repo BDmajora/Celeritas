@@ -41,7 +41,12 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
                 if (flags.contains(OptionFlag.REQUIRES_ASSET_RELOAD)) {
                     client.getTextureMapBlocks().setMipmapLevels(mc.gameSettings.mipmapLevels);
                     client.refreshResources();
+                    // Re-apply texture/pixel filtering + anisotropy in case the atlas was not fully restitched.
+                    com.bdmajora.impetus.impl.render.texture.BlockAtlasFiltering.reapplyToBlockAtlas();
                 }
+
+                // Push hot-path option values into the engine's runtime snapshot.
+                com.bdmajora.impetus.engine.impl.ImpetusRuntimeOptions.apply(ImpetusVintage.options());
             }
         };
         resetDrag();
@@ -52,7 +57,6 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
         pages.add(ImpetusGameOptionPages.general());
         pages.add(ImpetusGameOptionPages.quality());
         pages.add(CommonOptionPages.performance(ImpetusVintage.options()));
-        pages.add(ImpetusGameOptionPages.advanced());
 
         if (ShaderModBridge.isShaderModPresent()) {
             pages.add(IrisOptionPages.shaderPacks(parent));

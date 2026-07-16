@@ -6,11 +6,14 @@ import com.bdmajora.impetus.api.options.control.CyclingControl;
 import com.bdmajora.impetus.api.options.control.ReadOnlyStringControl;
 import com.bdmajora.impetus.api.options.control.SliderControl;
 import com.bdmajora.impetus.api.options.control.TickBoxControl;
+import com.bdmajora.impetus.engine.impl.ImpetusRuntimeOptions;
+import com.bdmajora.impetus.engine.impl.common.util.NativeBuffer;
 import com.bdmajora.impetus.engine.impl.gui.ImpetusGameOptions;
 import com.bdmajora.impetus.engine.impl.gui.framework.TextComponent;
 import com.bdmajora.impetus.engine.impl.render.ShaderModBridge;
 import com.bdmajora.impetus.engine.impl.render.chunk.compile.executor.ChunkBuilder;
 import com.bdmajora.impetus.engine.impl.render.chunk.occlusion.AsyncOcclusionMode;
+import com.bdmajora.impetus.engine.impl.render.chunk.region.RenderRegionManager;
 import com.bdmajora.impetus.api.options.structure.*;
 
 import java.util.ArrayList;
@@ -70,6 +73,7 @@ public class CommonOptionPages {
     public static OptionPage performance(ImpetusGameOptions gameOpts) {
         List<OptionGroup> groups = new ArrayList<>();
 
+        // Group 1: chunk updates (matches Sodium 0.9.1)
         groups.add(OptionGroup.createBuilder()
                 .setId(StandardOptions.Group.CHUNK_UPDATES)
                 .add(OptionImpl.createBuilder(int.class, gameOpts)
@@ -82,29 +86,23 @@ public class CommonOptionPages {
                         .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
                         .build()
                 )
-                .add(OptionImpl.createBuilder(boolean.class, gameOpts)
+                .add(OptionImpl.createBuilder(ImpetusGameOptions.DeferChunkUpdatesMode.class, gameOpts)
                         .setId(StandardOptions.Option.DEFFER_CHUNK_UPDATES.cast())
-                        .setName(TextComponent.translatable("impetus.options.chunk_updates.name"))
+                        .setName(TextComponent.translatable("impetus.options.defer_chunk_updates.name"))
                         .setTooltip(TextComponent.translatable("impetus.options.always_defer_chunk_updates.tooltip"))
-                        .setControl(o -> new CyclingControl<>(o, new Boolean[] { false, true }, new TextComponent[] {
-                                TextComponent.literal("Immediate"),
-                                TextComponent.literal("Deferred") }))
+                        .setControl(o -> new CyclingControl<>(o, ImpetusGameOptions.DeferChunkUpdatesMode.class))
                         .setImpact(OptionImpact.HIGH)
-                        .setBinding((opts, value) -> opts.performance.alwaysDeferChunkUpdates = value, opts -> opts.performance.alwaysDeferChunkUpdates)
+                        .setBinding((opts, value) -> {
+                            opts.performance.deferChunkUpdatesMode = value;
+                            opts.performance.alwaysDeferChunkUpdates = value.defersVisible();
+                            ImpetusRuntimeOptions.apply(opts);
+                        }, opts -> opts.performance.deferChunkUpdatesMode)
                         .setFlags(OptionFlag.REQUIRES_RENDERER_UPDATE)
-                        .build())
-                .add(OptionImpl.createBuilder(AsyncOcclusionMode.class, gameOpts)
-                        .setId(StandardOptions.Option.ASYNC_GRAPH_SEARCH.cast())
-                        .setName(TextComponent.translatable("impetus.options.async_graph_search.name"))
-                        .setTooltip(TextComponent.translatable("impetus.options.async_graph_search.tooltip"))
-                        .setControl(o -> new CyclingControl<>(o, AsyncOcclusionMode.class, new TextComponent[] { TextComponent.literal("Off"), TextComponent.literal("Only Shadows"), TextComponent.literal("Everything") }))
-                        .setImpact(OptionImpact.MEDIUM)
-                        .setBinding((opts, value) -> opts.performance.asyncOcclusionMode = value, opts -> opts.performance.asyncOcclusionMode)
-                        .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
                         .build())
                 .build()
         );
 
+        // Group 2: rendering & culling (matches Sodium 0.9.1)
         groups.add(OptionGroup.createBuilder()
                 .setId(StandardOptions.Group.RENDERING_CULLING)
                 .add(OptionImpl.createBuilder(boolean.class, gameOpts)
@@ -146,28 +144,68 @@ public class CommonOptionPages {
                         .setFlags(OptionFlag.REQUIRES_RENDERER_UPDATE)
                         .build()
                 )
-                .add(readOnlyOption(
-                        StandardOptions.Option.NO_ERROR_CONTEXT,
-                        TextComponent.translatable("impetus.options.use_no_error_context.name"),
-                        TextComponent.translatable("impetus.options.use_no_error_context.disabled_tooltip"),
-                        ""))
-                .add(displayOnlyOption(
-                        StandardOptions.Option.INACTIVITY_FPS_LIMIT,
-                        TextComponent.translatable("impetus.options.inactivity_fps_limit.name"),
-                        TextComponent.translatable("impetus.options.inactivity_fps_limit.disabled_tooltip"),
-                        "AFK"))
                 .add(OptionImpl.createBuilder(boolean.class, gameOpts)
+                        .setId(StandardOptions.Option.NO_ERROR_CONTEXT.cast())
+                        .setName(TextComponent.translatable("impetus.options.use_no_error_context.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.use_no_error_context.tooltip"))
+                        .setControl(TickBoxControl::new)
+                        .setImpact(OptionImpact.LOW)
+                        .setBinding((opts, value) -> opts.performance.useNoErrorGLContext = value, opts -> opts.performance.useNoErrorGLContext)
+                        .setFlags(OptionFlag.REQUIRES_GAME_RESTART)
+                        .build())
+                .add(OptionImpl.createBuilder(ImpetusGameOptions.InactivityFpsLimit.class, gameOpts)
+                        .setId(StandardOptions.Option.INACTIVITY_FPS_LIMIT.cast())
+                        .setName(TextComponent.translatable("impetus.options.inactivity_fps_limit.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.inactivity_fps_limit.tooltip"))
+                        .setControl(o -> new CyclingControl<>(o, ImpetusGameOptions.InactivityFpsLimit.class))
+                        .setImpact(OptionImpact.LOW)
+                        .setBinding((opts, value) -> {
+                            opts.performance.inactivityFpsLimit = value;
+                            ImpetusRuntimeOptions.apply(opts);
+                        }, opts -> opts.performance.inactivityFpsLimit)
+                        .build())
+                .build());
+
+        // Group 3: translucency sorting / quad splitting (matches Sodium 0.9.1)
+        groups.add(OptionGroup.createBuilder()
+                .setId(StandardOptions.Group.SORTING)
+                .add(OptionImpl.createBuilder(ImpetusGameOptions.QuadSplittingMode.class, gameOpts)
                         .setId(StandardOptions.Option.TRANSLUCENT_FACE_SORTING.cast())
-                        .setName(TextComponent.translatable("impetus.options.block_transparency.name"))
-                        .setTooltip(TextComponent.translatable("impetus.options.translucent_face_sorting.tooltip"))
-                        .setControl(o -> new CyclingControl<>(o, new Boolean[] { false, true }, new TextComponent[] {
-                                TextComponent.literal("Fast"),
-                                TextComponent.literal("Safe") }))
-                        .setImpact(OptionImpact.VARIES)
-                        .setBinding((opts, value) -> opts.performance.useTranslucentFaceSorting = value, opts -> opts.performance.useTranslucentFaceSorting)
+                        .setName(TextComponent.translatable("impetus.options.quad_splitting.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.quad_splitting.tooltip"))
+                        .setControl(o -> new CyclingControl<>(o, ImpetusGameOptions.QuadSplittingMode.class))
+                        .setImpact(OptionImpact.MEDIUM)
                         .setEnabled(!ShaderModBridge.isNvidiumEnabled())
+                        .setBinding((opts, value) -> {
+                            opts.performance.quadSplittingMode = value;
+                            ImpetusRuntimeOptions.apply(opts);
+                        }, opts -> opts.performance.quadSplittingMode)
                         .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
                         .build())
+                .build());
+
+        // Group 4: Impetus engine tunables (no upstream Sodium equivalent; kept so functionality is not lost)
+        groups.add(OptionGroup.createBuilder()
+                .setId(StandardOptions.Group.CPU_SAVING)
+                .add(OptionImpl.createBuilder(AsyncOcclusionMode.class, gameOpts)
+                        .setId(StandardOptions.Option.ASYNC_GRAPH_SEARCH.cast())
+                        .setName(TextComponent.translatable("impetus.options.async_graph_search.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.async_graph_search.tooltip"))
+                        .setControl(o -> new CyclingControl<>(o, AsyncOcclusionMode.class, new TextComponent[] { TextComponent.literal("Off"), TextComponent.literal("Only Shadows"), TextComponent.literal("Everything") }))
+                        .setImpact(OptionImpact.MEDIUM)
+                        .setBinding((opts, value) -> opts.performance.asyncOcclusionMode = value, opts -> opts.performance.asyncOcclusionMode)
+                        .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
+                        .build())
+                .add(OptionImpl.createBuilder(boolean.class, gameOpts)
+                        .setId(StandardOptions.Option.COMPACT_VERTEX_FORMAT.cast())
+                        .setName(TextComponent.translatable("impetus.options.use_compact_vertex_format.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.use_compact_vertex_format.tooltip"))
+                        .setControl(TickBoxControl::new)
+                        .setImpact(OptionImpact.MEDIUM)
+                        .setBinding((opts, value) -> opts.performance.useCompactVertexFormat = value, opts -> opts.performance.useCompactVertexFormat)
+                        .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
+                        .build()
+                )
                 .add(OptionImpl.createBuilder(boolean.class, gameOpts)
                         .setId(StandardOptions.Option.RENDER_PASS_OPTIMIZATION.cast())
                         .setName(TextComponent.translatable("impetus.options.use_render_pass_optimization.name"))
@@ -178,18 +216,6 @@ public class CommonOptionPages {
                         .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
                         .build())
                 .add(OptionImpl.createBuilder(boolean.class, gameOpts)
-                        .setId(StandardOptions.Option.COMPACT_VERTEX_FORMAT.cast())
-                        .setName(TextComponent.translatable("impetus.options.use_compact_vertex_format.name"))
-                        .setTooltip(TextComponent.translatable("impetus.options.use_compact_vertex_format.tooltip"))
-                        .setControl(TickBoxControl::new)
-                        .setImpact(OptionImpact.MEDIUM)
-                        .setBinding((opts, value) -> {
-                            opts.performance.useCompactVertexFormat = value;
-                        }, opts -> opts.performance.useCompactVertexFormat)
-                        .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
-                        .build()
-                )
-                .add(OptionImpl.createBuilder(boolean.class, gameOpts)
                         .setId(StandardOptions.Option.RENDER_PASS_CONSOLIDATION.cast())
                         .setName(TextComponent.translatable("impetus.options.use_render_pass_consolidation.name"))
                         .setTooltip(TextComponent.translatable("impetus.options.use_render_pass_consolidation.tooltip"))
@@ -198,7 +224,6 @@ public class CommonOptionPages {
                         .setBinding((opts, value) -> opts.performance.useRenderPassConsolidation = value, opts -> opts.performance.useRenderPassConsolidation)
                         .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
                         .build())
-                //? if <1.21.2 {
                 .add(OptionImpl.createBuilder(boolean.class, gameOpts)
                         .setId(StandardOptions.Option.USE_FASTER_CLOUDS.cast())
                         .setName(TextComponent.translatable("impetus.options.use_faster_clouds.name"))
@@ -207,7 +232,50 @@ public class CommonOptionPages {
                         .setImpact(OptionImpact.LOW)
                         .setBinding((opts, value) -> opts.performance.useFasterClouds = value, opts -> opts.performance.useFasterClouds)
                         .build())
-                //?}
+                .add(OptionImpl.createBuilder(boolean.class, gameOpts)
+                        .setId(StandardOptions.Option.PERSISTENT_MAPPING.cast())
+                        .setName(TextComponent.translatable("impetus.options.use_persistent_mapping.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.use_persistent_mapping.tooltip"))
+                        .setControl(TickBoxControl::new)
+                        .setImpact(OptionImpact.LOW)
+                        .setBinding((opts, value) -> {
+                            opts.advanced.useAdvancedStagingBuffers = value;
+                            RenderRegionManager.USE_ADVANCED_STAGING_BUFFERS = value;
+                        }, opts -> opts.advanced.useAdvancedStagingBuffers)
+                        .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
+                        .build())
+                .add(OptionImpl.createBuilder(int.class, gameOpts)
+                        .setId(StandardOptions.Option.CPU_FRAMES_AHEAD.cast())
+                        .setName(TextComponent.translatable("impetus.options.cpu_render_ahead_limit.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.cpu_render_ahead_limit.tooltip"))
+                        .setControl(opt -> new SliderControl(opt, 0, 9, 1, ControlValueFormatter.translateVariable("impetus.options.cpu_render_ahead_limit.value")))
+                        .setBinding((opts, value) -> opts.advanced.cpuRenderAheadLimit = value, opts -> opts.advanced.cpuRenderAheadLimit)
+                        .build())
+                .add(OptionImpl.createBuilder(boolean.class, gameOpts)
+                        .setId(StandardOptions.Option.MEMORY_TRACING.cast())
+                        .setName(TextComponent.translatable("impetus.options.memory_tracing.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.memory_tracing.tooltip"))
+                        .setControl(TickBoxControl::new)
+                        .setImpact(OptionImpact.MEDIUM)
+                        .setBinding((opts, value) -> {
+                            opts.advanced.enableMemoryTracing = value;
+                            NativeBuffer.ENABLE_MEMORY_TRACING = value;
+                        }, opts -> opts.advanced.enableMemoryTracing)
+                        .build())
+                .add(OptionImpl.createBuilder(boolean.class, gameOpts)
+                        .setId(StandardOptions.Option.SHOW_TOASTS.cast())
+                        .setName(TextComponent.translatable("impetus.options.show_toasts.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.show_toasts.tooltip"))
+                        .setControl(TickBoxControl::new)
+                        .setBinding((opts, value) -> opts.notifications.showToasts = value, opts -> opts.notifications.showToasts)
+                        .build())
+                .add(OptionImpl.createBuilder(boolean.class, gameOpts)
+                        .setId(StandardOptions.Option.INCOMPATIBLE_PACK_WARNINGS.cast())
+                        .setName(TextComponent.translatable("impetus.options.incompatible_pack_warnings.name"))
+                        .setTooltip(TextComponent.translatable("impetus.options.incompatible_pack_warnings.tooltip"))
+                        .setControl(TickBoxControl::new)
+                        .setBinding((opts, value) -> opts.advanced.disableIncompatibleModWarnings = !value, opts -> !opts.advanced.disableIncompatibleModWarnings)
+                        .build())
                 .build());
 
         return new OptionPage(StandardOptions.Pages.PERFORMANCE, TextComponent.translatable("impetus.options.pages.performance"), List.copyOf(groups));

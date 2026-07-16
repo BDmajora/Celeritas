@@ -3,9 +3,11 @@ package com.bdmajora.impetus.mixin.features.textures;
 import com.google.common.collect.Iterators;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.sugar.Local;
+import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.Stitcher;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.renderer.texture.TextureMap;
+import com.bdmajora.impetus.impl.render.texture.BlockAtlasFiltering;
 import com.bdmajora.impetus.engine.impl.util.collections.quadtree.QuadTree;
 import com.bdmajora.impetus.engine.impl.util.collections.quadtree.Rect2i;
 import org.spongepowered.asm.mixin.Final;
@@ -38,6 +40,9 @@ public class TextureAtlasMixin implements TextureMapExtension {
         Rect2i treeRect = new Rect2i(0, 0, impetus$width, impetus$height);
         int minSize = this.mapUploadedSprites.values().stream().mapToInt(sprite -> Math.max(sprite.getIconWidth(), sprite.getIconHeight())).min().getAsInt();
         this.impetus$quadTree = new QuadTree<>(treeRect, minSize, this.mapUploadedSprites.values(), sprite -> new Rect2i(sprite.getOriginX(), sprite.getOriginY(), sprite.getIconWidth(), sprite.getIconHeight()));
+
+        // Apply the configured texture/pixel filtering and anisotropy to the freshly (re)built block atlas.
+        BlockAtlasFiltering.apply(((AbstractTexture) (Object) this).getGlTextureId());
     }
 
     @Override

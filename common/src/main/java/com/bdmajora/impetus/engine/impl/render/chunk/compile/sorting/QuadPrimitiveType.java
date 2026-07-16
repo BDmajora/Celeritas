@@ -156,10 +156,14 @@ public final class QuadPrimitiveType implements ChunkPrimitiveType {
                     quadCount,
                     chunkData.normalSigns());
         } else {
-            int[] bspOrder = BspTranslucencySorter.sort(centers, chunkData.normals(), quadCount, x, y, z);
-            if (bspOrder != null) {
-                generateIndexBuffer(indexBuffer, bspOrder);
-                return;
+            // Quad splitting (BSP exact ordering) can be disabled via the Performance options, in which case we
+            // fall back to per-quad centroid distance sorting.
+            if (com.bdmajora.impetus.engine.impl.ImpetusRuntimeOptions.quadSplittingEnabled) {
+                int[] bspOrder = BspTranslucencySorter.sort(centers, chunkData.normals(), quadCount, x, y, z);
+                if (bspOrder != null) {
+                    generateIndexBuffer(indexBuffer, bspOrder);
+                    return;
+                }
             }
 
             buildDynamicDistanceArray(centers, distanceArray, quadCount, x, y, z);
