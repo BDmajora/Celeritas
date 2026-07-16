@@ -1,0 +1,173 @@
+package com.bdmajora.impetus.engine.impl.compat.probe;
+
+import com.bdmajora.impetus.engine.impl.compat.environment.OsKind;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Enumerates display adapters using operating-system facilities, without requiring a GL context.
+ * <p>
+ * On Linux this reads the PCI ids exposed through {@code /sys/class/drm}; on Windows it queries
+ * {@code Win32_VideoController} through PowerShell CIM. Both paths are strictly best-effort: any failure
+ * (missing tools, sandboxing, exotic setups) degrades to an empty result rather than an exception, since the
+ * caller only uses this to *refine* warnings, never to gate rendering.
+ */
+public final class GraphicsAdapterProbe {
+    private static final Logger LOGGER = LogManager.getLogger("Impetus-AdapterProbe");
+    private static final long PROCESS_TIMEOUT_SECONDS = 5;
+
+    private GraphicsAdapterProbe() {
+    }
+
+    public static List<GraphicsAdapterInfo> probe() {
+        try {
+            return switch (OsKind.current()) {
+                case LINUX -> probeLinuxSysFs();
+                case WINDOWS -> probeWindowsCim();
+                default -> Collections.emptyList();
+            };
+        } catch (Throwable t) {
+            LOGGER.debug("Graphics adapter probe failed", t);
+            return Collections.emptyList();
+        }
+    }
+
+    private static List<GraphicsAdapterInfo> probeLinuxSysFs() {
+        var results = new ArrayList<GraphicsAdapterInfo>();
+        var drm = Paths.get("/sys/class/drm");
+
+        if (!Files.isDirectory(drm)) {
+            return results;
+        }
+
+        try (DirectoryStream<Path> cards = Files.newDirectoryStream(drm, "card[0-9]")) {
+            for (var card : cards) {
+                var device = card.resolve("device");
+                var vendorId = parsePciId(readTrimmed(device.resolve("vendor")));
+
+                if (vendorId == 0) {
+                    continue;
+                }
+
+                var vendor = GraphicsVendor.fromPciVendorId(vendorId);
+                var driver = readUeventValue(device.resolve("uevent"), "DRIVER");
+                var deviceId = readTrimmed(device.resolve("device"));
+
+                results.add(new GraphicsAdapterInfo(vendor,
+                        String.format("PCI %04x:%s", vendorId, deviceId.replace("0x", "")),
+                        driver));
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Failed to walk /sys/class/drm", e);
+        }
+
+        return results;
+    }
+
+    private static List<GraphicsAdapterInfo> probeWindowsCim() {
+        // AdapterCompatibility|Name|DriverVersion, one adapter per line.
+        var lines = runProcess(
+                "powershell", "-NoProfile", "-NonInteractive", "-Command",
+                "Get-CimInstance Win32_VideoController | ForEach-Object { $_.AdapterCompatibility + '|' + $_.Name + '|' + $_.DriverVersion }");
+
+        var results = new ArrayList<GraphicsAdapterInfo>();
+
+        for (var line : lines) {
+            var parts = line.split("\\|", 3);
+
+            if (parts.length != 3 || parts[1].isEmpty()) {
+                continue;
+            }
+
+            var vendor = classifyWindowsVendor(parts[0] + " " + parts[1]);
+            results.add(new GraphicsAdapterInfo(vendor, parts[1].trim(), parts[2].trim()));
+        }
+
+        return results;
+    }
+
+    private static GraphicsVendor classifyWindowsVendor(String description) {
+        var lower = description.toLowerCase(java.util.Locale.ROOT);
+
+        if (lower.contains("nvidia")) {
+            return GraphicsVendor.NVIDIA;
+        } else if (lower.contains("amd") || lower.contains("ati ") || lower.contains("radeon")) {
+            return GraphicsVendor.AMD;
+        } else if (lower.contains("intel")) {
+            return GraphicsVendor.INTEL;
+        }
+
+        return GraphicsVendor.OTHER;
+    }
+
+    private static List<String> runProcess(String... command) {
+        try {
+            var process = new ProcessBuilder(command)
+                    .redirectErrorStream(true)
+                    .start();
+
+            var output = new ArrayList<String>();
+
+            try (var reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    line = line.trim();
+                    if (!line.isEmpty()) {
+                        output.add(line);
+                    }
+                }
+            }
+
+            if (!process.waitFor(PROCESS_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return Collections.emptyList();
+            }
+
+            return output;
+        } catch (Exception e) {
+            LOGGER.debug("Failed to run {}", command[0], e);
+            return Collections.emptyList();
+        }
+    }
+
+    private static String readTrimmed(Path path) {
+        try {
+            return new String(Files.readAllBytes(path), StandardCharsets.UTF_8).trim();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static int parsePciId(String value) {
+        try {
+            return Integer.decode(value);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private static String readUeventValue(Path uevent, String key) {
+        try {
+            for (var line : Files.readAllLines(uevent, StandardCharsets.UTF_8)) {
+                if (line.startsWith(key + "=")) {
+                    return line.substring(key.length() + 1).trim();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        return "";
+    }
+}

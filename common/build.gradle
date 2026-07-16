@@ -1,4 +1,4 @@
-import org.embeddedt.embeddium.gradle.task.GenerateLWJGLAbstraction
+import com.bdmajora.impetus.engine.gradle.task.GenerateLWJGLAbstraction
 
 plugins {
     id 'java-library'
@@ -6,7 +6,7 @@ plugins {
     id 'xyz.wagyourtail.jvmdowngrader' version '1.3.6'
 }
 
-group = "org.embeddedt.celeritas"
+group = "com.bdmajora.impetus"
 version = rootProject.version
 
 java {
@@ -89,7 +89,7 @@ tasks.named('test', Test) {
 publishing {
     publications {
         mavenJava(MavenPublication) {
-            artifactId 'celeritas-common'
+            artifactId 'impetus-common'
             from components.java
 
             artifact(shadeDowngradedApi) {

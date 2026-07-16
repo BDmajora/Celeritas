@@ -9,7 +9,7 @@ plugins {
 }
 
 project.version = tau.versioning.version(rootProject.properties["project_base_version"].toString(), rootProject.properties["release_channel"])
-println("Celeritas: ${tau.versioning.version}")
+println("Impetus: ${tau.versioning.version}")
 
 //project(":forge1710")
 
@@ -29,10 +29,10 @@ val publishTask = tau.publishing.publish {
         supportAllChannelsExcluding(PublishChannel.RELEASE)
 
         webhookURL = providers.environmentVariable("DISCORD_WEBHOOK")
-        username = "Celeritas Test Builds"
-        avatarURL = "https://git.taumc.org/embeddedt/celeritas/raw/branch/stonecutter/modern/src/main/resources/icon.png"
+        username = "Impetus Test Builds"
+        avatarURL = "https://git.taumc.org/embeddedt/impetus/raw/branch/stonecutter/modern/src/main/resources/icon.png"
 
-        testBuildPreset("Celeritas", "https://git.taumc.org/embeddedt/celeritas")
+        testBuildPreset("Impetus", "https://git.taumc.org/embeddedt/impetus")
     }
 
     if (System.getenv("GITEA_TOKEN") != null) {
@@ -43,7 +43,7 @@ val publishTask = tau.publishing.publish {
             apiEndpoint = "https://git.taumc.org/api/v1/"
 
             accessToken = System.getenv("GITEA_TOKEN")
-            repository = "embeddedt/celeritas"
+            repository = "embeddedt/impetus"
             tagName = tau.versioning.releaseTag
         }
     }

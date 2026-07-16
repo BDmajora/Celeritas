@@ -14,9 +14,9 @@ if [ ! -x "./gradlew" ]; then
     chmod +x gradlew
 fi
 
-echo "Building Celeritas for 1.12.2..."
+echo "Building Impetus for 1.12.2..."
 
-# FIX: Changed -Ptarget_versions to -Pceleritas_target_versions
-./gradlew -Pceleritas_target_versions="1.12.2" packageJar
+# FIX: Changed -Ptarget_versions to -Pimpetus_target_versions
+./gradlew -Pimpetus_target_versions="1.12.2" packageJar
 
 echo "Done. The compiled jar should be located in build/libs/1.12.2/"

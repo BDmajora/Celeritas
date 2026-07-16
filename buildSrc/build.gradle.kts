@@ -33,14 +33,14 @@ repositories {
 
 gradlePlugin {
     plugins {
-        register("embeddium-fabric-remapper") {
-            id = "embeddium-fabric-remapper"
-            implementationClass = "org.embeddedt.embeddium.gradle.fabric.remapper.RemapperPlugin"
+        register("impetus-fabric-remapper") {
+            id = "impetus-fabric-remapper"
+            implementationClass = "com.bdmajora.impetus.engine.gradle.fabric.remapper.RemapperPlugin"
         }
         // here we register our plugin with an ID
-        register("embeddium-fabric-module-finder") {
-            id = "embeddium-fabric-module-finder"
-            implementationClass = "org.embeddedt.embeddium.gradle.fabric.remapper.ModuleFinderPlugin"
+        register("impetus-fabric-module-finder") {
+            id = "impetus-fabric-module-finder"
+            implementationClass = "com.bdmajora.impetus.engine.gradle.fabric.remapper.ModuleFinderPlugin"
         }
     }
 }

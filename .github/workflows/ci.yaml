@@ -4,9 +4,9 @@ name: ci
 on: push
 
 env:
-  CELERITAS_DISABLE_DECOMP: true
-  ORG_GRADLE_PROJECT_celeritas_target_versions_pattern: ".*"
-  ORG_GRADLE_PROJECT_celeritas_target_subprojects_pattern: ".*"
+  IMPETUS_DISABLE_DECOMP: true
+  ORG_GRADLE_PROJECT_impetus_target_versions_pattern: ".*"
+  ORG_GRADLE_PROJECT_impetus_target_subprojects_pattern: ".*"
 
 jobs:
   build:

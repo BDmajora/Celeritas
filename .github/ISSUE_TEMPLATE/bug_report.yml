@@ -12,16 +12,16 @@ body:
 
         - **Are you playing on a modern version of Minecraft?** We currently support 1.20.1 and 1.21.1. Older versions are no longer supported.
         
-        - **Have you ensured that all of your mods (including Embeddium) are up-to-date?** The latest version of Embeddium
-        can always be found [on Modrinth](https://modrinth.com/mod/embeddium).
+        - **Have you ensured that all of your mods (including Impetus) are up-to-date?** The latest version of Impetus
+        can always be found [on Modrinth](https://modrinth.com/mod/impetus).
         
-        - **Have you checked whether you are [using mods that Embeddium does not support](https://github.com/embeddedt/embeddium/wiki/Unsupported-mods)?**
-        Sometimes Embeddium makes existing issues with these mods more obvious.
+        - **Have you checked whether you are [using mods that Impetus does not support](https://github.com/embeddedt/impetus/wiki/Unsupported-mods)?**
+        Sometimes Impetus makes existing issues with these mods more obvious.
         
         - **Have you read Sodium's [list of known driver incompatibilities](https://github.com/CaffeineMC/sodium-fabric/wiki/Driver-Compatibility)?** Most problems
         (including "poor performance") are caused by out-of-date or incompatible graphics drivers.
         
-        - **Have you used the [search tool](https://github.com/embeddedt/embeddium/issues) to check whether your issue
+        - **Have you used the [search tool](https://github.com/embeddedt/impetus/issues) to check whether your issue
         has already been reported?** If it has been, then consider adding more information to the existing issue instead.
         
         - **Have you determined the minimum set of instructions to reproduce the issue?** If your problem only occurs

@@ -2,13 +2,13 @@ package net.irisshaders.iris.api.v0;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
-import org.taumc.celeritas.iris.Iris;
-import org.taumc.celeritas.iris.gui.modern.ShaderPackSelectScreen;
+import com.bdmajora.impetus.iris.Iris;
+import com.bdmajora.impetus.iris.gui.modern.ShaderPackSelectScreen;
 
 /**
- * The small slice of modern Iris's public API that Celeritas's {@code ShaderModBridge} reflectively probes for
+ * The small slice of modern Iris's public API that Impetus's {@code ShaderModBridge} reflectively probes for
  * ({@code getInstance}, {@code isShaderPackInUse}, {@code openMainIrisScreenObj}). Providing this class under the
- * expected package is what makes Celeritas show its built-in "Shader Pack Selection" tab in the video options and
+ * expected package is what makes Impetus show its built-in "Shader Pack Selection" tab in the video options and
  * route it to our {@link ShaderPackSelectScreen} — no changes to the shared {@code common} module required.
  * <p>
  * This is a thin bridge to {@link Iris}; it deliberately does not implement the full {@code IrisApi} surface (only what
@@ -26,9 +26,9 @@ public class IrisApi {
     }
 
     /**
-     * @param parent the object Celeritas passes as the "parent" (its options controller, not always a screen)
+     * @param parent the object Impetus passes as the "parent" (its options controller, not always a screen)
      * @return the shader selection {@link GuiScreen}; the parent to return to is the object if it is a screen,
-     * otherwise the current screen (the Celeritas video options screen that opened us)
+     * otherwise the current screen (the Impetus video options screen that opened us)
      */
     public Object openMainIrisScreenObj(Object parent) {
         GuiScreen parentScreen = parent instanceof GuiScreen

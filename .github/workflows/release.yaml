@@ -15,13 +15,13 @@ on:
           - RELEASE
 
 env:
-  ORG_GRADLE_PROJECT_celeritas_target_versions_pattern: ".*"
-  ORG_GRADLE_PROJECT_celeritas_target_subprojects_pattern: ".*"
+  ORG_GRADLE_PROJECT_impetus_target_versions_pattern: ".*"
+  ORG_GRADLE_PROJECT_impetus_target_subprojects_pattern: ".*"
   DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
   MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
   MAVEN_SECRET: ${{ secrets.MAVEN_SECRET }}
   GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
-  CELERITAS_DISABLE_DECOMP: true
+  IMPETUS_DISABLE_DECOMP: true
 
 jobs:
   build:

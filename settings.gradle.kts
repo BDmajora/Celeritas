@@ -78,19 +78,19 @@ plugins {
     id("dev.kikugie.stonecutter") version(extra["stonecutter_version"].toString())
 }
 
-rootProject.name = "celeritas"
+rootProject.name = "impetus"
 
-includeBuild("plugins/celeritas-mdg-plugin")
-includeBuild("plugins/celeritas-unimined-plugin")
+includeBuild("plugins/impetus-mdg-plugin")
+includeBuild("plugins/impetus-unimined-plugin")
 include("common")
 
 val versionFilter: (String) -> Boolean =
-    if (extra.has("celeritas_target_versions")) {
-        val versions: List<String> = extra["celeritas_target_versions"].toString().split(",")
+    if (extra.has("impetus_target_versions")) {
+        val versions: List<String> = extra["impetus_target_versions"].toString().split(",")
         val pred: (String) -> Boolean = { ver -> versions.any { stonecutter.eval(ver, it) } }
         pred
-    } else if (extra.has("celeritas_target_versions_pattern")) {
-        val regex = Regex(extra["celeritas_target_versions_pattern"].toString())
+    } else if (extra.has("impetus_target_versions_pattern")) {
+        val regex = Regex(extra["impetus_target_versions_pattern"].toString())
         val pred: (String) -> Boolean = { ver -> regex.containsMatchIn(ver) }
         pred
     } else {
@@ -98,12 +98,12 @@ val versionFilter: (String) -> Boolean =
     }
 
 val subprojectFilter: ((String) -> Boolean)? =
-    if (extra.has("celeritas_target_subprojects")) {
-        val subprojects: List<String> = extra["celeritas_target_subprojects"].toString().split(",")
+    if (extra.has("impetus_target_subprojects")) {
+        val subprojects: List<String> = extra["impetus_target_subprojects"].toString().split(",")
         val pred: (String) -> Boolean = { name -> subprojects.contains(name) }
         pred
-    } else if (extra.has("celeritas_target_subprojects_pattern")) {
-        val regex = Regex(extra["celeritas_target_subprojects_pattern"].toString())
+    } else if (extra.has("impetus_target_subprojects_pattern")) {
+        val regex = Regex(extra["impetus_target_subprojects_pattern"].toString())
         val pred: (String) -> Boolean = { name -> regex.containsMatchIn(name) }
         pred
     } else {
@@ -153,16 +153,16 @@ createStonecutterProject("ornithe", listOf("1.2.5", "1.0.0-beta.7.3", "1.0.0-bet
     versions(versions)
 }
 
-data class CeleritasTarget(val friendlyName: String, val loaders: List<String>, val semanticName: String = friendlyName)
+data class ImpetusTarget(val friendlyName: String, val loaders: List<String>, val semanticName: String = friendlyName)
 
 createStonecutterProject("modern", listOf(
-        CeleritasTarget("1.20.1", listOf("forge", "fabric")),
-        CeleritasTarget("1.16.5", listOf("forge")),
-        CeleritasTarget("1.18.2", listOf("forge")),
-        //CeleritasTarget("1.20.4", listOf("neoforge")),
-        CeleritasTarget("1.21.1", listOf("fabric", "neoforge")),
-        CeleritasTarget("26.1.1", listOf("neoforge"))
-        //CeleritasTarget("1.19.2", listOf("forge", "fabric"))
+        ImpetusTarget("1.20.1", listOf("forge", "fabric")),
+        ImpetusTarget("1.16.5", listOf("forge")),
+        ImpetusTarget("1.18.2", listOf("forge")),
+        //ImpetusTarget("1.20.4", listOf("neoforge")),
+        ImpetusTarget("1.21.1", listOf("fabric", "neoforge")),
+        ImpetusTarget("26.1.1", listOf("neoforge"))
+        //ImpetusTarget("1.19.2", listOf("forge", "fabric"))
 ), { it.friendlyName }) { targets ->
     targets.forEach {
         val target = it
@@ -183,5 +183,5 @@ createStonecutterProject("modern", listOf(
 }
 
 if (includedProjectCount == 0) {
-    println("WARNING: No projects were selected. Set celeritas_target_versions or celeritas_target_versions_pattern to target specific versions.")
+    println("WARNING: No projects were selected. Set impetus_target_versions or impetus_target_versions_pattern to target specific versions.")
 }

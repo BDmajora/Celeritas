@@ -1,12 +1,12 @@
-# Iris-on-Celeritas (1.12.2) — Porting Spec
+# Iris-on-Impetus (1.12.2) — Porting Spec
 
 > **Status:** Phase 1 (Foundation) complete + **Phase 2 GL foundation complete (compiles green)**.
 > The reference source for the port is now **OptiFine 1.12.2 HD U C6 `shadersmod`** (the real 1.12.2 shader
 > implementation packs are written against), combined with the `modern/` module's Iris↔Sodium compat layer for the
-> Embeddium terrain integration. **No rendering behavior changes yet** — with no pack selected, Celeritas renders
+> Impetus terrain integration. **No rendering behavior changes yet** — with no pack selected, Impetus renders
 > identically to before.
 >
-> **Done in Phase 2 so far (all under `forge122/.../iris/`, all going through the `org.taumc.celeritas.lwjgl`
+> **Done in Phase 2 so far (all under `forge122/.../iris/`, all going through the `com.bdmajora.impetus.lwjgl`
 > abstraction, verified with `:forge122:compileJava`):**
 > - **`LWJGLService` extended** (interface + LWJGL2 + LWJGL3 impls): `glTexImage2D`, `glTexParameteri/f`,
 >   `glDrawBuffers(int|IntBuffer)`, `glReadBuffer`, `glBlitFramebuffer`, `glGen/Bind/Delete/RenderbufferStorage/
@@ -28,7 +28,7 @@
 
 This document supersedes the original "Port the Iris Shaders mod to Minecraft 1.12.2" brief. That brief was written
 without access to the real codebase and contained a number of concrete inaccuracies that would not compile or run as
-written. Everything below was **verified against the actual `Celeritas` source** (commit on branch `stonecutter` /
+written. Everything below was **verified against the actual `Impetus` source** (commit on branch `stonecutter` /
 `claude/exciting-nobel-906926`).
 
 ---
@@ -38,15 +38,15 @@ written. Everything below was **verified against the actual `Celeritas` source**
 | # | Original brief said | Reality in this repo | Impact |
 |---|---|---|---|
 | 1 | "Java 8 — NO `var`, NO `record`, NO text blocks." | Build uses **Jabel** (`sourceCompatibility=21`, `options.release=8`) **+ Lombok**. Modern *syntax* (`var`, records, text blocks, switch expressions) compiles to Java 8 bytecode. **But** because forge122 uses `--release 8`, Java 9+ *library* APIs (`Set.of`, `List.of`, `Stream.toList()`, `Path.of`, ...) are **not** available in forge122 sources — use Java 8 equivalents (`Arrays.asList`, `Collectors.toList()`). Only the bytecode-downgraded `common` module may use newer library APIs. | The real constraint is "Java 8 *bytecode + library API*, Java 21 *syntax*." Match the surrounding code (e.g. existing forge122 code uses `Collectors.toList()`, never `Set.of`/`.toList()`). |
-| 2 | "Use raw `org.lwjgl.opengl.GL20.*` / `GL30.*` directly." | All GL goes through the Celeritas abstraction **`org.taumc.celeritas.lwjgl.*`**: call functions via `LWJGLServiceProvider.LWJGL` (a `LWJGLService`), constants via generated classes `org.taumc.celeritas.lwjgl.GL11..GL46`. This is what provides LWJGL2/3 compatibility. | Raw LWJGL calls would break the LWJGL3/lwjgl3ify path. **The `LWJGLService` interface currently lacks many functions Iris needs** (see §5.1) and must be extended first. |
-| 3 | "`ChunkShaderTextureService` SPI; replace `VintageChunkShaderTextureService`." | **No such interface exists.** The real chunk-shader API is `ChunkShaderInterface` + `DefaultChunkShaderInterface` + enum `ChunkShaderTextureSlot{BLOCK, LIGHT}` (in `org.embeddedt.embeddium.impl.render.chunk.shader`). | Texture-slot binding for Iris must extend `ChunkShaderTextureSlot` / implement a custom `ChunkShaderInterface`, not a nonexistent service. |
+| 2 | "Use raw `org.lwjgl.opengl.GL20.*` / `GL30.*` directly." | All GL goes through the Impetus abstraction **`com.bdmajora.impetus.lwjgl.*`**: call functions via `LWJGLServiceProvider.LWJGL` (a `LWJGLService`), constants via generated classes `com.bdmajora.impetus.lwjgl.GL11..GL46`. This is what provides LWJGL2/3 compatibility. | Raw LWJGL calls would break the LWJGL3/lwjgl3ify path. **The `LWJGLService` interface currently lacks many functions Iris needs** (see §5.1) and must be extended first. |
+| 3 | "`ChunkShaderTextureService` SPI; replace `VintageChunkShaderTextureService`." | **No such interface exists.** The real chunk-shader API is `ChunkShaderInterface` + `DefaultChunkShaderInterface` + enum `ChunkShaderTextureSlot{BLOCK, LIGHT}` (in `com.bdmajora.impetus.engine.impl.render.chunk.shader`). | Texture-slot binding for Iris must extend `ChunkShaderTextureSlot` / implement a custom `ChunkShaderInterface`, not a nonexistent service. |
 | 4 | Lists three SPI services incl. `VintageChunkShaderTextureService`, `VintageRenderVisualsService`. | Only real SPI interfaces are **`FogService`** and **`RenderVisualsService`**. The `META-INF/services` entries point at `Vintage*Service` classes that **do not exist in source** (stale). Only `GLStateManagerFogService` exists. | Don't model new code on those names. If `RenderVisualsService` is actually loaded via `ServiceLoader`, its missing impl is a latent runtime bug to be aware of. |
 | 5 | AT: `EntityRenderer field_175074_T # shaderGroup` (and a v2 `field_147712_T`). | **Both SRG names are fabricated** — neither exists in MCP `stable_39`. Real: `EntityRenderer.shaderGroup` = **`field_147707_d`**. | Wrong AT = build failure. See §6 for verified names. |
 | 6 | AT: `Framebuffer field_147621_h # framebufferWidth`, `field_147622_i # framebufferHeight`. | Both fabricated. Real: `framebufferWidth` = **`field_147621_c`**, `framebufferHeight` = **`field_147618_d`** (and these are already `public` in vanilla — likely no AT needed). | See §6. |
 | 7 | AT: `OpenGlHelper field_153161_i # framebufferObjectsSupported`. | Fabricated. Real: `OpenGlHelper.framebufferSupported` = **`field_148823_f`**. *But* FBO management should go through the LWJGL abstraction (§5.1), not `OpenGlHelper`, for LWJGL3 parity. | See §6. |
 | 8 | "`Minecraft.getMinecraft().mcDataDir`." | This mapping set has **no `mcDataDir`** — the field is **`gameDir`**. Use the existing helper **`PlatformUtil.getGameDir()`**. | `mcDataDir` would not compile. |
-| 9 | "Hook `RenderManager.shouldRender()`" (v1) / "`Entity.isInRangeToRender3d()`" (v2). | The brief is internally inconsistent. Celeritas's actual entity gathering is in `RenderGlobalMixin`; the exact hook must be read from that mixin, not assumed. | Verify against `RenderGlobalMixin` before wiring shadow-entity culling. |
-| 10 | Single-module mental model. | Multi-module Gradle: **`common/`** holds the shared Embeddium impl (`org.embeddedt.embeddium.impl.*`) + Celeritas abstractions; **`forge122/`** is the Forge 1.12.2 platform (mixins, MC hooks) and depends on `common` (the `downgraded` configuration). | Put shared, MC-free logic where it belongs; Iris currently lives in `forge122`. |
+| 9 | "Hook `RenderManager.shouldRender()`" (v1) / "`Entity.isInRangeToRender3d()`" (v2). | The brief is internally inconsistent. Impetus's actual entity gathering is in `RenderGlobalMixin`; the exact hook must be read from that mixin, not assumed. | Verify against `RenderGlobalMixin` before wiring shadow-entity culling. |
+| 10 | Single-module mental model. | Multi-module Gradle: **`common/`** holds the shared Impetus impl (`com.bdmajora.impetus.engine.impl.*`) + Impetus abstractions; **`forge122/`** is the Forge 1.12.2 platform (mixins, MC hooks) and depends on `common` (the `downgraded` configuration). | Put shared, MC-free logic where it belongs; Iris currently lives in `forge122`. |
 
 ---
 
@@ -57,10 +57,10 @@ written. Everything below was **verified against the actual `Celeritas` source**
   annotation-processor path. Use modern *syntax* freely; do not hand-desugar. **But** `--release 8` also pins the
   *library* API to Java 8 in forge122 — no `Set.of`/`List.of`/`Stream.toList()`/`Path.of`; use Java 8 equivalents.
 - **GL backend:** LWJGL2 by default, LWJGL3 via `legacy-lwjgl3` / RetroFuturaBootstrap. **Always** go through
-  `org.taumc.celeritas.lwjgl` (`LWJGLServiceProvider.LWJGL` + `GLxx` constant classes).
+  `com.bdmajora.impetus.lwjgl` (`LWJGLServiceProvider.LWJGL` + `GLxx` constant classes).
 - **Mixins:** SpongePowered Mixin 0.8+ via MixinBooter (`zone.rong:mixinbooter`), MixinExtras available.
-- **Mod entry:** `@Mod` class `org.taumc.celeritas.CeleritasVintage`. Coremod / early-mixin loader:
-  `org.taumc.celeritas.core.CeleritasLoadingPlugin` (`IFMLLoadingPlugin` + `IEarlyMixinLoader`).
+- **Mod entry:** `@Mod` class `com.bdmajora.impetus.ImpetusVintage`. Coremod / early-mixin loader:
+  `com.bdmajora.impetus.core.ImpetusLoadingPlugin` (`IFMLLoadingPlugin` + `IEarlyMixinLoader`).
 - **Terrain pipeline:** `TerrainRenderPass` (a Lombok `@Builder` class) + `ChunkShaderInterface`. Vertex data:
   `ChunkVertexType` / `ChunkVertexEncoder.Vertex`.
 
@@ -70,7 +70,7 @@ written. Everything below was **verified against the actual `Celeritas` source**
 
 - Subprojects are **gated behind a Gradle property**. Building forge122 requires selecting the version:
   ```
-  ./gradlew :forge122:compileJava -Pceleritas_target_versions=1.12.2
+  ./gradlew :forge122:compileJava -Pimpetus_target_versions=1.12.2
   ```
   Without it you get `project 'forge122' not found` and `WARNING: No projects were selected`.
 - **Building inside a git worktree currently fails at configuration time** — root `build.gradle.kts:11`
@@ -89,7 +89,7 @@ written. Everything below was **verified against the actual `Celeritas` source**
 ## 3. Integration points (verified APIs)
 
 ### 3.1 Service Loader
-Real Embeddium SPI interfaces: `FogService` (`...render.chunk.fog`) and `RenderVisualsService`
+Real Impetus SPI interfaces: `FogService` (`...render.chunk.fog`) and `RenderVisualsService`
 (`...render.chunk.lists`). Iris should:
 - **Fog:** make the fog service return `ChunkFogMode.NONE` when shaders are active (shaders own fog via GLSL).
 - **Render visuals:** make it shadow-pass-aware (disable effects during the shadow pass).
@@ -97,7 +97,7 @@ Real Embeddium SPI interfaces: `FogService` (`...render.chunk.fog`) and `RenderV
   implementing a custom `ChunkShaderInterface` (see §3.4).
 
 ### 3.2 RenderGlobalMixin
-The existing `RenderGlobalMixin` (Celeritas) overriding `RenderGlobal.renderBlockLayer()` is the primary terrain
+The existing `RenderGlobalMixin` (Impetus) overriding `RenderGlobal.renderBlockLayer()` is the primary terrain
 interception point. When a pack is loaded: drive the geometry through Iris G-buffer programs instead of the default
 `drawChunkLayer`, then run composite/final passes after all g-buffer layers. When not loaded: unchanged.
 
@@ -113,7 +113,7 @@ uploads them; the OptiFine 1.12.2 texture-unit convention is TU0 `tex`, TU1 `tex
 TU3 `texSpec`, TU4 `shadowtex0/shadow`, TU5 `shadowcolor0`, TU6 `noisetex`, TU7 `shadowcolor1`.
 
 ### 3.5 Vertex format
-Extend Embeddium's `ChunkVertexType` (preferred) to add OptiFine attributes `mc_midTexCoord` (vec2),
+Extend Impetus's `ChunkVertexType` (preferred) to add OptiFine attributes `mc_midTexCoord` (vec2),
 `at_tangent` (vec4), `mc_Entity` (vec2 = block id + meta); `normal` already exists as `trueNormal`/`vanillaNormal`.
 `overlayId` does not exist in 1.12.2 and is excluded. `mc_midTexCoord` must come from `BakedQuad.getSprite()` center
 UV (`(minU+maxU)/2`, `(minV+maxV)/2`) — **not** an average of quad UVs (that breaks animated sprites).
@@ -124,7 +124,7 @@ UV (`(minU+maxU)/2`, `(minV+maxV)/2`) — **not** an average of quad UVs (that b
 
 - No post-processing pipeline / `PostChain` — build the FBO chain from scratch.
 - Fixed-function lighting for entities/TEs — disable when custom shaders are active.
-- Lightmap is TU1 (`texLightmap`); preserve Celeritas's existing binding.
+- Lightmap is TU1 (`texLightmap`); preserve Impetus's existing binding.
 - `BlockRenderLayer` (SOLID, CUTOUT_MIPPED, CUTOUT, TRANSLUCENT) instead of `RenderType`. Map: solid/cutout →
   `gbuffers_terrain` (alpha test for cutout); translucent water → `gbuffers_water`, other translucent →
   `gbuffers_translucent`. Classify water during meshing via `state.getMaterial() == Material.WATER`.
@@ -136,7 +136,7 @@ UV (`(minU+maxU)/2`, `(minV+maxV)/2`) — **not** an average of quad UVs (that b
 ## 5. The LWJGL abstraction (critical for all rendering phases)
 
 ### 5.1 `LWJGLService` must be extended before Phase 2
-`org.taumc.celeritas.lwjgl.LWJGLService` (impl in `common/src/lwjgl2` and `common/src/lwjgl3`) currently exposes
+`com.bdmajora.impetus.lwjgl.LWJGLService` (impl in `common/src/lwjgl2` and `common/src/lwjgl3`) currently exposes
 buffers, VAOs, shader/program calls, a subset of uniforms, textures, and basic FBO calls
 (`glGenFramebuffers`, `glBindFramebuffer`, `glFramebufferTexture2D`, `glCheckFramebufferStatus`). It is **missing**
 calls Iris needs, including: `glTexImage2D`, `glTexParameteri/f`, `glDrawArrays`, `glDrawBuffers`, `glReadBuffer`,
@@ -151,7 +151,7 @@ rebuild the chunk mesh queue (vertex format may have changed), restore default G
 
 ## 6. Access Transformers (verified SRG names, MCP `stable_39`)
 
-Existing `forge122/src/main/resources/META-INF/celeritas_at.cfg` already exposes the `GlStateManager` fog state and
+Existing `forge122/src/main/resources/META-INF/impetus_at.cfg` already exposes the `GlStateManager` fog state and
 `EntityRenderer` fog-color fields. Add, **only if the target is not already public** (check first):
 
 ```
@@ -170,10 +170,10 @@ vanilla — no AT required. If you need the *texture* dimensions instead, those 
 
 ## 7. Module structure
 
-### Implemented (Phase 1) — `forge122/src/main/java/org/taumc/celeritas/iris/`
+### Implemented (Phase 1) — `forge122/src/main/java/com/bdmajora/impetus/iris/`
 ```
 iris/
-├── Iris.java                       # entry point / global state, wired into CeleritasVintage.onInit
+├── Iris.java                       # entry point / global state, wired into ImpetusVintage.onInit
 ├── package-info.java               # module status + roadmap
 ├── config/
 │   └── IrisConfig.java             # optionsshaders.txt read/write, shaderpacks/ resolution
@@ -192,8 +192,8 @@ iris/
     └── preprocessor/
         └── GlslPreprocessor.java   # #version detection + #define injection
 ```
-Plumbing: `mixins.iris.json` (currently inert/empty) registered alongside `mixins.celeritas.json` by
-`CeleritasLoadingPlugin`; `Iris.initialize(PlatformUtil.getGameDir().toPath())` called from `CeleritasVintage.onInit`.
+Plumbing: `mixins.iris.json` (currently inert/empty) registered alongside `mixins.impetus.json` by
+`ImpetusLoadingPlugin`; `Iris.initialize(PlatformUtil.getGameDir().toPath())` called from `ImpetusVintage.onInit`.
 
 ### Planned (later phases)
 `gl/program/` (GlProgram/ProgramBuilder over the LWJGL abstraction), `gl/framebuffer/` (IrisRenderTargets),
@@ -228,11 +228,11 @@ TextureMapMixin for normal/specular atlas stitching).
 
 1. Java 21 syntax → Java 8 bytecode (Jabel + Lombok). forge122 sources are restricted to Java 8 *library* APIs
    (`--release 8`); use Java 8 equivalents, not `Set.of`/`List.of`/`.toList()`. Match surrounding code; no manual desugaring.
-2. No Fabric APIs — Forge 1.12.2 + Mixin + the `org.taumc.celeritas.lwjgl` abstraction.
-3. Zero-cost when disabled: no pack ⇒ Celeritas behaves exactly as today (Phase 1 already honors this).
+2. No Fabric APIs — Forge 1.12.2 + Mixin + the `com.bdmajora.impetus.lwjgl` abstraction.
+3. Zero-cost when disabled: no pack ⇒ Impetus behaves exactly as today (Phase 1 already honors this).
 4. Hot-swappable packs; strict GL-resource cleanup (§5.2).
 5. Don't regress entity culling, async occlusion, chunk fade-in, render-pass consolidation, animated-texture filtering.
-6. Shadow/build work dispatched off the render thread via Celeritas's chunk build pool where applicable.
+6. Shadow/build work dispatched off the render thread via Impetus's chunk build pool where applicable.
 7. Default shadow FBO budget ≤ 4096×4096; configurable.
 8. LWJGL3 (lwjgl3ify) parity: resolve all GL through `LWJGLService`; never raw `org.lwjgl.opengl.*`.
 9. OptiFine attribute/uniform parity (`mc_`/`at_` prefixes; standard 1.12.2 uniforms).
@@ -243,5 +243,5 @@ TextureMapMixin for normal/specular atlas stitching).
 
 - Iris (modern): https://github.com/IrisShaders/Iris — focus `net.coderbot.iris.{pipeline,gl,shaderpack,vertices}`.
 - Iris 1.6.x (last with the big Sodium API changes): https://github.com/IrisShaders/Iris/tree/1.6.x
-- Embeddium (bundled in `common`): `org.embeddedt.embeddium.impl.render.chunk.{shader,vertex.format}`.
+- Impetus (bundled in `common`): `com.bdmajora.impetus.engine.impl.render.chunk.{shader,vertex.format}`.
 - OptiFine 1.12.2 HD U source — shader-pack conventions (attribute names, uniform list, texture units).
