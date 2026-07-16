@@ -3,6 +3,7 @@ package com.bdmajora.impetus.api.options.control;
 import com.bdmajora.impetus.api.options.structure.Option;
 import com.bdmajora.impetus.engine.impl.gui.framework.DrawContext;
 import com.bdmajora.impetus.engine.impl.gui.framework.InteractionContext;
+import com.bdmajora.impetus.engine.impl.gui.theme.DefaultColors;
 import com.bdmajora.impetus.engine.impl.util.Dim2i;
 
 public class SliderControl implements Control<Integer> {
@@ -93,9 +94,15 @@ public class SliderControl implements Control<Integer> {
             int sliderHeight = this.sliderBounds.height();
 
             var label = this.formatter.format(this.option.getValue());
+            boolean enabled = this.option.isAvailable();
+
+            if (!enabled) {
+                label = this.formatDisabledControlValue(label);
+            }
+
             int labelWidth = drawContext.getStringWidth(label);
 
-            drawContext.drawString(label, sliderX + sliderWidth - labelWidth, sliderY + (sliderHeight / 2) - 4, 0xFFFFFFFF);
+            drawContext.drawString(label, sliderX + sliderWidth - labelWidth, sliderY + (sliderHeight / 2) - 4, enabled ? 0xFFFFFFFF : this.getDisabledControlColor());
         }
 
         private void renderSlider(DrawContext drawContext) {
@@ -111,8 +118,9 @@ public class SliderControl implements Control<Integer> {
             int thumbX = (int) (sliderX + thumbOffset - THUMB_WIDTH);
             int trackY = (int) (sliderY + (sliderHeight / 2f) - ((double) TRACK_HEIGHT / 2));
 
-            drawContext.fill(thumbX, sliderY, thumbX + (THUMB_WIDTH * 2), sliderY + sliderHeight, 0xFFFFFFFF);
-            drawContext.fill(sliderX, trackY, sliderX + sliderWidth, trackY + TRACK_HEIGHT, 0xFFFFFFFF);
+            int accentColor = this.getAccentColor(drawContext);
+            drawContext.fill(thumbX, sliderY, thumbX + (THUMB_WIDTH * 2), sliderY + sliderHeight, accentColor);
+            drawContext.fill(sliderX, trackY, sliderX + sliderWidth, trackY + TRACK_HEIGHT, DefaultColors.withAlpha(accentColor, 0xB8));
 
             var label = this.formatter.format(this.getIntValue());
 

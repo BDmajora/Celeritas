@@ -11,7 +11,6 @@ import com.bdmajora.impetus.engine.impl.gui.framework.TextComponent;
 import com.bdmajora.impetus.engine.impl.gui.framework.TextFormattingStyle;
 import com.bdmajora.impetus.engine.impl.util.Dim2i;
 import com.bdmajora.impetus.api.options.OptionIdentifier;
-import com.bdmajora.impetus.engine.impl.gui.theme.DefaultColors;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -19,6 +18,9 @@ import java.util.Objects;
 import java.util.function.Predicate;
 
 public class OptionPageFrame extends AbstractFrame {
+    /** Height of the page-title header band rendered above the option rows. */
+    private static final int SECTION_HEADER_HEIGHT = 18;
+
     protected final OptionPage page;
     private long lastTime = 0;
     private ControlElement<?> lastHoveredElement = null;
@@ -41,7 +43,7 @@ public class OptionPageFrame extends AbstractFrame {
         this.drawable.clear();
         this.controlElements.clear();
 
-        int y = 0;
+        int y = SECTION_HEADER_HEIGHT;
         if (!this.page.getGroups().isEmpty()) {
             OptionGroup lastGroup = this.page.getGroups().get(this.page.getGroups().size() - 1);
 
@@ -65,7 +67,7 @@ public class OptionPageFrame extends AbstractFrame {
         this.drawable.clear();
         this.controlElements.clear();
 
-        int y = 0;
+        int y = SECTION_HEADER_HEIGHT;
         for (OptionGroup group : this.page.getGroups()) {
             boolean needPadding = false;
             // Add each option's control element
@@ -94,6 +96,8 @@ public class OptionPageFrame extends AbstractFrame {
 
     @Override
     public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
+        this.renderSectionHeader(drawContext);
+
         ControlElement<?> hoveredElement = this.isMouseOver(mouseX, mouseY) ? this.controlElements.stream()
                 .filter(c -> c.isMouseOver(mouseX, mouseY))
                 .findFirst().orElse(null) : null;
@@ -107,6 +111,20 @@ public class OptionPageFrame extends AbstractFrame {
             this.lastTime = 0;
             this.lastHoveredElement = hoveredElement;
         }
+    }
+
+    /**
+     * Draws the page-title band above the options: a teal accent bar followed by the page name, echoing the
+     * section headers of the modern Iris/Sodium settings screen.
+     */
+    private void renderSectionHeader(DrawContext drawContext) {
+        int x = this.dim.x();
+        int y = this.dim.y();
+        int textY = y + (SECTION_HEADER_HEIGHT - 4 - drawContext.lineHeight() / 2) / 2;
+        int accentColor = drawContext.getModAccentColor(this.page.getId().getModId());
+
+        drawContext.fill(x, y + 2, x + 2, y + SECTION_HEADER_HEIGHT - 6, accentColor);
+        drawContext.drawString(this.page.getName(), x + 7, textY, accentColor);
     }
 
     private static String normalizeModForTooltip(@Nullable String mod) {
@@ -169,7 +187,7 @@ public class OptionPageFrame extends AbstractFrame {
         drawContext.translate(0, 0, 90);
 
         drawContext.fill(boxX, boxY, boxX + boxWidth, boxY + boxHeight, 0xE0000000);
-        drawContext.drawBorder(boxX, boxY, boxX + boxWidth, boxY + boxHeight, DefaultColors.ELEMENT_ACTIVATED);
+        drawContext.drawBorder(boxX, boxY, boxX + boxWidth, boxY + boxHeight, drawContext.getModAccentColor(this.page.getId().getModId()));
 
         for (int i = 0; i < tooltip.size(); i++) {
             drawContext.drawString(tooltip.get(i), boxX + textPadding, boxY + textPadding + (i * 12), 0xFFFFFFFF, true);

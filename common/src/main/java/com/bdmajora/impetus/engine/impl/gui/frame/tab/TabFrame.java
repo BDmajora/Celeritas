@@ -1,11 +1,14 @@
 package com.bdmajora.impetus.engine.impl.gui.frame.tab;
 
+import com.bdmajora.impetus.api.options.structure.Option;
+import com.bdmajora.impetus.api.options.structure.OptionPage;
 import com.bdmajora.impetus.engine.impl.gui.framework.DrawContext;
-import com.bdmajora.impetus.engine.impl.gui.framework.FontMetricsProvider;
 import com.bdmajora.impetus.engine.impl.gui.framework.InteractionContext;
 import com.bdmajora.impetus.engine.impl.gui.framework.TextComponent;
+import com.bdmajora.impetus.engine.impl.gui.frame.MultiOptionPageFrame;
 import com.bdmajora.impetus.engine.impl.gui.widgets.AbstractWidget;
 import com.bdmajora.impetus.engine.impl.gui.widgets.FlatButtonWidget;
+import com.bdmajora.impetus.engine.impl.gui.theme.DefaultColors;
 import com.bdmajora.impetus.engine.impl.util.Dim2i;
 import com.bdmajora.impetus.engine.impl.gui.frame.AbstractFrame;
 import com.bdmajora.impetus.engine.impl.gui.frame.ScrollableFrame;
@@ -13,6 +16,7 @@ import com.bdmajora.impetus.engine.impl.gui.frame.ScrollableFrame;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -22,6 +26,7 @@ public class TabFrame extends AbstractFrame {
     private Dim2i tabSection;
     private final Dim2i frameSection;
     private final Map<String, List<Tab<?>>> tabs;
+    private final Map<String, Integer> modAccentColors;
     private final Runnable onSetTab;
     private final AtomicReference<TextComponent> tabSectionSelectedTab;
     private final AtomicReference<Integer> tabSectionScrollBarOffset;
@@ -33,9 +38,20 @@ public class TabFrame extends AbstractFrame {
     public TabFrame(DrawContext drawContext, Dim2i dim, boolean renderOutline, Map<String, List<Tab<?>>> tabs, Runnable onSetTab, AtomicReference<TextComponent> tabSectionSelectedTab, AtomicReference<Integer> tabSectionScrollBarOffset) {
         super(dim, renderOutline);
         this.tabs = Collections.unmodifiableMap(tabs.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> List.copyOf(e.getValue()), (a, b) -> a, LinkedHashMap::new)));
-        int tabSectionY = ((int)tabStream().count() + this.tabs.size()) * 18;
+        this.modAccentColors = this.tabs.keySet().stream().collect(Collectors.toMap(id -> id, drawContext::getModAccentColor, (a, b) -> a, LinkedHashMap::new));
+        int tabSectionY = (int)tabStream().count() * 18 + this.tabs.size() * TabHeaderWidget.HEIGHT;
         Optional<Integer> result = Stream.concat(
-                tabs.keySet().stream().map(id -> drawContext.getStringWidth(drawContext.getFriendlyModName(id)) + 10),
+                tabs.keySet().stream().flatMap(id -> {
+                    int headerTextOffset = 5 + 20 + 5;
+                    var version = drawContext.getModVersion(id);
+                    Stream<Integer> widths = Stream.of(drawContext.getStringWidth(drawContext.getFriendlyModName(id)) + headerTextOffset);
+
+                    if (version != null) {
+                        widths = Stream.concat(widths, Stream.of(drawContext.getStringWidth(version) + headerTextOffset));
+                    }
+
+                    return widths;
+                }),
                 tabStream().map(tab -> drawContext.getStringWidth(tab.title()) + TAB_OPTION_INDENT)
         ).max(Integer::compareTo);
 
@@ -98,9 +114,10 @@ public class TabFrame extends AbstractFrame {
             int height = 18;
 
             for (var modEntry : tabs.entrySet()) {
+                int accentColor = modAccentColors.getOrDefault(modEntry.getKey(), DefaultColors.ELEMENT_ACTIVATED);
                 // Add a "button" as the header
-                Dim2i modHeaderDim = new Dim2i(0, offsetY, width, height).withParentOffset(tabSection);
-                offsetY += height;
+                Dim2i modHeaderDim = new Dim2i(0, offsetY, width, TabHeaderWidget.HEIGHT).withParentOffset(tabSection);
+                offsetY += TabHeaderWidget.HEIGHT;
                 TabHeaderWidget headerButton = new TabHeaderWidget(modHeaderDim, modEntry.getKey());
                 headerButton.setLeftAligned(true);
                 this.children.add(headerButton);
@@ -122,6 +139,11 @@ public class TabFrame extends AbstractFrame {
 
                     button.setSelected(TabFrame.this.selectedTab == tab);
                     button.setLeftAligned(true);
+                    FlatButtonWidget.Style style = FlatButtonWidget.Style.defaults();
+                    style.textDefault = DefaultColors.withAlpha(accentColor, 0xB8);
+                    style.textSelected = 0xFFFFFFFF;
+                    style.accentColor = accentColor;
+                    button.setStyle(style);
                     this.children.add(button);
 
                     offsetY += height;
@@ -158,12 +180,56 @@ public class TabFrame extends AbstractFrame {
 
     private void rebuildTabFrame() {
         if (this.selectedTab == null) return;
-        AbstractFrame frame = this.selectedTab.createFrame(this.frameSection);
+        AbstractFrame frame = this.createSelectedContentFrame();
         if (frame != null) {
             this.selectedFrame = frame;
             frame.buildFrame();
             this.children.add(frame);
         }
+    }
+
+    private AbstractFrame createSelectedContentFrame() {
+        if (!this.selectedTab.stackable() || this.selectedTab.page() == null || this.selectedTab.verticalScrollBarOffset() == null) {
+            return this.selectedTab.createFrame(this.frameSection);
+        }
+
+        List<Tab<?>> stackableTabs = this.getSelectedTabGroup().stream()
+                .filter(tab -> tab.stackable() && tab.page() != null)
+                .collect(Collectors.toList());
+
+        if (stackableTabs.size() <= 1) {
+            return this.selectedTab.createFrame(this.frameSection);
+        }
+
+        List<OptionPage> pages = stackableTabs.stream()
+                .map(Tab::page)
+                .collect(Collectors.toList());
+        Predicate<Option<?>> optionFilter = this.selectedTab.optionFilter() != null ? this.selectedTab.optionFilter() : option -> true;
+
+        MultiOptionPageFrame frame = MultiOptionPageFrame.createBuilder()
+                .setDimension(new Dim2i(this.frameSection.x(), this.frameSection.y(), this.frameSection.width(), this.frameSection.height()))
+                .setPages(pages)
+                .setOptionFilter(optionFilter)
+                .build();
+
+        this.selectedTab.verticalScrollBarOffset().set(frame.getSectionOffset(this.selectedTab.page()));
+
+        return ScrollableFrame.createBuilder()
+                .setDimension(this.frameSection)
+                .setFrame(frame)
+                .setVerticalScrollBarOffset(this.selectedTab.verticalScrollBarOffset())
+                .setScrollBarAccentColor(this.modAccentColors.getOrDefault(this.selectedTab.page().getId().getModId(), DefaultColors.ELEMENT_ACTIVATED))
+                .build();
+    }
+
+    private List<Tab<?>> getSelectedTabGroup() {
+        for (List<Tab<?>> group : this.tabs.values()) {
+            if (group.contains(this.selectedTab)) {
+                return group;
+            }
+        }
+
+        return Collections.singletonList(this.selectedTab);
     }
 
     @Override
@@ -181,6 +247,15 @@ public class TabFrame extends AbstractFrame {
     @Override
     public boolean mouseClicked(InteractionContext context, double mouseX, double mouseY, int button) {
         return (this.dim.containsCursor(mouseX, mouseY) && super.mouseClicked(context, mouseX, mouseY, button));
+    }
+
+    @Override
+    public boolean mouseScrolled(InteractionContext context, double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        if (this.selectedFrame != null && this.frameSection.containsCursor(mouseX, mouseY)) {
+            return this.selectedFrame.mouseScrolled(context, mouseX, mouseY, horizontalAmount, verticalAmount);
+        }
+
+        return super.mouseScrolled(context, mouseX, mouseY, horizontalAmount, verticalAmount);
     }
 
     public static class Builder {

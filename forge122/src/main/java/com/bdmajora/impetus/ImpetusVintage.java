@@ -47,6 +47,7 @@ public class ImpetusVintage {
 
         // Platform compatibility: GL strings must be read on the client thread (which owns the context during
         // FML construction); the adapter probe and overlay scan then continue on a background thread.
+        StartupChecks.installCrashDialog();
         StartupChecks.runAsync(GlContextInfo.capture());
     }
 

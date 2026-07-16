@@ -110,13 +110,6 @@ public class ImpetusGameOptionPages {
 
         groups.add(OptionGroup.createBuilder()
                 .setId(StandardOptions.Group.INDICATORS)
-                .add(OptionImpl.createBuilder(boolean.class, vanillaOpts)
-                        .setId(StandardOptions.Option.VIEW_BOBBING.cast())
-                        .setName(TextComponent.translatable("options.viewBobbing"))
-                        .setTooltip(TextComponent.translatable("impetus.options.view_bobbing.tooltip"))
-                        .setControl(TickBoxControl::new)
-                        .setBinding((opts, value) -> opts.viewBobbing = value, opts -> opts.viewBobbing)
-                        .build())
                 .add(OptionImpl.createBuilder(int.class, vanillaOpts)
                         .setId(StandardOptions.Option.ATTACK_INDICATOR.cast())
                         .setName(TextComponent.translatable("options.attackIndicator"))
@@ -126,6 +119,13 @@ public class ImpetusGameOptionPages {
                                 TextComponent.translatable("options.attack.crosshair"),
                                 TextComponent.translatable("options.attack.hotbar") }))
                         .setBinding((opts, value) -> opts.attackIndicator = value, (opts) -> opts.attackIndicator)
+                        .build())
+                .add(OptionImpl.createBuilder(boolean.class, vanillaOpts)
+                        .setId(StandardOptions.Option.VIEW_BOBBING.cast())
+                        .setName(TextComponent.translatable("options.viewBobbing"))
+                        .setTooltip(TextComponent.translatable("impetus.options.view_bobbing.tooltip"))
+                        .setControl(TickBoxControl::new)
+                        .setBinding((opts, value) -> opts.viewBobbing = value, opts -> opts.viewBobbing)
                         .build())
                 .build());
 

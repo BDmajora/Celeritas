@@ -34,4 +34,9 @@ public interface InteractableContainer extends Interactable {
     default boolean mouseScrolled(InteractionContext context, double mouseX, double mouseY, double deltaX, double deltaY) {
         return runSingleChildAction(i -> i.isMouseOver(mouseX, mouseY) && i.mouseScrolled(context, mouseX, mouseY, deltaX, deltaY));
     }
+
+    @Override
+    default boolean keyTyped(char typedChar, int keyCode) {
+        return runSingleChildAction(i -> i.keyTyped(typedChar, keyCode));
+    }
 }

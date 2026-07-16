@@ -1,5 +1,6 @@
 package com.bdmajora.impetus.engine.impl.gui.framework;
 
+import com.bdmajora.impetus.engine.impl.gui.theme.DefaultColors;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -41,5 +42,13 @@ public interface DrawContext extends FontMetricsProvider {
 
     default TextComponent getFriendlyModName(String modId) {
         return TextComponent.literal(modId);
+    }
+
+    default @Nullable String getModVersion(String modId) {
+        return null;
+    }
+
+    default int getModAccentColor(String modId) {
+        return DefaultColors.getModAccentColor(modId);
     }
 }

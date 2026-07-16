@@ -182,11 +182,25 @@ public class VintageDrawContext implements DrawContext {
 
     @Override
     public TextComponent getFriendlyModName(String modId) {
+        if ("iris".equals(modId)) {
+            return TextComponent.literal("Iris");
+        }
+
         var container = Loader.instance().getIndexedModList().get(modId);
         if (container == null) {
             return DrawContext.super.getFriendlyModName(modId);
         }
         return TextComponent.literal(container.getName());
+    }
+
+    @Override
+    public @Nullable String getModVersion(String modId) {
+        if ("iris".equals(modId)) {
+            return "1.12.2-port";
+        }
+
+        var container = Loader.instance().getIndexedModList().get(modId);
+        return container != null ? container.getDisplayVersion() : null;
     }
 
     @Override

@@ -2,13 +2,12 @@ package com.bdmajora.impetus.impl.gui;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
-import com.bdmajora.impetus.api.options.OptionIdentifier;
 import com.bdmajora.impetus.api.options.structure.OptionFlag;
+import com.bdmajora.impetus.api.options.structure.OptionPage;
 import com.bdmajora.impetus.engine.impl.gui.ImpetusVideoOptionsController;
-import com.bdmajora.impetus.engine.impl.gui.frame.tab.Tab;
-import com.bdmajora.impetus.engine.impl.gui.framework.TextComponent;
 import com.bdmajora.impetus.engine.impl.gui.options.CommonOptionPages;
 import com.bdmajora.impetus.engine.impl.render.ShaderModBridge;
+import com.bdmajora.impetus.iris.gui.modern.IrisOptionPages;
 import org.lwjgl.input.Mouse;
 import com.bdmajora.impetus.ImpetusVintage;
 
@@ -24,28 +23,7 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
     public ImpetusVideoOptionsScreen(GuiScreen prevScreen) {
         super();
         this.prevScreen = prevScreen;
-        this.controller = new ImpetusVideoOptionsController(() -> this.mc.displayGuiScreen(this.prevScreen), Arrays.asList(
-                ImpetusGameOptionPages.general(),
-                ImpetusGameOptionPages.quality(),
-                CommonOptionPages.performance(ImpetusVintage.options()),
-                ImpetusGameOptionPages.advanced()
-        ), new VintageDrawContext()) {
-            @Override
-            protected void createExtraTabs(Map<String, List<Tab<?>>> tabs) {
-                if(ShaderModBridge.isShaderModPresent()) {
-                    tabs.computeIfAbsent(ImpetusVintage.MODID, $ -> new ArrayList<>()).add(Tab.createBuilder()
-                            .setTitle(TextComponent.translatable("options.iris.shaderPackSelection"))
-                            .setId(OptionIdentifier.create(ImpetusVintage.MODID, "shader_packs"))
-                            .setOnSelectFunction(() -> {
-                                if(ShaderModBridge.openShaderScreen(this) instanceof GuiScreen screen) {
-                                    Minecraft.getMinecraft().displayGuiScreen(screen);
-                                }
-                                return false;
-                            })
-                            .build());
-                }
-            }
-
+        this.controller = new ImpetusVideoOptionsController(() -> this.mc.displayGuiScreen(this.prevScreen), createPages(this), new VintageDrawContext()) {
             @Override
             protected void applyFlagSideEffects(Set<OptionFlag> flags) {
                 super.applyFlagSideEffects(flags);
@@ -67,6 +45,21 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
             }
         };
         resetDrag();
+    }
+
+    private static List<OptionPage> createPages(GuiScreen parent) {
+        List<OptionPage> pages = new ArrayList<>();
+        pages.add(ImpetusGameOptionPages.general());
+        pages.add(ImpetusGameOptionPages.quality());
+        pages.add(CommonOptionPages.performance(ImpetusVintage.options()));
+        pages.add(ImpetusGameOptionPages.advanced());
+
+        if (ShaderModBridge.isShaderModPresent()) {
+            pages.add(IrisOptionPages.shaderPacks(parent));
+            pages.add(IrisOptionPages.settings(parent));
+        }
+
+        return pages;
     }
 
     @Override
@@ -103,6 +96,16 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
     }
 
     @Override
+    protected void keyTyped(char typedChar, int keyCode) throws IOException {
+        // Give the framework (e.g. the search bar) first refusal; fall back to vanilla handling (ESC-to-close).
+        if (this.controller.getFrame().keyTyped(typedChar, keyCode)) {
+            return;
+        }
+
+        super.keyTyped(typedChar, keyCode);
+    }
+
+    @Override
     public void handleMouseInput() throws IOException {
         super.handleMouseInput();
         int dWheel = Mouse.getEventDWheel();
@@ -118,6 +121,15 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         this.drawDefaultBackground();
         this.controller.render(new VintageDrawContext(), mouseX, mouseY, partialTicks);
+    }
+
+    @Override
+    public void drawWorldBackground(int tint) {
+        if (this.mc.world != null) {
+            return;
+        }
+
+        super.drawWorldBackground(tint);
     }
 
     @Override

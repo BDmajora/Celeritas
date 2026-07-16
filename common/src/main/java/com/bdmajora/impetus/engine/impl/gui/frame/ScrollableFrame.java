@@ -3,6 +3,7 @@ package com.bdmajora.impetus.engine.impl.gui.frame;
 import com.bdmajora.impetus.engine.impl.gui.framework.DrawContext;
 import com.bdmajora.impetus.engine.impl.gui.framework.Interactable;
 import com.bdmajora.impetus.engine.impl.gui.framework.InteractionContext;
+import com.bdmajora.impetus.engine.impl.gui.theme.DefaultColors;
 import com.bdmajora.impetus.engine.impl.util.Dim2i;
 import com.bdmajora.impetus.engine.impl.gui.frame.components.ScrollBarComponent;
 
@@ -19,10 +20,16 @@ public class ScrollableFrame extends AbstractFrame {
     private Dim2i viewPortDimension = null;
     private ScrollBarComponent verticalScrollBar = null;
     private ScrollBarComponent horizontalScrollBar = null;
+    private final int scrollBarAccentColor;
 
     public ScrollableFrame(Dim2i dim, AbstractFrame frame, boolean renderOutline, AtomicReference<Integer> verticalScrollBarOffset, AtomicReference<Integer> horizontalScrollBarOffset) {
+        this(dim, frame, renderOutline, verticalScrollBarOffset, horizontalScrollBarOffset, DefaultColors.ELEMENT_ACTIVATED);
+    }
+
+    public ScrollableFrame(Dim2i dim, AbstractFrame frame, boolean renderOutline, AtomicReference<Integer> verticalScrollBarOffset, AtomicReference<Integer> horizontalScrollBarOffset, int scrollBarAccentColor) {
         super(dim, renderOutline);
         this.frame = frame;
+        this.scrollBarAccentColor = scrollBarAccentColor;
         this.frameOrigin = new Dim2i(frame.dim.x(), frame.dim.y(), 0, 0);
         this.setupFrame(verticalScrollBarOffset, horizontalScrollBarOffset);
         this.buildFrame();
@@ -70,13 +77,13 @@ public class ScrollableFrame extends AbstractFrame {
         if (this.canScrollHorizontal) {
             this.horizontalScrollBar = new ScrollBarComponent(new Dim2i(this.viewPortDimension.x(), this.viewPortDimension.getLimitY() + 1, this.viewPortDimension.width(), 10), ScrollBarComponent.Mode.HORIZONTAL, this.frame.dim.width(), this.viewPortDimension.width(), offset -> {
                 horizontalScrollBarOffset.set(offset);
-            });
+            }, this.scrollBarAccentColor);
             this.horizontalScrollBar.setOffset(horizontalScrollBarOffset.get());
         }
         if (this.canScrollVertical) {
             this.verticalScrollBar = new ScrollBarComponent(new Dim2i(this.viewPortDimension.getLimitX() + 1, this.viewPortDimension.y(), 10, this.viewPortDimension.height()), ScrollBarComponent.Mode.VERTICAL, this.frame.dim.height(), this.viewPortDimension.height(), offset -> {
                 verticalScrollBarOffset.set(offset);
-            }, this.viewPortDimension);
+            }, this.scrollBarAccentColor, this.viewPortDimension);
             this.verticalScrollBar.setOffset(verticalScrollBarOffset.get());
         }
     }
@@ -170,12 +177,18 @@ public class ScrollableFrame extends AbstractFrame {
                 || super.mouseScrolled(context, applyOffset(this.horizontalScrollBar, mouseX, false), applyOffset(this.verticalScrollBar, mouseY, false), horizontalAmount, verticalAmount);
     }
 
+    @Override
+    public boolean isMouseOver(double mouseX, double mouseY) {
+        return this.dim.containsCursor(mouseX, mouseY);
+    }
+
     public static class Builder {
         private boolean renderOutline = false;
         private Dim2i dim = null;
         private AbstractFrame frame = null;
         private AtomicReference<Integer> verticalScrollBarOffset = new AtomicReference<>(0);
         private AtomicReference<Integer> horizontalScrollBarOffset = new AtomicReference<>(0);
+        private int scrollBarAccentColor = DefaultColors.ELEMENT_ACTIVATED;
 
         public Builder setDimension(Dim2i dim) {
             this.dim = dim;
@@ -202,8 +215,13 @@ public class ScrollableFrame extends AbstractFrame {
             return this;
         }
 
+        public Builder setScrollBarAccentColor(int scrollBarAccentColor) {
+            this.scrollBarAccentColor = scrollBarAccentColor;
+            return this;
+        }
+
         public ScrollableFrame build() {
-            return new ScrollableFrame(this.dim, this.frame, this.renderOutline, this.verticalScrollBarOffset, this.horizontalScrollBarOffset);
+            return new ScrollableFrame(this.dim, this.frame, this.renderOutline, this.verticalScrollBarOffset, this.horizontalScrollBarOffset, this.scrollBarAccentColor);
         }
     }
 }

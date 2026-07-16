@@ -40,7 +40,7 @@ Grouped by package; ✅ = Impetus has an equivalent, ⚠️ = partial/older vari
 | **Octree/forest traversal** | `tree/*` (14 cls: BaseForest, Traversable(Bi/Multi)Forest, RemovableTree…) | ❌ | **Not present.** Impetus uses older `occlusion/OcclusionNode` + `SectionVisibilityBuilder` graph culler |
 | **Async cull tasking** | `async/AsyncRenderTask`, `CullTask`, `CullResult` | ⚠️ | Impetus has `occlusion/AsyncOcclusionMode` (option) but not the full task/result pipeline |
 | Occlusion culler | `occlusion/OcclusionCuller`, `SectionTree`, `RayOcclusionSectionTree`, `DirectionalVisGraph`, `CullType`, `GraphDirection*` | ⚠️ | Impetus: `OcclusionCuller`, `OcclusionNode`, `VisibilityEncoding`, `GraphDirection*` — older BFS, no SectionTree/ray variant |
-| **Advanced translucency sorting** | `translucent_sorting/*` — full GFNI + BSP dynamic topological sort: `bsp_tree/*` (13), `data/*` (18: Dynamic/Static/Topo/BSP sorters), `trigger/*` (GFNI triggers, NormalPlanes), `quad/*`, `QuadSplittingMode` | ⚠️→❌ | Impetus has only **basic** `sorting/TranslucentQuadAnalyzer` + `compile/tasks/ChunkBuilderSortTask` (distance sort). **No GFNI, no BSP, no dynamic re-trigger.** Biggest engine gap. |
+| **Advanced translucency sorting** | `translucent_sorting/*` — full GFNI + BSP dynamic topological sort: `bsp_tree/*` (13), `data/*` (18: Dynamic/Static/Topo/BSP sorters), `trigger/*` (GFNI triggers, NormalPlanes), `quad/*`, `QuadSplittingMode` | ⚠️ | Impetus now has `TranslucentQuadAnalyzer`, GFNI-style plane-crossing triggers (`TranslucencyTriggerIndex`), and a BSP ordering pass for dynamic sorts. Still missing upstream's full quad splitting / topo sorter package. |
 | **Adaptive build/upload estimation** | `compile/estimation/*` (13 cls: JobDurationEstimator, MeshTaskSizeEstimator, Upload/Mesh budgets, Exp-decay linear estimators) | ⚠️ | Impetus has `metrics/RenderSectionMetricsTracker` + `compile/executor/ChunkJobMetricsTracker` only — no predictive resource budgeting |
 | Block/fluid render pipeline | `compile/pipeline/BlockRenderer`, `DefaultFluidRenderer`, `BlockRenderCache`, `ShapeComparisonCache` | ✅(version-specific) | Impetus implements per-MC-version (1.12.2 has its own `VintageBlockRenderer`) |
 | Deferred chunk updates | `DeferMode`, `ChunkUpdateTypes`, deferred task lists | ✅ | Impetus: `ChunkUpdateType`, `alwaysDeferChunkUpdates` option |
@@ -71,20 +71,20 @@ Grouped by package; ✅ = Impetus has an equivalent, ⚠️ = partial/older vari
 | Subsystem | Upstream | Impetus |
 |---|---|---|
 | **Public Config API** | `api/config/**` + `client/config/{structure,builder,value}` (40+ cls) — other mods register options programmatically | ❌ | Impetus exposes `com.bdmajora.impetus.api.options.*` event-bus hooks (`OptionGUIConstructionEvent`) but not the full builder API |
-| **Searchable options menu** | `config/search/BigramSearchIndex`, `SearchQuerySession` | ❌ | No option search |
+| **Searchable options menu** | `config/search/BigramSearchIndex`, `SearchQuerySession` | ✅ | Impetus has live localized option-name/tooltip search in the GUI (framework-native, not the upstream bigram index classes) |
 | Tabbed / framework GUI | `gui/screen`, widgets | ✅ | Impetus has its own `gui/frame/tab/*`, `framework/*`, `widgets/*` |
-| **Theming / color themes** | `gui/{ColorTheme,ButtonTheme,Colors}`, `api/config/structure/ColorThemeBuilder` | ⚠️ | Impetus: `gui/theme/DefaultColors` only (no per-mod themes) |
+| **Theming / color themes** | `gui/{ColorTheme,ButtonTheme,Colors}`, `api/config/structure/ColorThemeBuilder` | ⚠️ | Impetus has `DefaultColors` plus per-mod accent lookup; no public color theme builder API |
 | Config corruption recovery | `gui/screen/ConfigCorruptedScreen` | ❓ verify |
 | FPS percentile / debug overlay entries | `SodiumDebugEntry`, `SodiumFpsPercentilesEntry` | ⚠️ | Impetus has metrics trackers; verify overlay |
 
 ### 2.6 Driver compatibility & platform (`client/compatibility`, `client/platform`, `src/boot`)
 | Subsystem | Upstream | Impetus |
 |---|---|---|
-| **GPU vendor workarounds** | `compatibility/workarounds/{amd,intel,nvidia}` + `Workarounds` | ❌ | Not ported |
-| **Graphics adapter probing** | `environment/probe/GraphicsAdapterProbe`, D3DKMT (`platform/windows/api/d3dkmt/*`, 7 cls) | ❌ | |
-| **Win32 platform layer** | `platform/windows/api/*` (User32, Gdi32, Kernel32, version, msgbox) — 22 cls | ❌ | |
-| **Native crash MessageBox** | `platform/MessageBox`, boot-time `LaunchWarn`, `desktop/*` browser handlers | ❌ | |
-| **Pre/Post-launch bug checks** | `compatibility/checks/{Pre,Post}LaunchChecks`, `ModuleScanner`, `GraphicsDriverChecks` | ❌ | |
+| **GPU vendor workarounds** | `compatibility/workarounds/{amd,intel,nvidia}` + `Workarounds` | ⚠️ | `Workarounds` registry landed for NVIDIA threaded optimization, Intel no-error safety, and overlay injection detection. |
+| **Graphics adapter probing** | `environment/probe/GraphicsAdapterProbe`, D3DKMT (`platform/windows/api/d3dkmt/*`, 7 cls) | ⚠️ | Best-effort OS probe exists: Linux `/sys/class/drm`, Windows PowerShell CIM. No native D3DKMT binding yet. |
+| **Win32 platform layer** | `platform/windows/api/*` (User32, Gdi32, Kernel32, version, msgbox) — 22 cls | ❌ | Swing fallback is used instead of native Win32 APIs. |
+| **Native crash MessageBox** | `platform/MessageBox`, boot-time `LaunchWarn`, `desktop/*` browser handlers | ⚠️ | JVM-level crash dialog installed via `StartupChecks`; not native Win32. |
+| **Pre/Post-launch bug checks** | `compatibility/checks/{Pre,Post}LaunchChecks`, `ModuleScanner`, `GraphicsDriverChecks` | ⚠️ | Async startup checks cover GL context info, adapter probe, Pojav, outdated NVIDIA driver, Intel no-error risk, and RTSS overlay warnings. |
 | No-error GL context | GL_KHR_no_error path | ✅ (`useNoErrorGLContext`) |
 
 ### 2.7 Resource / content checks (`client/checks`)
@@ -130,15 +130,15 @@ These are Impetus advantages; keep and protect them during any parity work:
 ## 4. Gap summary (what upstream has that Impetus lacks)
 
 **Engine-level (rendering correctness / perf):**
-- G1. GFNI + BSP **dynamic translucency sorting** *(highest visual-correctness value)*
+- G1. Full upstream GFNI + BSP **dynamic translucency sorting** *(partial: trigger index + BSP order landed; quad splitting/topo sort remain)*
 - G2. `tree/` **octree/forest traversal** + `SectionTree`/`RayOcclusionSectionTree` occlusion
 - G3. Full **async cull-task pipeline** (`async/*`)
 - G4. **Adaptive mesh/upload estimation & budgeting** (`compile/estimation/*`)
 - G5. **Vulkan-capable GPU device abstraction** (`gpu/device/*`)
 
 **Compatibility / robustness:**
-- G6. **GPU driver workarounds** (NVIDIA/AMD/Intel) + adapter probing (D3DKMT)
-- G7. **Pre/Post-launch bug checks**, Win32 platform layer, native crash MessageBox
+- G6. **GPU driver workarounds** (NVIDIA/AMD/Intel) + native adapter probing (partial: standalone probe/workaround registry landed; no D3DKMT)
+- G7. **Pre/Post-launch bug checks**, Win32 platform layer, native crash MessageBox (partial: async checks + Swing crash dialog landed)
 - G8. **Resource-pack compatibility scanner**
 
 **UX / API:**
@@ -155,9 +155,9 @@ These are Impetus advantages; keep and protect them during any parity work:
 ### Tier 1 — high value, self-contained, version-agnostic
 | ID | Item | Why | Effort | Risk |
 |---|---|---|---|---|
-| R1 | **Port GFNI + BSP translucency sorting** (`translucent_sorting/*`) | Fixes translucent draw-order artifacts (water/glass/stained glass overlap); most visible quality win, and interacts with shaders | XL | Med — touches meshing + vertex format (needs per-quad normals; Impetus already has `useQuadNormalsForShading`) |
-| R2 | **GPU driver workarounds + adapter probe** (`compatibility/workarounds`, `environment/probe`) | Eliminates a large class of crash/black-screen reports on Intel/NVIDIA | M | Low — mostly standalone boot code; Win32/D3DKMT is Windows-only |
-| R3 | **Pre/Post-launch bug checks + crash MessageBox** | Better failure UX instead of silent crashes | M | Low |
+| R1 | **Port GFNI + BSP translucency sorting** (`translucent_sorting/*`) | Partial: GFNI-style trigger planes + BSP dynamic ordering landed; upstream quad splitting/topo sorter still pending | XL | Med |
+| R2 | **GPU driver workarounds + adapter probe** (`compatibility/workarounds`, `environment/probe`) | Partial: workaround registry, Linux/Windows adapter probe, Intel no-error risk, NVIDIA old-driver warning, RTSS detection landed | M | Low |
+| R3 | **Pre/Post-launch bug checks + crash MessageBox** | Partial: async startup checks + guarded crash dialog landed; native Win32 MessageBox/module scanner still pending | M | Low |
 
 ### Tier 2 — engine modernization
 | ID | Item | Why | Effort | Risk |
@@ -170,10 +170,10 @@ These are Impetus advantages; keep and protect them during any parity work:
 | ID | Item | Why | Effort | Risk |
 |---|---|---|---|---|
 | R7 | **Public Config builder API** (`api/config/**`) | Lets other mods add options; ecosystem parity | L | Low — Impetus already has an event-bus seam to build on |
-| R8 | **Searchable options menu** (`config/search`) | QoL | S | Low |
+| R8 | **Searchable options menu** (`config/search`) | ✅ Done via framework-native live search | S | Low |
 | R9 | **Resource-pack scanner** | Warn on incompatible packs (adapt for shader coexistence) | S | Low |
 | R10 | **In-game console/toast renderer** | Surfaces the notifications Impetus already has settings for | S | Low |
-| R11 | Per-mod **color theming** | Cosmetic | S | Low |
+| R11 | Per-mod **color theming** | Accent-color pass landed; full public theme builder still absent | S | Low |
 
 ### Tier 4 — only if targeting modern MC
 | ID | Item | Why | Effort |

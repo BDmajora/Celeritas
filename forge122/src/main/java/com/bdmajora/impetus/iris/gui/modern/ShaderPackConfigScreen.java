@@ -355,4 +355,13 @@ public class ShaderPackConfigScreen extends GuiScreen {
             }
         }
     }
+
+    @Override
+    public void drawWorldBackground(int tint) {
+        if (this.mc.world != null) {
+            return;
+        }
+
+        super.drawWorldBackground(tint);
+    }
 }

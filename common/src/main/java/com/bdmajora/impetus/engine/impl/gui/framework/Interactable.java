@@ -18,4 +18,13 @@ public interface Interactable {
     default boolean mouseScrolled(InteractionContext context, double mouseX, double mouseY, double deltaX, double deltaY) {
         return false;
     }
+
+    /**
+     * Handles a key press. {@code typedChar} is the produced character ({@code '\0'} when none); {@code keyCode}
+     * is the platform key code (LWJGL2 or GLFW depending on the runtime — consumers should prefer matching on
+     * {@code typedChar} and accept both code sets for editing keys).
+     */
+    default boolean keyTyped(char typedChar, int keyCode) {
+        return false;
+    }
 }

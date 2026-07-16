@@ -156,6 +156,12 @@ public final class QuadPrimitiveType implements ChunkPrimitiveType {
                     quadCount,
                     chunkData.normalSigns());
         } else {
+            int[] bspOrder = BspTranslucencySorter.sort(centers, chunkData.normals(), quadCount, x, y, z);
+            if (bspOrder != null) {
+                generateIndexBuffer(indexBuffer, bspOrder);
+                return;
+            }
+
             buildDynamicDistanceArray(centers, distanceArray, quadCount, x, y, z);
         }
 

@@ -170,4 +170,13 @@ public class ShaderPackSelectScreen extends GuiScreen {
             widget.render(ctx, mouseX, mouseY, partialTicks);
         }
     }
+
+    @Override
+    public void drawWorldBackground(int tint) {
+        if (this.mc.world != null) {
+            return;
+        }
+
+        super.drawWorldBackground(tint);
+    }
 }

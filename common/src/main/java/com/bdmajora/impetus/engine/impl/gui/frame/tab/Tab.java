@@ -4,12 +4,13 @@ import lombok.Builder;
 import com.bdmajora.impetus.api.options.structure.Option;
 import com.bdmajora.impetus.api.options.structure.OptionPage;
 import com.bdmajora.impetus.engine.impl.gui.framework.TextComponent;
-import com.bdmajora.impetus.engine.impl.gui.framework.TextFormattingStyle;
+import com.bdmajora.impetus.engine.impl.gui.theme.DefaultColors;
 import com.bdmajora.impetus.engine.impl.util.Dim2i;
 import com.bdmajora.impetus.api.options.OptionIdentifier;
 import com.bdmajora.impetus.engine.impl.gui.frame.AbstractFrame;
 import com.bdmajora.impetus.engine.impl.gui.frame.OptionPageFrame;
 import com.bdmajora.impetus.engine.impl.gui.frame.ScrollableFrame;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -17,7 +18,16 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 @Builder(builderClassName = "Builder", setterPrefix = "set")
-public record Tab<T extends AbstractFrame>(OptionIdentifier<Void> id, TextComponent title, Supplier<Boolean> onSelectFunction, Function<Dim2i, T> frameFunction) {
+public record Tab<T extends AbstractFrame>(
+        OptionIdentifier<Void> id,
+        TextComponent title,
+        Supplier<Boolean> onSelectFunction,
+        Function<Dim2i, T> frameFunction,
+        @Nullable OptionPage page,
+        @Nullable Predicate<Option<?>> optionFilter,
+        @Nullable AtomicReference<Integer> verticalScrollBarOffset,
+        boolean stackable
+) {
     public static Tab.Builder<?> createBuilder() {
         return new Tab.Builder<>();
     }
@@ -27,6 +37,10 @@ public record Tab<T extends AbstractFrame>(OptionIdentifier<Void> id, TextCompon
     }
 
     public static Tab<ScrollableFrame> from(OptionPage page, Predicate<Option<?>> optionFilter, AtomicReference<Integer> verticalScrollBarOffset) {
+        return from(page, optionFilter, verticalScrollBarOffset, true);
+    }
+
+    public static Tab<ScrollableFrame> from(OptionPage page, Predicate<Option<?>> optionFilter, AtomicReference<Integer> verticalScrollBarOffset, boolean stackable) {
         Function<Dim2i, ScrollableFrame> frameFunction = dim2i -> ScrollableFrame
                 .createBuilder()
                 .setDimension(dim2i)
@@ -37,10 +51,15 @@ public record Tab<T extends AbstractFrame>(OptionIdentifier<Void> id, TextCompon
                         .setOptionFilter(optionFilter)
                         .build())
                 .setVerticalScrollBarOffset(verticalScrollBarOffset)
+                .setScrollBarAccentColor(DefaultColors.getModAccentColor(page.getId().getModId()))
                 .build();
         return Tab.<ScrollableFrame>builder()
                 .setTitle(page.getName())
                 .setId(page.getId())
+                .setPage(page)
+                .setOptionFilter(optionFilter)
+                .setVerticalScrollBarOffset(verticalScrollBarOffset)
+                .setStackable(stackable)
                 .setFrameFunction(frameFunction)
                 .build();
     }

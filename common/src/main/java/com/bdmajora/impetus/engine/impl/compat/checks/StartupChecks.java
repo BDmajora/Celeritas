@@ -3,7 +3,9 @@ package com.bdmajora.impetus.engine.impl.compat.checks;
 import com.bdmajora.impetus.engine.impl.compat.environment.GlContextInfo;
 import com.bdmajora.impetus.engine.impl.compat.environment.OsKind;
 import com.bdmajora.impetus.engine.impl.compat.platform.MessageBoxUtil;
+import com.bdmajora.impetus.engine.impl.compat.probe.GraphicsAdapterInfo;
 import com.bdmajora.impetus.engine.impl.compat.probe.GraphicsAdapterProbe;
+import com.bdmajora.impetus.engine.impl.compat.probe.GraphicsVendor;
 import com.bdmajora.impetus.engine.impl.compat.workarounds.Workarounds;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -11,7 +13,9 @@ import org.apache.logging.log4j.Logger;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -25,8 +29,38 @@ import java.util.concurrent.TimeUnit;
  */
 public final class StartupChecks {
     private static final Logger LOGGER = LogManager.getLogger("Impetus");
+    private static final AtomicBoolean CRASH_DIALOG_INSTALLED = new AtomicBoolean(false);
+    private static final AtomicBoolean CRASH_DIALOG_SHOWN = new AtomicBoolean(false);
 
     private StartupChecks() {
+    }
+
+    public static void installCrashDialog() {
+        if (!CRASH_DIALOG_INSTALLED.compareAndSet(false, true)) {
+            return;
+        }
+
+        Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+
+        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
+            if (CRASH_DIALOG_SHOWN.compareAndSet(false, true)) {
+                try {
+                    MessageBoxUtil.showError("Impetus — Minecraft crashed",
+                            "Minecraft encountered an unrecoverable error while Impetus was loaded.\n\n" +
+                            "Error: " + throwable.getClass().getSimpleName() + ": " +
+                            String.valueOf(throwable.getMessage()) + "\n\n" +
+                            "The full crash details are still written to the game log/crash report.");
+                } catch (Throwable dialogFailure) {
+                    LOGGER.debug("Crash dialog failed", dialogFailure);
+                }
+            }
+
+            if (previous != null) {
+                previous.uncaughtException(thread, throwable);
+            } else {
+                LOGGER.error("Unhandled exception in thread " + thread.getName(), throwable);
+            }
+        });
     }
 
     public static void runAsync(GlContextInfo context) {
@@ -47,9 +81,115 @@ public final class StartupChecks {
             }
 
             Workarounds.init(context, adapters);
+            runBugChecks(context, adapters);
             scanForFrameHookOverlays();
         } catch (Throwable t) {
             LOGGER.debug("Startup compatibility checks failed", t);
+        }
+    }
+
+    private static void runBugChecks(GlContextInfo context, List<GraphicsAdapterInfo> adapters) {
+        warnIfPojavLauncher();
+        warnIfOutdatedNvidiaDriver(adapters);
+
+        if (Workarounds.isActive(Workarounds.Issue.NO_ERROR_CONTEXT_UNSAFE)) {
+            MessageBoxUtil.showWarning("Impetus — Driver workaround active",
+                    "Impetus detected an older Intel Windows graphics driver.\n\n" +
+                    "The no-error OpenGL context path is unsafe on this driver, so Impetus will avoid\n" +
+                    "using it where possible. If you still see black screens or driver crashes, update\n" +
+                    "your Intel graphics driver.");
+        }
+
+        if (context.vendor().isEmpty() || context.renderer().isEmpty()) {
+            LOGGER.warn("OpenGL context strings were incomplete; compatibility checks may be less accurate.");
+        }
+    }
+
+    private static void warnIfPojavLauncher() {
+        if (!isPojavLauncher()) {
+            return;
+        }
+
+        MessageBoxUtil.showWarning("Impetus — Unsupported launcher",
+                "PojavLauncher appears to be running.\n\n" +
+                "PojavLauncher is not supported with Impetus and is very likely to hit severe\n" +
+                "performance problems, graphical bugs, or crashes.");
+    }
+
+    private static boolean isPojavLauncher() {
+        return envPresent("POJAV_RENDERER")
+                || envPresent("POJAVEXEC_EGL")
+                || envPresent("ANDROID_ROOT")
+                || propertyContains("java.runtime.name", "android")
+                || propertyContains("java.vm.name", "dalvik");
+    }
+
+    private static boolean envPresent(String key) {
+        String value = System.getenv(key);
+        return value != null && !value.isEmpty();
+    }
+
+    private static boolean propertyContains(String key, String needle) {
+        return System.getProperty(key, "").toLowerCase(Locale.ROOT).contains(needle);
+    }
+
+    private static void warnIfOutdatedNvidiaDriver(List<GraphicsAdapterInfo> adapters) {
+        for (var adapter : adapters) {
+            if (adapter.vendor() != GraphicsVendor.NVIDIA) {
+                continue;
+            }
+
+            DriverVersion version = DriverVersion.parseNvidia(adapter.driverVersion());
+            if (version != null && version.compareTo(new DriverVersion(536, 23)) < 0) {
+                MessageBoxUtil.showWarning("Impetus — Outdated NVIDIA driver",
+                        "Your NVIDIA graphics driver appears to be out of date.\n\n" +
+                        "Detected driver: " + adapter.driverVersion() + "\n" +
+                        "Recommended driver: 536.23 or newer\n\n" +
+                        "Older NVIDIA drivers are known to cause severe performance issues and crashes\n" +
+                        "with modern chunk renderers. Please update your graphics driver.");
+                return;
+            }
+        }
+    }
+
+    private record DriverVersion(int major, int minor) implements Comparable<DriverVersion> {
+        static DriverVersion parseNvidia(String raw) {
+            if (raw == null || raw.trim().isEmpty()) {
+                return null;
+            }
+
+            String[] parts = raw.trim().split("\\.");
+
+            if (parts.length >= 4 && "15".equals(parts[2])) {
+                Integer packed = parseInt(parts[3]);
+                if (packed != null && packed >= 1000) {
+                    return new DriverVersion(500 + (packed / 100), packed % 100);
+                }
+            }
+
+            if (parts.length >= 2) {
+                Integer major = parseInt(parts[0]);
+                Integer minor = parseInt(parts[1]);
+                if (major != null && minor != null) {
+                    return new DriverVersion(major, minor);
+                }
+            }
+
+            return null;
+        }
+
+        private static Integer parseInt(String value) {
+            try {
+                return Integer.parseInt(value);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+
+        @Override
+        public int compareTo(DriverVersion other) {
+            int majorCmp = Integer.compare(this.major, other.major);
+            return majorCmp != 0 ? majorCmp : Integer.compare(this.minor, other.minor);
         }
     }
 

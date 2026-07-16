@@ -1,0 +1,112 @@
+package com.bdmajora.impetus.engine.impl.gui.widgets;
+
+import com.bdmajora.impetus.engine.impl.gui.framework.DrawContext;
+import com.bdmajora.impetus.engine.impl.gui.framework.InteractionContext;
+import com.bdmajora.impetus.engine.impl.gui.framework.TextComponent;
+import com.bdmajora.impetus.engine.impl.gui.theme.DefaultColors;
+import com.bdmajora.impetus.engine.impl.util.Dim2i;
+
+import java.util.function.Consumer;
+
+/**
+ * A flat text-input field used to search the options list. Editing keys are matched primarily on the produced
+ * character, with both LWJGL2 and GLFW key codes accepted as fallbacks, so the widget behaves identically on
+ * every runtime the engine targets. While focused, all key input is consumed so game keybinds don't fire.
+ */
+public class SearchBarWidget extends AbstractWidget {
+    private static final int TEXT_PADDING = 6;
+
+    // Editing keys, by produced character and by (LWJGL2, GLFW) key code.
+    private static final char CHAR_BACKSPACE = '\b';
+    private static final char CHAR_ESCAPE = 27;
+    private static final int LWJGL2_KEY_ESCAPE = 1, GLFW_KEY_ESCAPE = 256;
+    private static final int LWJGL2_KEY_BACK = 14, GLFW_KEY_BACKSPACE = 259;
+
+    private final Dim2i dim;
+    private final StringBuilder query = new StringBuilder();
+    private final Consumer<String> queryListener;
+    private final TextComponent placeholder = TextComponent.translatable("impetus.search_bar_empty");
+    private boolean focused;
+
+    public SearchBarWidget(Dim2i dim, String initialQuery, boolean focused, Consumer<String> queryListener) {
+        this.dim = dim;
+        this.query.append(initialQuery);
+        this.focused = focused;
+        this.queryListener = queryListener;
+    }
+
+    @Override
+    public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
+        boolean highlight = this.focused || this.dim.containsCursor(mouseX, mouseY);
+
+        drawContext.fill(this.dim.x(), this.dim.y(), this.dim.getLimitX(), this.dim.getLimitY(), 0x90000000);
+        drawContext.drawBorder(this.dim.x(), this.dim.y(), this.dim.getLimitX(), this.dim.getLimitY(),
+                highlight ? DefaultColors.ELEMENT_ACTIVATED : 0xFF3F3F3F);
+
+        int textX = this.dim.x() + TEXT_PADDING;
+        int textY = this.dim.getCenterY() - (drawContext.lineHeight() / 2);
+
+        if (this.query.length() == 0 && !this.focused) {
+            drawContext.drawString(this.placeholder, textX, textY, 0xFF808080);
+        } else {
+            var text = this.query.toString();
+
+            if (this.focused && (System.currentTimeMillis() / 500) % 2 == 0) {
+                text += "_";
+            }
+
+            drawContext.drawString(text, textX, textY, 0xFFFFFFFF);
+        }
+    }
+
+    @Override
+    public boolean isMouseOver(double mouseX, double mouseY) {
+        return this.dim.containsCursor(mouseX, mouseY);
+    }
+
+    @Override
+    public boolean mouseClicked(InteractionContext context, double mouseX, double mouseY, int button) {
+        var inside = this.dim.containsCursor(mouseX, mouseY);
+        this.focused = inside;
+        return inside;
+    }
+
+    @Override
+    public boolean keyTyped(char typedChar, int keyCode) {
+        if (!this.focused) {
+            return false;
+        }
+
+        if (typedChar == CHAR_ESCAPE || keyCode == LWJGL2_KEY_ESCAPE || keyCode == GLFW_KEY_ESCAPE) {
+            if (this.query.length() == 0) {
+                this.focused = false;
+            } else {
+                this.query.setLength(0);
+                this.fireQueryChanged();
+            }
+        } else if (typedChar == CHAR_BACKSPACE || keyCode == LWJGL2_KEY_BACK || keyCode == GLFW_KEY_BACKSPACE) {
+            if (this.query.length() > 0) {
+                this.query.setLength(this.query.length() - 1);
+                this.fireQueryChanged();
+            }
+        } else if (typedChar >= ' ' && typedChar != 127) {
+            this.query.append(typedChar);
+            this.fireQueryChanged();
+        }
+
+        // Swallow everything while focused so typing doesn't trigger game keybinds.
+        return true;
+    }
+
+    private void fireQueryChanged() {
+        this.queryListener.accept(this.query.toString());
+    }
+
+    public boolean isFocused() {
+        return this.focused;
+    }
+
+    public String getQuery() {
+        return this.query.toString();
+    }
+}

@@ -2,8 +2,10 @@ package com.bdmajora.impetus.engine.impl.gui;
 
 import lombok.Getter;
 import com.bdmajora.impetus.api.OptionGUIConstructionEvent;
+import com.bdmajora.impetus.api.options.OptionIdentifier;
 import com.bdmajora.impetus.api.options.structure.Option;
 import com.bdmajora.impetus.api.options.structure.OptionFlag;
+import com.bdmajora.impetus.api.options.structure.OptionGroup;
 import com.bdmajora.impetus.api.options.structure.OptionPage;
 import com.bdmajora.impetus.api.options.structure.OptionStorage;
 import com.bdmajora.impetus.engine.impl.gui.frame.AbstractFrame;
@@ -12,7 +14,9 @@ import com.bdmajora.impetus.engine.impl.gui.frame.tab.Tab;
 import com.bdmajora.impetus.engine.impl.gui.frame.tab.TabFrame;
 import com.bdmajora.impetus.engine.impl.gui.framework.*;
 import com.bdmajora.impetus.engine.impl.gui.widgets.FlatButtonWidget;
+import com.bdmajora.impetus.engine.impl.gui.widgets.SearchBarWidget;
 import com.bdmajora.impetus.engine.impl.util.Dim2i;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -33,6 +37,13 @@ public class ImpetusVideoOptionsController implements Renderable {
     @Getter
     private AbstractFrame frame;
     private FlatButtonWidget applyButton, closeButton, undoButton;
+
+    /** Title (and identifier) of the synthesized search-results page. */
+    private static final TextComponent SEARCH_RESULTS_TITLE = TextComponent.translatable("impetus.search_results");
+
+    private SearchBarWidget searchBar;
+    private String searchQuery = "";
+    private @Nullable TextComponent preSearchTabTitle;
 
     @Getter
     private boolean hasPendingChanges;
@@ -72,6 +83,10 @@ public class ImpetusVideoOptionsController implements Renderable {
         Dim2i applyButtonDim = new Dim2i(tabFrameDim.getLimitX() - 134, tabFrameDim.getLimitY() + 5, 65, 20);
         Dim2i closeButtonDim = new Dim2i(tabFrameDim.getLimitX() - 65, tabFrameDim.getLimitY() + 5, 65, 20);
 
+        // Full-width search field above the tab frame; recreated on rebuild but preserving query and focus.
+        Dim2i searchBarDim = new Dim2i(tabFrameDim.x(), Math.max(2, tabFrameDim.y() - 24), tabFrameDim.width(), 18);
+        boolean searchFocused = this.searchBar != null && this.searchBar.isFocused();
+        this.searchBar = new SearchBarWidget(searchBarDim, this.searchQuery, searchFocused, this::setSearchQuery);
 
         this.undoButton = new FlatButtonWidget(undoButtonDim, TextComponent.translatable("impetus.options.buttons.undo"), this::undoChanges);
         this.applyButton = new FlatButtonWidget(applyButtonDim, TextComponent.translatable("impetus.options.buttons.apply"), this::applyChanges);
@@ -156,6 +171,13 @@ public class ImpetusVideoOptionsController implements Renderable {
                         .forEach(page -> tabs.computeIfAbsent(page.getId().getModId(), $ -> new ArrayList<>()).add(Tab.from(page, o -> true, optionPageScrollBarOffset)))
                 )
                 .addTabs(this::createExtraTabs)
+                .addTabs(tabs -> {
+                    if (!this.searchQuery.isEmpty()) {
+                        var resultsPage = this.buildSearchResultsPage();
+                        tabs.computeIfAbsent(resultsPage.getId().getModId(), $ -> new ArrayList<>())
+                                .add(Tab.from(resultsPage, o -> true, optionPageScrollBarOffset, false));
+                    }
+                })
                 .onSetTab(() -> {
                     optionPageScrollBarOffset.set(0);
                 })
@@ -166,9 +188,80 @@ public class ImpetusVideoOptionsController implements Renderable {
         return BasicFrame.createBuilder()
                 .setDimension(parentBasicFrameDim)
                 .shouldRenderOutline(false)
+                // First child so it sees key events before anything else.
+                .addChild(dim -> this.searchBar)
                 .addChild(parentDim -> this.createTabFrame(tabFrameDim))
                 .addChild(dim -> this.undoButton)
                 .addChild(dim -> this.applyButton)
                 .addChild(dim -> this.closeButton);
+    }
+
+    /**
+     * Live search: while the query is non-empty, a synthesized "Search Results" page (containing every option
+     * whose name or tooltip matches, across all pages) is added as a tab and selected. The matched options are
+     * the live instances, so they can be edited directly from the results view. Clearing the query restores the
+     * previously selected tab.
+     */
+    private void setSearchQuery(String query) {
+        var trimmed = query.trim();
+
+        if (trimmed.equals(this.searchQuery)) {
+            return;
+        }
+
+        boolean wasSearching = !this.searchQuery.isEmpty();
+        boolean searching = !trimmed.isEmpty();
+        this.searchQuery = trimmed;
+
+        if (searching && !wasSearching) {
+            this.preSearchTabTitle = tabFrameSelectedTab.get();
+        }
+
+        if (searching) {
+            tabFrameSelectedTab.set(SEARCH_RESULTS_TITLE);
+        } else if (wasSearching) {
+            tabFrameSelectedTab.set(this.preSearchTabTitle);
+        }
+
+        this.optionPageScrollBarOffset.set(0);
+        this.frame = this.parentFrameBuilder().build();
+    }
+
+    private OptionPage buildSearchResultsPage() {
+        var needle = this.searchQuery.toLowerCase(Locale.ROOT);
+        var matches = new ArrayList<Option<?>>();
+
+        for (var page : this.pages) {
+            for (var option : page.getOptions()) {
+                if (this.matchesQuery(option, needle)) {
+                    matches.add(option);
+                }
+            }
+        }
+
+        List<OptionGroup> groups;
+
+        if (matches.isEmpty()) {
+            groups = List.of();
+        } else {
+            var group = OptionGroup.createBuilder()
+                    .setId(OptionIdentifier.create("impetus", "search_results"));
+            matches.forEach(group::add);
+            groups = List.of(group.build());
+        }
+
+        return new OptionPage(OptionIdentifier.create("impetus", "search_results"), SEARCH_RESULTS_TITLE, groups);
+    }
+
+    private boolean matchesQuery(Option<?> option, String needle) {
+        var name = this.font.extractString(option.getName());
+
+        if (name.toLowerCase(Locale.ROOT).contains(needle)) {
+            return true;
+        }
+
+        var tooltip = option.getTooltip();
+
+        return tooltip != null && this.font.extractString(tooltip).toLowerCase(Locale.ROOT).contains(needle);
     }
 }

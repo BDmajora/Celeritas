@@ -45,7 +45,7 @@ public class FlatButtonWidget extends AbstractWidget {
         boolean hovered = this.isHovered(mouseX, mouseY);
 
         int backgroundColor = this.enabled ? (hovered ? this.style.bgHovered : this.style.bgDefault) : this.style.bgDisabled;
-        int textColor = this.enabled ? this.style.textDefault : this.style.textDisabled;
+        int textColor = this.enabled ? (this.selected ? this.style.textSelected : this.style.textDefault) : this.style.textDisabled;
 
         int strWidth = drawContext.getStringWidth(this.label);
 
@@ -59,7 +59,7 @@ public class FlatButtonWidget extends AbstractWidget {
         drawContext.drawString(this.label, textX, this.dim.getCenterY() - 4, textColor);
 
         if (this.enabled && this.selected) {
-            drawContext.fill(this.dim.x(), this.leftAligned ? this.dim.y() : (this.dim.getLimitY() - 1), this.leftAligned ? (this.dim.x() + 1) : this.dim.getLimitX(), this.dim.getLimitY(), DefaultColors.ELEMENT_ACTIVATED);
+            drawContext.fill(this.dim.x(), this.leftAligned ? this.dim.y() : (this.dim.getLimitY() - 1), this.leftAligned ? (this.dim.x() + 1) : this.dim.getLimitX(), this.dim.getLimitY(), this.style.accentColor);
         }
     }
 
@@ -120,15 +120,18 @@ public class FlatButtonWidget extends AbstractWidget {
 
     public static class Style {
         public int bgHovered, bgDefault, bgDisabled;
-        public int textDefault, textDisabled;
+        public int textDefault, textSelected, textDisabled;
+        public int accentColor;
 
         public static Style defaults() {
             var style = new Style();
-            style.bgHovered = 0xE0202020;
-            style.bgDefault = 0x90000000;
-            style.bgDisabled = 0x60000000;
+            style.bgHovered = DefaultColors.BACKGROUND_HOVERED;
+            style.bgDefault = DefaultColors.BACKGROUND_DEFAULT;
+            style.bgDisabled = DefaultColors.BACKGROUND_DISABLED;
             style.textDefault = 0xFFFFFFFF;
+            style.textSelected = 0xFFFFFFFF;
             style.textDisabled = 0x90FFFFFF;
+            style.accentColor = DefaultColors.ELEMENT_ACTIVATED;
 
             return style;
         }

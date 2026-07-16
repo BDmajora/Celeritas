@@ -3,13 +3,14 @@ package com.bdmajora.impetus.engine.impl.gui.frame.components;
 import com.bdmajora.impetus.engine.impl.common.util.MathUtil;
 import com.bdmajora.impetus.engine.impl.gui.framework.DrawContext;
 import com.bdmajora.impetus.engine.impl.gui.framework.InteractionContext;
+import com.bdmajora.impetus.engine.impl.gui.theme.DefaultColors;
 import com.bdmajora.impetus.engine.impl.gui.widgets.AbstractWidget;
 import com.bdmajora.impetus.engine.impl.util.Dim2i;
 
 import java.util.function.Consumer;
 
 public class ScrollBarComponent extends AbstractWidget {
-    protected static final int SCROLL_OFFSET = 6;
+    protected static final int SCROLL_OFFSET = 18;
 
     protected final Dim2i dim;
 
@@ -18,6 +19,7 @@ public class ScrollBarComponent extends AbstractWidget {
     private final int viewPortLength;
     private final int maxScrollBarOffset;
     private final Consumer<Integer> onSetOffset;
+    private final int accentColor;
     private int offset = 0;
     private boolean isDragging;
 
@@ -27,16 +29,25 @@ public class ScrollBarComponent extends AbstractWidget {
     private Dim2i extendedScrollArea = null;
 
     public ScrollBarComponent(Dim2i trackArea, Mode mode, int frameLength, int viewPortLength, Consumer<Integer> onSetOffset) {
+        this(trackArea, mode, frameLength, viewPortLength, onSetOffset, DefaultColors.ELEMENT_ACTIVATED);
+    }
+
+    public ScrollBarComponent(Dim2i trackArea, Mode mode, int frameLength, int viewPortLength, Consumer<Integer> onSetOffset, int accentColor) {
         this.dim = trackArea;
         this.mode = mode;
         this.frameLength = frameLength;
         this.viewPortLength = viewPortLength;
         this.onSetOffset = onSetOffset;
         this.maxScrollBarOffset = this.frameLength - this.viewPortLength;
+        this.accentColor = accentColor;
     }
 
     public ScrollBarComponent(Dim2i scrollBarArea, Mode mode, int frameLength, int viewPortLength, Consumer<Integer> onSetOffset, Dim2i extendedTrackArea) {
-        this(scrollBarArea, mode, frameLength, viewPortLength, onSetOffset);
+        this(scrollBarArea, mode, frameLength, viewPortLength, onSetOffset, DefaultColors.ELEMENT_ACTIVATED, extendedTrackArea);
+    }
+
+    public ScrollBarComponent(Dim2i scrollBarArea, Mode mode, int frameLength, int viewPortLength, Consumer<Integer> onSetOffset, int accentColor, Dim2i extendedTrackArea) {
+        this(scrollBarArea, mode, frameLength, viewPortLength, onSetOffset, accentColor);
         this.extendedScrollArea = extendedTrackArea;
     }
 
@@ -49,8 +60,12 @@ public class ScrollBarComponent extends AbstractWidget {
 
     @Override
     public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
-        drawContext.drawBorder(this.dim.x(), this.dim.y(), this.dim.getLimitX(), this.dim.getLimitY(), 0xFFAAAAAA);
-        drawContext.fill(this.scrollThumb.x(), this.scrollThumb.y(), this.scrollThumb.getLimitX(), this.scrollThumb.getLimitY(), 0xFFAAAAAA);
+        boolean hovered = this.dim.containsCursor(mouseX, mouseY);
+        int trackColor = hovered || this.isDragging ? 0x50000000 : 0x26000000;
+        int thumbColor = DefaultColors.withAlpha(this.accentColor, hovered || this.isDragging ? 0xFF : 0xB8);
+
+        drawContext.fill(this.dim.x(), this.dim.y(), this.dim.getLimitX(), this.dim.getLimitY(), trackColor);
+        drawContext.fill(this.scrollThumb.x(), this.scrollThumb.y(), this.scrollThumb.getLimitX(), this.scrollThumb.getLimitY(), thumbColor);
     }
 
     @Override
@@ -126,7 +141,7 @@ public class ScrollBarComponent extends AbstractWidget {
 
     @Override
     public boolean isMouseOver(double mouseX, double mouseY) {
-        return this.dim.containsCursor(mouseX, mouseY) || this.extendedScrollArea.containsCursor(mouseX, mouseY);
+        return this.dim.containsCursor(mouseX, mouseY) || this.extendedScrollArea != null && this.extendedScrollArea.containsCursor(mouseX, mouseY);
     }
 
     public enum Mode {

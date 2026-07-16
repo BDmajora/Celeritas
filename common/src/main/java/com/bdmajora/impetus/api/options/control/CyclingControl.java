@@ -4,7 +4,6 @@ import com.bdmajora.impetus.api.options.structure.Option;
 import com.bdmajora.impetus.engine.impl.gui.framework.DrawContext;
 import com.bdmajora.impetus.engine.impl.gui.framework.InteractionContext;
 import com.bdmajora.impetus.engine.impl.gui.framework.TextComponent;
-import com.bdmajora.impetus.engine.impl.gui.framework.TextFormattingStyle;
 import com.bdmajora.impetus.engine.impl.gui.options.TextProvider;
 import com.bdmajora.impetus.engine.impl.util.Dim2i;
 
@@ -98,13 +97,14 @@ public class CyclingControl<T> implements Control<T> {
             super.render(drawContext, mouseX, mouseY, delta);
 
             TextComponent name = this.names[getCurrentIndex()];
+            boolean enabled = this.option.isAvailable();
 
-            if(!this.option.isAvailable()) {
-                name = name.withStyle(TextFormattingStyle.GRAY, TextFormattingStyle.STRIKETHROUGH);
+            if(!enabled) {
+                name = this.formatDisabledControlValue(name);
             }
 
             int strWidth = drawContext.getStringWidth(name);
-            drawContext.drawString(name, this.dim.getLimitX() - strWidth - 6, this.dim.getCenterY() - 4, 0xFFFFFFFF);
+            drawContext.drawString(name, this.dim.getLimitX() - strWidth - 6, this.dim.getCenterY() - 4, enabled ? 0xFFFFFFFF : this.getDisabledControlColor());
         }
 
         @Override

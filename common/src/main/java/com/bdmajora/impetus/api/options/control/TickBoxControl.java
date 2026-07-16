@@ -4,7 +4,6 @@ import com.bdmajora.impetus.api.options.structure.Option;
 import com.bdmajora.impetus.engine.impl.gui.framework.DrawContext;
 import com.bdmajora.impetus.engine.impl.gui.framework.InteractionContext;
 import com.bdmajora.impetus.engine.impl.util.Dim2i;
-import com.bdmajora.impetus.engine.impl.gui.theme.DefaultColors;
 
 public class TickBoxControl implements Control<Boolean> {
     private final Option<Boolean> option;
@@ -52,9 +51,9 @@ public class TickBoxControl implements Control<Boolean> {
             final int color;
 
             if (enabled) {
-                color = ticked ? DefaultColors.ELEMENT_ACTIVATED : 0xFFFFFFFF;
+                color = ticked ? this.getAccentColor(drawContext) : 0xFFFFFFFF;
             } else {
-                color = 0xFFAAAAAA;
+                color = this.getDisabledControlColor();
             }
 
             if (ticked) {

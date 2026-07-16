@@ -16,14 +16,26 @@ public final class MessageBoxUtil {
     }
 
     public static void showWarning(String title, String message) {
-        LOGGER.warn("{}: {}", title, message.replace('\n', ' '));
+        show(title, message, javax.swing.JOptionPane.WARNING_MESSAGE);
+    }
+
+    public static void showError(String title, String message) {
+        show(title, message, javax.swing.JOptionPane.ERROR_MESSAGE);
+    }
+
+    private static void show(String title, String message, int type) {
+        if (type == javax.swing.JOptionPane.ERROR_MESSAGE) {
+            LOGGER.error("{}: {}", title, message.replace('\n', ' '));
+        } else {
+            LOGGER.warn("{}: {}", title, message.replace('\n', ' '));
+        }
 
         if (Boolean.getBoolean("impetus.hideMessageBoxes") || java.awt.GraphicsEnvironment.isHeadless()) {
             return;
         }
 
         try {
-            javax.swing.JOptionPane.showMessageDialog(null, message, title, javax.swing.JOptionPane.WARNING_MESSAGE);
+            javax.swing.JOptionPane.showMessageDialog(null, message, title, type);
         } catch (Throwable t) {
             // AWT can fail in exotic launcher setups (e.g. macOS without -XstartOnFirstThread juggling); the
             // warning is already in the log, so never let the dialog itself take the game down.

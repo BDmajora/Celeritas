@@ -18,6 +18,7 @@ public class TranslucentQuadAnalyzer {
      */
     private static final int MAX_TRACKED_NORMALS = 16;
     private final FloatArrayList quadCenters = new FloatArrayList(EXPECTED_QUADS * 3);
+    private final FloatArrayList quadNormals = new FloatArrayList(EXPECTED_QUADS * 3);
     private final Vector3f[] vertexPositions = new Vector3f[4];
     private final Vector3f currentNormal = new Vector3f();
     private final Vector3f globalNormal = new Vector3f();
@@ -90,8 +91,8 @@ public class TranslucentQuadAnalyzer {
      *                      camera-crossing re-sort triggering; {@code null} when unavailable (too many distinct
      *                      normals), in which case the caller must fall back to coarse movement-based triggering.
      */
-    public record SortState(Level level, float[] centers, int centersLength, BitSet normalSigns, Vector3f sharedNormal, NormalPlanes[] triggerPlanes) {
-        public static final SortState NONE = new SortState(Level.NONE, null, 0, null, null, null);
+    public record SortState(Level level, float[] centers, float[] normals, int centersLength, BitSet normalSigns, Vector3f sharedNormal, NormalPlanes[] triggerPlanes) {
+        public static final SortState NONE = new SortState(Level.NONE, null, null, 0, null, null, null);
 
         public boolean requiresDynamicSorting() {
             return level.requiresDynamicSorting();
@@ -101,7 +102,7 @@ public class TranslucentQuadAnalyzer {
             if(this == NONE || requiresDynamicSorting()) {
                 return this;
             } else {
-                return new SortState(level, null, 0, null, null, null);
+                return new SortState(level, null, null, 0, null, null, null);
             }
         }
 
@@ -170,10 +171,10 @@ public class TranslucentQuadAnalyzer {
                 finalState = SortState.NONE;
             } else if (sortLevel.requiresDynamicSorting()) {
                 // Clone everything
-                finalState = new SortState(sortLevel, quadCenters.toArray(new float[0]), quadCenters.size(), cloneBits(normalSigns), new Vector3f(globalNormal), buildTriggerPlanes());
+                finalState = new SortState(sortLevel, quadCenters.toArray(new float[0]), quadNormals.toArray(new float[0]), quadCenters.size(), cloneBits(normalSigns), new Vector3f(globalNormal), buildTriggerPlanes());
             } else {
                 // Just make a thin wrapper around our backing objects
-                finalState = new SortState(sortLevel, quadCenters.elements(), quadCenters.size(), normalSigns, globalNormal, null);
+                finalState = new SortState(sortLevel, quadCenters.elements(), null, quadCenters.size(), normalSigns, globalNormal, null);
             }
 
             return finalState;
@@ -182,6 +183,7 @@ public class TranslucentQuadAnalyzer {
 
     public void clear() {
         quadCenters.clear();
+        quadNormals.clear();
         currentVertex = 0;
         globalNormal.zero();
         normalSigns.clear();
@@ -296,6 +298,9 @@ public class TranslucentQuadAnalyzer {
         // planes with the trigger index, which requires every quad's plane, not just those seen before the
         // distinct-normal flag tripped.
         calculateNormal();
+        quadNormals.add(currentNormal.x);
+        quadNormals.add(currentNormal.y);
+        quadNormals.add(currentNormal.z);
         accumulatePlane(totalX / 4, totalY / 4, totalZ / 4);
 
         if(!hasDistinctNormals) {
