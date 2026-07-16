@@ -151,6 +151,9 @@ public interface LWJGLService {
     void glMemoryBarrier(int barriers);
     void glDispatchCompute(int numGroupsX, int numGroupsY, int numGroupsZ);
     void glClearTexImage(int texture, int level, int format, int type, ByteBuffer data);
+    default void glClearTexImage(int texture, int level, int format, int type) {
+        glClearTexImage(texture, level, format, type, (ByteBuffer) null);
+    }
     void glTexParameteri(int target, int pname, int param);
     void glTexParameterf(int target, int pname, float param);
 

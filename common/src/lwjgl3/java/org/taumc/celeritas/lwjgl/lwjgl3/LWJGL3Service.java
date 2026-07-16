@@ -680,7 +680,7 @@ public record LWJGL3Service(
 
     @Override
     public void glClearTexImage(int texture, int level, int format, int type, ByteBuffer data) {
-        GL44C.glClearTexImage(texture, level, format, type, data);
+        ARBClearTexture.glClearTexImage(texture, level, format, type, data);
     }
 
     @Override

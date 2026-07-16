@@ -361,6 +361,13 @@ public class IrisRenderingPipeline {
                     this.blitSourceFramebuffer != null ? " + colortex0 blit" : "",
                     this.swapPasses.size(),
                     this.renderTargets.getWidth(), this.renderTargets.getHeight());
+
+            // Pipeline setup creates and checks Iris FBOs as a side effect. Give Minecraft's main target back before
+            // vanilla reaches its next post-render GL check.
+            LWJGL.glUseProgram(0);
+            bindMainRenderTarget(mc);
+            restoreMainDrawReadBuffers(mc);
+            restoreTextureUnits();
             initialized = true;
         } finally {
             if (!initialized) {

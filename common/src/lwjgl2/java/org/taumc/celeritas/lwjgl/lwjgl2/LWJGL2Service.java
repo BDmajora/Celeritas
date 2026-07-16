@@ -12,6 +12,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.lwjgl.opengl.APPLEVertexArrayObject;
 import org.lwjgl.opengl.ARBBufferStorage;
+import org.lwjgl.opengl.ARBClearTexture;
 import org.lwjgl.opengl.ARBDrawBuffersBlend;
 import org.lwjgl.opengl.ARBTimerQuery;
 import org.lwjgl.opengl.ARBVertexArrayObject;
@@ -764,7 +765,7 @@ public record LWJGL2Service(
 
     @Override
     public void glClearTexImage(int texture, int level, int format, int type, ByteBuffer data) {
-        org.lwjgl.opengl.GL44.glClearTexImage(texture, level, format, type, data);
+        ARBClearTexture.glClearTexImage(texture, level, format, type, data);
     }
 
     @Override

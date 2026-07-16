@@ -69,7 +69,6 @@ public class CustomImageManager {
     private final Map<String, Image> imagesBySampler = new LinkedHashMap<>();
     /** Image uniform name → image unit AND sampler name → texture unit, for program uniform assignment. */
     private final Map<String, Integer> uniformOverrides = new LinkedHashMap<>();
-    private final ByteBuffer zeroClearValue = ByteBuffer.allocateDirect(16);
 
     public CustomImageManager(List<CustomImageDefinition> definitions, int firstSamplerUnit, int lastSamplerUnit) {
         int reportedImageUnits = LWJGL.glGetInteger(GL_MAX_IMAGE_UNITS);
@@ -218,8 +217,9 @@ public class CustomImageManager {
     }
 
     private void clearTexture(int texture, int format, int pixelType) {
-        this.zeroClearValue.clear();
-        LWJGL.glClearTexImage(texture, 0, format, pixelType, this.zeroClearValue);
+        // Iris clears custom images with a null data pointer, which means "clear to zero" and avoids any
+        // interaction with client memory or a currently-bound pixel-unpack buffer.
+        LWJGL.glClearTexImage(texture, 0, format, pixelType);
     }
 
     /**
