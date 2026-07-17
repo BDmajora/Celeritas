@@ -22,6 +22,8 @@ import com.bdmajora.impetus.ImpetusVintage;
 import com.bdmajora.impetus.engine.impl.gl.device.RenderDevice;
 import com.bdmajora.impetus.engine.impl.render.terrain.SimpleWorldRenderer;
 import com.bdmajora.impetus.engine.impl.render.viewport.ViewportProvider;
+import com.bdmajora.impetus.iris.Iris;
+import com.bdmajora.impetus.iris.shaderpack.ShaderPack;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -182,6 +184,42 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
     @Redirect(method = "updateClouds", at = @At(value = "INVOKE", target = "Ljava/util/Set;isEmpty()Z", ordinal = 1))
     private boolean alwaysHaveNoTasks(Set instance) {
         return true;
+    }
+
+    @Inject(method = "renderClouds", at = @At("HEAD"), cancellable = true)
+    private void obeyShaderPackFastCloudMode(float partialTicks, int pass, double x, double y, double z,
+            CallbackInfo ci) {
+        if (!shouldRenderVanillaClouds(false)) {
+            ci.cancel();
+        }
+    }
+
+    @Inject(method = "renderCloudsFancy", at = @At("HEAD"), cancellable = true)
+    private void obeyShaderPackFancyCloudMode(float partialTicks, int pass, double x, double y, double z,
+            CallbackInfo ci) {
+        if (!shouldRenderVanillaClouds(true)) {
+            ci.cancel();
+        }
+    }
+
+    private static boolean shouldRenderVanillaClouds(boolean fancy) {
+        ShaderPack pack = Iris.getCurrentPack();
+        if (pack == null) {
+            return true;
+        }
+        String mode = pack.getProperties().getCloudMode().orElse("");
+        switch (mode) {
+            case "off":
+            case "none":
+            case "false":
+                return false;
+            case "fast":
+                return !fancy;
+            case "fancy":
+                return fancy;
+            default:
+                return true;
+        }
     }
 
     @Redirect(method = "renderClouds", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/WorldProvider;getCloudHeight()F"))

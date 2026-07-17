@@ -76,6 +76,11 @@ public final class FullscreenTransformer {
             "#define gl_TexCoord iris_TexCoord",
             "in float iris_FogFragCoord;",
             "#define gl_FogFragCoord iris_FogFragCoord",
+            "const vec4 iris_FogColor = vec4(0.0);",
+            "const float iris_FogDensity = 0.0;",
+            "const float iris_FogStart = 0.0;",
+            "const float iris_FogEnd = 1.0;",
+            "const float iris_FogScale = 1.0;",
             "vec4 iris_shadow2D(sampler2DShadow s, vec3 p) { return vec4(texture(s, p)); }",
             "vec4 iris_shadow2DLod(sampler2DShadow s, vec3 p, float l) { return vec4(textureLod(s, p, l)); }",
             ""
@@ -118,10 +123,11 @@ public final class FullscreenTransformer {
         body = renameMain(body);
         body = convertVaryings(body, "in");
         body = modernize(body);
+        body = DrawBuffers.rewriteFragmentOutputs(body, drawBuffers);
         GlslGlobalInitHoister.Result hoist = GlslGlobalInitHoister.hoist(body);
         String transformed = FRAGMENT_PROLOGUE + hoist.body
                 + FRAGMENT_EPILOGUE.replace("    irisMain();", hoist.hoistedAssignments + "    irisMain();");
-        return DrawBuffers.rewriteFragmentOutputs(transformed, drawBuffers);
+        return transformed;
     }
 
     private static String strip(String source) {
@@ -142,6 +148,7 @@ public final class FullscreenTransformer {
     }
 
     private static String modernize(String source) {
+        source = rewriteFogParameters(source);
         // A sampler literally named "texture" clashes with the 330 builtin; rename it first (the word boundary keeps
         // texture2D/texture2DLod untouched). The sampler-unit table maps "gtexture" to the same unit.
         source = source.replaceAll("\\btexture\\b", "gtexture");
@@ -152,5 +159,13 @@ public final class FullscreenTransformer {
         source = source.replaceAll("\\bshadow2DLod\\b", "iris_shadow2DLod");
         source = source.replaceAll("\\bshadow2D\\b", "iris_shadow2D");
         return source;
+    }
+
+    private static String rewriteFogParameters(String source) {
+        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*color\\b", "iris_FogColor");
+        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*density\\b", "iris_FogDensity");
+        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*start\\b", "iris_FogStart");
+        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*end\\b", "iris_FogEnd");
+        return source.replaceAll("\\bgl_Fog\\s*\\.\\s*scale\\b", "iris_FogScale");
     }
 }

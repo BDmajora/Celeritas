@@ -17,6 +17,7 @@ import org.joml.Vector2i;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
 import com.bdmajora.impetus.iris.gl.program.ProgramUniforms;
+import com.bdmajora.impetus.iris.gl.uniform.UniformCollector;
 import com.bdmajora.impetus.iris.gl.uniform.UniformUpdateFrequency;
 import com.bdmajora.impetus.lwjgl.GL11;
 
@@ -62,11 +63,13 @@ public final class CommonUniforms {
         updateComplementaryCustomUniforms();
     }
 
-    public static void addCommonUniforms(ProgramUniforms.Builder uniforms) {
+    public static void addCommonUniforms(UniformCollector uniforms) {
         CelestialUniforms.addCelestialUniforms(uniforms);
         SystemTimeUniforms.addSystemTimeUniforms(uniforms);
 
         uniforms
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "centerDepthSmooth",
+                        com.bdmajora.impetus.iris.pipeline.CenterDepthSampler::getCenterDepthSmooth)
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "rainStrength", CommonUniforms::getRainStrength)
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "eyeAltitude", CommonUniforms::getEyeAltitude)
                 .uniform1i(UniformUpdateFrequency.PER_FRAME, "isEyeInWater", CommonUniforms::isEyeInWater)
@@ -91,6 +94,7 @@ public final class CommonUniforms {
                 // Complementary's remaining custom uniforms from shaders.properties. Real Iris evaluates these with
                 // its custom-uniform expression system; until that lands here, provide the hardcoded Iris-compatible
                 // values that are unsafe to leave at GLSL's default 0.
+                .uniform1i(UniformUpdateFrequency.PER_FRAME, "biome", CommonUniforms::getBiomeId)
                 .uniform1i(UniformUpdateFrequency.PER_FRAME, "biome_precipitation",
                         CommonUniforms::getBiomePrecipitation)
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "isEyeInCave", CommonUniforms::getIsEyeInCave)
@@ -230,13 +234,7 @@ public final class CommonUniforms {
     }
 
     private static int getBiomePrecipitation() {
-        World world = world();
-        Entity camera = Minecraft.getMinecraft().getRenderViewEntity();
-        if (world == null || camera == null) {
-            return 0;
-        }
-
-        Biome biome = world.getBiome(new BlockPos(camera));
+        Biome biome = getCameraBiome();
         if (biome == null) {
             return 0;
         }
@@ -244,6 +242,20 @@ public final class CommonUniforms {
             return 2;
         }
         return biome.canRain() ? 1 : 0;
+    }
+
+    private static int getBiomeId() {
+        Biome biome = getCameraBiome();
+        return biome == null ? -1 : Biome.getIdForBiome(biome);
+    }
+
+    private static Biome getCameraBiome() {
+        World world = world();
+        Entity camera = Minecraft.getMinecraft().getRenderViewEntity();
+        if (world == null || camera == null) {
+            return null;
+        }
+        return world.getBiome(new BlockPos(camera));
     }
 
     private static float clamp(float value, float min, float max) {

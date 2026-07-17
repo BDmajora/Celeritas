@@ -10,6 +10,8 @@ import com.bdmajora.impetus.iris.shaderpack.include.IncludeProcessor;
 import com.bdmajora.impetus.iris.shaderpack.loading.ProgramArrayId;
 import com.bdmajora.impetus.iris.shaderpack.loading.ProgramId;
 import com.bdmajora.impetus.iris.shaderpack.materialmap.IdMap;
+import com.bdmajora.impetus.iris.shaderpack.option.Profile;
+import com.bdmajora.impetus.iris.shaderpack.option.ProfileSet;
 import com.bdmajora.impetus.iris.shaderpack.option.ShaderPackOptions;
 import com.bdmajora.impetus.iris.shaderpack.preprocessor.PropertiesPreprocessor;
 import com.bdmajora.impetus.iris.shaderpack.texture.CustomTextureData;
@@ -21,8 +23,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A fully parsed shader pack: all of its GLSL files (keyed by {@link AbsolutePackPath} relative to the pack's
@@ -90,15 +94,34 @@ public final class ShaderPack {
 
         // The macro environment Iris feeds its PropertiesPreprocessor: MC_* environment defines plus the pack's
         // option values (enabled booleans as flag macros, string options as value macros).
-        Map<String, String> propertiesDefines = buildPropertiesDefines();
+        Map<String, String> propertiesDefines = getShaderDefines();
 
         // Iris parity: pipeline directives read from the PREPROCESSED contents (so #if MC_VERSION/option gates
         // resolve), menu-layout directives from the original. Option EDITS still never touch this file.
         String propertiesContents = this.sources.get(PROPERTIES_PATH);
-        this.properties = propertiesContents != null
+        ShaderProperties parsedProperties = propertiesContents != null
                 ? ShaderProperties.parse(propertiesContents,
-                        PropertiesPreprocessor.preprocess(propertiesContents, propertiesDefines))
+                        PropertiesPreprocessor.preprocess(propertiesContents, propertiesDefines),
+                        propertiesDefines,
+                        Collections.emptySet())
                 : ShaderProperties.empty();
+        Set<String> profileDisabledPrograms = activeProfileDisabledPrograms(parsedProperties);
+        this.properties = profileDisabledPrograms.isEmpty()
+                ? parsedProperties
+                : parsedProperties.withProfileDisabledPrograms(profileDisabledPrograms);
+
+        // Feature-flag validation: a pack *requiring* a flag this port cannot honor must fail loudly and visibly
+        // instead of rendering subtly wrong. Optional flags simply stay undefined for the pack to detect.
+        java.util.List<String> unsupportedRequired = com.bdmajora.impetus.iris.features.FeatureFlags
+                .findUnsupported(this.properties.getRaw().get("iris.features.required"));
+        if (!unsupportedRequired.isEmpty()) {
+            String missing = String.join(", ", unsupportedRequired);
+            LOGGER.error("[Iris] This shader pack requires Iris features not supported by this port: {}", missing);
+            com.bdmajora.impetus.engine.impl.notification.ImpetusNotifications.warn(
+                    "Shader pack may not work correctly",
+                    "Requires unsupported features:",
+                    missing);
+        }
 
         Map<AbsolutePackPath, String> flattenSources = new HashMap<>(this.sources);
         flattenSources.putAll(this.shaderPackOptions.getEditedSources());
@@ -150,6 +173,10 @@ public final class ShaderPack {
      * </ul>
      */
     private CustomTextureData readTexture(String path) throws IOException {
+        String[] rawParts = path.trim().split("\\s+");
+        if (rawParts.length > 1) {
+            return readRawTexture(rawParts);
+        }
         if (path.contains(":")) {
             String[] parts = path.split(":");
             if (parts.length > 2) {
@@ -168,11 +195,7 @@ public final class ShaderPack {
             path = path.substring(1);
         }
 
-        AbsolutePackPath texturePath = AbsolutePackPath.fromAbsolutePath("/" + path);
-        byte[] content = this.binaries.get(texturePath);
-        if (content == null) {
-            throw new IOException("Texture file not found in pack: " + path);
-        }
+        byte[] content = readBinary(path);
 
         boolean blur = false;
         boolean clamp = false;
@@ -199,20 +222,90 @@ public final class ShaderPack {
         return new CustomTextureData.PngData(new TextureFilteringData(blur, clamp), content);
     }
 
+    private CustomTextureData readRawTexture(String[] parts) throws IOException {
+        String textureType = parts[1].toUpperCase(java.util.Locale.ROOT);
+        if (textureType.equals("TEXTURE_3D")) {
+            if (parts.length < 8) {
+                throw new IOException("Malformed raw 3D texture definition");
+            }
+            return new CustomTextureData.RawData(textureType, parts[2],
+                    parsePositiveInt(parts[3], "width"),
+                    parsePositiveInt(parts[4], "height"),
+                    parsePositiveInt(parts[5], "depth"),
+                    parts[6], parts[7], readBinary(parts[0]));
+        }
+        if (textureType.equals("TEXTURE_2D")) {
+            if (parts.length < 7) {
+                throw new IOException("Malformed raw 2D texture definition");
+            }
+            return new CustomTextureData.RawData(textureType, parts[2],
+                    parsePositiveInt(parts[3], "width"),
+                    parsePositiveInt(parts[4], "height"),
+                    1, parts[5], parts[6], readBinary(parts[0]));
+        }
+        throw new IOException("Unsupported raw texture target: " + parts[1]);
+    }
+
+    private byte[] readBinary(String path) throws IOException {
+        if (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        AbsolutePackPath texturePath = AbsolutePackPath.fromAbsolutePath("/" + path);
+        byte[] content = this.binaries.get(texturePath);
+        if (content == null) {
+            throw new IOException("Texture file not found in pack: " + path);
+        }
+        return content;
+    }
+
+    private static int parsePositiveInt(String value, String field) throws IOException {
+        try {
+            int parsed = Integer.parseInt(value);
+            if (parsed <= 0) {
+                throw new IOException("Raw texture " + field + " must be positive: " + value);
+            }
+            return parsed;
+        } catch (NumberFormatException e) {
+            throw new IOException("Bad raw texture " + field + ": " + value);
+        }
+    }
+
     /**
      * The macro set for preprocessing the pack's {@code *.properties} files: the GL-free {@code MC_*} environment
      * macros plus the pack's current option values, mirroring what Iris passes to its PropertiesPreprocessor.
      */
-    private Map<String, String> buildPropertiesDefines() {
+    public Map<String, String> getShaderDefines() {
         Map<String, String> defines = ShaderMacros.standard();
         this.shaderPackOptions.getOptionSet().getBooleanOptions().forEach((name, option) -> {
             if (this.shaderPackOptions.getOptionValues().getBooleanValueOrDefault(name)) {
-                defines.put(name, "");
+                defines.put(name, "1");
             }
         });
         this.shaderPackOptions.getOptionSet().getStringOptions().forEach((name, option) ->
                 defines.put(name, this.shaderPackOptions.getOptionValues().getStringValueOrDefault(name)));
         return defines;
+    }
+
+    private Set<String> activeProfileDisabledPrograms(ShaderProperties parsedProperties) {
+        if (parsedProperties.getProfiles().isEmpty()) {
+            return Collections.emptySet();
+        }
+        try {
+            ProfileSet profileSet = ProfileSet.fromTree(
+                    new LinkedHashMap<>(parsedProperties.getProfiles()),
+                    this.shaderPackOptions.getOptionSet());
+            ProfileSet.ProfileResult result = profileSet.scan(
+                    this.shaderPackOptions.getOptionSet(),
+                    this.shaderPackOptions.getOptionValues());
+            if (!result.current.isPresent()) {
+                return Collections.emptySet();
+            }
+            Profile current = result.current.get();
+            return new LinkedHashSet<>(current.disabledPrograms);
+        } catch (RuntimeException e) {
+            LOGGER.warn("[Iris] Failed to parse shader pack profiles; profile program disables ignored", e);
+            return Collections.emptySet();
+        }
     }
 
     /** The pack's parsed block/item/entity ID maps. */

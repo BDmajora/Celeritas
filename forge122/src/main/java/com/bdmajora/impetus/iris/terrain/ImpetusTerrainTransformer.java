@@ -87,6 +87,11 @@ public final class ImpetusTerrainTransformer {
             "#define ftransform() (u_ProjectionMatrix * (u_ModelViewMatrix * iris_Vertex))",
             "out float iris_FogFragCoord;",
             "#define gl_FogFragCoord iris_FogFragCoord",
+            "const vec4 iris_FogColor = vec4(0.0);",
+            "const float iris_FogDensity = 0.0;",
+            "const float iris_FogStart = 0.0;",
+            "const float iris_FogEnd = 1.0;",
+            "const float iris_FogScale = 1.0;",
             "out vec4 iris_TexCoordArr[4];",
             "#define gl_TexCoord iris_TexCoordArr",
             "// OptiFine packs rely on fixed-function GL_ALPHA_TEST for cutout transparency, but Impetus disables it",
@@ -137,6 +142,11 @@ public final class ImpetusTerrainTransformer {
             "#define gl_TextureMatrix iris_TextureMatrix",
             "in float iris_FogFragCoord;",
             "#define gl_FogFragCoord iris_FogFragCoord",
+            "const vec4 iris_FogColor = vec4(0.0);",
+            "const float iris_FogDensity = 0.0;",
+            "const float iris_FogStart = 0.0;",
+            "const float iris_FogEnd = 1.0;",
+            "const float iris_FogScale = 1.0;",
             "in vec4 iris_TexCoordArr[4];",
             "#define gl_TexCoord iris_TexCoordArr",
             "flat in float iris_AlphaCutoff;",
@@ -165,11 +175,12 @@ public final class ImpetusTerrainTransformer {
         body = renameMain(body);
         body = convertVaryings(body, "in");
         body = modernizeCommon(body);
+        body = DrawBuffers.rewriteFragmentOutputs(body, drawBuffers);
         GlslGlobalInitHoister.Result hoist = GlslGlobalInitHoister.hoist(body);
         String transformed = FRAGMENT_PROLOGUE + hoist.body
                 + "\nvoid main() {\n" + hoist.hoistedAssignments + "    irisMain();\n"
                 + "    if (iris_FragData[0].a < iris_AlphaCutoff) { discard; }\n}\n";
-        return DrawBuffers.rewriteFragmentOutputs(transformed, drawBuffers);
+        return transformed;
     }
 
     // ------------------------------------------------------------------ modern (#version 130+) terrain
@@ -190,6 +201,8 @@ public final class ImpetusTerrainTransformer {
         // Delete the pack's mc_Entity/mc_midTexCoord/at_tangent attribute declarations; the prologue #defines those
         // names onto its own decoded globals, so the pack's declarations would become illegal redeclarations.
         body = dropAttributeStorageQualifier(body);
+        body = rewriteFogParameters(body);
+        body = ModernPackTransformer.rewriteUnsignedStrictness(body);
         return compatFor(VERTEX_PROLOGUE, source) + body + vertexMain("");
     }
 
@@ -200,10 +213,13 @@ public final class ImpetusTerrainTransformer {
     public static String transformFragmentShaderModern(String source, int[] drawBuffers) {
         String body = stripVersion(source);
         body = renameMain(body);
+        body = rewriteFogParameters(body);
+        body = ModernPackTransformer.rewriteUnsignedStrictness(body);
+        body = DrawBuffers.rewriteFragmentOutputs(body, drawBuffers);
         String transformed = compatFor(FRAGMENT_PROLOGUE, source) + body
                 + "\nvoid main() {\n    irisMain();\n"
                 + "    if (iris_FragData[0].a < iris_AlphaCutoff) { discard; }\n}\n";
-        return DrawBuffers.rewriteFragmentOutputs(transformed, drawBuffers);
+        return transformed;
     }
 
     /** The shared prologue targets 330 core; modern packs need 330 compatibility (legacy built-ins + modern intrinsics). */
@@ -245,7 +261,11 @@ public final class ImpetusTerrainTransformer {
         // mc_Entity / mc_midTexCoord / at_tangent are now REAL attributes fed by IrisChunkVertexType; the prologue
         // #defines those names onto its own inputs, so the pack's declarations must be deleted outright (the define
         // would otherwise rewrite them into duplicate declarations of the prologue globals).
-        source = source.replaceAll("(?m)^\\s*(?:attribute|in)\\s+\\w+\\s+(mc_Entity|mc_midTexCoord|at_tangent|at_midBlock)\\s*;\\s*$", "");
+        source = source.replaceAll("(?m)^\\s*(?:layout\\s*\\([^)]*\\)\\s*)?"
+                + "(?:(?:flat|smooth|noperspective|centroid|sample|invariant)\\s+)*"
+                + "(?:attribute|in)\\s+(?:(?:lowp|mediump|highp)\\s+)?\\w+\\s+"
+                + "(?:mc_Entity|mc_midTexCoord|at_tangent|at_midBlock)\\b"
+                + "(?:\\s*=\\s*[^;]+)?\\s*;\\s*(?://.*)?$", "");
         // Any other attribute becomes an explicitly zero-initialized global — an uninitialized global is undefined.
         source = source.replaceAll("(?m)^(\\s*)attribute\\s+(\\w+)\\s+(\\w+)\\s*;", "$1$2 $3 = $2(0.0);");
         // Fallback for forms the initializer rewrite doesn't cover (e.g. multiple declarators): just drop the keyword.
@@ -254,6 +274,8 @@ public final class ImpetusTerrainTransformer {
 
     /** Keyword modernizations common to both stages for 330 core. */
     private static String modernizeCommon(String source) {
+        source = rewriteFogParameters(source);
+        source = ModernPackTransformer.rewriteUnsignedStrictness(source);
         // OptiFine's block sampler is often literally named "texture", which clashes with GLSL 330's texture() builtin.
         // Rename the standalone sampler to "gtexture" first (word-boundary avoids touching texture2D/texture2DLod),
         // then modernize the legacy sampling functions to the builtins.
@@ -266,5 +288,13 @@ public final class ImpetusTerrainTransformer {
         source = source.replaceAll("\\bshadow2DLod\\b", "iris_shadow2DLod");
         source = source.replaceAll("\\bshadow2D\\b", "iris_shadow2D");
         return source;
+    }
+
+    private static String rewriteFogParameters(String source) {
+        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*color\\b", "iris_FogColor");
+        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*density\\b", "iris_FogDensity");
+        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*start\\b", "iris_FogStart");
+        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*end\\b", "iris_FogEnd");
+        return source.replaceAll("\\bgl_Fog\\s*\\.\\s*scale\\b", "iris_FogScale");
     }
 }

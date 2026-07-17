@@ -33,7 +33,7 @@ public class IrisPipeline {
     }
 
     private void compilePrograms(ShaderPack pack) {
-        Map<String, String> defines = buildDefines();
+        Map<String, String> defines = buildDefines(pack);
         Map<String, ProgramSource> declared = pack.getProgramSet().collectDeclaredPrograms();
 
         int compiled = 0;
@@ -55,8 +55,8 @@ public class IrisPipeline {
                 compiled, declared.size(), failed > 0 ? " (" + failed + " failed — see errors above)" : "");
     }
 
-    private static Map<String, String> buildDefines() {
-        Map<String, String> defines = ShaderMacros.standard();
+    private static Map<String, String> buildDefines(ShaderPack pack) {
+        Map<String, String> defines = pack.getShaderDefines();
         try {
             int major = LWJGL.glGetInteger(GL30.GL_MAJOR_VERSION);
             int minor = LWJGL.glGetInteger(GL30.GL_MINOR_VERSION);

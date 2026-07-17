@@ -7,7 +7,6 @@ import com.bdmajora.impetus.iris.gl.program.GlProgram;
 import com.bdmajora.impetus.iris.gl.program.IrisProgram;
 import com.bdmajora.impetus.iris.gl.program.ProgramUniforms;
 import com.bdmajora.impetus.iris.gl.program.ShaderProgramCompiler;
-import com.bdmajora.impetus.iris.gl.shader.ShaderMacros;
 import com.bdmajora.impetus.iris.gl.blending.ProgramBlendState;
 import com.bdmajora.impetus.iris.shaderpack.ProgramSource;
 import com.bdmajora.impetus.iris.shaderpack.ShaderPack;
@@ -83,7 +82,7 @@ public class GbufferPrograms {
      *                         over the standard table so e.g. {@code texture.gbuffers.gaux4} redirects that sampler.
      */
     GbufferPrograms(ShaderPack pack, Map<String, Integer> samplerUnits, Map<String, Integer> samplerOverrides) {
-        Map<String, String> defines = ShaderMacros.standard();
+        Map<String, String> defines = pack.getShaderDefines();
         // Fixed-function stages sample the bound atlas/lightmap on the vanilla units, plus OptiFine's aux slots.
         Map<String, Integer> gbufferSamplers = new HashMap<>(samplerUnits);
         gbufferSamplers.put("texture", 0);
@@ -101,6 +100,11 @@ public class GbufferPrograms {
                 continue;
             }
             String sourceName = source.get().getName();
+            if (!pack.getProperties().getProgramEnabled(sourceName).orElse(Boolean.TRUE)) {
+                LOGGER.info("[Iris] Skipping disabled gbuffer program '{}'", sourceName);
+                bySourceName.put(sourceName, null);
+                continue;
+            }
             Entry entry;
             if (bySourceName.containsKey(sourceName)) {
                 entry = bySourceName.get(sourceName); // may be null: a failed compile is not retried
@@ -142,6 +146,7 @@ public class GbufferPrograms {
             ProgramUniforms.Builder builder = ProgramUniforms.builder(source.getName(), glProgram.getGlId());
             CommonUniforms.addCommonUniforms(builder);
             MatrixUniforms.addMatrixUniforms(builder);
+            com.bdmajora.impetus.iris.uniforms.custom.ActiveCustomUniforms.assignTo(builder);
             int[] drawBuffers = IrisRenderingPipeline.sanitizeDrawBuffers(source.getName(), program.getDrawBuffers());
             return new Entry(program, builder.buildUniforms(), drawBuffers, blendState);
         } catch (Exception e) {

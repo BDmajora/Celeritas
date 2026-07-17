@@ -2,6 +2,7 @@ package com.bdmajora.impetus.iris.shaderpack;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import com.bdmajora.impetus.iris.shaderpack.preprocessor.PropertiesPreprocessor;
 import com.bdmajora.impetus.iris.shaderpack.texture.TextureStage;
 
 import java.util.ArrayList;
@@ -15,6 +16,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.Set;
 
 /**
  * A parsed {@code shaders.properties} file (OptiFine format).
@@ -38,6 +40,9 @@ public final class ShaderProperties {
             Arrays.asList("gcolor", "gdepth", "gnormal", "composite", "gaux1", "gaux2", "gaux3", "gaux4");
 
     private final Map<String, String> raw;
+    private final Map<String, String> original;
+    private final Map<String, String> expressionDefines;
+    private final Set<String> profileDisabledPrograms;
 
     // --- Option-menu layout directives (parsed from the raw, non-preprocessed file) ---
     private final List<String> sliderOptions = new ArrayList<>();
@@ -60,20 +65,30 @@ public final class ShaderProperties {
     /** {@code flip.<program>.<target> = true|false}, including {@code deferred_pre}/{@code composite_pre}. */
     private final Map<String, Map<Integer, Boolean>> explicitFlips = new LinkedHashMap<>();
 
-    private ShaderProperties(Map<String, String> preprocessed, Map<String, String> original) {
-        this.raw = preprocessed;
+    /** {@code uniform.<type>.<name>} / {@code variable.<type>.<name>} custom uniform expressions. */
+    private final com.bdmajora.impetus.iris.uniforms.custom.CustomUniforms.Builder customUniforms =
+            new com.bdmajora.impetus.iris.uniforms.custom.CustomUniforms.Builder();
+
+    private ShaderProperties(Map<String, String> preprocessed, Map<String, String> original,
+                             Map<String, String> expressionDefines, Set<String> profileDisabledPrograms) {
+        this.raw = Collections.unmodifiableMap(new LinkedHashMap<>(preprocessed));
+        this.original = Collections.unmodifiableMap(new LinkedHashMap<>(original));
+        this.expressionDefines = Collections.unmodifiableMap(new HashMap<>(expressionDefines));
+        this.profileDisabledPrograms = Collections.unmodifiableSet(new java.util.LinkedHashSet<>(profileDisabledPrograms));
         parseMenuDirectives(original);
         parseCustomTextureDirectives();
+        parseCustomUniformDirectives();
     }
 
     public static ShaderProperties empty() {
-        return new ShaderProperties(Collections.emptyMap(), Collections.emptyMap());
+        return new ShaderProperties(Collections.emptyMap(), Collections.emptyMap(),
+                Collections.emptyMap(), Collections.emptySet());
     }
 
     /** Parses without conditional evaluation — every {@code #if}-guarded line is read, last one wins. */
     public static ShaderProperties parse(String contents) {
         Map<String, String> map = parseMap(contents);
-        return new ShaderProperties(map, map);
+        return new ShaderProperties(map, map, Collections.emptyMap(), Collections.emptySet());
     }
 
     /**
@@ -82,7 +97,18 @@ public final class ShaderProperties {
      *                     pipeline consumes comes from here).
      */
     public static ShaderProperties parse(String original, String preprocessed) {
-        return new ShaderProperties(parseMap(preprocessed), parseMap(original));
+        return parse(original, preprocessed, Collections.emptyMap(), Collections.emptySet());
+    }
+
+    public static ShaderProperties parse(String original, String preprocessed,
+                                         Map<String, String> expressionDefines,
+                                         Set<String> profileDisabledPrograms) {
+        return new ShaderProperties(parseMap(preprocessed), parseMap(original),
+                expressionDefines, profileDisabledPrograms);
+    }
+
+    public ShaderProperties withProfileDisabledPrograms(Set<String> disabledPrograms) {
+        return new ShaderProperties(this.raw, this.original, this.expressionDefines, disabledPrograms);
     }
 
     private static Map<String, String> parseMap(String contents) {
@@ -103,6 +129,40 @@ public final class ShaderProperties {
             }
         }
         return map;
+    }
+
+    /**
+     * Parses {@code uniform.<type>.<name> = <expr>} and {@code variable.<type>.<name> = <expr>} directives into the
+     * custom-uniforms builder. Mirrors Iris's ShaderProperties handling of the same keys.
+     */
+    private void parseCustomUniformDirectives() {
+        this.raw.forEach((key, value) -> {
+            boolean isUniform = key.startsWith("uniform.");
+            boolean isVariable = key.startsWith("variable.");
+            if (!isUniform && !isVariable) {
+                return;
+            }
+
+            String remainder = key.substring((isUniform ? "uniform." : "variable.").length());
+            String[] parts = remainder.split("\\.", 2);
+            if (parts.length != 2) {
+                LOGGER.warn("[Iris] Custom {} should take the form `{}.<type>.<name> = <expression>`; ignoring {}",
+                        isUniform ? "uniforms" : "variables", isUniform ? "uniform" : "variable", key);
+                return;
+            }
+
+            this.customUniforms.addVariable(parts[0], parts[1], value, isUniform);
+        });
+    }
+
+    /** {@return the collected custom uniform/variable declarations} */
+    public com.bdmajora.impetus.iris.uniforms.custom.CustomUniforms.Builder getCustomUniforms() {
+        return this.customUniforms;
+    }
+
+    /** {@return the raw preprocessed key→value directives (read-only view)} */
+    public Map<String, String> getRaw() {
+        return Collections.unmodifiableMap(this.raw);
     }
 
     /**
@@ -141,8 +201,8 @@ public final class ShaderProperties {
      * mip-level syntax); like Iris, only the base name before the first {@code .} is kept;</li>
      * <li>{@code customTexture.<name> = <path>} — Iris-exclusive named samplers, available in every stage.</li>
      * </ul>
-     * Multi-token values are Iris raw-texture definitions ({@code <path> <type> <format> ...}); those are logged and
-     * skipped — no OptiFine-format 1.12.2 pack uses them.
+     * Multi-token values are Iris raw-texture definitions ({@code <path> <type> <format> ...}) and are resolved when
+     * the shader pack loads its texture data.
      */
     private void parseCustomTextureDirectives() {
         this.raw.forEach((key, value) -> {
@@ -166,10 +226,6 @@ public final class ShaderProperties {
                             stageName, key);
                     return;
                 }
-                if (value.trim().split("\\s+").length > 1) {
-                    LOGGER.warn("[Iris] Raw custom texture definitions are not supported, ignoring: {} = {}", key, value);
-                    return;
-                }
                 this.customTextures
                         .computeIfAbsent(stage.get(), s -> new LinkedHashMap<>())
                         .put(samplerName, value);
@@ -184,10 +240,6 @@ public final class ShaderProperties {
                 String name = key.substring("customTexture.".length());
                 if (name.isEmpty()) {
                     LOGGER.warn("[Iris] Malformed custom texture directive, ignoring: {}", key);
-                    return;
-                }
-                if (value.trim().split("\\s+").length > 1) {
-                    LOGGER.warn("[Iris] Raw custom texture definitions are not supported, ignoring: {} = {}", key, value);
                     return;
                 }
                 this.irisCustomTextures.put(name, value.trim());
@@ -339,7 +391,30 @@ public final class ShaderProperties {
      * Per-program enable toggle, e.g. {@code program.composite4.enabled = false}.
      */
     public Optional<Boolean> getProgramEnabled(String programName) {
-        return getBoolean("program." + programName + ".enabled");
+        if (isProfileDisabled(programName)) {
+            return Optional.of(Boolean.FALSE);
+        }
+
+        return firstBoolean(
+                "program.world0/" + programName + ".enabled",
+                "program.world0/" + programName + "..enabled",
+                "program." + programName + ".enabled",
+                "program." + programName + "..enabled");
+    }
+
+    private boolean isProfileDisabled(String programName) {
+        return this.profileDisabledPrograms.contains(programName)
+                || this.profileDisabledPrograms.contains("world0/" + programName);
+    }
+
+    private Optional<Boolean> firstBoolean(String... keys) {
+        for (String key : keys) {
+            Optional<Boolean> value = getBoolean(key);
+            if (value.isPresent()) {
+                return value;
+            }
+        }
+        return Optional.empty();
     }
 
     public Map<Integer, Boolean> getExplicitFlips(String programName) {
@@ -364,7 +439,11 @@ public final class ShaderProperties {
         if (value == null) {
             return Optional.empty();
         }
-        return parseBooleanValue(value);
+        Optional<Boolean> literal = parseBooleanValue(value);
+        if (literal.isPresent()) {
+            return literal;
+        }
+        return PropertiesPreprocessor.evaluateBooleanExpression(value, this.expressionDefines);
     }
 
     private static Optional<Boolean> parseBooleanValue(String value) {

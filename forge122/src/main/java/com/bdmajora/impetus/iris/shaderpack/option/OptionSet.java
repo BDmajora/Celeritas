@@ -8,8 +8,10 @@ import java.util.Map;
 
 /**
  * The complete, deduplicated set of configurable options discovered across a shader pack, split into boolean and
- * string options keyed by name. Ambiguous options (same name, conflicting defaults) are dropped. Ported from Iris;
- * guava maps replaced with unmodifiable {@link HashMap}s and {@code Iris.logger} with {@link Iris#logger()}.
+ * string options keyed by name. When duplicated options disagree, keep the first definition instead of deleting the
+ * option entirely; several packs intentionally repeat an option across include paths, and dropping it leaves shader
+ * preprocessor gates undefined. Ported from Iris; guava maps replaced with unmodifiable {@link HashMap}s and
+ * {@code Iris.logger} with {@link Iris#logger()}.
  */
 public class OptionSet {
     private final Map<String, MergedBooleanOption> booleanOptions;
@@ -73,8 +75,7 @@ public class OptionSet {
                 merged = existing.merge(proposed);
 
                 if (merged == null) {
-                    Iris.logger().warn("Ignoring ambiguous boolean option " + option.getName());
-                    booleanOptions.remove(option.getName());
+                    Iris.logger().warn("Keeping first definition of ambiguous boolean option " + option.getName());
                     return;
                 }
             } else {
@@ -98,8 +99,7 @@ public class OptionSet {
                 merged = existing.merge(proposed);
 
                 if (merged == null) {
-                    Iris.logger().warn("Ignoring ambiguous string option " + option.getName());
-                    stringOptions.remove(option.getName());
+                    Iris.logger().warn("Keeping first definition of ambiguous string option " + option.getName());
                     return;
                 }
             } else {

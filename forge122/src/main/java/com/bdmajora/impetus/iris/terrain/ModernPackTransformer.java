@@ -23,6 +23,15 @@ import java.util.regex.Pattern;
  */
 public final class ModernPackTransformer {
     private static final Pattern VERSION = Pattern.compile("(?m)^\\s*#version\\s+(\\d+)(?:\\s+\\w+)?\\s*$");
+    private static final Pattern UINT_DECLARATION = Pattern.compile(
+            "(?m)^(\\s*(?:const\\s+)?uint\\s+[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*)([^;]+)(;.*)$");
+    private static final Pattern UVEC_CONSTRUCTOR = Pattern.compile("\\buvec([234])\\s*\\(([^()]*)\\)");
+    private static final Pattern VEC2_DECLARATION_FROM_FIXED_FUNCTION_VEC4 = Pattern.compile(
+            "(?m)^(\\s*(?:const\\s+)?vec2\\s+[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*)([^;\\n]+)(;.*)$");
+    private static final Pattern FIXED_FUNCTION_VEC4_TERM = Pattern.compile(
+            "\\b(?:gl_MultiTexCoord[0-7]|gl_Color|gl_Vertex|mc_midTexCoord|iris_MultiTexCoord[0-7]"
+                    + "|iris_Color|iris_Vertex|iris_MidTexFull)\\b");
+    private static final Pattern TRAILING_SWIZZLE = Pattern.compile("\\.\\s*[xyzwrgastpq]{1,4}\\s*$");
 
     private ModernPackTransformer() {
     }
@@ -45,14 +54,10 @@ public final class ModernPackTransformer {
      * entry point carries, so nothing stage-specific is needed here.
      */
     public static String transform(String source) {
-        Matcher matcher = VERSION.matcher(source);
-        if (matcher.find()) {
-            return source.substring(0, matcher.start())
-                    + "#version " + targetVersion(source) + " compatibility"
-                    + source.substring(matcher.end());
-        }
-        // No #version at all — prepend one so the driver doesn't default to 110.
-        return "#version " + targetVersion(source) + " compatibility\n" + source;
+        String body = VERSION.matcher(source).replaceAll("");
+        body = rewriteFogParameters(body);
+        body = rewriteUnsignedStrictness(body);
+        return "#version " + targetVersion(source) + " compatibility\n" + stripLeadingBlankLines(body);
     }
 
     /**
@@ -70,5 +75,84 @@ public final class ModernPackTransformer {
             version = Math.max(version, 430);
         }
         return version;
+    }
+
+    private static String stripLeadingBlankLines(String source) {
+        int start = 0;
+        while (start < source.length()) {
+            char c = source.charAt(start);
+            if (c == '\n' || c == '\r') {
+                start++;
+                continue;
+            }
+            if (Character.isWhitespace(c)) {
+                start++;
+                continue;
+            }
+            break;
+        }
+        return source.substring(start);
+    }
+
+    private static String rewriteFogParameters(String source) {
+        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*color\\b", "vec4(0.0)");
+        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*density\\b", "0.0");
+        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*start\\b", "0.0");
+        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*end\\b", "1.0");
+        return source.replaceAll("\\bgl_Fog\\s*\\.\\s*scale\\b", "1.0");
+    }
+
+    static String rewriteUnsignedStrictness(String source) {
+        Matcher constUint = UINT_DECLARATION.matcher(source);
+        StringBuffer rewritten = new StringBuffer(source.length());
+        while (constUint.find()) {
+            String expression = constUint.group(2).trim();
+            constUint.appendReplacement(rewritten, Matcher.quoteReplacement(
+                    constUint.group(1) + "uint(" + expression + ")" + constUint.group(3)));
+        }
+        constUint.appendTail(rewritten);
+        return rewriteFixedFunctionVec2Narrowing(rewriteUnsignedVectorConstructors(rewritten.toString()));
+    }
+
+    private static String rewriteUnsignedVectorConstructors(String source) {
+        Matcher constructor = UVEC_CONSTRUCTOR.matcher(source);
+        StringBuffer rewritten = new StringBuffer(source.length());
+        while (constructor.find()) {
+            String[] args = constructor.group(2).split(",", -1);
+            boolean changed = false;
+            for (int i = 0; i < args.length; i++) {
+                String trimmed = args[i].trim();
+                if (trimmed.matches("\\d+")) {
+                    args[i] = args[i].replaceFirst("\\d+", trimmed + "u");
+                    changed = true;
+                }
+            }
+            if (changed) {
+                constructor.appendReplacement(rewritten, Matcher.quoteReplacement(
+                        "uvec" + constructor.group(1) + "(" + String.join(",", args) + ")"));
+            } else {
+                constructor.appendReplacement(rewritten, Matcher.quoteReplacement(constructor.group(0)));
+            }
+        }
+        constructor.appendTail(rewritten);
+        return rewritten.toString();
+    }
+
+    private static String rewriteFixedFunctionVec2Narrowing(String source) {
+        Matcher declaration = VEC2_DECLARATION_FROM_FIXED_FUNCTION_VEC4.matcher(source);
+        StringBuffer rewritten = new StringBuffer(source.length());
+        while (declaration.find()) {
+            String expression = declaration.group(2).trim();
+            if (FIXED_FUNCTION_VEC4_TERM.matcher(expression).find()
+                    && !TRAILING_SWIZZLE.matcher(expression).find()
+                    && !expression.startsWith("vec2(")) {
+                declaration.appendReplacement(rewritten, Matcher.quoteReplacement(
+                        declaration.group(1) + "(" + expression + ").xy" + declaration.group(3)));
+            } else {
+                declaration.appendReplacement(rewritten, Matcher.quoteReplacement(declaration.group(0)));
+            }
+        }
+        declaration.appendTail(rewritten);
+        return rewritten.toString();
     }
 }

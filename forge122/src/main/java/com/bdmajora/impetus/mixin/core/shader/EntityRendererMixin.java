@@ -150,6 +150,35 @@ public class EntityRendererMixin {
         }
     }
 
+    private boolean impetus$handProgramBound;
+
+    /**
+     * gbuffers_hand: the classic OptiFine 1.12 order renders the first-person hand AFTER the composite/final
+     * chain, shaded by the pack's hand program so it matches the composited scene. We bind the program around
+     * vanilla's renderHand call; when the pack has no hand program, vanilla draws it untouched exactly as before.
+     */
+    @Inject(method = "renderWorldPass",
+            at = @At(value = "INVOKE",
+                    target = "Lnet/minecraft/client/renderer/EntityRenderer;renderHand(FI)V"))
+    private void impetus$beginHandProgram(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
+        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        if (pipeline != null) {
+            this.impetus$handProgramBound = pipeline.beginHandRendering();
+        }
+    }
+
+    @Inject(method = "renderWorldPass",
+            at = @At(value = "INVOKE",
+                    target = "Lnet/minecraft/client/renderer/EntityRenderer;renderHand(FI)V",
+                    shift = At.Shift.AFTER))
+    private void impetus$endHandProgram(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
+        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        if (pipeline != null && this.impetus$handProgramBound) {
+            this.impetus$handProgramBound = false;
+            pipeline.endHandRendering();
+        }
+    }
+
     @Inject(method = "renderWorld", at = @At("RETURN"))
     private void impetus$finishShaderFrame(float partialTicks, long finishTimeNano, CallbackInfo ci) {
         IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();

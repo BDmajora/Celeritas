@@ -57,8 +57,7 @@ public final class IncludeProcessor {
                     AbsolutePackPath target = path.resolve(matcher.group(1).trim());
                     String included = this.sources.get(target);
                     if (included == null) {
-                        // Tolerate unresolvable includes (e.g. OptiFine's virtual "shaders.settings"): OptiFine packs
-                        // reference generated/optional includes that don't exist as files. Emit a marker and continue
+                        // Tolerate generated/optional includes that don't exist as files. Emit a marker and continue
                         // rather than failing the whole pack load.
                         out.add("// [Impetus/Iris] skipped unresolved #include \"" + matcher.group(1) + "\"");
                     } else {

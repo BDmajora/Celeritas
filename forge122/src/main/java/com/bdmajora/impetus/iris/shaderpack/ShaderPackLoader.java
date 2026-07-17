@@ -28,8 +28,9 @@ import java.util.zip.ZipInputStream;
  * {@link ShaderPack}. Minecraft-free: uses only {@code java.nio} and {@code java.util.zip}.
  * <p>
  * Text stages relevant to compilation (GLSL stages, includes, {@code shaders.properties}) are read as strings.
- * Binary assets the custom-texture directives can point at ({@code .png}, plus their {@code .mcmeta} sidecars) are
- * read as raw bytes into a separate map. All keys are made relative to the pack's {@code shaders/} directory.
+ * Binary assets the custom-texture directives can point at ({@code .png}, raw LUT/data files, plus their
+ * {@code .mcmeta} sidecars) are read as raw bytes into a separate map. All keys are made relative to the pack's
+ * {@code shaders/} directory.
  */
 public final class ShaderPackLoader {
     /**
@@ -39,14 +40,16 @@ public final class ShaderPackLoader {
      * Java 9+ library APIs like {@code Set.of} are unavailable even though Jabel allows modern syntax.
      */
     private static final Set<String> TEXT_EXTENSIONS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-            "vsh", "fsh", "gsh", "tcs", "tes", "csh", "glsl", "inc", "properties", "txt", "lang")));
+            "vsh", "fsh", "gsh", "tcs", "tes", "csh", "glsl", "inc", "settings", "properties", "txt", "lang")));
 
     /**
      * File extensions read as raw bytes for the custom-texture directives ({@code texture.<stage>.<sampler>},
      * {@code texture.noise}, {@code customTexture.<name>}) and their {@code .mcmeta} filtering sidecars.
+     * Photon and several newer packs ship 3D lookup textures as {@code .dat}; treating only PNGs as binary makes
+     * those directives fail even though the assets are present in the pack.
      */
     private static final Set<String> BINARY_EXTENSIONS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-            "png", "mcmeta")));
+            "png", "mcmeta", "dat", "bin", "raw")));
 
     /** Guard against accidentally slurping a huge file as a string. */
     private static final long MAX_TEXT_FILE_BYTES = 8L * 1024 * 1024;

@@ -1,0 +1,68 @@
+package com.bdmajora.impetus.iris.features;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * The Iris feature-flag vocabulary ({@code iris.features.required} / {@code iris.features.optional} in
+ * {@code shaders.properties}). Each flag knows whether this 1.12.2 port can actually honor it; usable flags are
+ * advertised to shaders as {@code IRIS_FEATURE_<NAME>} defines, and packs *requiring* an unusable flag produce a
+ * loud, user-visible error instead of silently broken rendering.
+ */
+public enum FeatureFlags {
+    CUSTOM_IMAGES(true),
+    COMPUTE_SHADERS(true),
+    SSBO(true),
+    BLOCK_EMISSION_ATTRIBUTE(true),
+    // Not (yet) honored by this port — packs requiring these get a visible error rather than broken visuals.
+    ENTITY_TRANSLUCENT(false),
+    SEPARATE_HARDWARE_SAMPLERS(false),
+    PER_BUFFER_BLENDING(false),
+    HIGHER_SHADOWCOLOR(false),
+    REVERSED_CULLING(false),
+    CAN_DISABLE_WEATHER(false),
+    TESSELLATION_SHADERS(false),
+    UNKNOWN(false);
+
+    private final boolean usable;
+
+    FeatureFlags(boolean usable) {
+        this.usable = usable;
+    }
+
+    public boolean isUsable() {
+        return this.usable;
+    }
+
+    public static FeatureFlags byName(String name) {
+        try {
+            return valueOf(name.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return UNKNOWN;
+        }
+    }
+
+    /** {@return the names from {@code declared} (space-separated) that this port cannot honor} */
+    public static List<String> findUnsupported(String declared) {
+        List<String> missing = new ArrayList<>();
+        if (declared == null || declared.trim().isEmpty()) {
+            return missing;
+        }
+        for (String token : declared.trim().split("\\s+")) {
+            if (!byName(token).isUsable()) {
+                missing.add(token);
+            }
+        }
+        return missing;
+    }
+
+    /** Adds an {@code IRIS_FEATURE_<NAME>} define for every flag this port can honor. */
+    public static void addUsableDefines(java.util.Map<String, String> macros) {
+        for (FeatureFlags flag : values()) {
+            if (flag != UNKNOWN && flag.usable) {
+                macros.put("IRIS_FEATURE_" + flag.name(), "");
+            }
+        }
+    }
+}

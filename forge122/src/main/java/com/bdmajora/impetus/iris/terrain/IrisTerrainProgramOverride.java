@@ -94,6 +94,10 @@ public final class IrisTerrainProgramOverride {
                 return null;
             }
             ProgramSource source = sourceOpt.get();
+            if (!pack.getProperties().getProgramEnabled(source.getName()).orElse(Boolean.TRUE)) {
+                LOGGER.info("[Iris] Skipping disabled terrain program '{}'", source.getName());
+                return null;
+            }
             String vshSource = source.getVertexSource().orElse(null);
             String fshSource = source.getFragmentSource().orElse(null);
             if (vshSource == null || fshSource == null) {
@@ -103,7 +107,7 @@ public final class IrisTerrainProgramOverride {
             // Modern (#version 130+) dual-stage packs (Complementary) use the compatibility stage normalizer; the
             // GLSL-120 Chocapic family (LIGHT) keeps the full rewrite.
             boolean modern = ModernPackTransformer.isModernSource(fshSource);
-            Map<String, String> macros = com.bdmajora.impetus.iris.gl.shader.ShaderMacros.standard();
+            Map<String, String> macros = pack.getShaderDefines();
             int[] drawBuffers = IrisRenderingPipeline.sanitizeDrawBuffers(
                     programId.getSourceName(), DrawBuffers.parseActive(fshSource, macros));
             String vsh = modern
@@ -149,6 +153,7 @@ public final class IrisTerrainProgramOverride {
             ProgramUniforms.Builder uniforms = ProgramUniforms.builder(programId.getSourceName(), program.handle());
             CommonUniforms.addCommonUniforms(uniforms);
             MatrixUniforms.addMatrixUniforms(uniforms);
+            com.bdmajora.impetus.iris.uniforms.custom.ActiveCustomUniforms.assignTo(uniforms);
             ((IrisTerrainShaderInterface) program.getInterface()).setUniforms(uniforms.buildUniforms());
             IrisRenderingPipeline.reportGlError("terrain '" + programId.getSourceName() + "' uniforms");
 

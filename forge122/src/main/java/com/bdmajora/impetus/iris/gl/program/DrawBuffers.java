@@ -1,5 +1,7 @@
 package com.bdmajora.impetus.iris.gl.program;
 
+import com.bdmajora.impetus.iris.targets.IrisRenderTargets;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -20,9 +22,18 @@ public final class DrawBuffers {
     private static final Pattern RENDERTARGETS = Pattern.compile("/\\*\\s*RENDERTARGETS:\\s*([0-9,\\s]+)\\*/");
     private static final Pattern FRAG_DATA_INDEX =
             Pattern.compile("\\b((?:gl|iris)_FragData)\\s*\\[\\s*(\\d+)\\s*\\]");
+    private static final Pattern FRAG_COLOR = Pattern.compile("\\bgl_FragColor\\b");
     private static final Pattern OUTPUT_LAYOUT_LOCATION = Pattern.compile(
             "\\blayout\\s*\\(([^)]*?\\blocation\\s*=\\s*)(\\d+)([^)]*?)\\)"
                     + "(\\s*(?:\\b(?:flat|smooth|noperspective|centroid|sample|invariant)\\s+)*\\bout\\b)");
+    private static final Pattern NAMED_FRAGMENT_OUTPUT = Pattern.compile(
+            "(?m)^([\\t ]*)(?:layout\\s*\\((?s:.*?)\\)\\s*)?"
+                    + "(?:(?:flat|smooth|noperspective|centroid|sample|invariant)\\s+)*"
+                    + "out\\s+(?:(?:lowp|mediump|highp)\\s+)?(float|vec2|vec3|vec4)\\s+"
+                    + "([A-Za-z_][A-Za-z0-9_]*)\\s*;\\s*(?://.*)?$");
+    private static final Pattern DEFINE_DIRECTIVE = Pattern.compile(
+            "^(\\s*#\\s*define\\s+)([A-Za-z_][A-Za-z0-9_]*)(\\b.*)$");
+    private static final Pattern LAYOUT_LOCATION = Pattern.compile("\\blocation\\s*=\\s*(\\d+)\\b");
 
     /** The default when a fragment shader declares no directive: write to colortex0 only. */
     public static final int[] DEFAULT = new int[]{0};
@@ -105,14 +116,16 @@ public final class DrawBuffers {
      * Iris packs shader-pack render targets into dense framebuffer color attachments before drawing. A directive such as
      * {@code DRAWBUFFERS:03648} therefore means "shader output slot 0 writes colortex0, slot 1 writes colortex3, ...",
      * not "leave holes until location 8". Rewrite explicit logical target writes into the dense slots the framebuffer
-     * enables. Dense slot writes are preserved; only explicit high logical target writes are folded back into the
-     * enabled slot list, so sparse target packs cannot write outside the generated output array or disabled buffers.
+     * enables. Explicit logical target writes are folded back into the enabled slot list, so sparse target packs cannot
+     * write outside the generated output array or disabled buffers.
      */
     public static String rewriteFragmentOutputs(String fragmentSource, int[] drawBuffers) {
         if (fragmentSource == null || drawBuffers == null || drawBuffers.length == 0) {
             return fragmentSource;
         }
-        String rewritten = rewriteFragDataIndices(fragmentSource, drawBuffers);
+        String rewritten = rewriteFragColor(fragmentSource);
+        rewritten = rewriteNamedFragmentOutputs(rewritten, drawBuffers);
+        rewritten = rewriteFragDataIndices(rewritten, drawBuffers);
         return rewriteLayoutLocations(rewritten, drawBuffers);
     }
 
@@ -134,7 +147,7 @@ public final class DrawBuffers {
         while (matcher.find()) {
             int renderTarget = Integer.parseInt(matcher.group(2));
             int outputSlot = outputSlotForTarget(drawBuffers, renderTarget);
-            if (outputSlot >= 0 && renderTarget >= drawBuffers.length) {
+            if (outputSlot >= 0 && outputSlot != renderTarget) {
                 matcher.appendReplacement(rewritten,
                         Matcher.quoteReplacement(matcher.group(1) + "[" + outputSlot + "]"));
             } else {
@@ -145,13 +158,33 @@ public final class DrawBuffers {
         return rewritten.toString();
     }
 
+    private static String rewriteFragColor(String source) {
+        String[] lines = source.split("\n", -1);
+        for (int i = 0; i < lines.length; i++) {
+            Matcher define = DEFINE_DIRECTIVE.matcher(lines[i]);
+            if (define.matches()) {
+                if (!"gl_FragColor".equals(define.group(2))) {
+                    lines[i] = define.group(1) + define.group(2)
+                            + FRAG_COLOR.matcher(define.group(3))
+                            .replaceAll(Matcher.quoteReplacement("gl_FragData[0]"));
+                }
+                continue;
+            }
+            if (lines[i].trim().startsWith("#")) {
+                continue;
+            }
+            lines[i] = FRAG_COLOR.matcher(lines[i]).replaceAll(Matcher.quoteReplacement("gl_FragData[0]"));
+        }
+        return String.join("\n", lines);
+    }
+
     private static String rewriteLayoutLocations(String source, int[] drawBuffers) {
         Matcher matcher = OUTPUT_LAYOUT_LOCATION.matcher(source);
         StringBuffer rewritten = new StringBuffer(source.length());
         while (matcher.find()) {
             int renderTarget = Integer.parseInt(matcher.group(2));
             int outputSlot = outputSlotForTarget(drawBuffers, renderTarget);
-            if (outputSlot >= 0 && renderTarget >= drawBuffers.length) {
+            if (outputSlot >= 0 && outputSlot != renderTarget) {
                 matcher.appendReplacement(rewritten, Matcher.quoteReplacement(
                         "layout(" + matcher.group(1) + outputSlot + matcher.group(3) + ")" + matcher.group(4)));
             } else {
@@ -160,6 +193,59 @@ public final class DrawBuffers {
         }
         matcher.appendTail(rewritten);
         return rewritten.toString();
+    }
+
+    private static String rewriteNamedFragmentOutputs(String source, int[] drawBuffers) {
+        Matcher matcher = NAMED_FRAGMENT_OUTPUT.matcher(source);
+        StringBuffer rewritten = new StringBuffer(source.length());
+        int implicitSlot = 0;
+        while (matcher.find()) {
+            String declaration = matcher.group(0);
+            int outputSlot = outputSlotForDeclaration(declaration, drawBuffers, implicitSlot);
+            if (LAYOUT_LOCATION.matcher(declaration).find()) {
+                implicitSlot = Math.max(implicitSlot, outputSlot + 1);
+            } else {
+                implicitSlot++;
+            }
+            if (outputSlot < 0 || outputSlot >= IrisRenderTargets.MAX_COLOR_BUFFERS) {
+                matcher.appendReplacement(rewritten, Matcher.quoteReplacement(declaration));
+                continue;
+            }
+            String outputName = matcher.group(3);
+            if (outputName.startsWith("iris_")) {
+                matcher.appendReplacement(rewritten, Matcher.quoteReplacement(declaration));
+                continue;
+            }
+            matcher.appendReplacement(rewritten, Matcher.quoteReplacement(
+                    matcher.group(1) + "#define " + outputName + " "
+                            + fragDataTarget(matcher.group(2), outputSlot)));
+        }
+        matcher.appendTail(rewritten);
+        return rewritten.toString();
+    }
+
+    private static int outputSlotForDeclaration(String declaration, int[] drawBuffers, int implicitSlot) {
+        Matcher layout = LAYOUT_LOCATION.matcher(declaration);
+        if (!layout.find()) {
+            return implicitSlot;
+        }
+        int renderTarget = Integer.parseInt(layout.group(1));
+        int outputSlot = outputSlotForTarget(drawBuffers, renderTarget);
+        return outputSlot >= 0 ? outputSlot : renderTarget;
+    }
+
+    private static String fragDataTarget(String type, int outputSlot) {
+        String target = "gl_FragData[" + outputSlot + "]";
+        switch (type) {
+            case "float":
+                return target + ".r";
+            case "vec2":
+                return target + ".rg";
+            case "vec3":
+                return target + ".rgb";
+            default:
+                return target;
+        }
     }
 
     /**

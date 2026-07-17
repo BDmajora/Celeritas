@@ -70,6 +70,9 @@ public final class IrisConfig {
             properties.load(reader);
         }
         setShaderPackName(properties.getProperty("shaderPack", NO_PACK));
+        com.bdmajora.impetus.iris.pipeline.ColorSpaceConverter.setColorSpace(
+                com.bdmajora.impetus.iris.pipeline.ColorSpaceConverter.ColorSpace.byName(
+                        properties.getProperty("colorSpace", "SRGB")));
     }
 
     /**
@@ -79,6 +82,8 @@ public final class IrisConfig {
         Files.createDirectories(this.propertiesFile.getParent());
         Properties properties = new Properties();
         properties.setProperty("shaderPack", this.shaderPackName);
+        properties.setProperty("colorSpace",
+                com.bdmajora.impetus.iris.pipeline.ColorSpaceConverter.getColorSpace().name());
         try (var writer = Files.newBufferedWriter(this.propertiesFile, StandardCharsets.UTF_8)) {
             properties.store(writer, "Impetus/Iris shader configuration");
         }

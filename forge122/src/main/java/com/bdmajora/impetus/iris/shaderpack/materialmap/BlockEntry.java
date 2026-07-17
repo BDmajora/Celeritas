@@ -37,6 +37,10 @@ public final class BlockEntry implements Entry {
         if (isTag) {
             entry = entry.replace("%", "");
         }
+        // Some OptiFine-era packs accidentally write mod IDs as "namespace::block". Vanilla/Iris block IDs only use a
+        // single namespace separator; without this tolerance the empty segment is parsed as the block name and the real
+        // name is misreported as a malformed blockstate predicate.
+        entry = entry.replaceAll(":{2,}", ":");
 
         String[] splitStates = entry.split(":");
 

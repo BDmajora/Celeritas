@@ -220,6 +220,8 @@ public class IrisRenderingPipeline {
     private final CustomImageManager customImageManager;
     /** Compute passes (shadowcomp {@code .csh}), dispatched right after the shadow map renders. */
     private final List<ComputePass> computePasses = new ArrayList<>();
+    /** Active shader macro environment: built-in MC/IRIS macros plus the pack's resolved option values. */
+    private final Map<String, String> shaderDefines;
 
     /** One compute dispatch: the linked program, its uniforms, and the work-group counts. */
     private static final class ComputePass {
@@ -229,14 +231,30 @@ public class IrisRenderingPipeline {
         final int groupsX;
         final int groupsY;
         final int groupsZ;
+        /** Screen-relative dispatch ({@code const vec2 workGroupsRender}); NaN = fixed dispatch. */
+        final float renderScaleX;
+        final float renderScaleY;
+        final int localSizeX;
+        final int localSizeY;
+        /** Indirect dispatch ({@code indirect.<pass>} directive): GL buffer id, or -1 for direct dispatch. */
+        final int indirectBuffer;
+        final long indirectOffset;
 
-        ComputePass(String name, GlProgram program, ProgramUniforms uniforms, int groupsX, int groupsY, int groupsZ) {
+        ComputePass(String name, GlProgram program, ProgramUniforms uniforms, int groupsX, int groupsY, int groupsZ,
+                    float renderScaleX, float renderScaleY, int localSizeX, int localSizeY,
+                    int indirectBuffer, long indirectOffset) {
             this.name = name;
             this.program = program;
             this.uniforms = uniforms;
             this.groupsX = groupsX;
             this.groupsY = groupsY;
             this.groupsZ = groupsZ;
+            this.renderScaleX = renderScaleX;
+            this.renderScaleY = renderScaleY;
+            this.localSizeX = localSizeX;
+            this.localSizeY = localSizeY;
+            this.indirectBuffer = indirectBuffer;
+            this.indirectOffset = indirectOffset;
         }
     }
     /**
@@ -261,6 +279,22 @@ public class IrisRenderingPipeline {
     /** The shadow-map pass, or {@code null} when the pack declares no {@code shadow} program. */
     private final IrisShadowRenderer shadowRenderer;
     private final FrameUpdateNotifier frameUpdateNotifier = new FrameUpdateNotifier();
+
+    /** centerDepthSmooth producer + its pack-configurable smoothing half-life (seconds). */
+    private final CenterDepthSampler centerDepthSampler = new CenterDepthSampler();
+    private float centerDepthHalfLife = 1.0f;
+
+    /** Optional final-presentation wide-gamut conversion (user-configured, defaults to sRGB = off). */
+    private final ColorSpaceConverter colorSpaceConverter = new ColorSpaceConverter();
+
+    /** Pack-declared shader storage buffers; {@code null} until construction. */
+    private com.bdmajora.impetus.iris.gl.buffer.ShaderStorageBufferHolder shaderStorageBuffers;
+
+    /** {@code indirect.<pass>} directives: pass name → {bufferObject index, byte offset}. */
+    private Map<String, long[]> indirectDispatchPointers = java.util.Collections.emptyMap();
+
+    /** GL43 dispatch-indirect binding target (kept as a literal to avoid a hard generated-constant dependency). */
+    private static final int GL_DISPATCH_INDIRECT_BUFFER = 0x90EE;
 
     /**
      * End-of-frame alt->main copy-back for a buffer the chain left odd-flipped (Iris FinalPassRenderer.SwapPass).
@@ -311,6 +345,7 @@ public class IrisRenderingPipeline {
     public IrisRenderingPipeline(ShaderPack pack) {
         Minecraft mc = Minecraft.getMinecraft();
         this.renderTargets = new IrisRenderTargets(mc.displayWidth, mc.displayHeight);
+        this.shaderDefines = pack.getShaderDefines();
         java.util.Arrays.fill(this.colorBufferClears, true);
         CameraUniforms.attach(this.frameUpdateNotifier);
 
@@ -338,6 +373,17 @@ public class IrisRenderingPipeline {
             this.customImageManager = new CustomImageManager(pack.getProperties().getIrisCustomImages(),
                     this.customTextureManager.getNextAvailableUnit(), maxProgrammableTextureUnit());
             activeGbufferSamplerOverrides = mergedStageOverrides(TextureStage.GBUFFERS_AND_SHADOW);
+
+            // Custom uniforms must exist before any program compiles, so every compile path can register them.
+            com.bdmajora.impetus.iris.uniforms.custom.ActiveCustomUniforms.set(
+                    pack.getProperties().getCustomUniforms().build());
+
+            // Pack-declared SSBOs (bufferObject.<index> directives), zero-filled and bound at fixed indices.
+            this.shaderStorageBuffers = new com.bdmajora.impetus.iris.gl.buffer.ShaderStorageBufferHolder(
+                    com.bdmajora.impetus.iris.gl.buffer.ShaderStorageBufferHolder.parseDefinitions(
+                            pack.getProperties().getRaw()),
+                    mc.displayWidth, mc.displayHeight);
+            this.indirectDispatchPointers = parseIndirectPointers(pack.getProperties().getRaw());
 
             this.gbufferPrograms = new GbufferPrograms(pack, SAMPLER_UNITS, gbufferSamplerOverrideUnits());
             this.gbufferAttachments = computeGbufferAttachments(pack, terrainDrawBuffers(pack));
@@ -401,6 +447,20 @@ public class IrisRenderingPipeline {
      * their tonemapping input is clamped and highlights blow out.
      */
     private void applyPackFormatDirectives(List<ProgramSource> sources) {
+        Pattern halfLifeDirective = Pattern.compile("const\\s+float\\s+centerDepthHalflife\\s*=\\s*([0-9.]+)f?\\s*;");
+        for (ProgramSource source : sources) {
+            String fragment = source.getFragmentSource().orElse(null);
+            if (fragment != null) {
+                Matcher halfLife = halfLifeDirective.matcher(fragment);
+                if (halfLife.find()) {
+                    try {
+                        this.centerDepthHalfLife = Float.parseFloat(halfLife.group(1));
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+        }
+
         Pattern formatDirective = Pattern.compile("const\\s+int\\s+(\\w+?)Format\\s*=\\s*(\\w+)\\s*;");
         Pattern clearDirective = Pattern.compile("const\\s+bool\\s+(\\w+?)Clear\\s*=\\s*(true|false)\\s*;");
         Pattern clearColorDirective = Pattern.compile("const\\s+vec4\\s+(\\w+?)ClearColor\\s*=\\s*vec4\\s*\\(([^)]*)\\)\\s*;");
@@ -544,7 +604,8 @@ public class IrisRenderingPipeline {
         shadowSamplerUnits.putAll(gbufferSamplerOverrideUnits());
         try {
             return new IrisShadowRenderer(resolution, distance, sunPathRotation,
-                    shadowSource.get(), shadowSamplerUnits, hardwareFiltering, this::bindShaderPackResources);
+                    shadowSource.get(), shadowSamplerUnits, this.shaderDefines,
+                    hardwareFiltering, this::bindShaderPackResources);
         } catch (Exception e) {
             LOGGER.error("[Iris] Failed to create the shadow renderer; shadows disabled", e);
             return null;
@@ -570,7 +631,7 @@ public class IrisRenderingPipeline {
     private int[] terrainDrawBuffers(ShaderPack pack) {
         int[] drawBuffers = pack.getProgramSet().get(ProgramId.Terrain)
                 .flatMap(ProgramSource::getFragmentSource)
-                .map(DrawBuffers::parseActive)
+                .map(source -> DrawBuffers.parseActive(source, this.shaderDefines))
                 .orElse(DrawBuffers.DEFAULT.clone());
         return sanitizeDrawBuffers("gbuffers_terrain", drawBuffers);
     }
@@ -588,7 +649,7 @@ public class IrisRenderingPipeline {
         }
         int[] waterDrawBuffers = pack.getProgramSet().get(ProgramId.Water)
                 .flatMap(ProgramSource::getFragmentSource)
-                .map(DrawBuffers::parseActive)
+                .map(source -> DrawBuffers.parseActive(source, this.shaderDefines))
                 .orElse(DrawBuffers.DEFAULT.clone());
         for (int buffer : sanitizeDrawBuffers("gbuffers_water", waterDrawBuffers)) {
             attachments.add(buffer);
@@ -657,6 +718,10 @@ public class IrisRenderingPipeline {
             if (!source.isPresent()) {
                 continue;
             }
+            if (!isProgramEnabled(pack, source.get().getName())) {
+                LOGGER.info("[Iris] Skipping disabled pass '{}'", source.get().getName());
+                continue;
+            }
             FullscreenPass pass = buildCompositePass(pack, source.get(), flipper);
             if (pass != null) {
                 this.deferredPasses.add(pass);
@@ -669,6 +734,10 @@ public class IrisRenderingPipeline {
         for (int i = 0; i < ProgramArrayId.Composite.getNumPrograms(); i++) {
             Optional<ProgramSource> source = pack.getProgramSet().get(ProgramArrayId.Composite, i);
             if (!source.isPresent()) {
+                continue;
+            }
+            if (!isProgramEnabled(pack, source.get().getName())) {
+                LOGGER.info("[Iris] Skipping disabled pass '{}'", source.get().getName());
                 continue;
             }
             FullscreenPass pass = buildCompositePass(pack, source.get(), flipper);
@@ -874,6 +943,10 @@ public class IrisRenderingPipeline {
             return null;
         }
         String name = source.get().getName();
+        if (!isProgramEnabled(pack, name)) {
+            LOGGER.info("[Iris] Skipping disabled final pass '{}'", name);
+            return null;
+        }
         try {
             IrisProgram program = cachedProgram(source.get());
             if (program == null) {
@@ -947,7 +1020,7 @@ public class IrisRenderingPipeline {
             // the GLSL-120 Chocapic family (LIGHT) keeps the full 330-core rewrite. Detect off the fragment source.
             boolean modern = ModernPackTransformer.isModernSource(fshRaw);
             this.modernPack |= modern;
-            Map<String, String> macros = com.bdmajora.impetus.iris.gl.shader.ShaderMacros.standard();
+            Map<String, String> macros = this.shaderDefines;
             int[] drawBuffers = sanitizeCompositeDrawBuffers(source.getName(), DrawBuffers.parseActive(fshRaw, macros));
             String vsh;
             String fsh;
@@ -1066,6 +1139,7 @@ public class IrisRenderingPipeline {
         ProgramUniforms.Builder builder = ProgramUniforms.builder(name, program.getProgram().getGlId());
         CommonUniforms.addCommonUniforms(builder);
         MatrixUniforms.addMatrixUniforms(builder);
+        com.bdmajora.impetus.iris.uniforms.custom.ActiveCustomUniforms.assignTo(builder);
         return builder.buildUniforms();
     }
 
@@ -1132,6 +1206,13 @@ public class IrisRenderingPipeline {
         if (mc.displayWidth != this.renderTargets.getWidth() || mc.displayHeight != this.renderTargets.getHeight()) {
             this.renderTargets.resize(mc.displayWidth, mc.displayHeight);
             this.fullClearRequired = true;
+            if (this.shaderStorageBuffers != null) {
+                this.shaderStorageBuffers.onResize(mc.displayWidth, mc.displayHeight);
+            }
+        }
+
+        if (this.shaderStorageBuffers != null && !this.shaderStorageBuffers.isEmpty()) {
+            this.shaderStorageBuffers.bindAll();
         }
 
         SystemTimeUniforms.COUNTER.beginFrame(System.nanoTime());
@@ -1149,6 +1230,7 @@ public class IrisRenderingPipeline {
         }
         this.frameUpdateNotifier.onNewFrame();
         CommonUniforms.beginFrame();
+        com.bdmajora.impetus.iris.uniforms.custom.ActiveCustomUniforms.update();
 
 
         // noisetex and the stub shadow maps ride along for the whole frame (gbuffer + fullscreen stages) on their
@@ -1167,12 +1249,16 @@ public class IrisRenderingPipeline {
         this.customImageManager.clearAll();
         bindShaderPackResources();
 
-        // Default PBR maps on the gbuffer-stage normals/specular units (2/3, so through GlStateManager to keep its
-        // cache coherent). The composite stage overwrites these units with colortex2/3 when it runs.
+        // PBR maps on the gbuffer-stage normals/specular units (2/3, so through GlStateManager to keep its cache
+        // coherent). When the resource pack ships _n/_s companion textures, the stitched PBR atlases (identical
+        // layout to the block atlas) are bound; otherwise the neutral 1×1 defaults. The composite stage overwrites
+        // these units with colortex2/3 when it runs.
         GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + 2);
-        GlStateManager.bindTexture(this.defaultNormals.getTextureId());
+        GlStateManager.bindTexture(com.bdmajora.impetus.iris.pbr.PBRAtlasManager.getNormalsAtlas(
+                this.defaultNormals.getTextureId()));
         GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + 3);
-        GlStateManager.bindTexture(this.defaultSpecular.getTextureId());
+        GlStateManager.bindTexture(com.bdmajora.impetus.iris.pbr.PBRAtlasManager.getSpecularAtlas(
+                this.defaultSpecular.getTextureId()));
         GlStateManager.setActiveTexture(GL13.GL_TEXTURE0);
 
         IrisFramebuffer gbuffer = this.gbufferFramebuffer;
@@ -1375,6 +1461,33 @@ public class IrisRenderingPipeline {
         copyDepthTexture(this.renderTargets.getDepthTextureNoHand());
     }
 
+    /**
+     * Binds the pack's {@code gbuffers_hand} program around vanilla's first-person hand render, which happens
+     * after the composite/final chain in the classic OptiFine 1.12 order — packs shade the hand there to match
+     * the composited scene. No-op (vanilla hand) when the pack ships no hand program.
+     *
+     * @return true when a program was bound and {@link #endHandRendering()} must be called
+     */
+    public boolean beginHandRendering() {
+        if (this.destroyed) {
+            return false;
+        }
+        GbufferPrograms.Entry entry = this.gbufferPrograms != null ? this.gbufferPrograms.get(ProgramId.Hand) : null;
+        if (entry == null) {
+            return false;
+        }
+        CapturedRenderingState.INSTANCE.setRenderStage(16); // MC_RENDER_STAGE_HAND_SOLID (see ShaderMacros)
+        entry.getProgram().bind();
+        bindShaderPackResources();
+        entry.getUniforms().update();
+        return true;
+    }
+
+    public void endHandRendering() {
+        LWJGL.glUseProgram(0);
+        CapturedRenderingState.INSTANCE.setRenderStage(0); // MC_RENDER_STAGE_NONE
+    }
+
     /** renderWorld RETURN: run the composite chain and final pass, then hand a clean GL state back to vanilla. */
     public void finishWorldRendering() {
         if (!this.worldRenderingActive) {
@@ -1394,6 +1507,12 @@ public class IrisRenderingPipeline {
         GlStateManager.disableAlpha();
 
         bindDepthSamplers();
+
+        // centerDepthSmooth: sample depthtex0 at the screen centre now that all geometry has landed in it, before
+        // any composite consumes the uniform.
+        this.centerDepthSampler.sample(this.renderTargets.getDepthTexture().getTextureId(),
+                this.renderTargets.getWidth(), this.renderTargets.getHeight(),
+                SystemTimeUniforms.COUNTER.getLastFrameTime(), this.centerDepthHalfLife);
 
         String probeSuffix = this.activeProbeSuffix;
         boolean probeThisFrame = probeSuffix != null;
@@ -1418,6 +1537,14 @@ public class IrisRenderingPipeline {
             LWJGL.glBlitFramebuffer(0, 0, this.renderTargets.getWidth(), this.renderTargets.getHeight(),
                     0, 0, mc.displayWidth, mc.displayHeight,
                     GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
+        }
+
+        // Optional wide-gamut output conversion: runs in place on the presentation target as the last color op
+        // of the shader frame. No-op (and zero cost) when the configured colorspace is sRGB.
+        if (this.colorSpaceConverter.isActive()) {
+            bindMainRenderTarget(mc);
+            restoreMainDrawReadBuffers(mc);
+            this.colorSpaceConverter.run(mc.displayWidth, mc.displayHeight, this.quadRenderer);
         }
 
         resetRenderTargetMipmaps();
@@ -1588,10 +1715,14 @@ public class IrisRenderingPipeline {
                 continue;
             }
             String name = source.get().getName();
+            if (!isProgramEnabled(pack, name)) {
+                LOGGER.info("[Iris] Skipping disabled compute pass '{}'", name);
+                continue;
+            }
             try {
                 String csh = com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(
                         source.get().getComputeSource().get(),
-                        com.bdmajora.impetus.iris.gl.shader.ShaderMacros.standard());
+                        this.shaderDefines);
                 csh = stabilizeShaderSource(name, csh);
                 IrisDebugDump.dumpText("src_" + name + ".csh", csh);
                 int[] localSize = parseLocalSize(csh);
@@ -1602,7 +1733,20 @@ public class IrisRenderingPipeline {
                                 ceilDiv(volume[2], localSize[2])
                         }
                         : null;
-                int[] workGroups = parseWorkGroups(csh);
+                float[] renderScale = parseWorkGroupsRender(csh, this.shaderDefines);
+                long[] indirectPointer = this.indirectDispatchPointers.get(name);
+                int indirectBuffer = -1;
+                long indirectOffset = 0L;
+                if (indirectPointer != null && this.shaderStorageBuffers != null) {
+                    indirectBuffer = this.shaderStorageBuffers.getBufferId((int) indirectPointer[0]);
+                    indirectOffset = indirectPointer[1];
+                    if (indirectBuffer == -1) {
+                        LOGGER.warn("[Iris] Compute pass '{}' requests indirect dispatch from undeclared bufferObject.{}",
+                                name, indirectPointer[0]);
+                    }
+                }
+
+                int[] workGroups = parseWorkGroups(csh, this.shaderDefines);
                 if (workGroups != null && fallbackWorkGroups != null
                         && !coversVolume(workGroups, localSize, volume)) {
                     LOGGER.warn("[Iris] Compute pass '{}' declared dispatch {}x{}x{} does not cover custom image volume {}x{}x{} with local {}x{}x{}; using {}x{}x{}",
@@ -1614,12 +1758,12 @@ public class IrisRenderingPipeline {
                     workGroups = fallbackWorkGroups;
                 }
                 if (workGroups == null) {
-                    if (fallbackWorkGroups == null) {
-                        LOGGER.warn("[Iris] Compute pass '{}' skipped (no workGroups declaration and no 3D custom image/local_size fallback)",
+                    if (fallbackWorkGroups == null && renderScale == null && indirectBuffer == -1) {
+                        LOGGER.warn("[Iris] Compute pass '{}' skipped (no workGroups/workGroupsRender/indirect declaration and no 3D custom image/local_size fallback)",
                                 name);
                         continue;
                     }
-                    workGroups = fallbackWorkGroups;
+                    workGroups = fallbackWorkGroups != null ? fallbackWorkGroups : new int[]{1, 1, 1};
                 }
                 GlShader shader = new GlShader(ShaderType.COMPUTE, name + ".csh", csh);
                 GlProgram program;
@@ -1635,8 +1779,14 @@ public class IrisRenderingPipeline {
                 ProgramUniforms.Builder uniforms = ProgramUniforms.builder(name, program.getGlId());
                 CommonUniforms.addCommonUniforms(uniforms);
                 MatrixUniforms.addMatrixUniforms(uniforms);
+                com.bdmajora.impetus.iris.uniforms.custom.ActiveCustomUniforms.assignTo(uniforms);
                 this.computePasses.add(new ComputePass(name, program, uniforms.buildUniforms(),
-                        workGroups[0], workGroups[1], workGroups[2]));
+                        workGroups[0], workGroups[1], workGroups[2],
+                        renderScale != null ? renderScale[0] : Float.NaN,
+                        renderScale != null ? renderScale[1] : Float.NaN,
+                        localSize != null ? localSize[0] : 1,
+                        localSize != null ? localSize[1] : 1,
+                        indirectBuffer, indirectOffset));
                 LOGGER.info("[Iris] Compute pass '{}' ready: dispatch {}x{}x{}{}",
                         name, workGroups[0], workGroups[1], workGroups[2],
                         localSize == null ? "" : " (local " + localSize[0] + "x" + localSize[1] + "x" + localSize[2] + ")");
@@ -1644,6 +1794,10 @@ public class IrisRenderingPipeline {
                 LOGGER.error("[Iris] Failed to build compute pass '{}'; it will be skipped: {}", name, e.getMessage());
             }
         }
+    }
+
+    private static boolean isProgramEnabled(ShaderPack pack, String programName) {
+        return pack.getProperties().getProgramEnabled(programName).orElse(Boolean.TRUE);
     }
 
     private static final Pattern UNINITIALIZED_LIGHT_VOLUME =
@@ -1700,16 +1854,58 @@ public class IrisRenderingPipeline {
         return source;
     }
 
-    private static int[] parseWorkGroups(String source) {
-        String active = preprocessActiveShaderSource(source);
+    private static int[] parseWorkGroups(String source, Map<String, String> defines) {
+        String active = preprocessActiveShaderSource(source, defines);
         int[] workGroups = parseWorkGroupsDirect(active);
         return workGroups != null ? workGroups : parseWorkGroupsDirect(source);
     }
 
-    private static String preprocessActiveShaderSource(String source) {
+    /** {@return the `const vec2 workGroupsRender` scale factors, or {@code null} when not declared} */
+    private static float[] parseWorkGroupsRender(String source, Map<String, String> defines) {
+        String active = preprocessActiveShaderSource(source, defines);
+        float[] scale = parseWorkGroupsRenderDirect(active);
+        return scale != null ? scale : parseWorkGroupsRenderDirect(source);
+    }
+
+    private static float[] parseWorkGroupsRenderDirect(String source) {
+        Matcher matcher = Pattern.compile(
+                "const\\s+vec2\\s+workGroupsRender\\s*=\\s*vec2\\s*\\(([^)]*)\\)")
+                .matcher(stripGlslComments(source));
+        if (!matcher.find()) {
+            return null;
+        }
+        try {
+            String[] values = matcher.group(1).split(",");
+            float x = Float.parseFloat(values[0].trim().replace("f", ""));
+            float y = values.length > 1 ? Float.parseFloat(values[1].trim().replace("f", "")) : x;
+            return new float[]{x, y};
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** Parses every {@code indirect.<pass> = <bufferObjectIndex> <offsetBytes>} directive (Iris syntax). */
+    private static Map<String, long[]> parseIndirectPointers(Map<String, String> rawProperties) {
+        Map<String, long[]> pointers = new LinkedHashMap<>();
+        rawProperties.forEach((key, value) -> {
+            if (!key.startsWith("indirect.")) {
+                return;
+            }
+            try {
+                String[] parts = value.trim().split("\\s+");
+                pointers.put(key.substring("indirect.".length()),
+                        new long[]{Long.parseLong(parts[0]), Long.parseLong(parts[1])});
+            } catch (RuntimeException e) {
+                LOGGER.warn("[Iris] Malformed indirect directive '{} = {}'", key, value);
+            }
+        });
+        return pointers;
+    }
+
+    private static String preprocessActiveShaderSource(String source, Map<String, String> defines) {
         try {
             return com.bdmajora.impetus.iris.shaderpack.preprocessor.PropertiesPreprocessor.preprocess(
-                    source, com.bdmajora.impetus.iris.gl.shader.ShaderMacros.standard());
+                    source, defines);
         } catch (RuntimeException e) {
             return source;
         }
@@ -1805,7 +2001,20 @@ public class IrisRenderingPipeline {
             pass.program.bind();
             bindShaderPackResources(false);
             pass.uniforms.update();
-            LWJGL.glDispatchCompute(pass.groupsX, pass.groupsY, pass.groupsZ);
+            if (pass.indirectBuffer != -1) {
+                // Indirect dispatch: group counts read from the pack-declared SSBO at the given offset.
+                LWJGL.glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, pass.indirectBuffer);
+                LWJGL.glDispatchComputeIndirect(pass.indirectOffset);
+                LWJGL.glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, 0);
+            } else if (!Float.isNaN(pass.renderScaleX)) {
+                // Screen-relative dispatch (`const vec2 workGroupsRender`): recomputed every frame from the
+                // current render size and the shader's local_size.
+                int groupsX = Math.max(1, ceilDiv((int) Math.ceil(this.renderTargets.getWidth() * pass.renderScaleX), pass.localSizeX));
+                int groupsY = Math.max(1, ceilDiv((int) Math.ceil(this.renderTargets.getHeight() * pass.renderScaleY), pass.localSizeY));
+                LWJGL.glDispatchCompute(groupsX, groupsY, 1);
+            } else {
+                LWJGL.glDispatchCompute(pass.groupsX, pass.groupsY, pass.groupsZ);
+            }
             // Each floodfill iteration reads the previous one's writes.
             LWJGL.glMemoryBarrier(com.bdmajora.impetus.lwjgl.GL42.GL_ALL_BARRIER_BITS);
         }
@@ -2074,6 +2283,13 @@ public class IrisRenderingPipeline {
         }
         this.destroyed = true;
         this.worldRenderingActive = false;
+        this.centerDepthSampler.destroy();
+        this.colorSpaceConverter.destroy();
+        if (this.shaderStorageBuffers != null) {
+            this.shaderStorageBuffers.destroy();
+            this.shaderStorageBuffers = null;
+        }
+        com.bdmajora.impetus.iris.uniforms.custom.ActiveCustomUniforms.clear();
         com.bdmajora.impetus.iris.terrain.IrisTerrainProgramOverride.destroyShadowPrograms();
         if (this.shadowRenderer != null) {
             this.shadowRenderer.destroy();

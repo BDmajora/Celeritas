@@ -6,6 +6,7 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 import com.bdmajora.impetus.iris.gl.program.ProgramUniforms;
+import com.bdmajora.impetus.iris.gl.uniform.UniformCollector;
 import com.bdmajora.impetus.iris.gl.uniform.UniformUpdateFrequency;
 
 /**
@@ -40,7 +41,7 @@ public final class CelestialUniforms {
         return sunPathRotation;
     }
 
-    public static void addCelestialUniforms(ProgramUniforms.Builder uniforms) {
+    public static void addCelestialUniforms(UniformCollector uniforms) {
         uniforms
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "celestialAngle", CelestialUniforms::getCelestialAngle)
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "sunAngle", CelestialUniforms::getSunAngle)

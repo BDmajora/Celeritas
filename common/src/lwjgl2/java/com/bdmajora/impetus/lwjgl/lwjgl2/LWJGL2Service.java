@@ -764,6 +764,11 @@ public record LWJGL2Service(
     }
 
     @Override
+    public void glDispatchComputeIndirect(long indirect) {
+        GL43.glDispatchComputeIndirect(indirect);
+    }
+
+    @Override
     public void glClearTexImage(int texture, int level, int format, int type, ByteBuffer data) {
         ARBClearTexture.glClearTexImage(texture, level, format, type, data);
     }

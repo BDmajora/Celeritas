@@ -5,7 +5,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import com.bdmajora.impetus.api.options.OptionIdentifier;
 import com.bdmajora.impetus.api.options.control.ActionButtonControl;
+import com.bdmajora.impetus.api.options.control.CyclingControl;
 import com.bdmajora.impetus.api.options.control.ReadOnlyStringControl;
+import com.bdmajora.impetus.iris.pipeline.ColorSpaceConverter;
 import com.bdmajora.impetus.api.options.structure.OptionFlag;
 import com.bdmajora.impetus.api.options.structure.OptionGroup;
 import com.bdmajora.impetus.api.options.structure.OptionImpl;
@@ -52,12 +54,25 @@ public final class IrisOptionPages {
                                 TextComponent.translatable("options.iris.shaderPackList.tooltip"),
                                 () -> Minecraft.getMinecraft().displayGuiScreen(new ShaderPackSelectScreen(parent)),
                                 true))
-                        .add(OptionImpl.createBuilder(String.class, STORAGE)
-                                .setId(OptionIdentifier.create(IRIS_MOD_ID, "color_space", String.class))
+                        .add(OptionImpl.createBuilder(ColorSpaceConverter.ColorSpace.class, STORAGE)
+                                .setId(OptionIdentifier.create(IRIS_MOD_ID, "color_space", ColorSpaceConverter.ColorSpace.class))
                                 .setName(TextComponent.translatable("options.iris.colorSpace"))
                                 .setTooltip(TextComponent.translatable("options.iris.colorSpace.tooltip"))
-                                .setControl(ReadOnlyStringControl::new)
-                                .setBinding((state, value) -> { }, IrisMenuState::colorSpace)
+                                .setControl(option -> new CyclingControl<>(option,
+                                        ColorSpaceConverter.ColorSpace.values(),
+                                        new TextComponent[] {
+                                                TextComponent.literal("sRGB"),
+                                                TextComponent.literal("DCI-P3"),
+                                                TextComponent.literal("Display P3"),
+                                                TextComponent.literal("Rec.2020"),
+                                                TextComponent.literal("Adobe RGB") }))
+                                .setBinding((state, value) -> {
+                                    ColorSpaceConverter.setColorSpace(value);
+                                    try {
+                                        Iris.getConfig().save();
+                                    } catch (Exception ignored) {
+                                    }
+                                }, state -> ColorSpaceConverter.getColorSpace())
                                 .build())
                         .add(OptionImpl.createBuilder(String.class, STORAGE)
                                 .setId(OptionIdentifier.create(IRIS_MOD_ID, "max_shadow_distance", String.class))

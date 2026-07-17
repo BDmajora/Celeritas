@@ -2,9 +2,8 @@ package com.bdmajora.impetus.iris.shaderpack.texture;
 
 /**
  * A parsed-but-not-yet-uploaded custom texture from a {@code texture.<stage>.<sampler>}, {@code texture.noise}, or
- * {@code customTexture.<name>} directive. Port of Iris's {@code shaderpack.texture.CustomTextureData}, minus the raw
- * (typed 1D/2D/3D/rect) variants — those are an Iris-1.6 extension no OptiFine-format 1.12.2 pack uses; the properties
- * parser warns and skips them.
+ * {@code customTexture.<name>} directive. Port of Iris's {@code shaderpack.texture.CustomTextureData}; includes the
+ * raw typed texture definitions modern Iris packs use for precomputed 3D data textures.
  * <p>
  * Construction is Minecraft-free (bytes and names only); {@code pipeline.CustomTextureManager} turns these into GL
  * textures on the render thread.
@@ -66,6 +65,62 @@ public abstract class CustomTextureData {
         /** @return the path / location of the texture; the caller is responsible for validating it. */
         public String getLocation() {
             return this.location;
+        }
+    }
+
+    /** A raw binary texture definition, e.g. {@code image/foo.dat TEXTURE_3D RGB16F 32 64 32 RGB HALF_FLOAT}. */
+    public static final class RawData extends CustomTextureData {
+        private final String textureType;
+        private final String internalFormat;
+        private final int width;
+        private final int height;
+        private final int depth;
+        private final String pixelFormat;
+        private final String pixelType;
+        private final byte[] content;
+
+        public RawData(String textureType, String internalFormat, int width, int height, int depth,
+                       String pixelFormat, String pixelType, byte[] content) {
+            this.textureType = textureType;
+            this.internalFormat = internalFormat;
+            this.width = width;
+            this.height = height;
+            this.depth = depth;
+            this.pixelFormat = pixelFormat;
+            this.pixelType = pixelType;
+            this.content = content;
+        }
+
+        public String getTextureType() {
+            return this.textureType;
+        }
+
+        public String getInternalFormat() {
+            return this.internalFormat;
+        }
+
+        public int getWidth() {
+            return this.width;
+        }
+
+        public int getHeight() {
+            return this.height;
+        }
+
+        public int getDepth() {
+            return this.depth;
+        }
+
+        public String getPixelFormat() {
+            return this.pixelFormat;
+        }
+
+        public String getPixelType() {
+            return this.pixelType;
+        }
+
+        public byte[] getContent() {
+            return this.content;
         }
     }
 }

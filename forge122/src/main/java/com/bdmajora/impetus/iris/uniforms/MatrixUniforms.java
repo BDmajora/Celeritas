@@ -5,6 +5,7 @@ import org.joml.Matrix4fc;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
 import com.bdmajora.impetus.iris.gl.program.ProgramUniforms;
+import com.bdmajora.impetus.iris.gl.uniform.UniformCollector;
 import com.bdmajora.impetus.iris.gl.uniform.UniformUpdateFrequency;
 
 import java.util.function.Supplier;
@@ -20,7 +21,7 @@ public final class MatrixUniforms {
     private MatrixUniforms() {
     }
 
-    public static void addMatrixUniforms(ProgramUniforms.Builder uniforms) {
+    public static void addMatrixUniforms(UniformCollector uniforms) {
         CapturedRenderingState state = CapturedRenderingState.INSTANCE;
         uniforms
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "gbufferModelView", state::getGbufferModelView)

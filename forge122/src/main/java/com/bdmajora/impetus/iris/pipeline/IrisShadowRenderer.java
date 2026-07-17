@@ -16,7 +16,6 @@ import org.joml.Vector3d;
 import com.bdmajora.impetus.impl.render.terrain.ImpetusWorldRenderer;
 import com.bdmajora.impetus.iris.gl.framebuffer.IrisFramebuffer;
 import com.bdmajora.impetus.iris.gl.program.DrawBuffers;
-import com.bdmajora.impetus.iris.gl.shader.ShaderMacros;
 import com.bdmajora.impetus.iris.shaderpack.ProgramSource;
 import com.bdmajora.impetus.iris.targets.DepthTexture;
 import com.bdmajora.impetus.iris.uniforms.CapturedRenderingState;
@@ -104,7 +103,8 @@ public class IrisShadowRenderer {
      */
     public IrisShadowRenderer(int resolution, float shadowDistance, float sunPathRotation,
                               ProgramSource shadowSource, Map<String, Integer> samplerUnits,
-                              boolean[] hardwareFiltering, Runnable shaderPackResourceRestorer) {
+                              Map<String, String> shaderDefines, boolean[] hardwareFiltering,
+                              Runnable shaderPackResourceRestorer) {
         this.resolution = resolution;
         this.halfPlaneLength = shadowDistance;
         this.sunPathRotation = sunPathRotation;
@@ -126,11 +126,11 @@ public class IrisShadowRenderer {
         // The shadow program's DRAWBUFFERS (0, or 01 when it also writes shadowcolor1); indices past the two
         // shadowcolor attachments would make the FBO mask reference missing images, so they are dropped.
         this.shadowDrawBuffers = shadowSource.getFragmentSource()
-                .map(DrawBuffers::parseActive)
+                .map(source -> DrawBuffers.parseActive(source, shaderDefines))
                 .map(buffers -> DrawBuffers.sanitize(buffers, 2))
                 .orElse(new int[]{0});
 
-        this.entityShadowProgram = GbufferPrograms.compile(shadowSource, ShaderMacros.standard(), samplerUnits);
+        this.entityShadowProgram = GbufferPrograms.compile(shadowSource, shaderDefines, samplerUnits);
         if (this.entityShadowProgram == null) {
             LOGGER.warn("[Iris] Fixed-function shadow program failed to compile; entity shadows disabled");
         }

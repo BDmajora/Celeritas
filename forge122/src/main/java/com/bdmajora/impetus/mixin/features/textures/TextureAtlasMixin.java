@@ -29,6 +29,9 @@ public class TextureAtlasMixin implements TextureMapExtension {
     @Final
     private Map<String, TextureAtlasSprite> mapUploadedSprites;
 
+    @Shadow
+    private int mipmapLevels;
+
     private QuadTree<TextureAtlasSprite> impetus$quadTree;
 
     private int impetus$width, impetus$height;
@@ -43,6 +46,10 @@ public class TextureAtlasMixin implements TextureMapExtension {
 
         // Apply the configured texture/pixel filtering and anisotropy to the freshly (re)built block atlas.
         BlockAtlasFiltering.apply(((AbstractTexture) (Object) this).getGlTextureId());
+
+        // Build the shader-pipeline PBR atlases (normals/specular companions) mirroring this atlas's layout.
+        com.bdmajora.impetus.iris.pbr.PBRAtlasManager.rebuild(
+                this.mapUploadedSprites, this.impetus$width, this.impetus$height, this.mipmapLevels);
     }
 
     @Override

@@ -11,11 +11,14 @@ import com.bdmajora.impetus.iris.gl.uniform.FloatUniform;
 import com.bdmajora.impetus.iris.gl.uniform.IntUniform;
 import com.bdmajora.impetus.iris.gl.uniform.MatrixUniform;
 import com.bdmajora.impetus.iris.gl.uniform.Uniform;
+import com.bdmajora.impetus.iris.gl.uniform.UniformCollector;
 import com.bdmajora.impetus.iris.gl.uniform.UniformUpdateFrequency;
 import com.bdmajora.impetus.iris.gl.uniform.Vector2IntUniform;
+import com.bdmajora.impetus.iris.gl.uniform.Vector2Uniform;
 import com.bdmajora.impetus.iris.gl.uniform.Vector3IntUniform;
 import com.bdmajora.impetus.iris.gl.uniform.Vector3Uniform;
 import com.bdmajora.impetus.iris.gl.uniform.Vector4Uniform;
+import org.joml.Vector2f;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -87,7 +90,7 @@ public class ProgramUniforms {
         return new Builder(name, program);
     }
 
-    public static class Builder {
+    public static class Builder implements UniformCollector {
         private final String name;
         private final int program;
         private final List<Uniform> dynamic = new ArrayList<>();
@@ -124,6 +127,14 @@ public class ProgramUniforms {
             int location = location(uniformName);
             if (location != -1) {
                 add(frequency, new FloatUniform(location, value));
+            }
+            return this;
+        }
+
+        public Builder uniform2f(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector2f> value) {
+            int location = location(uniformName);
+            if (location != -1) {
+                add(frequency, new Vector2Uniform(location, value));
             }
             return this;
         }

@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Evaluates the C-preprocessor conditionals OptiFine allows in {@code *.properties} files
@@ -182,11 +183,15 @@ public final class PropertiesPreprocessor {
     // ------------------------------------------------------------------ expression evaluation
 
     private static boolean evaluate(String expression, Map<String, String> defines) {
+        return evaluateBooleanExpression(expression, defines).orElse(false);
+    }
+
+    public static Optional<Boolean> evaluateBooleanExpression(String expression, Map<String, String> defines) {
         try {
-            return new ExpressionParser(expression, defines).parse() != 0;
+            return Optional.of(new ExpressionParser(expression, defines).parse() != 0);
         } catch (RuntimeException e) {
             LOGGER.warn("[Iris] Failed to evaluate properties conditional \"#if{}\": {}", expression, e.getMessage());
-            return false;
+            return Optional.empty();
         }
     }
 

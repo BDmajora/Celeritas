@@ -16,6 +16,10 @@ import java.util.regex.Pattern;
  * Line-based with brace-depth tracking: only depth-0, single-declarator, single-line initializers of simple types are
  * touched, and only when the initializer references an identifier that is not a literal/type-constructor (moving a
  * genuinely constant initializer would also be safe — the whitelist just minimizes churn).
+ * <p>
+ * Top-level preprocessor conditionals are mirrored into the hoisted assignment stream. Packs such as Sildur's put
+ * non-constant globals inside {@code #ifdef}/{@code #if} option gates; moving the assignments outside those gates makes
+ * the generated {@code main()} reference declarations that the GLSL preprocessor removed.
  */
 public final class GlslGlobalInitHoister {
     private static final Pattern GLOBAL_INIT = Pattern.compile(
@@ -42,10 +46,14 @@ public final class GlslGlobalInitHoister {
         StringBuilder body = new StringBuilder(source.length());
         StringBuilder hoisted = new StringBuilder();
         int depth = 0;
+        boolean hasHoistedAssignments = false;
 
         for (String line : source.split("\n", -1)) {
             boolean rewritten = false;
             String trimmed = line.trim();
+            if (depth == 0 && isConditionalDirective(trimmed)) {
+                hoisted.append(line).append('\n');
+            }
             if (depth == 0
                     && !trimmed.isEmpty()
                     && !trimmed.startsWith("const")
@@ -62,6 +70,7 @@ public final class GlslGlobalInitHoister {
                             .append(matcher.group(3)).append(";");
                     hoisted.append("    ").append(matcher.group(3)).append(" = ")
                             .append(matcher.group(4)).append(";\n");
+                    hasHoistedAssignments = true;
                     rewritten = true;
                 }
             }
@@ -79,7 +88,31 @@ public final class GlslGlobalInitHoister {
                 }
             }
         }
-        return new Result(body.toString(), hoisted.toString());
+        return new Result(body.toString(), hasHoistedAssignments ? hoisted.toString() : "");
+    }
+
+    private static boolean isConditionalDirective(String trimmed) {
+        if (!trimmed.startsWith("#")) {
+            return false;
+        }
+        String directive = trimmed.substring(1).trim();
+        return startsDirective(directive, "if")
+                || startsDirective(directive, "ifdef")
+                || startsDirective(directive, "ifndef")
+                || startsDirective(directive, "elif")
+                || directive.equals("else")
+                || directive.equals("endif");
+    }
+
+    private static boolean startsDirective(String directive, String keyword) {
+        if (!directive.startsWith(keyword)) {
+            return false;
+        }
+        if (directive.length() == keyword.length()) {
+            return true;
+        }
+        char next = directive.charAt(keyword.length());
+        return next == '(' || Character.isWhitespace(next);
     }
 
     private static boolean isConstantExpression(String expression) {

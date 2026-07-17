@@ -1,6 +1,7 @@
 package com.bdmajora.impetus.iris.uniforms;
 
 import com.bdmajora.impetus.iris.gl.program.ProgramUniforms;
+import com.bdmajora.impetus.iris.gl.uniform.UniformCollector;
 import com.bdmajora.impetus.iris.gl.uniform.UniformUpdateFrequency;
 
 /**
@@ -15,7 +16,7 @@ public final class SystemTimeUniforms {
     private SystemTimeUniforms() {
     }
 
-    public static void addSystemTimeUniforms(ProgramUniforms.Builder uniforms) {
+    public static void addSystemTimeUniforms(UniformCollector uniforms) {
         uniforms
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "frameTimeCounter", COUNTER::getFrameTimeCounter)
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "frameTime", COUNTER::getLastFrameTime)

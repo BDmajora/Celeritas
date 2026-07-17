@@ -67,10 +67,6 @@ public final class GlslPreprocessor {
                 versionIndex = i;
                 break;
             }
-            String trimmed = lines.get(i).trim();
-            if (!trimmed.isEmpty() && !trimmed.startsWith("//")) {
-                break;
-            }
         }
 
         if (versionIndex < 0) {
@@ -81,11 +77,12 @@ public final class GlslPreprocessor {
             return out;
         }
 
-        for (int i = 0; i <= versionIndex; i++) {
-            out.add(lines.get(i));
-        }
+        out.add(lines.get(versionIndex));
         out.addAll(toDefineLines(defines));
-        for (int i = versionIndex + 1; i < lines.size(); i++) {
+        for (int i = 0; i < lines.size(); i++) {
+            if (i == versionIndex || VERSION_PATTERN.matcher(lines.get(i)).matches()) {
+                continue;
+            }
             out.add(lines.get(i));
         }
         return out;
