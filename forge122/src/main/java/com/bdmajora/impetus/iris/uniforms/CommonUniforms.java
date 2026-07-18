@@ -73,8 +73,10 @@ public final class CommonUniforms {
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "rainStrength", CommonUniforms::getRainStrength)
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "eyeAltitude", CommonUniforms::getEyeAltitude)
                 .uniform1i(UniformUpdateFrequency.PER_FRAME, "isEyeInWater", CommonUniforms::isEyeInWater)
-                .uniform1i(UniformUpdateFrequency.PER_FRAME, "blindness", CommonUniforms::getBlindness)
-                .uniform1i(UniformUpdateFrequency.PER_FRAME, "nightVision", CommonUniforms::getNightVision)
+                // OptiFine declares blindness/nightVision as FLOAT uniforms (potion effect strength 0..1);
+                // uploading them as ints hits the wrong glUniform family and the type validator disables them.
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "blindness", CommonUniforms::getBlindness)
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "nightVision", CommonUniforms::getNightVision)
                 .uniform1i(UniformUpdateFrequency.DYNAMIC, "renderStage",
                         CapturedRenderingState.INSTANCE::getRenderStage)
                 // Iris-exclusive: whether the player is invisible (spectator/potion). Not tracked yet.
@@ -335,14 +337,22 @@ public final class CommonUniforms {
         return (camera != null && camera.isInsideOfMaterial(Material.WATER)) ? 1 : 0;
     }
 
-    private static int getBlindness() {
+    private static float getBlindness() {
         EntityLivingBase player = livingCamera();
-        return (player != null && player.isPotionActive(MobEffects.BLINDNESS)) ? 1 : 0;
+        return (player != null && player.isPotionActive(MobEffects.BLINDNESS)) ? 1.0f : 0.0f;
     }
 
-    private static int getNightVision() {
+    /** Vanilla's night-vision brightness ramp (EntityRenderer): 1.0 held, pulsing fade in the last 10s. */
+    private static float getNightVision() {
         EntityLivingBase player = livingCamera();
-        return (player != null && player.isPotionActive(MobEffects.NIGHT_VISION)) ? 1 : 0;
+        if (player == null || !player.isPotionActive(MobEffects.NIGHT_VISION)) {
+            return 0.0f;
+        }
+        int duration = player.getActivePotionEffect(MobEffects.NIGHT_VISION).getDuration();
+        if (duration > 200) {
+            return 1.0f;
+        }
+        return 0.7f + (float) Math.sin(duration * Math.PI * 0.2) * 0.3f;
     }
 
     private static EntityLivingBase livingCamera() {

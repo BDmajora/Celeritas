@@ -107,7 +107,7 @@ public final class IrisTerrainProgramOverride {
             // Modern (#version 130+) dual-stage packs (Complementary) use the compatibility stage normalizer; the
             // GLSL-120 Chocapic family (LIGHT) keeps the full rewrite.
             boolean modern = ModernPackTransformer.isModernSource(fshSource);
-            Map<String, String> macros = pack.getShaderDefines();
+            Map<String, String> macros = pack.getEnvironmentDefines();
             int[] drawBuffers = IrisRenderingPipeline.sanitizeDrawBuffers(
                     programId.getSourceName(), DrawBuffers.parseActive(fshSource, macros));
             String vsh = modern

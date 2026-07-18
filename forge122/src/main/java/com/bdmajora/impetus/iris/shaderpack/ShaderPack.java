@@ -286,6 +286,17 @@ public final class ShaderPack {
         return defines;
     }
 
+    /**
+     * The macro set for GLSL source injection: environment macros ONLY ({@code MC_*}, {@code IRIS_*}). Option values
+     * must never be injected into GLSL — they are already applied in place to the pack sources (OptiFine/Iris
+     * semantics, {@link ShaderPackOptions}), so injecting them again redefines the pack's own {@code #define} lines
+     * (driver error "macro redefined") and force-defines names packs use as stage/include guards or plain
+     * identifiers (SuperDuperVanilla's {@code VERTEX}/{@code FRAGMENT} guards select which {@code main} to compile).
+     */
+    public Map<String, String> getEnvironmentDefines() {
+        return ShaderMacros.standard();
+    }
+
     private Set<String> activeProfileDisabledPrograms(ShaderProperties parsedProperties) {
         if (parsedProperties.getProfiles().isEmpty()) {
             return Collections.emptySet();

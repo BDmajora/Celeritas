@@ -340,12 +340,12 @@ public class IrisRenderingPipeline {
      * the {@code 1282 Invalid operation} Minecraft's "Post render" check reports. Counts down over the opening frames.
      */
     private int glErrorProbeFrames =
-            Math.max(0, Integer.getInteger("impetus.iris.glErrorProbeFrames", 0));
+            Math.max(0, Integer.getInteger("impetus.iris.glErrorProbeFrames", 3));
 
     public IrisRenderingPipeline(ShaderPack pack) {
         Minecraft mc = Minecraft.getMinecraft();
         this.renderTargets = new IrisRenderTargets(mc.displayWidth, mc.displayHeight);
-        this.shaderDefines = pack.getShaderDefines();
+        this.shaderDefines = pack.getEnvironmentDefines();
         java.util.Arrays.fill(this.colorBufferClears, true);
         CameraUniforms.attach(this.frameUpdateNotifier);
 

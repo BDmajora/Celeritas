@@ -91,12 +91,50 @@ public class ProgramUniforms {
     }
 
     public static class Builder implements UniformCollector {
+        private static final org.apache.logging.log4j.Logger LOGGER =
+                org.apache.logging.log4j.LogManager.getLogger("Impetus/Iris");
+        // GL uniform type enums (glGetActiveUniform), used for provided-vs-declared validation.
+        private static final int GL_ACTIVE_UNIFORMS = 0x8B86;
+        private static final int GL_FLOAT_T = 0x1406;
+        private static final int GL_INT_T = 0x1404;
+        private static final int GL_BOOL_T = 0x8B56;
+        private static final int GL_FLOAT_VEC2_T = 0x8B50;
+        private static final int GL_FLOAT_VEC3_T = 0x8B51;
+        private static final int GL_FLOAT_VEC4_T = 0x8B52;
+        private static final int GL_INT_VEC2_T = 0x8B53;
+        private static final int GL_INT_VEC3_T = 0x8B54;
+        private static final int GL_FLOAT_MAT4_T = 0x8B5C;
+        private static final int GL_SAMPLER_1D_T = 0x8B5D;
+        private static final int GL_SAMPLER_2D_T = 0x8B5E;
+        private static final int GL_SAMPLER_3D_T = 0x8B5F;
+        private static final int GL_SAMPLER_CUBE_T = 0x8B60;
+        private static final int GL_SAMPLER_1D_SHADOW_T = 0x8B61;
+        private static final int GL_SAMPLER_2D_SHADOW_T = 0x8B62;
+        private static final int GL_UNSIGNED_INT_SAMPLER_2D_T = 0x8DD2;
+        private static final int GL_UNSIGNED_INT_SAMPLER_3D_T = 0x8DD3;
+
+        /** The GL type family a builder setter uploads with; compared against the program's declared type. */
+        private enum ProvidedType {
+            FLOAT, INT, VEC2, VEC2I, VEC3, VEC3I, VEC4, MAT4
+        }
+
+        private static final class PendingUniform {
+            final String uniformName;
+            final ProvidedType provided;
+            final UniformUpdateFrequency frequency;
+            final Uniform uniform;
+
+            PendingUniform(String uniformName, ProvidedType provided, UniformUpdateFrequency frequency, Uniform uniform) {
+                this.uniformName = uniformName;
+                this.provided = provided;
+                this.frequency = frequency;
+                this.uniform = uniform;
+            }
+        }
+
         private final String name;
         private final int program;
-        private final List<Uniform> dynamic = new ArrayList<>();
-        private final List<Uniform> once = new ArrayList<>();
-        private final List<Uniform> perTick = new ArrayList<>();
-        private final List<Uniform> perFrame = new ArrayList<>();
+        private final List<PendingUniform> pending = new ArrayList<>();
 
         private Builder(String name, int program) {
             this.name = name;
@@ -111,22 +149,14 @@ public class ProgramUniforms {
             return LWJGL.glGetUniformLocation(this.program, uniformName);
         }
 
-        private void add(UniformUpdateFrequency frequency, Uniform uniform) {
-            if (frequency == UniformUpdateFrequency.DYNAMIC) {
-                this.dynamic.add(uniform);
-            } else if (frequency == UniformUpdateFrequency.ONCE) {
-                this.once.add(uniform);
-            } else if (frequency == UniformUpdateFrequency.PER_TICK) {
-                this.perTick.add(uniform);
-            } else {
-                this.perFrame.add(uniform);
-            }
+        private void add(String uniformName, ProvidedType provided, UniformUpdateFrequency frequency, Uniform uniform) {
+            this.pending.add(new PendingUniform(uniformName, provided, frequency, uniform));
         }
 
         public Builder uniform1f(UniformUpdateFrequency frequency, String uniformName, FloatSupplier value) {
             int location = location(uniformName);
             if (location != -1) {
-                add(frequency, new FloatUniform(location, value));
+                add(uniformName, ProvidedType.FLOAT, frequency, new FloatUniform(location, value));
             }
             return this;
         }
@@ -134,7 +164,7 @@ public class ProgramUniforms {
         public Builder uniform2f(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector2f> value) {
             int location = location(uniformName);
             if (location != -1) {
-                add(frequency, new Vector2Uniform(location, value));
+                add(uniformName, ProvidedType.VEC2, frequency, new Vector2Uniform(location, value));
             }
             return this;
         }
@@ -142,7 +172,7 @@ public class ProgramUniforms {
         public Builder uniform1i(UniformUpdateFrequency frequency, String uniformName, IntSupplier value) {
             int location = location(uniformName);
             if (location != -1) {
-                add(frequency, new IntUniform(location, value));
+                add(uniformName, ProvidedType.INT, frequency, new IntUniform(location, value));
             }
             return this;
         }
@@ -150,7 +180,7 @@ public class ProgramUniforms {
         public Builder uniform2i(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector2i> value) {
             int location = location(uniformName);
             if (location != -1) {
-                add(frequency, new Vector2IntUniform(location, value));
+                add(uniformName, ProvidedType.VEC2I, frequency, new Vector2IntUniform(location, value));
             }
             return this;
         }
@@ -158,7 +188,7 @@ public class ProgramUniforms {
         public Builder uniform3f(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector3f> value) {
             int location = location(uniformName);
             if (location != -1) {
-                add(frequency, new Vector3Uniform(location, value));
+                add(uniformName, ProvidedType.VEC3, frequency, new Vector3Uniform(location, value));
             }
             return this;
         }
@@ -166,7 +196,7 @@ public class ProgramUniforms {
         public Builder uniform3i(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector3i> value) {
             int location = location(uniformName);
             if (location != -1) {
-                add(frequency, new Vector3IntUniform(location, value));
+                add(uniformName, ProvidedType.VEC3I, frequency, new Vector3IntUniform(location, value));
             }
             return this;
         }
@@ -174,7 +204,7 @@ public class ProgramUniforms {
         public Builder uniform4f(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector4f> value) {
             int location = location(uniformName);
             if (location != -1) {
-                add(frequency, new Vector4Uniform(location, value));
+                add(uniformName, ProvidedType.VEC4, frequency, new Vector4Uniform(location, value));
             }
             return this;
         }
@@ -182,13 +212,93 @@ public class ProgramUniforms {
         public Builder uniformMatrix(UniformUpdateFrequency frequency, String uniformName, Supplier<Matrix4fc> value) {
             int location = location(uniformName);
             if (location != -1) {
-                add(frequency, new MatrixUniform(location, value));
+                add(uniformName, ProvidedType.MAT4, frequency, new MatrixUniform(location, value));
             }
             return this;
         }
 
+        /** The provider family a declared GL type needs, or {@code null} for types we cannot supply. Iris parity. */
+        private static ProvidedType expectedType(int glType) {
+            switch (glType) {
+                case GL_FLOAT_T:
+                    return ProvidedType.FLOAT;
+                case GL_INT_T:
+                case GL_BOOL_T:
+                case GL_SAMPLER_1D_T:
+                case GL_SAMPLER_2D_T:
+                case GL_SAMPLER_3D_T:
+                case GL_SAMPLER_CUBE_T:
+                case GL_SAMPLER_1D_SHADOW_T:
+                case GL_SAMPLER_2D_SHADOW_T:
+                case GL_UNSIGNED_INT_SAMPLER_2D_T:
+                case GL_UNSIGNED_INT_SAMPLER_3D_T:
+                    return ProvidedType.INT;
+                case GL_FLOAT_VEC2_T:
+                    return ProvidedType.VEC2;
+                case GL_INT_VEC2_T:
+                    return ProvidedType.VEC2I;
+                case GL_FLOAT_VEC3_T:
+                    return ProvidedType.VEC3;
+                case GL_INT_VEC3_T:
+                    return ProvidedType.VEC3I;
+                case GL_FLOAT_VEC4_T:
+                    return ProvidedType.VEC4;
+                case GL_FLOAT_MAT4_T:
+                    return ProvidedType.MAT4;
+                default:
+                    return null;
+            }
+        }
+
+        /**
+         * Uploading through the wrong glUniform* family (e.g. glUniform1i to a {@code uniform float}) raises
+         * GL_INVALID_OPERATION on EVERY upload — the "1282 @ Post render" spam — because packs disagree about the
+         * declared types of OptiFine uniforms (int vs float worldTime/isEyeInWater/...). Iris parity
+         * (ProgramUniforms.buildUniforms): read every active uniform's declared type and disable, with a log line,
+         * any uniform whose provider family doesn't match.
+         */
+        private java.util.Map<String, ProvidedType> declaredTypes() {
+            java.util.Map<String, ProvidedType> declared = new java.util.HashMap<>();
+            int activeUniforms = LWJGL.glGetProgrami(this.program, GL_ACTIVE_UNIFORMS);
+            java.nio.IntBuffer sizeType = java.nio.ByteBuffer.allocateDirect(8)
+                    .order(java.nio.ByteOrder.nativeOrder()).asIntBuffer();
+            for (int index = 0; index < activeUniforms; index++) {
+                String uniformName = LWJGL.glGetActiveUniform(this.program, index, 256, sizeType);
+                if (uniformName == null || uniformName.isEmpty()) {
+                    continue;
+                }
+                if (uniformName.endsWith("[0]")) {
+                    uniformName = uniformName.substring(0, uniformName.length() - 3);
+                }
+                declared.put(uniformName, expectedType(sizeType.get(1)));
+            }
+            return declared;
+        }
+
         public ProgramUniforms buildUniforms() {
-            return new ProgramUniforms(this.dynamic, this.once, this.perTick, this.perFrame);
+            java.util.Map<String, ProvidedType> declared = declaredTypes();
+            List<Uniform> dynamic = new ArrayList<>();
+            List<Uniform> once = new ArrayList<>();
+            List<Uniform> perTick = new ArrayList<>();
+            List<Uniform> perFrame = new ArrayList<>();
+            for (PendingUniform entry : this.pending) {
+                if (declared.containsKey(entry.uniformName) && declared.get(entry.uniformName) != entry.provided) {
+                    LOGGER.warn("[{}] Wrong uniform type for {}: providing {} but the program declares a different"
+                                    + " type. Disabling that uniform.",
+                            this.name, entry.uniformName, entry.provided);
+                    continue;
+                }
+                if (entry.frequency == UniformUpdateFrequency.DYNAMIC) {
+                    dynamic.add(entry.uniform);
+                } else if (entry.frequency == UniformUpdateFrequency.ONCE) {
+                    once.add(entry.uniform);
+                } else if (entry.frequency == UniformUpdateFrequency.PER_TICK) {
+                    perTick.add(entry.uniform);
+                } else {
+                    perFrame.add(entry.uniform);
+                }
+            }
+            return new ProgramUniforms(dynamic, once, perTick, perFrame);
         }
     }
 }

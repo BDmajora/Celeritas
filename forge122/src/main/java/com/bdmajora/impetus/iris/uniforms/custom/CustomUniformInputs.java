@@ -92,8 +92,21 @@ public final class CustomUniformInputs implements UniformCollector {
 
     @Override
     public UniformCollector uniformMatrix(UniformUpdateFrequency frequency, String uniformName, Supplier<Matrix4fc> value) {
-        // Matrices are not representable in the expression value model; expressions that need positions use the
-        // dedicated vec3 uniforms (cameraPosition, sunPosition, ...) instead.
+        // A matrix is not representable as an expression value, but OptiFine/Iris custom uniforms can read single
+        // cells with GLSL-style indexing, e.g. MakeUp's `1.0 / atan(1.0 / gbufferProjection.1.1)` (column.row).
+        // Register one scalar input per cell under the exact dotted name the expression parser produces.
+        for (int column = 0; column < 4; column++) {
+            for (int row = 0; row < 4; row++) {
+                final int index = column * 4 + row;
+                this.inputs.put(uniformName + "." + column + "." + row, () -> {
+                    Matrix4fc matrix = value.get();
+                    if (matrix == null) {
+                        return CustomUniformValue.scalar(0.0f);
+                    }
+                    return CustomUniformValue.scalar(matrix.get(new float[16])[index]);
+                });
+            }
+        }
         return this;
     }
 }

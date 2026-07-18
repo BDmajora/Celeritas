@@ -23,9 +23,6 @@ public final class DrawBuffers {
     private static final Pattern FRAG_DATA_INDEX =
             Pattern.compile("\\b((?:gl|iris)_FragData)\\s*\\[\\s*(\\d+)\\s*\\]");
     private static final Pattern FRAG_COLOR = Pattern.compile("\\bgl_FragColor\\b");
-    private static final Pattern OUTPUT_LAYOUT_LOCATION = Pattern.compile(
-            "\\blayout\\s*\\(([^)]*?\\blocation\\s*=\\s*)(\\d+)([^)]*?)\\)"
-                    + "(\\s*(?:\\b(?:flat|smooth|noperspective|centroid|sample|invariant)\\s+)*\\bout\\b)");
     private static final Pattern NAMED_FRAGMENT_OUTPUT = Pattern.compile(
             "(?m)^([\\t ]*)(?:layout\\s*\\((?s:.*?)\\)\\s*)?"
                     + "(?:(?:flat|smooth|noperspective|centroid|sample|invariant)\\s+)*"
@@ -124,9 +121,8 @@ public final class DrawBuffers {
             return fragmentSource;
         }
         String rewritten = rewriteFragColor(fragmentSource);
-        rewritten = rewriteNamedFragmentOutputs(rewritten, drawBuffers);
-        rewritten = rewriteFragDataIndices(rewritten, drawBuffers);
-        return rewriteLayoutLocations(rewritten, drawBuffers);
+        rewritten = rewriteNamedFragmentOutputs(rewritten);
+        return rewriteFragDataIndices(rewritten, drawBuffers);
     }
 
     public static int outputSlotForTarget(int[] drawBuffers, int renderTarget) {
@@ -178,74 +174,39 @@ public final class DrawBuffers {
         return String.join("\n", lines);
     }
 
-    private static String rewriteLayoutLocations(String source, int[] drawBuffers) {
-        Matcher matcher = OUTPUT_LAYOUT_LOCATION.matcher(source);
-        StringBuffer rewritten = new StringBuffer(source.length());
-        while (matcher.find()) {
-            int renderTarget = Integer.parseInt(matcher.group(2));
-            int outputSlot = outputSlotForTarget(drawBuffers, renderTarget);
-            if (outputSlot >= 0 && outputSlot != renderTarget) {
-                matcher.appendReplacement(rewritten, Matcher.quoteReplacement(
-                        "layout(" + matcher.group(1) + outputSlot + matcher.group(3) + ")" + matcher.group(4)));
-            } else {
-                matcher.appendReplacement(rewritten, Matcher.quoteReplacement(matcher.group(0)));
-            }
-        }
-        matcher.appendTail(rewritten);
-        return rewritten.toString();
-    }
-
-    private static String rewriteNamedFragmentOutputs(String source, int[] drawBuffers) {
+    /**
+     * Named fragment outputs are kept as real {@code out} declarations, exactly like Iris: an explicit
+     * {@code layout(location = N)} already names the dense output slot (the Nth entry of the RENDERTARGETS list),
+     * so it passes through untouched; declarations without a layout get {@code layout(location = <declaration
+     * order>)} added in place. The old approach — replacing the declaration with
+     * {@code #define <name> gl_FragData[slot]} — corrupted any shader that reuses the output's name as a local
+     * variable or function parameter (photon's {@code result}/{@code fragment_color}), since the macro rewrites
+     * every occurrence.
+     */
+    private static String rewriteNamedFragmentOutputs(String source) {
         Matcher matcher = NAMED_FRAGMENT_OUTPUT.matcher(source);
         StringBuffer rewritten = new StringBuffer(source.length());
         int implicitSlot = 0;
         while (matcher.find()) {
             String declaration = matcher.group(0);
-            int outputSlot = outputSlotForDeclaration(declaration, drawBuffers, implicitSlot);
-            if (LAYOUT_LOCATION.matcher(declaration).find()) {
-                implicitSlot = Math.max(implicitSlot, outputSlot + 1);
-            } else {
-                implicitSlot++;
-            }
-            if (outputSlot < 0 || outputSlot >= IrisRenderTargets.MAX_COLOR_BUFFERS) {
+            Matcher layout = LAYOUT_LOCATION.matcher(declaration);
+            if (layout.find()) {
+                implicitSlot = Math.max(implicitSlot, Integer.parseInt(layout.group(1)) + 1);
                 matcher.appendReplacement(rewritten, Matcher.quoteReplacement(declaration));
                 continue;
             }
+            int outputSlot = implicitSlot++;
             String outputName = matcher.group(3);
-            if (outputName.startsWith("iris_")) {
+            if (outputName.startsWith("iris_") || outputSlot >= IrisRenderTargets.MAX_COLOR_BUFFERS) {
                 matcher.appendReplacement(rewritten, Matcher.quoteReplacement(declaration));
                 continue;
             }
+            String indent = matcher.group(1);
             matcher.appendReplacement(rewritten, Matcher.quoteReplacement(
-                    matcher.group(1) + "#define " + outputName + " "
-                            + fragDataTarget(matcher.group(2), outputSlot)));
+                    indent + "layout(location = " + outputSlot + ") " + declaration.substring(indent.length())));
         }
         matcher.appendTail(rewritten);
         return rewritten.toString();
-    }
-
-    private static int outputSlotForDeclaration(String declaration, int[] drawBuffers, int implicitSlot) {
-        Matcher layout = LAYOUT_LOCATION.matcher(declaration);
-        if (!layout.find()) {
-            return implicitSlot;
-        }
-        int renderTarget = Integer.parseInt(layout.group(1));
-        int outputSlot = outputSlotForTarget(drawBuffers, renderTarget);
-        return outputSlot >= 0 ? outputSlot : renderTarget;
-    }
-
-    private static String fragDataTarget(String type, int outputSlot) {
-        String target = "gl_FragData[" + outputSlot + "]";
-        switch (type) {
-            case "float":
-                return target + ".r";
-            case "vec2":
-                return target + ".rg";
-            case "vec3":
-                return target + ".rgb";
-            default:
-                return target;
-        }
     }
 
     /**

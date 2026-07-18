@@ -56,7 +56,7 @@ public class IrisPipeline {
     }
 
     private static Map<String, String> buildDefines(ShaderPack pack) {
-        Map<String, String> defines = pack.getShaderDefines();
+        Map<String, String> defines = pack.getEnvironmentDefines();
         try {
             int major = LWJGL.glGetInteger(GL30.GL_MAJOR_VERSION);
             int minor = LWJGL.glGetInteger(GL30.GL_MINOR_VERSION);

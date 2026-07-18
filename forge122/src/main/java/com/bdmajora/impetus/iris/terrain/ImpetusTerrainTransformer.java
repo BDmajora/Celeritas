@@ -75,10 +75,6 @@ public final class ImpetusTerrainTransformer {
             "#define gl_MultiTexCoord2 iris_MultiTexCoord2",
             "#define gl_MultiTexCoord3 iris_MultiTexCoord3",
             "#define gl_Normal (iris_Normal.xyz)",
-            "#define at_tangent iris_Tangent",
-            "#define at_midBlock iris_MidBlock",
-            "#define mc_midTexCoord iris_MidTexFull",
-            "#define mc_Entity iris_EntityFull",
             "#define gl_ModelViewMatrix u_ModelViewMatrix",
             "#define gl_ProjectionMatrix u_ProjectionMatrix",
             "#define gl_ModelViewProjectionMatrix (u_ProjectionMatrix * u_ModelViewMatrix)",
@@ -125,13 +121,22 @@ public final class ImpetusTerrainTransformer {
                 + "}\n";
     }
 
+    /**
+     * The generated {@code gl_FragData} replacement, emitted only when the pack body actually references
+     * {@code gl_FragData}/{@code gl_FragColor}: the location-0 16-array reserves output locations 0-15, which
+     * collides with the named {@code layout(location = N) out} declarations Iris-native packs (photon) use instead.
+     */
+    private static final String FRAGMENT_FRAGDATA_BLOCK = String.join("\n",
+            "layout(location = 0) out vec4 iris_FragData[16];",
+            "#define gl_FragColor iris_FragData[0]",
+            "#define gl_FragData iris_FragData",
+            ""
+    );
+
     /** Fragment prologue: promote GLSL 120 fragment built-ins to 330 core outputs/keywords. */
     private static final String FRAGMENT_PROLOGUE = String.join("\n",
             "#version 330 core",
             "// ---- Impetus/Iris terrain bridge (generated) ----",
-            "layout(location = 0) out vec4 iris_FragData[16];",
-            "#define gl_FragColor iris_FragData[0]",
-            "#define gl_FragData iris_FragData",
             "vec4 iris_shadow2D(sampler2DShadow s, vec3 p) { return vec4(texture(s, p)); }",
             "vec4 iris_shadow2DLod(sampler2DShadow s, vec3 p, float l) { return vec4(textureLod(s, p, l)); }",
             "const mat4 iris_LightmapTextureMatrix = mat4(",
@@ -163,7 +168,7 @@ public final class ImpetusTerrainTransformer {
         // Pack globals initialized from uniforms are undefined under 330 (drivers may evaluate them before uniform
         // upload — zeros/NaNs); run those initializers at the top of the generated main, like GLSL 120 did.
         GlslGlobalInitHoister.Result hoist = GlslGlobalInitHoister.hoist(body);
-        return VERTEX_PROLOGUE + hoist.body + vertexMain(hoist.hoistedAssignments);
+        return VERTEX_PROLOGUE + attributeAdapterDefines(source) + hoist.body + vertexMain(hoist.hoistedAssignments);
     }
 
     public static String transformFragmentShader(String source) {
@@ -177,7 +182,7 @@ public final class ImpetusTerrainTransformer {
         body = modernizeCommon(body);
         body = DrawBuffers.rewriteFragmentOutputs(body, drawBuffers);
         GlslGlobalInitHoister.Result hoist = GlslGlobalInitHoister.hoist(body);
-        String transformed = FRAGMENT_PROLOGUE + hoist.body
+        String transformed = FRAGMENT_PROLOGUE + FRAGMENT_FRAGDATA_BLOCK + hoist.body
                 + "\nvoid main() {\n" + hoist.hoistedAssignments + "    irisMain();\n"
                 + "    if (iris_FragData[0].a < iris_AlphaCutoff) { discard; }\n}\n";
         return transformed;
@@ -203,7 +208,7 @@ public final class ImpetusTerrainTransformer {
         body = dropAttributeStorageQualifier(body);
         body = rewriteFogParameters(body);
         body = ModernPackTransformer.rewriteUnsignedStrictness(body);
-        return compatFor(VERTEX_PROLOGUE, source) + body + vertexMain("");
+        return compatFor(VERTEX_PROLOGUE, source) + attributeAdapterDefines(source) + body + vertexMain("");
     }
 
     public static String transformFragmentShaderModern(String source) {
@@ -216,22 +221,89 @@ public final class ImpetusTerrainTransformer {
         body = rewriteFogParameters(body);
         body = ModernPackTransformer.rewriteUnsignedStrictness(body);
         body = DrawBuffers.rewriteFragmentOutputs(body, drawBuffers);
-        String transformed = compatFor(FRAGMENT_PROLOGUE, source) + body
-                + "\nvoid main() {\n    irisMain();\n"
-                + "    if (iris_FragData[0].a < iris_AlphaCutoff) { discard; }\n}\n";
+        // Iris parity: packs that write gl_FragData/gl_FragColor (OptiFine style) get the generated output array
+        // and the injected alpha test; packs using named layout(location) outputs (photon) keep their declarations
+        // — the 16-array would collide with their output locations — and handle cutout discard themselves.
+        boolean usesFragData = Pattern.compile("\\bgl_Frag(?:Data|Color)\\b").matcher(body).find();
+        String transformed = compatFor(FRAGMENT_PROLOGUE, source)
+                + (usesFragData ? FRAGMENT_FRAGDATA_BLOCK : "")
+                + body
+                + (usesFragData
+                        ? "\nvoid main() {\n    irisMain();\n"
+                                + "    if (iris_FragData[0].a < iris_AlphaCutoff) { discard; }\n}\n"
+                        : "\nvoid main() {\n    irisMain();\n}\n");
         return transformed;
     }
 
-    /** The shared prologue targets 330 core; modern packs need 330 compatibility (legacy built-ins + modern intrinsics). */
-    private static String compat(String prologue) {
-        return prologue.replaceFirst("#version 330 core", "#version 330 compatibility");
+    private static final Pattern DECLARED_VERSION = Pattern.compile("#version\\s+(\\d+)");
+
+    /**
+     * The compatibility version for a modern pack: never below the 330 the prologue needs, never below the pack's own
+     * declaration (photon declares 400 and relies on 400 semantics like implicit int→uint conversion), and 430 when
+     * the source uses image load/store (colored-lighting voxelization).
+     */
+    private static String compatFor(String prologue, String packBody) {
+        int version = 330;
+        Matcher declared = DECLARED_VERSION.matcher(packBody);
+        if (declared.find()) {
+            version = Math.max(version, Integer.parseInt(declared.group(1)));
+        }
+        if (packBody.contains("imageStore") || packBody.contains("imageLoad")
+                || packBody.contains("imageAtomic")) {
+            version = Math.max(version, 430);
+        }
+        return prologue.replaceFirst("#version 330 core", "#version " + version + " compatibility");
     }
 
-    /** Image load/store (colored-lighting voxelization) needs 430; plain modern sources keep 330. */
-    private static String compatFor(String prologue, String packBody) {
-        String version = (packBody.contains("imageStore") || packBody.contains("imageLoad")
-                || packBody.contains("imageAtomic")) ? "#version 430 compatibility" : "#version 330 compatibility";
-        return prologue.replaceFirst("#version 330 core", version);
+    // ------------------------------------------------------------------ OptiFine attribute type adaptation
+
+    private static final Pattern SPECIAL_ATTRIBUTE_DECL = Pattern.compile(
+            "(?m)^\\s*(?:layout\\s*\\([^)]*\\)\\s*)?"
+                    + "(?:(?:flat|smooth|noperspective|centroid|sample|invariant)\\s+)*"
+                    + "(?:attribute|in)\\s+(?:(?:lowp|mediump|highp)\\s+)?(\\w+)\\s+"
+                    + "(mc_Entity|mc_midTexCoord|at_tangent|at_midBlock)\\s*;");
+
+    /**
+     * The OptiFine attribute defines, adapted to the type each attribute is DECLARED with in the pack source (the
+     * declarations themselves are deleted by {@code dropAttributeStorageQualifier}). OptiFine-era packs declare
+     * {@code attribute vec4 mc_midTexCoord;} while Iris-native packs use the modern Iris types ({@code vec2
+     * mc_midTexCoord}, {@code vec3 mc_Entity}, {@code vec3 at_midBlock}) — pointing a vec2-typed usage at our vec4
+     * global is a hard compile error, so the define has to match the pack's own view of the type. Mirrors Iris's
+     * SodiumTransformer.replaceMidTexCoord/replaceMCEntity dimension adaptation.
+     */
+    private static String attributeAdapterDefines(String packSource) {
+        java.util.Map<String, String> declaredTypes = new java.util.HashMap<>();
+        Matcher decl = SPECIAL_ATTRIBUTE_DECL.matcher(packSource);
+        while (decl.find()) {
+            declaredTypes.putIfAbsent(decl.group(2), decl.group(1));
+        }
+        return "#define mc_Entity " + adaptTo(declaredTypes.get("mc_Entity"), "iris_EntityFull") + "\n"
+                + "#define mc_midTexCoord " + adaptTo(declaredTypes.get("mc_midTexCoord"), "iris_MidTexFull") + "\n"
+                + "#define at_tangent " + adaptTo(declaredTypes.get("at_tangent"), "iris_Tangent") + "\n"
+                + "#define at_midBlock " + adaptTo(declaredTypes.get("at_midBlock"), "iris_MidBlock") + "\n";
+    }
+
+    /** Narrows the vec4 bridge global to the pack's declared attribute type (absent declaration keeps vec4). */
+    private static String adaptTo(String declaredType, String vec4Global) {
+        if (declaredType == null) {
+            return vec4Global;
+        }
+        switch (declaredType) {
+            case "vec3":
+                return "(" + vec4Global + ".xyz)";
+            case "vec2":
+                return "(" + vec4Global + ".xy)";
+            case "float":
+                return "(" + vec4Global + ".x)";
+            case "int":
+                return "int(" + vec4Global + ".x)";
+            case "uint":
+                return "uint(max(" + vec4Global + ".x, 0.0))";
+            case "ivec2":
+                return "ivec2(" + vec4Global + ".xy)";
+            default:
+                return vec4Global;
+        }
     }
 
     private static String stripVersion(String source) {

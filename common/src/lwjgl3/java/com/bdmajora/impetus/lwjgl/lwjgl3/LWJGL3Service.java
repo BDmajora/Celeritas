@@ -369,6 +369,18 @@ public record LWJGL3Service(
     }
 
     @Override
+    public String glGetActiveUniform(int program, int index, int maxLength, java.nio.IntBuffer sizeType) {
+        java.nio.IntBuffer size = java.nio.ByteBuffer.allocateDirect(4)
+                .order(java.nio.ByteOrder.nativeOrder()).asIntBuffer();
+        java.nio.IntBuffer type = java.nio.ByteBuffer.allocateDirect(4)
+                .order(java.nio.ByteOrder.nativeOrder()).asIntBuffer();
+        String name = GL20C.glGetActiveUniform(program, index, maxLength, size, type);
+        sizeType.put(0, size.get(0));
+        sizeType.put(1, type.get(0));
+        return name;
+    }
+
+    @Override
     public void glUseProgram(int program) {
         GL20C.glUseProgram(program);
     }

@@ -421,6 +421,11 @@ public record LWJGL2Service(
     }
 
     @Override
+    public String glGetActiveUniform(int program, int index, int maxLength, java.nio.IntBuffer sizeType) {
+        return GL20.glGetActiveUniform(program, index, maxLength, sizeType);
+    }
+
+    @Override
     public void glUseProgram(int program) {
         GL20.glUseProgram(program);
     }

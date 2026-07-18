@@ -71,6 +71,8 @@ public interface LWJGLService {
     void glLinkProgram(int program);
     String glGetProgramInfoLog(int program, int maxLength);
     int glGetProgrami(int program, int pname);
+    /** Returns the active uniform's name at {@code index}; writes its size to {@code sizeType.get(0)} and GL type to {@code sizeType.get(1)}. */
+    String glGetActiveUniform(int program, int index, int maxLength, IntBuffer sizeType);
     void glUseProgram(int program);
     void glDeleteProgram(int program);
     void glBindAttribLocation(int program, int index, CharSequence name);

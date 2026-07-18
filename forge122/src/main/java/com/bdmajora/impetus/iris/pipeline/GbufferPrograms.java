@@ -82,7 +82,7 @@ public class GbufferPrograms {
      *                         over the standard table so e.g. {@code texture.gbuffers.gaux4} redirects that sampler.
      */
     GbufferPrograms(ShaderPack pack, Map<String, Integer> samplerUnits, Map<String, Integer> samplerOverrides) {
-        Map<String, String> defines = pack.getShaderDefines();
+        Map<String, String> defines = pack.getEnvironmentDefines();
         // Fixed-function stages sample the bound atlas/lightmap on the vanilla units, plus OptiFine's aux slots.
         Map<String, Integer> gbufferSamplers = new HashMap<>(samplerUnits);
         gbufferSamplers.put("texture", 0);

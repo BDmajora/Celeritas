@@ -226,6 +226,32 @@ public final class ExpressionParser {
                     if (constant != null) {
                         return ctx -> CustomUniformValue.scalar(constant);
                     }
+                    // Component/swizzle access (eyeBrightness.y, cameraPosition.x, delta.xz): the identifier
+                    // grammar swallows the dots, so decompose here. Without this the whole dotted name misses the
+                    // input table and SILENTLY evaluates to 0 — which zeroed eyeBrightness-derived custom uniforms
+                    // (SDV's eyeSkylight, MakeUp's exposure) and rendered those packs cave-black.
+                    int dot = ident.indexOf('.');
+                    if (dot > 0) {
+                        String base = ident.substring(0, dot);
+                        int[] indices = swizzleIndices(ident.substring(dot + 1));
+                        if (indices != null) {
+                            return ctx -> {
+                                CustomUniformValue whole = ctx.resolve(ident);
+                                if (whole != null) {
+                                    return whole;
+                                }
+                                CustomUniformValue value = ctx.resolve(base);
+                                if (value == null) {
+                                    return CustomUniformValue.scalar(0.0f);
+                                }
+                                float[] out = new float[indices.length];
+                                for (int i = 0; i < indices.length; i++) {
+                                    out[i] = indices[i] < value.width ? value.components[indices[i]] : 0.0f;
+                                }
+                                return CustomUniformValue.of(out);
+                            };
+                        }
+                    }
                     return ctx -> {
                         CustomUniformValue value = ctx.resolve(ident);
                         return value != null ? value : CustomUniformValue.scalar(0.0f);
@@ -483,6 +509,36 @@ public final class ExpressionParser {
     }
 
     // --- lexer helpers ---
+
+    /**
+     * Maps a swizzle suffix ({@code y}, {@code xz}, {@code rgb}) to component indices, or {@code null} when the
+     * suffix is not a pure swizzle (e.g. matrix cell access like {@code m.0.1}, which stays unresolvable).
+     */
+    private static int[] swizzleIndices(String suffix) {
+        if (suffix.isEmpty() || suffix.length() > 4 || suffix.indexOf('.') >= 0) {
+            return null;
+        }
+        int[] indices = new int[suffix.length()];
+        for (int i = 0; i < suffix.length(); i++) {
+            switch (suffix.charAt(i)) {
+                case 'x': case 'r': case 's':
+                    indices[i] = 0;
+                    break;
+                case 'y': case 'g': case 't':
+                    indices[i] = 1;
+                    break;
+                case 'z': case 'b': case 'p':
+                    indices[i] = 2;
+                    break;
+                case 'w': case 'a': case 'q':
+                    indices[i] = 3;
+                    break;
+                default:
+                    return null;
+            }
+        }
+        return indices;
+    }
 
     private String parseIdentifier() {
         int start = pos;

@@ -211,8 +211,9 @@ public final class CustomUniforms {
         public CustomUniforms build() {
             CustomUniformInputs inputs = new CustomUniformInputs();
             // Capture the full built-in uniform surface (common + celestial + system-time are all registered
-            // through addCommonUniforms; matrices are registered but not resolvable).
+            // through addCommonUniforms; matrices resolve per-cell, e.g. gbufferProjection.1.1).
             CommonUniforms.addCommonUniforms(inputs);
+            com.bdmajora.impetus.iris.uniforms.MatrixUniforms.addMatrixUniforms(inputs);
 
             List<Variable> variables = new ArrayList<>();
             for (PendingVariable p : this.pending.values()) {
