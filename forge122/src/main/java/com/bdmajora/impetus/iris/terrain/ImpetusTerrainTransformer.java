@@ -17,8 +17,8 @@ import java.util.regex.Pattern;
  * the Impetus vertex into globals that {@code #define}d built-ins ({@code gl_Vertex}, {@code gl_ModelViewMatrix},
  * {@code gl_MultiTexCoord0}, …) point at.
  * <p>
- * The generated fragment output array is wide enough for Iris's logical color targets, while draw-buffer routing
- * rewrites sparse shader-pack target writes to the dense slots that the framebuffer enables.
+ * The generated fragment output array is wide enough for Iris's logical color targets; the framebuffer routes the
+ * shader-pack's dense {@code gl_FragData} slots to the logical targets named by {@code DRAWBUFFERS}.
  */
 public final class ImpetusTerrainTransformer {
     private static final Pattern VERSION = Pattern.compile("^\\s*#version[^\\n]*\\n", Pattern.MULTILINE);

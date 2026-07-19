@@ -14,14 +14,13 @@ import java.util.regex.Pattern;
  * Parses the OptiFine {@code /* DRAWBUFFERS:0246 *&#47;} (and the newer Iris {@code /* RENDERTARGETS: 0,2,4,6 *&#47;})
  * directive from a fragment shader, which declares the set of color attachments the program writes to.
  * <p>
- * {@code DRAWBUFFERS} uses one hex digit per attachment ({@code 0-9}, then {@code a-f} for 10-15). {@code RENDERTARGETS}
- * uses a comma-separated decimal list. When neither is present the program is assumed to write only {@code colortex0}.
+ * {@code DRAWBUFFERS} uses one decimal digit per attachment ({@code 0-9}). {@code RENDERTARGETS} uses a
+ * comma-separated decimal list and is the path for targets 10-15. When neither is present the program is assumed to
+ * write only {@code colortex0}.
  */
 public final class DrawBuffers {
-    private static final Pattern DRAWBUFFERS = Pattern.compile("/\\*\\s*DRAWBUFFERS:([0-9a-fA-F]+)\\s*\\*/");
+    private static final Pattern DRAWBUFFERS = Pattern.compile("/\\*\\s*DRAWBUFFERS:([0-9]+)\\s*\\*/");
     private static final Pattern RENDERTARGETS = Pattern.compile("/\\*\\s*RENDERTARGETS:\\s*([0-9,\\s]+)\\*/");
-    private static final Pattern FRAG_DATA_INDEX =
-            Pattern.compile("\\b((?:gl|iris)_FragData)\\s*\\[\\s*(\\d+)\\s*\\]");
     private static final Pattern FRAG_COLOR = Pattern.compile("\\bgl_FragColor\\b");
     private static final Pattern NAMED_FRAGMENT_OUTPUT = Pattern.compile(
             "(?m)^([\\t ]*)(?:layout\\s*\\((?s:.*?)\\)\\s*)?"
@@ -112,46 +111,15 @@ public final class DrawBuffers {
     /**
      * Iris packs shader-pack render targets into dense framebuffer color attachments before drawing. A directive such as
      * {@code DRAWBUFFERS:03648} therefore means "shader output slot 0 writes colortex0, slot 1 writes colortex3, ...",
-     * not "leave holes until location 8". Rewrite explicit logical target writes into the dense slots the framebuffer
-     * enables. Explicit logical target writes are folded back into the enabled slot list, so sparse target packs cannot
-     * write outside the generated output array or disabled buffers.
+     * not "leave holes until location 8". {@code gl_FragData[N]} and {@code layout(location = N)} already name those
+     * dense output slots, so this only normalizes {@code gl_FragColor} and implicit named outputs.
      */
     public static String rewriteFragmentOutputs(String fragmentSource, int[] drawBuffers) {
-        if (fragmentSource == null || drawBuffers == null || drawBuffers.length == 0) {
+        if (fragmentSource == null) {
             return fragmentSource;
         }
         String rewritten = rewriteFragColor(fragmentSource);
-        rewritten = rewriteNamedFragmentOutputs(rewritten);
-        return rewriteFragDataIndices(rewritten, drawBuffers);
-    }
-
-    public static int outputSlotForTarget(int[] drawBuffers, int renderTarget) {
-        if (drawBuffers == null) {
-            return -1;
-        }
-        for (int slot = 0; slot < drawBuffers.length; slot++) {
-            if (drawBuffers[slot] == renderTarget) {
-                return slot;
-            }
-        }
-        return -1;
-    }
-
-    private static String rewriteFragDataIndices(String source, int[] drawBuffers) {
-        Matcher matcher = FRAG_DATA_INDEX.matcher(source);
-        StringBuffer rewritten = new StringBuffer(source.length());
-        while (matcher.find()) {
-            int renderTarget = Integer.parseInt(matcher.group(2));
-            int outputSlot = outputSlotForTarget(drawBuffers, renderTarget);
-            if (outputSlot >= 0 && outputSlot != renderTarget) {
-                matcher.appendReplacement(rewritten,
-                        Matcher.quoteReplacement(matcher.group(1) + "[" + outputSlot + "]"));
-            } else {
-                matcher.appendReplacement(rewritten, Matcher.quoteReplacement(matcher.group(0)));
-            }
-        }
-        matcher.appendTail(rewritten);
-        return rewritten.toString();
+        return rewriteNamedFragmentOutputs(rewritten);
     }
 
     private static String rewriteFragColor(String source) {
@@ -240,7 +208,7 @@ public final class DrawBuffers {
             String digits = db.group(1);
             int[] buffers = new int[digits.length()];
             for (int i = 0; i < digits.length(); i++) {
-                buffers[i] = Character.digit(digits.charAt(i), 16);
+                buffers[i] = Character.digit(digits.charAt(i), 10);
             }
             directives.add(new Directive(db.start(), buffers));
         }

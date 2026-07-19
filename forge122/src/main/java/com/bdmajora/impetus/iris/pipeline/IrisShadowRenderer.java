@@ -52,18 +52,26 @@ import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
  */
 public class IrisShadowRenderer {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Iris");
+    public static final float DEFAULT_NEAR_PLANE = -100.05f;
+    public static final float DEFAULT_FAR_PLANE = 156.0f;
+    public static final float DEFAULT_INTERVAL_SIZE = 2.0f;
 
     // Fixed-function matrix modes (GlStateManager.matrixMode takes the raw GL enum).
     private static final int GL_MODELVIEW_MODE = 0x1700;
     private static final int GL_PROJECTION_MODE = 0x1701;
+    private static final int GL_CULL_FACE = 0x0B44;
+    private static final int GL_DEPTH_FUNC = 0x0B74;
 
     /** True while the shadow pass is drawing; consulted by the matrix/program/draw-buffer seams. */
     private static boolean shadowPassActive;
 
     private final int resolution;
     private final float halfPlaneLength;
+    private final float nearPlane;
+    private final float farPlane;
     private final float sunPathRotation;
-    private final float intervalSize = 2.0f;
+    private final float intervalSize;
+    private final Float shadowMapFov;
 
     /** shadowtex0: everything, translucents included. */
     private final DepthTexture depthTexture;
@@ -101,12 +109,17 @@ public class IrisShadowRenderer {
      * @param samplerUnits      the standard sampler-unit table (with gbuffers-stage custom-texture overrides applied).
      * @param hardwareFiltering per-texture {@code shadowHardwareFiltering} flags: [0] = shadowtex0, [1] = shadowtex1.
      */
-    public IrisShadowRenderer(int resolution, float shadowDistance, float sunPathRotation,
+    public IrisShadowRenderer(int resolution, float shadowDistance, float nearPlane, float farPlane,
+                              float intervalSize, Float shadowMapFov, float sunPathRotation,
                               ProgramSource shadowSource, Map<String, Integer> samplerUnits,
                               Map<String, String> shaderDefines, boolean[] hardwareFiltering,
                               Runnable shaderPackResourceRestorer) {
         this.resolution = resolution;
         this.halfPlaneLength = shadowDistance;
+        this.nearPlane = nearPlane;
+        this.farPlane = farPlane;
+        this.intervalSize = intervalSize;
+        this.shadowMapFov = shadowMapFov;
         this.sunPathRotation = sunPathRotation;
         this.shaderPackResourceRestorer = shaderPackResourceRestorer;
 
@@ -135,8 +148,9 @@ public class IrisShadowRenderer {
             LOGGER.warn("[Iris] Fixed-function shadow program failed to compile; entity shadows disabled");
         }
 
-        LOGGER.info("[Iris] Shadow map ready: {}x{}, distance {}, hardware filtering [{}, {}]",
-                resolution, resolution, shadowDistance, hardwareFiltering[0], hardwareFiltering[1]);
+        LOGGER.info("[Iris] Shadow map ready: {}x{}, distance {}, near {}, far {}, interval {}, fov {}, hardware filtering [{}, {}]",
+                resolution, resolution, shadowDistance, nearPlane, farPlane, intervalSize,
+                shadowMapFov == null ? "ortho" : shadowMapFov, hardwareFiltering[0], hardwareFiltering[1]);
     }
 
     private static DepthTexture createShadowDepthTexture(int resolution, boolean hardwareFiltering) {
@@ -207,12 +221,23 @@ public class IrisShadowRenderer {
         CapturedRenderingState.INSTANCE.setShadowModelView(this.shadowModelView);
         CapturedRenderingState.INSTANCE.setShadowProjection(this.shadowProjection);
 
+        boolean cullWasEnabled = false;
+        int previousDepthFunc = GL11.GL_LEQUAL;
+        boolean restoreGlState = false;
+
         try {
             shadowPassActive = true;
             Minecraft mc = Minecraft.getMinecraft();
-
             this.framebuffer.bind();
+            cullWasEnabled = LWJGL.glGetBoolean(GL_CULL_FACE);
+            previousDepthFunc = LWJGL.glGetInteger(GL_DEPTH_FUNC);
+            restoreGlState = true;
             LWJGL.glViewport(0, 0, this.resolution, this.resolution);
+            GlStateManager.enableDepth();
+            GlStateManager.depthMask(true);
+            GlStateManager.depthFunc(GL11.GL_LEQUAL);
+            GlStateManager.clearDepth(1.0D);
+            GlStateManager.disableCull();
             // shadowcolor clears to white (no tint); GlStateManager keeps the vanilla clear-color cache coherent.
             this.framebuffer.drawBuffers(CLEAR_MASK);
             GlStateManager.clearColor(1.0f, 1.0f, 1.0f, 1.0f);
@@ -220,8 +245,6 @@ public class IrisShadowRenderer {
             this.framebuffer.drawBuffers(this.shadowDrawBuffers);
 
             GlStateManager.disableBlend();
-            GlStateManager.enableDepth();
-            GlStateManager.depthMask(true);
             // The shadow program alpha-tests foliage against the block atlas; make sure it is what unit 0 holds
             // (this runs before vanilla's own "prepareterrain" atlas bind).
             bindBlockAtlas(mc);
@@ -284,6 +307,15 @@ public class IrisShadowRenderer {
                 LOGGER.error("[Iris] Shadow pass failed repeatedly; disabling shadows for this pack", t);
             }
         } finally {
+            if (restoreGlState) {
+                if (cullWasEnabled) {
+                    GlStateManager.enableCull();
+                } else {
+                    GlStateManager.disableCull();
+                }
+                GlStateManager.depthFunc(previousDepthFunc);
+                GlStateManager.depthMask(true);
+            }
             shadowPassActive = false;
         }
     }
@@ -392,12 +424,21 @@ public class IrisShadowRenderer {
      * sign, which is what made the shadows flicker.
      */
     private void computeMatrices() {
-        // ShadowMatrices.createOrthoMatrix(halfPlaneLength): JOML setOrtho produces the identical matrix
-        // (z-scale 2/(NEAR-FAR), z-translate -(FAR+NEAR)/(FAR-NEAR)) for NEAR=0.05, FAR=256.
-        this.shadowProjection.identity().setOrtho(
-                -this.halfPlaneLength, this.halfPlaneLength,
-                -this.halfPlaneLength, this.halfPlaneLength,
-                0.05f, 256.0f);
+        if (this.shadowMapFov != null) {
+            // ShadowMatrices.createPerspectiveMatrix(fov).
+            float yScale = (float) (1.0f / Math.tan(Math.toRadians(this.shadowMapFov) * 0.5f));
+            this.shadowProjection.set(
+                    yScale, 0.0f, 0.0f, 0.0f,
+                    0.0f, yScale, 0.0f, 0.0f,
+                    0.0f, 0.0f, (this.farPlane + this.nearPlane) / (this.nearPlane - this.farPlane), -1.0f,
+                    0.0f, 0.0f, 2.0f * this.farPlane * this.nearPlane / (this.nearPlane - this.farPlane), 1.0f);
+        } else {
+            // ShadowMatrices.createOrthoMatrix(halfPlaneLength, nearPlane, farPlane).
+            this.shadowProjection.identity().setOrtho(
+                    -this.halfPlaneLength, this.halfPlaneLength,
+                    -this.halfPlaneLength, this.halfPlaneLength,
+                    this.nearPlane, this.farPlane);
+        }
 
         // ---- createBaselineModelViewMatrix(target, shadowAngle, sunPathRotation) ----
         float shadowAngle = CelestialUniforms.getShadowAngle();
@@ -409,18 +450,19 @@ public class IrisShadowRenderer {
         }
 
         this.shadowModelView.identity()
-                .translate(0.0f, 0.0f, -100.0f)
                 .rotateX((float) Math.toRadians(90.0f))
                 .rotateZ((float) Math.toRadians(skyAngle * -360.0f))
                 .rotateX((float) Math.toRadians(this.sunPathRotation));
 
         // ---- snapModelViewToGrid(target, intervalSize, cameraX, cameraY, cameraZ) ----
         Vector3d camera = CapturedRenderingState.INSTANCE.getCameraPosition();
-        float halfIntervalSize = this.intervalSize / 2.0f;
-        float offsetX = (float) (camera.x - Math.floor(camera.x / this.intervalSize) * this.intervalSize) - halfIntervalSize;
-        float offsetY = (float) (camera.y - Math.floor(camera.y / this.intervalSize) * this.intervalSize) - halfIntervalSize;
-        float offsetZ = (float) (camera.z - Math.floor(camera.z / this.intervalSize) * this.intervalSize) - halfIntervalSize;
-        this.shadowModelView.translate(offsetX, offsetY, offsetZ);
+        if (Math.abs(this.intervalSize) != 0.0f) {
+            float halfIntervalSize = this.intervalSize / 2.0f;
+            float offsetX = (float) camera.x % this.intervalSize - halfIntervalSize;
+            float offsetY = (float) camera.y % this.intervalSize - halfIntervalSize;
+            float offsetZ = (float) camera.z % this.intervalSize - halfIntervalSize;
+            this.shadowModelView.translate(offsetX, offsetY, offsetZ);
+        }
     }
 
     public Matrix4f getShadowModelView() {

@@ -94,6 +94,14 @@ public class IrisRenderingPipeline {
     /** High texture unit used transiently for depth-copy binds so no vanilla-tracked unit is disturbed. */
     private static final int DEPTH_COPY_SCRATCH_UNIT = 24;
     /**
+     * Scratch unit for mipmap generation/reset, ABOVE every sampler allocation (colortex 0..15, depth 16..18,
+     * shadow 19..22, noise 23, custom textures 24+, custom images 27..31). Mipmap ops bind textures raw; doing
+     * that on unit 0 desyncs GlStateManager's 8-slot cache, after which bindColorSamplers "already bound" checks
+     * skip the real rebind and a pass samples whatever mipmap target was bound last (BSL deferred1: colortex0
+     * ended up reading the black colortex6 → whole screen black).
+     */
+    private static final int MIPMAP_SCRATCH_UNIT = 32;
+    /**
      * Dedicated units for the pack's custom textures and image samplers, above every reserved sampler. Unit 24 is
      * shared only by transient depth-copy/capture helpers; custom textures are rebound after those scratch uses.
      */
@@ -109,6 +117,9 @@ public class IrisRenderingPipeline {
     // -Dimpetus.iris.flickerProbeFrames=12 to re-enable the recurring diagnostic bursts.
     private static final int FLICKER_PROBE_FRAMES =
             Math.max(0, Integer.getInteger("impetus.iris.flickerProbeFrames", 0));
+    /** One-shot per-pass readback probe ({@link IrisPassTap}): fires on the Nth world frame after pipeline creation. */
+    private int passTapCountdown = Math.max(0, Integer.getInteger("impetus.iris.passTapFrame", 200));
+    private boolean passTapThisFrame;
     private static final int GL_CURRENT_PROGRAM = 0x8B8D;
     private static final int GL_FRAMEBUFFER_BINDING = 0x8CA6;
     private static final int GL_READ_FRAMEBUFFER_BINDING = 0x8CAA;
@@ -562,8 +573,8 @@ public class IrisRenderingPipeline {
     }
 
     /**
-     * Builds the shadow renderer when the pack declares a {@code shadow} program, with {@code shadowMapResolution}
-     * and {@code shadowDistance} parsed from the OptiFine const directives anywhere in the pack sources.
+     * Builds the shadow renderer when the pack declares a {@code shadow} program, with the OptiFine shadow projection
+     * directives parsed anywhere in the pack sources.
      */
     private IrisShadowRenderer createShadowRenderer(ShaderPack pack) {
         // Const directives may live in ANY source (packs put them in shared includes flattened into every program),
@@ -591,7 +602,11 @@ public class IrisRenderingPipeline {
             return null;
         }
         int resolution = parseConstInt(text, "shadowMapResolution", 1024);
-        float distance = parseConstFloat(text, "shadowDistance", 120.0f);
+        float distance = parseConstFloat(text, "shadowDistance", 160.0f);
+        float nearPlane = parseConstFloat(text, "shadowNearPlane", IrisShadowRenderer.DEFAULT_NEAR_PLANE);
+        float farPlane = parseConstFloat(text, "shadowFarPlane", IrisShadowRenderer.DEFAULT_FAR_PLANE);
+        float intervalSize = parseConstFloat(text, "shadowIntervalSize", IrisShadowRenderer.DEFAULT_INTERVAL_SIZE);
+        Float shadowMapFov = parseConstFloat(text, "shadowMapFov");
         // OptiFine's hardware-compare contract: `const bool shadowHardwareFiltering` covers both shadow depth
         // textures; the 0/1 forms cover one each. LIGHT declares ...Filtering0, Complementary the both-textures form.
         boolean hwBoth = parseConstBool(text, "shadowHardwareFiltering");
@@ -603,7 +618,8 @@ public class IrisRenderingPipeline {
         Map<String, Integer> shadowSamplerUnits = new LinkedHashMap<>(SAMPLER_UNITS);
         shadowSamplerUnits.putAll(gbufferSamplerOverrideUnits());
         try {
-            return new IrisShadowRenderer(resolution, distance, sunPathRotation,
+            return new IrisShadowRenderer(resolution, distance, nearPlane, farPlane, intervalSize, shadowMapFov,
+                    sunPathRotation,
                     shadowSource.get(), shadowSamplerUnits, this.shaderDefines,
                     hardwareFiltering, this::bindShaderPackResources);
         } catch (Exception e) {
@@ -625,6 +641,11 @@ public class IrisRenderingPipeline {
         // Allow a leading sign (sunPathRotation is often negative) and an optional f/F suffix (e.g. -40.0f).
         Matcher matcher = Pattern.compile("const\\s+float\\s+" + name + "\\s*=\\s*(-?[0-9]+(?:\\.[0-9]+)?)[fF]?").matcher(text);
         return matcher.find() ? Float.parseFloat(matcher.group(1)) : fallback;
+    }
+
+    private static Float parseConstFloat(String text, String name) {
+        Matcher matcher = Pattern.compile("const\\s+float\\s+" + name + "\\s*=\\s*(-?[0-9]+(?:\\.[0-9]+)?)[fF]?").matcher(text);
+        return matcher.find() ? Float.parseFloat(matcher.group(1)) : null;
     }
 
     /** The color buffers the terrain program writes, per its {@code DRAWBUFFERS} directive. */
@@ -1048,8 +1069,8 @@ public class IrisRenderingPipeline {
                     .bindAttributeLocation(FullscreenQuadRenderer.POSITION_SLOT, "a_Position")
                     .bindAttributeLocation(FullscreenQuadRenderer.TEXCOORD_SLOT, "a_TexCoord");
             if (!modern) {
-                // The generated 330-core path writes to an explicit out array. Sparse shader-pack outputs have
-                // already been rewritten to the dense draw-buffer slots before linking.
+                // The generated 330-core path writes to an explicit out array whose indices are the dense
+                // draw-buffer slots, matching Iris's packed framebuffer attachments.
                 builder.bindFragmentDataLocation(0, "iris_FragData");
             }
             GlProgram program = builder.link();
@@ -1406,6 +1427,24 @@ public class IrisRenderingPipeline {
         }
         copyDepthTexture(this.renderTargets.getDepthTextureNoTranslucents());
 
+        if (this.passTapCountdown > 0 && --this.passTapCountdown == 0) {
+            this.passTapThisFrame = true;
+            int w = this.renderTargets.getWidth();
+            int h = this.renderTargets.getHeight();
+            LOGGER.info("[Iris] PassTap frame: gbuffer {}x{}, {} deferred + {} composite/final pass(es)",
+                    w, h, this.deferredPasses.size(), this.passes.size());
+            com.bdmajora.impetus.iris.uniforms.custom.ActiveCustomUniforms.logValues();
+            net.minecraft.world.World tapWorld = Minecraft.getMinecraft().world;
+            LOGGER.info("[Iris] PassTap built-ins: eyeBrightnessSmooth={} celestialAngle={} fogColor={} worldTime={} sun={} up={}",
+                    EyeBrightnessTracker.getEyeBrightnessSmooth(), CelestialUniforms.getCelestialAngle(),
+                    CapturedRenderingState.INSTANCE.getFogColor(),
+                    tapWorld == null ? -1L : tapWorld.getWorldTime() % 24000L,
+                    CelestialUniforms.getSunPosition(), CelestialUniforms.getUpPosition());
+            IrisPassTap.logDepth("pre-deferred depthtex0", this.renderTargets.getDepthTexture().getTextureId(), w, h);
+            this.currentGbuffer.bind();
+            IrisPassTap.logColor("pre-deferred gbuffer att0 (colortex0)", 0, w, h);
+        }
+
         Minecraft mc = Minecraft.getMinecraft();
 
         if (!this.deferredPasses.isEmpty()) {
@@ -1431,6 +1470,12 @@ public class IrisRenderingPipeline {
                 runPass(pass, mc);
                 if (probeThisFrame) {
                     logPassProbe(probeSuffix, pass, "after-deferred");
+                }
+                if (this.passTapThisFrame) {
+                    for (int k = 0; k < pass.drawBuffers.length; k++) {
+                        IrisPassTap.logColor("deferred '" + pass.name + "' wrote colortex" + pass.drawBuffers[k], k,
+                                this.renderTargets.getWidth(), this.renderTargets.getHeight());
+                    }
                 }
             }
             LWJGL.glUseProgram(0);
@@ -1520,6 +1565,14 @@ public class IrisRenderingPipeline {
             logFlickerProbeFrame(probeSuffix);
         }
 
+        if (this.passTapThisFrame) {
+            int w = this.renderTargets.getWidth();
+            int h = this.renderTargets.getHeight();
+            IrisPassTap.logDepth("pre-composite depthtex0", this.renderTargets.getDepthTexture().getTextureId(), w, h);
+            this.currentGbuffer.bind();
+            IrisPassTap.logColor("pre-composite gbuffer att0 (colortex0)", 0, w, h);
+        }
+
         for (FullscreenPass pass : this.passes) {
             if (probeThisFrame) {
                 logPassProbe(probeSuffix, pass, "before");
@@ -1527,6 +1580,17 @@ public class IrisRenderingPipeline {
             runPass(pass, mc);
             if (probeThisFrame) {
                 logPassProbe(probeSuffix, pass, "after");
+            }
+            if (this.passTapThisFrame) {
+                if (pass.framebuffer != null) {
+                    for (int k = 0; k < pass.drawBuffers.length; k++) {
+                        IrisPassTap.logColor("pass '" + pass.name + "' wrote colortex" + pass.drawBuffers[k], k,
+                                this.renderTargets.getWidth(), this.renderTargets.getHeight());
+                    }
+                } else {
+                    IrisPassTap.logColor("final pass '" + pass.name + "' wrote screen", -1,
+                            mc.displayWidth, mc.displayHeight);
+                }
             }
         }
 
@@ -1574,6 +1638,12 @@ public class IrisRenderingPipeline {
         GlStateManager.depthMask(true);
         GlStateManager.enableDepth();
         GlStateManager.enableAlpha();
+
+        if (this.passTapThisFrame) {
+            IrisPassTap.logColor("post-frame screen", -1, mc.displayWidth, mc.displayHeight);
+            IrisPassTap.release();
+            this.passTapThisFrame = false;
+        }
 
         if (this.activeProbeSuffix != null) {
             logScreenProbe(this.activeProbeSuffix, mc);
@@ -2088,7 +2158,7 @@ public class IrisRenderingPipeline {
         if (pass.mipmappedBuffers.nextSetBit(0) < 0) {
             return;
         }
-        GlStateManager.setActiveTexture(GL13.GL_TEXTURE0);
+        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + MIPMAP_SCRATCH_UNIT);
         for (int index = pass.mipmappedBuffers.nextSetBit(0); index >= 0;
              index = pass.mipmappedBuffers.nextSetBit(index + 1)) {
             IrisRenderTarget target = this.renderTargets.get(index);
@@ -2096,10 +2166,12 @@ public class IrisRenderingPipeline {
                 target.generateMipmaps(pass.flipsBefore.get(index));
             }
         }
+        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
     }
 
     private void resetRenderTargetMipmaps() {
-        GlStateManager.setActiveTexture(GL13.GL_TEXTURE0);
+        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + MIPMAP_SCRATCH_UNIT);
         for (int i = 0; i < IrisRenderTargets.MAX_COLOR_BUFFERS; i++) {
             IrisRenderTarget target = this.renderTargets.get(i);
             if (target != null) {
@@ -2107,6 +2179,7 @@ public class IrisRenderingPipeline {
             }
         }
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
     }
 
     public static void drainGlError() {
