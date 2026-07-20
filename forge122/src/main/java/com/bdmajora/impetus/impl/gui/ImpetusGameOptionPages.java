@@ -70,7 +70,9 @@ public class ImpetusGameOptionPages {
                         .setName(TextComponent.translatable("options.gamma"))
                         .setTooltip(TextComponent.translatable("impetus.options.brightness.tooltip"))
                         .setControl(opt -> new SliderControl(opt, 0, 100, 1, ControlValueFormatter.brightness()))
-                        .setBinding((opts, value) -> opts.gammaSetting = (float) (value * 0.01D), (opts) -> (int) (opts.gammaSetting / 0.01D))
+                        .setBinding(
+                                (opts, value) -> opts.setOptionFloatValue(GameSettings.Options.GAMMA, value * 0.01f),
+                                opts -> Math.round(opts.gammaSetting * 100.0f))
                         .build())
                 .build());
 

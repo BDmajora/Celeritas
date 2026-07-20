@@ -635,6 +635,11 @@ public record LWJGL3Service(
     }
 
     @Override
+    public void glMultiTexCoord2f(int target, float s, float t) {
+        GL13.glMultiTexCoord2f(target, s, t);
+    }
+
+    @Override
     public int glGetTexLevelParameteri(int target, int level, int pname) {
         return GL11C.glGetTexLevelParameteri(target, level, pname);
     }

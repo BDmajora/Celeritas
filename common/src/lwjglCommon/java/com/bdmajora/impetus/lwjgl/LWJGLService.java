@@ -137,6 +137,7 @@ public interface LWJGLService {
     void glDeleteTextures(int[] textures);
     void glBindTexture(int target, int texture);
     void glActiveTexture(int texture);
+    void glMultiTexCoord2f(int target, float s, float t);
     int glGetTexLevelParameteri(int target, int level, int pname);
     void glCopyTexSubImage2D(int target, int level, int xoffset, int yoffset, int x, int y, int width, int height);
     void glReadPixels(int x, int y, int width, int height, int format, int type, ByteBuffer pixels);

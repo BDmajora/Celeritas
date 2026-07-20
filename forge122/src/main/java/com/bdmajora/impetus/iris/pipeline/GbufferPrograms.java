@@ -26,10 +26,10 @@ import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 /**
  * The pack's fixed-function gbuffer programs — sky, entities, block damage, particles, weather, clouds, hand. These
  * vanilla sections still render through the classic fixed-function pipeline (immediate mode / client arrays), and on
- * our compatibility-profile context the pack's original GLSL-120 programs consume that state natively
- * ({@code gl_Vertex}, {@code gl_ModelViewProjectionMatrix}, {@code gl_MultiTexCoord0}, …). So, exactly like OptiFine,
- * each program is compiled <em>untransformed</em> and simply bound around its vanilla render section; only Impetus
- * terrain (custom vertex format) and the fullscreen passes (core-profile quad) need GLSL transformation.
+ * our compatibility-profile context the pack's fixed-function inputs are still the contract
+ * ({@code gl_Vertex}, {@code gl_ModelViewProjectionMatrix}, {@code gl_MultiTexCoord0}, …). GLSL-120 programs consume
+ * that state natively; modern single-source packs are normalized by {@link ShaderProgramCompiler} but still bind
+ * around the vanilla render section.
  * <p>
  * OptiFine's fallback chain is honored via {@link com.bdmajora.impetus.iris.shaderpack.ProgramSet#get(ProgramId)}, and
  * phases resolving to the same source share one compiled program.
@@ -49,12 +49,15 @@ public class GbufferPrograms {
         final ProgramUniforms uniforms;
         final int[] drawBuffers;
         final ProgramBlendState blendState;
+        final int handLightmapLocation;
 
-        Entry(IrisProgram program, ProgramUniforms uniforms, int[] drawBuffers, ProgramBlendState blendState) {
+        Entry(IrisProgram program, ProgramUniforms uniforms, int[] drawBuffers, ProgramBlendState blendState,
+              int handLightmapLocation) {
             this.program = program;
             this.uniforms = uniforms;
             this.drawBuffers = drawBuffers == null ? DrawBuffers.DEFAULT.clone() : drawBuffers.clone();
             this.blendState = blendState;
+            this.handLightmapLocation = handLightmapLocation;
         }
 
         public IrisProgram getProgram() {
@@ -71,6 +74,12 @@ public class GbufferPrograms {
 
         public ProgramBlendState getBlendState() {
             return this.blendState;
+        }
+
+        public void setHandLightmap(float blockLight, float skyLight) {
+            if (this.handLightmapLocation != -1) {
+                LWJGL.glUniform2f(this.handLightmapLocation, blockLight, skyLight);
+            }
         }
     }
 
@@ -141,6 +150,7 @@ public class GbufferPrograms {
                     LWJGL.glUniform1i(location, sampler.getValue());
                 }
             }
+            int handLightmapLocation = glProgram.getUniformLocation(ShaderProgramCompiler.HAND_LIGHTMAP_UNIFORM);
             glProgram.unbind();
 
             ProgramUniforms.Builder builder = ProgramUniforms.builder(source.getName(), glProgram.getGlId());
@@ -148,7 +158,7 @@ public class GbufferPrograms {
             MatrixUniforms.addMatrixUniforms(builder);
             com.bdmajora.impetus.iris.uniforms.custom.ActiveCustomUniforms.assignTo(builder);
             int[] drawBuffers = IrisRenderingPipeline.sanitizeDrawBuffers(source.getName(), program.getDrawBuffers());
-            return new Entry(program, builder.buildUniforms(), drawBuffers, blendState);
+            return new Entry(program, builder.buildUniforms(), drawBuffers, blendState, handLightmapLocation);
         } catch (Exception e) {
             LOGGER.error("[Iris] Failed to compile gbuffer program '{}'; its phases render vanilla-style: {}",
                     source.getName(), e.getMessage());

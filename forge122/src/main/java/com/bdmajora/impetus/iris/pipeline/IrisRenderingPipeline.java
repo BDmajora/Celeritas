@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.entity.Entity;
+import net.minecraft.util.math.BlockPos;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.joml.Matrix4f;
@@ -109,6 +110,9 @@ public class IrisRenderingPipeline {
     private static final int GL_MAX_TEXTURE_IMAGE_UNITS = 0x8872;
     private static final int GL_BACK_BUFFER = 0x0405;
     private static final int SHADER_PACK_RESOURCE_BARRIERS = 0x00000020 | 0x00000008 | 0x00002000;
+    private static final int FULL_BRIGHT_LIGHTMAP = 0x00F000F0;
+    private static final float LIGHTMAP_TEXTURE_SCALE = 1.0f / 256.0f;
+    private static final float LIGHTMAP_TEXTURE_OFFSET = 8.0f / 256.0f;
     /** Draw-buffer mask for fixed-function content with no pack program: plain color into colortex0 only. */
     private static final int[] FIXED_FUNCTION_MASK = {0};
     private static final int FLICKER_PROBE_DELAY_FRAMES =
@@ -153,6 +157,12 @@ public class IrisRenderingPipeline {
         SAMPLER_UNITS.put("watershadow", SHADOW_TEX_0_UNIT);
         SAMPLER_UNITS.put("shadowtex1", SHADOW_TEX_1_UNIT);
         SAMPLER_UNITS.put("noisetex", NOISE_TEX_UNIT);
+        // OptiFine gbuffer-stage PBR samplers. During fullscreen passes these units are also colortex2/3, so the same
+        // mapping remains correct for packs that leave the aliases active in shared include code.
+        SAMPLER_UNITS.put("normals", 2);
+        SAMPLER_UNITS.put("texNorm", 2);
+        SAMPLER_UNITS.put("specular", 3);
+        SAMPLER_UNITS.put("texSpecular", 3);
     }
 
     /** One full-screen pass: a composite ({@code framebuffer != null}) or the final pass (drawn to the screen). */
@@ -1270,17 +1280,7 @@ public class IrisRenderingPipeline {
         this.customImageManager.clearAll();
         bindShaderPackResources();
 
-        // PBR maps on the gbuffer-stage normals/specular units (2/3, so through GlStateManager to keep its cache
-        // coherent). When the resource pack ships _n/_s companion textures, the stitched PBR atlases (identical
-        // layout to the block atlas) are bound; otherwise the neutral 1×1 defaults. The composite stage overwrites
-        // these units with colortex2/3 when it runs.
-        GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + 2);
-        GlStateManager.bindTexture(com.bdmajora.impetus.iris.pbr.PBRAtlasManager.getNormalsAtlas(
-                this.defaultNormals.getTextureId()));
-        GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + 3);
-        GlStateManager.bindTexture(com.bdmajora.impetus.iris.pbr.PBRAtlasManager.getSpecularAtlas(
-                this.defaultSpecular.getTextureId()));
-        GlStateManager.setActiveTexture(GL13.GL_TEXTURE0);
+        bindGbufferPbrSamplers();
 
         IrisFramebuffer gbuffer = this.gbufferFramebuffer;
         this.currentGbuffer = gbuffer;
@@ -1480,6 +1480,7 @@ public class IrisRenderingPipeline {
             }
             LWJGL.glUseProgram(0);
             restoreTextureUnits();
+            bindGbufferPbrSamplers();
             GlStateManager.enableDepth();
             GlStateManager.enableAlpha();
 
@@ -1498,7 +1499,7 @@ public class IrisRenderingPipeline {
         GlStateManager.depthMask(true);
     }
 
-    /** Called at the {@code "hand"} profiler anchor: snapshot the pre-hand depth ({@code depthtex2}). */
+    /** Called right before the solid hand draws: snapshot the pre-hand depth ({@code depthtex2}). */
     public void beginHand() {
         if (!this.worldRenderingActive) {
             return;
@@ -1507,22 +1508,45 @@ public class IrisRenderingPipeline {
     }
 
     /**
-     * Binds the pack's {@code gbuffers_hand} program around vanilla's first-person hand render, which happens
-     * after the composite/final chain in the classic OptiFine 1.12 order — packs shade the hand there to match
-     * the composited scene. No-op (vanilla hand) when the pack ships no hand program.
+     * Starts the first-person hand gbuffer pass. Matching OptiFine's {@code ShadersRender.renderHand0} (and Iris's
+     * {@code HandRenderer.renderSolid}), the solid hand draws into the <em>pre-deferred</em> gbuffer, before
+     * {@link #beginTranslucents()} runs the pack's {@code deferred} chain. That is what lights the hand: deferred
+     * packs (e.g. Complementary) write only albedo/normal/lightmap data in {@code gbuffers_hand} and do all shading
+     * in {@code deferred*} — a hand drawn after that chain stays as raw unlit gbuffer data. When the pack has no
+     * hand program, the hand still renders into colortex0 fixed-function.
      *
-     * @return true when a program was bound and {@link #endHandRendering()} must be called
+     * @return true when hand rendering should proceed and {@link #endHandRendering()} must be called
      */
     public boolean beginHandRendering() {
-        if (this.destroyed) {
+        if (this.destroyed || !this.worldRenderingActive) {
             return false;
         }
+        this.currentGbuffer.bind();
+        LWJGL.glViewport(0, 0, this.renderTargets.getWidth(), this.renderTargets.getHeight());
+        LWJGL.glDepthRange(0.0, 1.0);
+        this.skyAtFarPlane = false;
+
+        GlStateManager.enableDepth();
+        GlStateManager.depthMask(true);
+        GlStateManager.depthFunc(GL11.GL_LEQUAL);
+        GlStateManager.enableAlpha();
+        GlStateManager.enableBlend();
+
         GbufferPrograms.Entry entry = this.gbufferPrograms != null ? this.gbufferPrograms.get(ProgramId.Hand) : null;
-        if (entry == null) {
-            return false;
-        }
+        int packedLight = getHandPackedLight();
+        setupHandLightmap(packedLight);
+        bindGbufferPbrSamplers();
         CapturedRenderingState.INSTANCE.setRenderStage(16); // MC_RENDER_STAGE_HAND_SOLID (see ShaderMacros)
+        if (entry == null) {
+            LWJGL.glUseProgram(0);
+            drawGbufferBuffers(this.currentGbuffer, FIXED_FUNCTION_MASK);
+            return true;
+        }
         entry.getProgram().bind();
+        int[] drawBuffers = DrawBuffers.sanitize(entry.getDrawBuffers(), GBUFFER_ATTACHMENT_LIMIT);
+        drawGbufferBuffers(this.currentGbuffer, drawBuffers);
+        entry.getBlendState().apply(drawBuffers);
+        entry.setHandLightmap(getBlockLightmapCoord(packedLight), getSkyLightmapCoord(packedLight));
         bindShaderPackResources();
         entry.getUniforms().update();
         return true;
@@ -1531,6 +1555,49 @@ public class IrisRenderingPipeline {
     public void endHandRendering() {
         LWJGL.glUseProgram(0);
         CapturedRenderingState.INSTANCE.setRenderStage(0); // MC_RENDER_STAGE_NONE
+    }
+
+    /**
+     * Feeds the first-person hand its lightmap coordinate. BSL's {@code gbuffers_hand} derives all its
+     * brightness from {@code lmCoord = gl_TextureMatrix[1] * gl_MultiTexCoord1} (it never samples the lightmap texture),
+     * while Sodium/Embeddium can leave the fixed-function lightmap coord stale. Set both the legacy current texcoord
+     * and the hand shader bridge uniform to the player's combined light, matching Iris
+     * ({@code getPackedLightCoords(player)}). The vanilla lightmap texture matrix (scale 1/256, translate 8/256)
+     * expects the raw [0,240] block/sky values {@code getCombinedLight} packs.
+     */
+    private void setupHandLightmap(int packedLight) {
+        float blockLight = getBlockLightmapCoord(packedLight);
+        float skyLight = getSkyLightmapCoord(packedLight);
+        LWJGL.glMultiTexCoord2f(OpenGlHelper.lightmapTexUnit, blockLight, skyLight);
+        setupLightmapTextureMatrix();
+        GlStateManager.color(1.0f, 1.0f, 1.0f, 1.0f);
+    }
+
+    private static int getHandPackedLight() {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc.world == null || mc.player == null) {
+            return FULL_BRIGHT_LIGHTMAP;
+        }
+        BlockPos eyePos = new BlockPos(mc.player.posX, mc.player.posY + mc.player.getEyeHeight(), mc.player.posZ);
+        return mc.world.getCombinedLight(eyePos, 0);
+    }
+
+    private static float getBlockLightmapCoord(int packedLight) {
+        return packedLight & 0xFFFF;
+    }
+
+    private static float getSkyLightmapCoord(int packedLight) {
+        return (packedLight >>> 16) & 0xFFFF;
+    }
+
+    private static void setupLightmapTextureMatrix() {
+        GlStateManager.setActiveTexture(OpenGlHelper.lightmapTexUnit);
+        GlStateManager.matrixMode(GL_TEXTURE_MODE);
+        GlStateManager.loadIdentity();
+        GlStateManager.translate(LIGHTMAP_TEXTURE_OFFSET, LIGHTMAP_TEXTURE_OFFSET, LIGHTMAP_TEXTURE_OFFSET);
+        GlStateManager.scale(LIGHTMAP_TEXTURE_SCALE, LIGHTMAP_TEXTURE_SCALE, LIGHTMAP_TEXTURE_SCALE);
+        GlStateManager.matrixMode(GL_MODELVIEW_MODE);
+        GlStateManager.setActiveTexture(OpenGlHelper.defaultTexUnit);
     }
 
     /** renderWorld RETURN: run the composite chain and final pass, then hand a clean GL state back to vanilla. */
@@ -1553,8 +1620,8 @@ public class IrisRenderingPipeline {
 
         bindDepthSamplers();
 
-        // centerDepthSmooth: sample depthtex0 at the screen centre now that all geometry has landed in it, before
-        // any composite consumes the uniform.
+        // centerDepthSmooth: sample depthtex0 at the screen centre now that all geometry (translucents included) has
+        // landed in it, before any composite consumes the uniform — OptiFine's readCenterDepth in renderHand1.
         this.centerDepthSampler.sample(this.renderTargets.getDepthTexture().getTextureId(),
                 this.renderTargets.getWidth(), this.renderTargets.getHeight(),
                 SystemTimeUniforms.COUNTER.getLastFrameTime(), this.centerDepthHalfLife);
@@ -2292,6 +2359,19 @@ public class IrisRenderingPipeline {
         bindDepthSampler(DEPTH_TEX_1_UNIT, this.renderTargets.getDepthTextureNoTranslucents());
         bindDepthSampler(DEPTH_TEX_2_UNIT, this.renderTargets.getDepthTextureNoHand());
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+    }
+
+    private void bindGbufferPbrSamplers() {
+        // PBR maps on the gbuffer-stage normals/specular units (2/3, through GlStateManager so its cache stays
+        // coherent). Fullscreen passes overwrite these units with colortex2/3; rebind before later gbuffers stages
+        // such as water and hand sample the atlas again.
+        GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + 2);
+        GlStateManager.bindTexture(com.bdmajora.impetus.iris.pbr.PBRAtlasManager.getNormalsAtlas(
+                this.defaultNormals.getTextureId()));
+        GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + 3);
+        GlStateManager.bindTexture(com.bdmajora.impetus.iris.pbr.PBRAtlasManager.getSpecularAtlas(
+                this.defaultSpecular.getTextureId()));
+        GlStateManager.setActiveTexture(OpenGlHelper.defaultTexUnit);
     }
 
     private static void bindDepthSampler(int unit, DepthTexture texture) {

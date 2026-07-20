@@ -27,6 +27,7 @@ import java.util.Map;
  */
 public final class ShaderProgramCompiler {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Iris");
+    public static final String HAND_LIGHTMAP_UNIFORM = "impetus_HandLightmap";
 
     private ShaderProgramCompiler() {
     }
@@ -55,6 +56,9 @@ public final class ShaderProgramCompiler {
             if (geometrySource != null) {
                 geometrySource = ModernPackTransformer.transform(geometrySource);
             }
+        }
+        if (isFirstPersonHandProgram(name)) {
+            vertexSource = injectHandLightmapBridge(vertexSource);
         }
         fragmentSource = DrawBuffers.rewriteFragmentOutputs(fragmentSource, drawBuffers);
 
@@ -116,6 +120,34 @@ public final class ShaderProgramCompiler {
     private static boolean declaresAttribute(String source, String attributeName) {
         // Matches OptiFine's `attribute <type> <name>` scan, tolerant of both GLSL 120 `attribute` and 150 `in`.
         return source.matches("(?s).*\\b(?:attribute|in)\\s+\\w+\\s+" + attributeName + "\\b.*");
+    }
+
+    private static boolean isFirstPersonHandProgram(String name) {
+        return "gbuffers_hand".equals(name) || "gbuffers_hand_water".equals(name);
+    }
+
+    private static String injectHandLightmapBridge(String source) {
+        List<String> lines = new ArrayList<>(Arrays.asList(source.split("\n", -1)));
+        int insertIndex = -1;
+        for (int i = 0; i < lines.size(); i++) {
+            if (lines.get(i).trim().startsWith("#version")) {
+                insertIndex = i + 1;
+                break;
+            }
+        }
+        if (insertIndex < 0) {
+            lines.add(0, "#version " + GlslPreprocessor.DEFAULT_VERSION);
+            insertIndex = 1;
+        }
+        for (int i = insertIndex; i < lines.size(); i++) {
+            if (lines.get(i).trim().startsWith("#extension")) {
+                insertIndex = i + 1;
+            }
+        }
+
+        lines.add(insertIndex, "uniform vec2 " + HAND_LIGHTMAP_UNIFORM + ";");
+        return String.join("\n", lines).replaceAll("\\bgl_MultiTexCoord1\\b",
+                "vec4(" + HAND_LIGHTMAP_UNIFORM + ", 0.0, 1.0)");
     }
 
     private static String applyDefines(String source, Map<String, String> defines) {
