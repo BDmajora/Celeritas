@@ -126,10 +126,6 @@ public class IrisRenderingPipeline {
             Math.max(0, Integer.getInteger("impetus.iris.flickerProbeFrames", 0));
     /** One-shot per-pass readback probe ({@link IrisPassTap}): fires on the Nth world frame after pipeline creation. */
     private int passTapCountdown = Math.max(0, Integer.getInteger("impetus.iris.passTapFrame", 200));
-    // Re-arm interval (frames). The one-shot tap fires at spawn, which is useless for view-dependent artifacts; with
-    // a positive repeat the probe keeps firing so you can aim at the blown horizon/black-wall view and the NEXT tap
-    // captures THAT frame. Default ~300 frames (~5 s). Set impetus.iris.passTapRepeat=0 for the old one-shot behaviour.
-    private static final int PASS_TAP_REPEAT = Math.max(0, Integer.getInteger("impetus.iris.passTapRepeat", 300));
     private boolean passTapThisFrame;
     private static final int GL_CURRENT_PROGRAM = 0x8B8D;
     private static final int GL_FRAMEBUFFER_BINDING = 0x8CA6;
@@ -1370,7 +1366,10 @@ public class IrisRenderingPipeline {
         }
         this.skyHorizonActive = true;
         try {
-            float f = Minecraft.getMinecraft().gameSettings.renderDistanceChunks * 16.0f;
+            // Clamp the radius (Iris HorizonRenderer parity): at high render distances the ring would otherwise reach
+            // the far plane and get clipped, letting the band return. 256 blocks is always beyond the visible terrain
+            // fog yet safely inside the sky projection.
+            float f = Math.min(Minecraft.getMinecraft().gameSettings.renderDistanceChunks * 16.0f, 256.0f);
             double d0 = f * 0.9238D;
             double d1 = f * 0.3826D;
             double d2 = -d1;
@@ -1521,7 +1520,6 @@ public class IrisRenderingPipeline {
 
         if (this.passTapCountdown > 0 && --this.passTapCountdown == 0) {
             this.passTapThisFrame = true;
-            this.passTapCountdown = PASS_TAP_REPEAT; // re-arm so the probe keeps sampling the CURRENT view
             int w = this.renderTargets.getWidth();
             int h = this.renderTargets.getHeight();
             LOGGER.info("[Iris] PassTap frame: gbuffer {}x{}, {} deferred + {} composite/final pass(es)",
@@ -1543,10 +1541,6 @@ public class IrisRenderingPipeline {
             IrisPassTap.logDepth("pre-deferred depthtex0", this.renderTargets.getDepthTexture().getTextureId(), w, h);
             this.currentGbuffer.bind();
             IrisPassTap.logColor("pre-deferred gbuffer att0 (colortex0)", 0, w, h);
-            // HDR read of colortex1 straight out of GBUFFERS, BEFORE the deferred pass runs. Splits the horizon 50-band
-            // source: if b3/b4 are already 50 here, it's a gbuffers program (skybasic/skytextured/clouds); if they only
-            // hit 50 in post-deferred, it's the deferred volumetric-cloud (get_cloud) stage.
-            IrisPassTap.logColorHDR("pre-deferred (post-gbuffers) colortex1 att1", 1, w, h);
         }
 
         Minecraft mc = Minecraft.getMinecraft();
@@ -1579,13 +1573,6 @@ public class IrisRenderingPipeline {
                     for (int k = 0; k < pass.drawBuffers.length; k++) {
                         IrisPassTap.logColor("deferred '" + pass.name + "' wrote colortex" + pass.drawBuffers[k], k,
                                 this.renderTargets.getWidth(), this.renderTargets.getHeight());
-                        // HDR read of the SOLID scene BEFORE translucent water renders. If the horizon 50-band is
-                        // already here, it's terrain/deferred; if it only appears in the pre-composite read (after
-                        // water), the water pass (grazing reflection) is what overflows.
-                        if (pass.drawBuffers[k] == 1) {
-                            IrisPassTap.logColorHDR("post-deferred pre-water colortex1", k,
-                                    this.renderTargets.getWidth(), this.renderTargets.getHeight());
-                        }
                     }
                 }
             }
@@ -1749,12 +1736,6 @@ public class IrisRenderingPipeline {
             IrisPassTap.logDepth("pre-composite depthtex0", this.renderTargets.getDepthTexture().getTextureId(), w, h);
             this.currentGbuffer.bind();
             IrisPassTap.logColor("pre-composite gbuffer att0 (colortex0)", 0, w, h);
-            // HDR probe of the fog/atmosphere path. The gbuffer FBO attachments are [colortex0, colortex1, colortex7]
-            // (att0/1/2). colortex1 (att1) is the scene BEFORE the composite godray/fog blend; colortex7 (att2) is the
-            // sky the terrain fog fades toward (gaux4). Unclamped so we can see whether the sky-band already exceeds
-            // 1.0 here (skybasic/atmosphere too bright) or only exceeds it AFTER composite (godrays are the culprit).
-            IrisPassTap.logColorHDR("pre-composite scene (colortex1 att1)", 1, w, h);
-            IrisPassTap.logColorHDR("pre-composite fog source (colortex7 att2)", 2, w, h);
         }
 
         for (FullscreenPass pass : this.passes) {
@@ -1770,12 +1751,6 @@ public class IrisRenderingPipeline {
                     for (int k = 0; k < pass.drawBuffers.length; k++) {
                         IrisPassTap.logColor("pass '" + pass.name + "' wrote colortex" + pass.drawBuffers[k], k,
                                 this.renderTargets.getWidth(), this.renderTargets.getHeight());
-                        // Unclamped read of colortex1 as each pass writes it: pinpoints which pass first drives the
-                        // sky band over 1.0 (the composite godray/fog blend is the prime suspect for the blown horizon).
-                        if (pass.drawBuffers[k] == 1) {
-                            IrisPassTap.logColorHDR("pass '" + pass.name + "' wrote colortex1", k,
-                                    this.renderTargets.getWidth(), this.renderTargets.getHeight());
-                        }
                     }
                 } else {
                     IrisPassTap.logColor("final pass '" + pass.name + "' wrote screen", -1,
