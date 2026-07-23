@@ -4,6 +4,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.bdmajora.impetus.iris.gl.shader.GlShader;
 import com.bdmajora.impetus.iris.gl.shader.ShaderType;
+import com.bdmajora.impetus.iris.pipeline.IrisDebugDump;
 import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
 import com.bdmajora.impetus.iris.shaderpack.ProgramSource;
 import com.bdmajora.impetus.iris.shaderpack.preprocessor.GlslPreprocessor;
@@ -57,6 +58,7 @@ public final class ShaderProgramCompiler {
                 geometrySource = ModernPackTransformer.transform(geometrySource);
             }
         }
+        vertexSource = neutralizeUnfedVanillaAttributes(vertexSource);
         if (isFirstPersonHandProgram(name)) {
             vertexSource = injectHandLightmapBridge(vertexSource);
         }
@@ -66,6 +68,11 @@ public final class ShaderProgramCompiler {
                 applyDefines(vertexSource, defines));
         String processedFragment = IrisRenderingPipeline.stabilizeShaderSource(name,
                 applyDefines(fragmentSource, defines));
+
+        // Dump the driver-visible source for every gbuffer program (entities, hand, block, …). The terrain/fullscreen
+        // paths dump their own; these immediate-mode programs were the blind spot when debugging entity/hand artifacts.
+        IrisDebugDump.dumpText("src_" + name + ".vsh", processedVertex);
+        IrisDebugDump.dumpText("src_" + name + ".fsh", processedFragment);
 
         GlShader vertexShader = null;
         GlShader fragmentShader = null;
@@ -120,6 +127,43 @@ public final class ShaderProgramCompiler {
     private static boolean declaresAttribute(String source, String attributeName) {
         // Matches OptiFine's `attribute <type> <name>` scan, tolerant of both GLSL 120 `attribute` and 150 `in`.
         return source.matches("(?s).*\\b(?:attribute|in)\\s+\\w+\\s+" + attributeName + "\\b.*");
+    }
+
+    /**
+     * The immediate-mode (vanilla-geometry) gbuffer programs compiled here — entities, hand, block-entities, particles,
+     * held items — never receive the OptiFine generic vertex attributes the pack declares. OptiFine's own renderer
+     * computes and submits {@code at_tangent}/{@code mc_midTexCoord} per vertex (via SVertexBuilder); the vanilla
+     * 1.12.2 draw path does not, so those slots read the GL default generic value {@code (0,0,0,1)}. Two distinct
+     * failures result in ADVANCED_MATERIALS packs (BSL, Complementary v4 / Insanity), and both must be neutralized:
+     *
+     * <ul>
+     *   <li>{@code at_tangent = (0,0,0,1)} → {@code normalize(at_tangent.xyz)} and
+     *       {@code normalize(cross(at_tangent.xyz, gl_Normal))} are {@code normalize(vec3(0))} = <b>NaN</b> on every
+     *       vertex, poisoning the fragment TBN matrix. Replaced with an orthonormal basis derived from the vertex
+     *       normal; with the neutral normal map (0,0,1) the pack reconstructs {@code newNormal == gl_Normal}, so
+     *       shading is correct and finite.</li>
+     *   <li>{@code mc_midTexCoord = (0,0,0,1)} → the vertex shader builds the atlas-tiling basis
+     *       ({@code vTexCoordAM}/{@code vTexCoord}) from {@code texCoord - midCoord}. With {@code midCoord == 0} that
+     *       basis is garbage, and with {@code PARALLAX} enabled {@code GetParallaxCoord} returns out-of-sprite
+     *       (negative) coordinates that re-sample the albedo via {@code texture2DGradARB} — the salt-and-pepper
+     *       <b>speckle noise</b> smeared over every entity and the hand. Aliased to the vertex's own texcoord so
+     *       {@code midCoord == texCoord}: the tile size collapses to zero, parallax becomes a no-op, and the albedo is
+     *       sampled at {@code texCoord} exactly. (POM on standalone entity/hand textures is meaningless anyway.)</li>
+     * </ul>
+     *
+     * Only the {@code ShaderProgramCompiler} path (vanilla geometry) is affected; terrain/water get real tangents and
+     * sprite centers from the chunk vertex format via {@code ImpetusTerrainTransformer} and are compiled elsewhere.
+     */
+    private static String neutralizeUnfedVanillaAttributes(String source) {
+        source = source.replaceAll("(?m)^\\s*(?:attribute|in)\\s+vec4\\s+at_tangent\\s*;",
+                "vec4 iris_tangentFallback() { "
+                        + "vec3 n = normalize(gl_Normal); "
+                        + "vec3 t = abs(n.y) < 0.99 ? cross(n, vec3(0.0, 1.0, 0.0)) : vec3(1.0, 0.0, 0.0); "
+                        + "return vec4(normalize(t), 1.0); }\n"
+                        + "#define at_tangent (iris_tangentFallback())");
+        source = source.replaceAll("(?m)^\\s*(?:attribute|in)\\s+vec4\\s+mc_midTexCoord\\s*;",
+                "#define mc_midTexCoord gl_MultiTexCoord0");
+        return source;
     }
 
     private static boolean isFirstPersonHandProgram(String name) {

@@ -79,6 +79,31 @@ public class IrisFramebuffer extends GlResource {
         this.hasDepthAttachment = true;
     }
 
+    /**
+     * Restricts the FBO's <em>live</em> color attachments to exactly {@code keepLogical}; every other color target
+     * previously added is physically detached ({@code glFramebufferTexture2D(..., 0)}), while those in the set are
+     * (re)attached from the stored texture map.
+     * <p>
+     * This mirrors Iris, which builds each gbuffer program a framebuffer holding only the buffers that program writes.
+     * A gbuffer program that <em>samples</em> a colortex it does not write — e.g. {@code gbuffers_terrain} reading
+     * {@code gaux4} (=colortex7) as the atmosphere/fog color — must NOT have that texture attached, or the driver hits
+     * a rendering feedback loop and returns garbage (here: the in-progress colortex1, which is why distant terrain fog
+     * blended toward the ~50 clamp and blew the horizon white). Detaching the unwritten targets makes the read clean.
+     */
+    public void retainColorAttachments(java.util.Set<Integer> keepLogical) {
+        bind();
+        for (Map.Entry<Integer, Integer> entry : this.colorAttachments.entrySet()) {
+            int logicalIndex = entry.getKey();
+            Integer point = this.logicalAttachmentPoints.get(logicalIndex);
+            if (point == null) {
+                continue;
+            }
+            int texture = keepLogical.contains(logicalIndex) ? entry.getValue() : 0;
+            LWJGL.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0 + point,
+                    GL11.GL_TEXTURE_2D, texture, 0);
+        }
+    }
+
     public void noDrawBuffers() {
         bind();
         LWJGL.glDrawBuffers(GL11.GL_NONE);

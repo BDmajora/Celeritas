@@ -11,7 +11,7 @@ import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
 /**
  * Draws the full-screen quad for the composite/deferred/final passes. Owns a tiny VAO+VBO holding four vertices
- * (NDC position + texcoord, drawn as a triangle strip) — the modern replacement for the immediate-mode
+ * ([0,1] position + texcoord, drawn as a triangle strip) — the modern replacement for the immediate-mode
  * {@code Tessellator} quad that OptiFine/AUSM used, which cannot work when a core-profile VAO is current.
  * <p>
  * Vertex layout matches the attribute slots {@link FullscreenTransformer}-generated programs are linked with:
@@ -45,10 +45,14 @@ public class FullscreenQuadRenderer {
             ByteBuffer data = stack.malloc(4 * STRIDE);
             FloatBuffer floats = data.asFloatBuffer();
             floats.put(new float[]{
-                    // x, y, u, v — triangle strip covering the whole screen
-                    -1.0f, -1.0f, 0.0f, 0.0f,
-                    1.0f, -1.0f, 1.0f, 0.0f,
-                    -1.0f, 1.0f, 0.0f, 1.0f,
+                    // x, y, u, v — triangle strip covering the whole screen. Positions are in [0,1] (matching Iris's
+                    // FullScreenQuadRenderer), NOT NDC [-1,1]: packs address the quad as gl_Vertex and expect [0,1]
+                    // (e.g. superDuperVanilla does `gl_Vertex.xy * 2.0 - 1.0`; ftransform packs get the same NDC via
+                    // the fullscreen ortho). The [0,1]->[-1,1] mapping lives in pushFullscreenFixedFunctionMatrices
+                    // (modern path) and the gl_ProjectionMatrix/ftransform defines in FullscreenTransformer (legacy).
+                    0.0f, 0.0f, 0.0f, 0.0f,
+                    1.0f, 0.0f, 1.0f, 0.0f,
+                    0.0f, 1.0f, 0.0f, 1.0f,
                     1.0f, 1.0f, 1.0f, 1.0f
             });
             LWJGL.glBufferData(GL15.GL_ARRAY_BUFFER, data, GL15.GL_STATIC_DRAW);

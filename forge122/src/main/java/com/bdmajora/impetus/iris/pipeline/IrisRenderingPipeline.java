@@ -1,7 +1,10 @@
 package com.bdmajora.impetus.iris.pipeline;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.BufferBuilder;
 import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.entity.Entity;
 import net.minecraft.util.math.BlockPos;
@@ -123,6 +126,10 @@ public class IrisRenderingPipeline {
             Math.max(0, Integer.getInteger("impetus.iris.flickerProbeFrames", 0));
     /** One-shot per-pass readback probe ({@link IrisPassTap}): fires on the Nth world frame after pipeline creation. */
     private int passTapCountdown = Math.max(0, Integer.getInteger("impetus.iris.passTapFrame", 200));
+    // Re-arm interval (frames). The one-shot tap fires at spawn, which is useless for view-dependent artifacts; with
+    // a positive repeat the probe keeps firing so you can aim at the blown horizon/black-wall view and the NEXT tap
+    // captures THAT frame. Default ~300 frames (~5 s). Set impetus.iris.passTapRepeat=0 for the old one-shot behaviour.
+    private static final int PASS_TAP_REPEAT = Math.max(0, Integer.getInteger("impetus.iris.passTapRepeat", 300));
     private boolean passTapThisFrame;
     private static final int GL_CURRENT_PROGRAM = 0x8B8D;
     private static final int GL_FRAMEBUFFER_BINDING = 0x8CA6;
@@ -727,15 +734,22 @@ public class IrisRenderingPipeline {
 
     private void drawGbufferBuffers(IrisFramebuffer framebuffer, int[] logicalDrawBuffers) {
         int[] physicalDrawBuffers = new int[logicalDrawBuffers.length];
+        java.util.Set<Integer> written = new java.util.HashSet<>();
         for (int i = 0; i < logicalDrawBuffers.length; i++) {
             Integer attachmentPoint = this.gbufferAttachmentPoints.get(logicalDrawBuffers[i]);
             if (attachmentPoint == null) {
                 LOGGER.warn("[Iris] Gbuffer draw buffer colortex{} is not attached; routing output slot {} to colortex0",
                         logicalDrawBuffers[i], i);
                 attachmentPoint = this.gbufferAttachmentPoints.get(0);
+            } else {
+                written.add(logicalDrawBuffers[i]);
             }
             physicalDrawBuffers[i] = attachmentPoint == null ? 0 : attachmentPoint;
         }
+        // Iris parity: a gbuffer FBO must hold ONLY the buffers the current program writes, so a program that samples a
+        // colortex it doesn't write (gbuffers_terrain reading gaux4=colortex7 for fog) reads a detached — thus valid —
+        // texture instead of triggering a feedback loop that returns garbage (the ~50 that blew the horizon white).
+        framebuffer.retainColorAttachments(written);
         framebuffer.drawBuffers(physicalDrawBuffers);
     }
 
@@ -1281,6 +1295,9 @@ public class IrisRenderingPipeline {
         bindShaderPackResources();
 
         bindGbufferPbrSamplers();
+        // colortex4..15 (gaux1..4 + extras) must be readable by gbuffer programs — MakeUp's terrain fog samples gaux4
+        // (colortex7). Bind before world geometry renders; without it distant terrain fogs toward garbage and blows out.
+        bindGbufferColorSamplers();
 
         IrisFramebuffer gbuffer = this.gbufferFramebuffer;
         this.currentGbuffer = gbuffer;
@@ -1327,12 +1344,84 @@ public class IrisRenderingPipeline {
         } else {
             entry.getProgram().bind();
             bindShaderPackResources();
+            // Re-assert colortex4..15 read bindings: sky/entity/hand phases sample gaux buffers too, and the prior
+            // phase's fixed-function draws may have disturbed these units.
+            bindGbufferColorSamplers();
             entry.getUniforms().update();
             int[] drawBuffers = DrawBuffers.sanitize(entry.getDrawBuffers(), GBUFFER_ATTACHMENT_LIMIT);
             drawGbufferBuffers(this.currentGbuffer, drawBuffers);
             entry.getBlendState().apply(drawBuffers);
         }
     }
+
+    /**
+     * Port of OptiFine's {@code Shaders.drawHorizon} ({@code preSkyList}): draws an octagonal ring at the
+     * render-distance edge, from ground level ({@code y = -cameraY}) up to {@code y = 16}, through the currently-bound
+     * sky program ({@code gbuffers_skybasic}). Vanilla's {@code renderSky} only draws the sky disc (above the horizon)
+     * and the void plane (well below it); the thin band at the horizon between the render-distance edge and those is
+     * left uncovered. Because packs commonly set {@code colortex1} to not clear (OptiFine/Iris both honour that), those
+     * uncovered pixels keep last frame's colortex1 — which self-perpetuated into the blown ~50 neutral horizon band.
+     * skybasic derives the sky colour from the view direction (not vertex colour), so this fill gets the correct
+     * atmospheric horizon colour and the band disappears. Call right before the sky disc, matching OptiFine.
+     */
+    public void drawSkyHorizon() {
+        if (!this.worldRenderingActive || this.skyHorizonActive) {
+            return;
+        }
+        this.skyHorizonActive = true;
+        try {
+            float f = Minecraft.getMinecraft().gameSettings.renderDistanceChunks * 16.0f;
+            double d0 = f * 0.9238D;
+            double d1 = f * 0.3826D;
+            double d2 = -d1;
+            double d3 = -d0;
+            double top = 16.0D;
+            double bottom = -CapturedRenderingState.INSTANCE.getCameraPosition().y;
+            org.joml.Vector3f fog = CapturedRenderingState.INSTANCE.getFogColor();
+            GlStateManager.color(fog.x, fog.y, fog.z);
+            BufferBuilder bb = Tessellator.getInstance().getBuffer();
+            bb.begin(7, DefaultVertexFormats.POSITION);
+            bb.pos(d2, bottom, d3).endVertex();
+            bb.pos(d2, top, d3).endVertex();
+            bb.pos(d3, top, d2).endVertex();
+            bb.pos(d3, bottom, d2).endVertex();
+            bb.pos(d3, bottom, d2).endVertex();
+            bb.pos(d3, top, d2).endVertex();
+            bb.pos(d3, top, d1).endVertex();
+            bb.pos(d3, bottom, d1).endVertex();
+            bb.pos(d3, bottom, d1).endVertex();
+            bb.pos(d3, top, d1).endVertex();
+            bb.pos(d2, top, d1).endVertex();
+            bb.pos(d2, bottom, d1).endVertex();
+            bb.pos(d2, bottom, d1).endVertex();
+            bb.pos(d2, top, d1).endVertex();
+            bb.pos(d1, top, d0).endVertex();
+            bb.pos(d1, bottom, d0).endVertex();
+            bb.pos(d1, bottom, d0).endVertex();
+            bb.pos(d1, top, d0).endVertex();
+            bb.pos(d0, top, d1).endVertex();
+            bb.pos(d0, bottom, d1).endVertex();
+            bb.pos(d0, bottom, d1).endVertex();
+            bb.pos(d0, top, d1).endVertex();
+            bb.pos(d0, top, d2).endVertex();
+            bb.pos(d0, bottom, d2).endVertex();
+            bb.pos(d0, bottom, d2).endVertex();
+            bb.pos(d0, top, d2).endVertex();
+            bb.pos(d1, top, d3).endVertex();
+            bb.pos(d1, bottom, d3).endVertex();
+            bb.pos(d1, bottom, d3).endVertex();
+            bb.pos(d1, top, d3).endVertex();
+            bb.pos(d2, top, d3).endVertex();
+            bb.pos(d2, bottom, d3).endVertex();
+            Tessellator.getInstance().draw();
+        } catch (Throwable t) {
+            LOGGER.warn("[Iris] drawSkyHorizon failed: {}", t.toString());
+        } finally {
+            this.skyHorizonActive = false;
+        }
+    }
+
+    private boolean skyHorizonActive;
 
     /**
      * Called when the Impetus terrain override program binds ({@code IrisTerrainShaderInterface.setupState}): points
@@ -1346,6 +1435,9 @@ public class IrisRenderingPipeline {
             this.probeTerrainBindingsPending = false;
             logProbeSamplerBindings("terrain-draw");
         }
+        // Sodium/Embeddium sets up its own texture units for the chunk draw; re-assert the colortex4..15 read bindings
+        // so gbuffers_terrain's gaux4 (colortex7) fog sampler reads the real sky, not a stale unit-7 texture.
+        bindGbufferColorSamplers();
         int[] sanitizedDrawBuffers = DrawBuffers.sanitize(drawBuffers, GBUFFER_ATTACHMENT_LIMIT);
         drawGbufferBuffers(this.currentGbuffer, sanitizedDrawBuffers);
         blendState.apply(sanitizedDrawBuffers);
@@ -1429,20 +1521,32 @@ public class IrisRenderingPipeline {
 
         if (this.passTapCountdown > 0 && --this.passTapCountdown == 0) {
             this.passTapThisFrame = true;
+            this.passTapCountdown = PASS_TAP_REPEAT; // re-arm so the probe keeps sampling the CURRENT view
             int w = this.renderTargets.getWidth();
             int h = this.renderTargets.getHeight();
             LOGGER.info("[Iris] PassTap frame: gbuffer {}x{}, {} deferred + {} composite/final pass(es)",
                     w, h, this.deferredPasses.size(), this.passes.size());
             com.bdmajora.impetus.iris.uniforms.custom.ActiveCustomUniforms.logValues();
             net.minecraft.world.World tapWorld = Minecraft.getMinecraft().world;
-            LOGGER.info("[Iris] PassTap built-ins: eyeBrightnessSmooth={} celestialAngle={} fogColor={} worldTime={} sun={} up={}",
+            // skyColor (vanilla biome sky) + rainStrength drive the sky shader directly; log them so a "gray sky at
+            // clear noon" frame shows whether the vanilla inputs are wrong vs. the sky shader misusing correct inputs.
+            float tapDelta = CapturedRenderingState.INSTANCE.getTickDelta();
+            net.minecraft.entity.Entity tapCam = Minecraft.getMinecraft().getRenderViewEntity();
+            String tapSkyColor = (tapWorld != null && tapCam != null)
+                    ? tapWorld.getSkyColor(tapCam, tapDelta).toString() : "n/a";
+            float tapRain = tapWorld == null ? -1f : tapWorld.getRainStrength(tapDelta);
+            LOGGER.info("[Iris] PassTap built-ins: eyeBrightnessSmooth={} celestialAngle={} fogColor={} skyColor={} rainStrength={} worldTime={} sun={} up={}",
                     EyeBrightnessTracker.getEyeBrightnessSmooth(), CelestialUniforms.getCelestialAngle(),
-                    CapturedRenderingState.INSTANCE.getFogColor(),
+                    CapturedRenderingState.INSTANCE.getFogColor(), tapSkyColor, tapRain,
                     tapWorld == null ? -1L : tapWorld.getWorldTime() % 24000L,
                     CelestialUniforms.getSunPosition(), CelestialUniforms.getUpPosition());
             IrisPassTap.logDepth("pre-deferred depthtex0", this.renderTargets.getDepthTexture().getTextureId(), w, h);
             this.currentGbuffer.bind();
             IrisPassTap.logColor("pre-deferred gbuffer att0 (colortex0)", 0, w, h);
+            // HDR read of colortex1 straight out of GBUFFERS, BEFORE the deferred pass runs. Splits the horizon 50-band
+            // source: if b3/b4 are already 50 here, it's a gbuffers program (skybasic/skytextured/clouds); if they only
+            // hit 50 in post-deferred, it's the deferred volumetric-cloud (get_cloud) stage.
+            IrisPassTap.logColorHDR("pre-deferred (post-gbuffers) colortex1 att1", 1, w, h);
         }
 
         Minecraft mc = Minecraft.getMinecraft();
@@ -1475,6 +1579,13 @@ public class IrisRenderingPipeline {
                     for (int k = 0; k < pass.drawBuffers.length; k++) {
                         IrisPassTap.logColor("deferred '" + pass.name + "' wrote colortex" + pass.drawBuffers[k], k,
                                 this.renderTargets.getWidth(), this.renderTargets.getHeight());
+                        // HDR read of the SOLID scene BEFORE translucent water renders. If the horizon 50-band is
+                        // already here, it's terrain/deferred; if it only appears in the pre-composite read (after
+                        // water), the water pass (grazing reflection) is what overflows.
+                        if (pass.drawBuffers[k] == 1) {
+                            IrisPassTap.logColorHDR("post-deferred pre-water colortex1", k,
+                                    this.renderTargets.getWidth(), this.renderTargets.getHeight());
+                        }
                     }
                 }
             }
@@ -1638,6 +1749,12 @@ public class IrisRenderingPipeline {
             IrisPassTap.logDepth("pre-composite depthtex0", this.renderTargets.getDepthTexture().getTextureId(), w, h);
             this.currentGbuffer.bind();
             IrisPassTap.logColor("pre-composite gbuffer att0 (colortex0)", 0, w, h);
+            // HDR probe of the fog/atmosphere path. The gbuffer FBO attachments are [colortex0, colortex1, colortex7]
+            // (att0/1/2). colortex1 (att1) is the scene BEFORE the composite godray/fog blend; colortex7 (att2) is the
+            // sky the terrain fog fades toward (gaux4). Unclamped so we can see whether the sky-band already exceeds
+            // 1.0 here (skybasic/atmosphere too bright) or only exceeds it AFTER composite (godrays are the culprit).
+            IrisPassTap.logColorHDR("pre-composite scene (colortex1 att1)", 1, w, h);
+            IrisPassTap.logColorHDR("pre-composite fog source (colortex7 att2)", 2, w, h);
         }
 
         for (FullscreenPass pass : this.passes) {
@@ -1653,6 +1770,12 @@ public class IrisRenderingPipeline {
                     for (int k = 0; k < pass.drawBuffers.length; k++) {
                         IrisPassTap.logColor("pass '" + pass.name + "' wrote colortex" + pass.drawBuffers[k], k,
                                 this.renderTargets.getWidth(), this.renderTargets.getHeight());
+                        // Unclamped read of colortex1 as each pass writes it: pinpoints which pass first drives the
+                        // sky band over 1.0 (the composite godray/fog blend is the prime suspect for the blown horizon).
+                        if (pass.drawBuffers[k] == 1) {
+                            IrisPassTap.logColorHDR("pass '" + pass.name + "' wrote colortex1", k,
+                                    this.renderTargets.getWidth(), this.renderTargets.getHeight());
+                        }
                     }
                 } else {
                     IrisPassTap.logColor("final pass '" + pass.name + "' wrote screen", -1,
@@ -2198,10 +2321,11 @@ public class IrisRenderingPipeline {
             drainGlError(); // clear anything vanilla/Impetus left so we only attribute this pass's own errors
         }
         if (this.modernPack) {
-            // ftransform() = projection*modelview*gl_Vertex and (gl_TextureMatrix[0]*gl_MultiTexCoord0) must be
-            // identities so the [-1,1] quad and its [0,1] texcoords pass straight through. Save/restore so the hand
-            // and GUI that vanilla draws after the composite chain are unaffected.
-            pushIdentityFixedFunctionMatrices();
+            // The [0,1] fullscreen quad maps to NDC via an ortho projection (modelview/texture stay identity), so
+            // ftransform() = projection*modelview*gl_Vertex = ortho*[0,1] = NDC and (gl_TextureMatrix[0]*
+            // gl_MultiTexCoord0) passes the [0,1] texcoords through. Save/restore so the hand and GUI that vanilla
+            // draws after the composite chain are unaffected.
+            pushFullscreenFixedFunctionMatrices();
             if (probe) {
                 reportGlError(pass.name + " push-matrices");
             }
@@ -2268,10 +2392,14 @@ public class IrisRenderingPipeline {
     private static final int GL_PROJECTION_MODE = 0x1701;
     private static final int GL_TEXTURE_MODE = 0x1702;
 
-    private static void pushIdentityFixedFunctionMatrices() {
+    private static void pushFullscreenFixedFunctionMatrices() {
+        // Projection is the ortho that maps the [0,1] fullscreen quad to NDC [-1,1] (matching Iris's composite
+        // gl_ProjectionMatrix), so `gl_Position = ftransform()` (Complementary/BSL) resolves to
+        // projection*modelview*gl_Vertex = ortho*[0,1] = NDC. Modelview + texture stay identity.
         GlStateManager.matrixMode(GL_PROJECTION_MODE);
         GlStateManager.pushMatrix();
         GlStateManager.loadIdentity();
+        GlStateManager.ortho(0.0, 1.0, 0.0, 1.0, -1.0, 1.0);
         GlStateManager.matrixMode(GL_TEXTURE_MODE);
         GlStateManager.pushMatrix();
         GlStateManager.loadIdentity();
@@ -2377,6 +2505,36 @@ public class IrisRenderingPipeline {
     private static void bindDepthSampler(int unit, DepthTexture texture) {
         LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + unit);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture.getTextureId());
+    }
+
+    /**
+     * Binds the readable {@code colortex4..15} textures to their sampler units for the gbuffer/world phase (Iris parity:
+     * {@code colortexN} lives on unit N). Gbuffer programs sample these — most importantly MakeUp and other packs read
+     * {@code gaux4} (= colortex7) in {@code gbuffers_terrain} as the atmosphere/fog color that distant terrain fades
+     * toward. Without this bind, unit 7 held a stale/garbage texture, so the fog blended distant terrain toward a huge
+     * value (clamped to the shader's 50.0 ceiling) — the blown-out horizon band, which also dragged auto-exposure down.
+     * <p>
+     * Units 0..3 are deliberately left alone: unit 0 is the block atlas, unit 1 the lightmap, and units 2/3 the PBR
+     * normals/specular maps ({@link #bindGbufferPbrSamplers}). Custom-texture overrides (e.g. gaux2 -> a pack noise
+     * texture) point their sampler uniforms at their own high units and are unaffected. Called once at gbuffer start
+     * and re-asserted on every fixed-function phase switch, since vanilla/Sodium may disturb these units mid-frame.
+     */
+    private void bindGbufferColorSamplers() {
+        BufferFlipper flipper = this.renderTargets.getBufferFlipper();
+        for (int i = 4; i < IrisRenderTargets.MAX_COLOR_BUFFERS; i++) {
+            if (this.renderTargets.get(i) == null) {
+                continue;
+            }
+            int texture = frontTexture(flipper, i);
+            if (i < 8) {
+                GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + i);
+                GlStateManager.bindTexture(texture);
+            } else {
+                LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + i);
+                LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+            }
+        }
+        GlStateManager.setActiveTexture(GL13.GL_TEXTURE0);
     }
 
     private void restoreTextureUnits() {

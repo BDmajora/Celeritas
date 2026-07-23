@@ -118,6 +118,13 @@ public final class ImpetusTerrainTransformer {
                 + "    iris_AlphaCutoff = _IRIS_ALPHA_CUTOFF[int((lightData >> 1u) & 3u)];\n"
                 + hoistedAssignments
                 + "    irisMain();\n"
+                // Diagnostic + robustness guard: if the pack's vertex math produced a non-finite clip position, a single
+                // flung vertex drags a sliver triangle across the screen (the "exploding grass spikes"). Collapse such
+                // vertices to a far-plane-clipped point so the triangle degenerates to nothing instead of a spike.
+                // If enabling this makes the artifacts vanish, the corruption is a vertex-stage NaN/Inf (not raster).
+                + "    if (any(isnan(gl_Position)) || any(isinf(gl_Position))) {\n"
+                + "        gl_Position = vec4(0.0, 0.0, 2.0, 1.0);\n"
+                + "    }\n"
                 + "}\n";
     }
 

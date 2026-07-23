@@ -21,6 +21,21 @@ public class RenderGlobalMixin {
     private static final String SUN_TEXTURES_FIELD =
             "Lnet/minecraft/client/renderer/RenderGlobal;SUN_TEXTURES:Lnet/minecraft/util/ResourceLocation;";
 
+    /**
+     * Right before the vanilla sky disc VBO is drawn (skybasic phase already active), draw OptiFine's horizon fill so
+     * the thin uncovered band at the horizon lands in colortex1 with the atmospheric sky colour instead of stale HDR.
+     * Matches OptiFine's {@code Shaders.preSkyList()} call site (immediately before {@code skyVBO.bindBuffer()}).
+     */
+    @Inject(method = "renderSky(FI)V",
+            at = @At(value = "INVOKE",
+                    target = "Lnet/minecraft/client/renderer/vertex/VertexBuffer;bindBuffer()V", ordinal = 0))
+    private void impetus$drawHorizon(float partialTicks, int pass, CallbackInfo ci) {
+        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        if (pipeline != null) {
+            pipeline.drawSkyHorizon();
+        }
+    }
+
     @Inject(method = "renderSky(FI)V",
             at = @At(value = "FIELD", target = SUN_TEXTURES_FIELD, opcode = org.objectweb.asm.Opcodes.GETSTATIC))
     private void impetus$beginSunMoon(float partialTicks, int pass, CallbackInfo ci) {

@@ -166,7 +166,8 @@ public final class ColorSpaceConverter {
             "varying vec2 v_Tex;\n" +
             "void main() {\n" +
             "    v_Tex = a_TexCoord;\n" +
-            "    gl_Position = vec4(a_Position, 0.0, 1.0);\n" +
+            // The shared fullscreen quad supplies a_Position in [0,1]; map to NDC [-1,1] here.
+            "    gl_Position = vec4(a_Position * 2.0 - 1.0, 0.0, 1.0);\n" +
             "}\n";
 
     /**

@@ -71,6 +71,89 @@ final class IrisPassTap {
         }
     }
 
+    /**
+     * Unclamped HDR readback: reads the given color attachment as float and logs the max channel value plus separate
+     * means for the top screen band (sky/horizon) and bottom band (foreground). The byte-based {@link #logColor}
+     * clamps everything to 1.0, hiding exactly the over-1 values that blow the horizon out; this exposes them so we
+     * can see whether the fog source (colortex7) or the composited scene (colortex1) is where values exceed 1.
+     */
+    static void logColorHDR(String label, int attachment, int width, int height) {
+        try {
+            if (attachment >= 0) {
+                LWJGL.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0 + attachment);
+            }
+            ByteBuffer pixels = buffer(width * height * 4 * 4);
+            LWJGL.glReadPixels(0, 0, width, height, GL11.GL_RGBA, GL11.GL_FLOAT, pixels);
+            if (attachment >= 0) {
+                LWJGL.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
+            }
+            FloatBuffer f = pixels.asFloatBuffer();
+            float max = 0.0f;
+            int over1 = 0;
+            int count = width * height;
+            // Track the single brightest pixel so we can pinpoint what the blown values ARE: location (as a fraction
+            // of the screen, 0,0 = bottom-left) + its raw RGB. e.g. a hot pixel at (0.5,0.55) with RGB near the sun's
+            // color = sun; a band at y~0.5 over water = specular; distributed = terrain lighting.
+            float argMaxLuma = -1.0f;
+            int argX = -1;
+            int argY = -1;
+            float argR = 0, argG = 0, argB = 0;
+            // 8 horizontal bands from screen TOP (band 0) to BOTTOM (band 7). glReadPixels y=0 is the bottom row, so
+            // band index = 7 - (y * 8 / height). Report each band's mean luma, over-1 fraction, and max — this pins
+            // WHERE the blown (>1, up to the 50 clamp) pixels live: a small hot spot high up = the sun; a mid band =
+            // the horizon; spread across the bottom = terrain lighting.
+            int bands = 8;
+            double[] bandSum = new double[bands];
+            long[] bandCount = new long[bands];
+            int[] bandOver1 = new int[bands];
+            float[] bandMax = new float[bands];
+            for (int y = 0; y < height; y++) {
+                int band = bands - 1 - Math.min(bands - 1, y * bands / height);
+                for (int x = 0; x < width; x++) {
+                    int base = (y * width + x) * 4;
+                    float pr = f.get(base);
+                    float pg = f.get(base + 1);
+                    float pb = f.get(base + 2);
+                    float luma = 0.2126f * pr + 0.7152f * pg + 0.0722f * pb;
+                    float pmax = Math.max(pr, Math.max(pg, pb));
+                    max = Math.max(max, pmax);
+                    if (luma > argMaxLuma) {
+                        argMaxLuma = luma;
+                        argX = x;
+                        argY = y;
+                        argR = pr;
+                        argG = pg;
+                        argB = pb;
+                    }
+                    boolean hot = pr > 1.0f || pg > 1.0f || pb > 1.0f;
+                    if (hot) {
+                        over1++;
+                        bandOver1[band]++;
+                    }
+                    bandSum[band] += luma;
+                    bandCount[band]++;
+                    bandMax[band] = Math.max(bandMax[band], pmax);
+                }
+            }
+            StringBuilder bandStr = new StringBuilder();
+            for (int b = 0; b < bands; b++) {
+                if (b > 0) {
+                    bandStr.append(" | ");
+                }
+                bandStr.append(String.format(Locale.ROOT, "b%d luma=%.2f over1=%.0f%% max=%.1f",
+                        b, bandCount[b] == 0 ? 0.0 : bandSum[b] / bandCount[b],
+                        bandCount[b] == 0 ? 0.0 : bandOver1[b] * 100.0 / bandCount[b], bandMax[b]));
+            }
+            LOGGER.info(String.format(Locale.ROOT,
+                    "[Iris] PassTap HDR %s: maxChannel=%.3f over1=%.1f%% brightestAt=(%.2f,%.2f) rgb=(%.1f,%.1f,%.1f)  [top->bottom] %s",
+                    label, max, over1 * 100.0 / count,
+                    width == 0 ? 0.0 : argX / (double) width, height == 0 ? 0.0 : argY / (double) height,
+                    argR, argG, argB, bandStr));
+        } catch (Throwable t) {
+            LOGGER.warn("[Iris] PassTap HDR {} failed: {}", label, t.toString());
+        }
+    }
+
     /** Reads a depth texture through a scratch FBO and logs mean/min plus the fraction of pixels at exactly 1.0. */
     static void logDepth(String label, int depthTexture, int width, int height) {
         IrisFramebuffer scratch = new IrisFramebuffer();
@@ -84,17 +167,35 @@ final class IrisPassTap {
             float min = Float.POSITIVE_INFINITY;
             int atOne = 0;
             int count = width * height;
-            for (int i = 0; i < count; i++) {
-                float d = depths.get(i);
-                sum += d;
-                min = Math.min(min, d);
-                if (d >= 1.0f) {
-                    atOne++;
+            // Per-band sky fraction (atOne%), top->bottom, so we can tell whether the horizon 50-band (band b4) sits on
+            // SKY (depth==1 → a sky program overflowed) or on GEOMETRY (depth<1 → terrain/water fog/lighting).
+            int bands = 8;
+            long[] bandCount = new long[bands];
+            int[] bandAtOne = new int[bands];
+            for (int y = 0; y < height; y++) {
+                int band = bands - 1 - Math.min(bands - 1, y * bands / height);
+                for (int x = 0; x < width; x++) {
+                    float d = depths.get(y * width + x);
+                    sum += d;
+                    min = Math.min(min, d);
+                    bandCount[band]++;
+                    if (d >= 1.0f) {
+                        atOne++;
+                        bandAtOne[band]++;
+                    }
                 }
             }
+            StringBuilder bandStr = new StringBuilder();
+            for (int b = 0; b < bands; b++) {
+                if (b > 0) {
+                    bandStr.append(" | ");
+                }
+                bandStr.append(String.format(Locale.ROOT, "b%d sky=%.0f%%",
+                        b, bandCount[b] == 0 ? 0.0 : bandAtOne[b] * 100.0 / bandCount[b]));
+            }
             LOGGER.info(String.format(Locale.ROOT,
-                    "[Iris] PassTap %s: depth mean=%.6f min=%.6f atOne=%.1f%%",
-                    label, sum / count, min, atOne * 100.0 / count));
+                    "[Iris] PassTap %s: depth mean=%.6f min=%.6f atOne=%.1f%%  [top->bottom] %s",
+                    label, sum / count, min, atOne * 100.0 / count, bandStr));
         } catch (Throwable t) {
             LOGGER.warn("[Iris] PassTap {} failed: {}", label, t.toString());
         } finally {

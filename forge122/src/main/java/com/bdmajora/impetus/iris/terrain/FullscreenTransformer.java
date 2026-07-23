@@ -8,9 +8,9 @@ import java.util.regex.Pattern;
  * Transforms a GLSL-120 full-screen shader-pack program ({@code composite}/{@code deferred}/{@code final}) to
  * {@code #version 330 core} for Impetus. Full-screen passes are trivial in the vertex stage (they just pass the
  * fullscreen quad's position/texcoord through), so this injects an {@code a_Position}/{@code a_TexCoord} attribute
- * pair, aliases the {@code gl_*} built-ins to them (with an identity model-view-projection so {@code ftransform()} /
- * {@code gl_ModelViewProjectionMatrix * gl_Vertex} pass the NDC position straight through), and promotes fragment
- * outputs. The pack's {@code colortexN}/{@code depthtexN} samplers are left as-is (bound by the pipeline).
+ * pair, aliases the {@code gl_*} built-ins to them (with an ortho model-view-projection so {@code ftransform()} /
+ * {@code gl_ModelViewProjectionMatrix * gl_Vertex} map the {@code [0,1]} quad to NDC {@code [-1,1]}), and promotes
+ * fragment outputs. The pack's {@code colortexN}/{@code depthtexN} samplers are left as-is (bound by the pipeline).
  */
 public final class FullscreenTransformer {
     private static final Pattern VERSION = Pattern.compile("^\\s*#version[^\\n]*\\n", Pattern.MULTILINE);
@@ -31,6 +31,9 @@ public final class FullscreenTransformer {
             "vec3 iris_VertNormal = vec3(0.0, 0.0, 1.0);",
             "mat4 iris_Identity = mat4(1.0);",
             "mat3 iris_Identity3 = mat3(1.0);",
+            // Ortho that maps the [0,1] fullscreen quad to NDC [-1,1] (column-major; M*(x,y,z,1)=(2x-1,2y-1,0,1)),
+            // matching Iris's composite gl_ProjectionMatrix and the modern path's pushFullscreenFixedFunctionMatrices.
+            "mat4 iris_FullscreenProj = mat4(vec4(2.0, 0.0, 0.0, 0.0), vec4(0.0, 2.0, 0.0, 0.0), vec4(0.0), vec4(-1.0, -1.0, 0.0, 1.0));",
             "#define gl_Vertex iris_Vertex",
             "#define gl_MultiTexCoord0 iris_MultiTexCoord0",
             "#define gl_MultiTexCoord1 iris_MultiTexCoord1",
@@ -38,9 +41,9 @@ public final class FullscreenTransformer {
             "#define gl_MultiTexCoord3 iris_MultiTexCoord3",
             "#define gl_Color iris_VertColor",
             "#define gl_Normal iris_VertNormal",
-            "#define gl_ModelViewProjectionMatrix iris_Identity",
+            "#define gl_ModelViewProjectionMatrix iris_FullscreenProj",
             "#define gl_ModelViewMatrix iris_Identity",
-            "#define gl_ProjectionMatrix iris_Identity",
+            "#define gl_ProjectionMatrix iris_FullscreenProj",
             "#define gl_NormalMatrix iris_Identity3",
             "#define gl_TextureMatrix iris_TextureMatrixArray",
             "mat4 iris_TextureMatrixArray[8] = mat4[8](mat4(1.0),mat4(1.0),mat4(1.0),mat4(1.0),mat4(1.0),mat4(1.0),mat4(1.0),mat4(1.0));",
@@ -50,7 +53,7 @@ public final class FullscreenTransformer {
             "#define gl_FogFragCoord iris_FogFragCoord",
             "vec4 iris_shadow2D(sampler2DShadow s, vec3 p) { return vec4(texture(s, p)); }",
             "vec4 iris_shadow2DLod(sampler2DShadow s, vec3 p, float l) { return vec4(textureLod(s, p, l)); }",
-            "#define ftransform() iris_Vertex",
+            "#define ftransform() (iris_FullscreenProj * iris_Vertex)",
             ""
     ) + "\n";
 

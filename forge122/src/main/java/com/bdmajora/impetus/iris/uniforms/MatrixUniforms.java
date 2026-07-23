@@ -69,9 +69,19 @@ public final class MatrixUniforms {
         return new Vector3f((float) position.x, (float) position.y, (float) position.z);
     }
 
+    /**
+     * Supplies the previous frame's value of a matrix. State must roll forward exactly once per rendered frame, but
+     * {@link #get()} is invoked once per <em>program</em> that declares the uniform (every gbuffers/deferred/composite
+     * pass), many times within a single frame. Rolling on every call collapsed {@code previous} onto the current
+     * matrix after the first upload, so by the time the TAA composite ran, {@code gbufferPreviousModelView} equalled
+     * {@code gbufferModelView}: reprojection produced zero motion and TAA smeared history over moving geometry.
+     * Guard the roll on {@code frameCounter} so every pass in a frame sees the same, genuinely-previous matrix.
+     */
     private static final class Previous implements Supplier<Matrix4fc> {
         private final Supplier<Matrix4fc> parent;
-        private Matrix4f previous = new Matrix4f();
+        private final Matrix4f previous = new Matrix4f();
+        private final Matrix4f current = new Matrix4f();
+        private int lastFrame = -1;
 
         private Previous(Supplier<Matrix4fc> parent) {
             this.parent = parent;
@@ -79,10 +89,17 @@ public final class MatrixUniforms {
 
         @Override
         public Matrix4fc get() {
-            Matrix4f copy = new Matrix4f(this.parent.get());
-            Matrix4f result = new Matrix4f(this.previous);
-            this.previous = copy;
-            return result;
+            int frame = SystemTimeUniforms.COUNTER.getFrameCounter();
+            if (frame != this.lastFrame) {
+                this.previous.set(this.current);
+                this.current.set(this.parent.get());
+                if (this.lastFrame == -1) {
+                    // First frame: no genuine history yet, so avoid a bogus one-frame jump.
+                    this.previous.set(this.current);
+                }
+                this.lastFrame = frame;
+            }
+            return new Matrix4f(this.previous);
         }
     }
 }

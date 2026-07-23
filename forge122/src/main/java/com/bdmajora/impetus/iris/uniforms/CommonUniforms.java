@@ -115,6 +115,12 @@ public final class CommonUniforms {
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "aspectRatio", CommonUniforms::getAspectRatio)
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "viewWidth", CommonUniforms::getViewWidth)
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "viewHeight", CommonUniforms::getViewHeight)
+                // Legacy OptiFine screen-texel size (1/viewWidth, 1/viewHeight). Pre-1.13 packs (MakeUp, and many
+                // other 1.12.2 packs) use these instead of taaOffset for TAA neighbourhood taps, jitter and blur
+                // kernels. Without them the shader's uniforms default to 0, collapsing every neighbour tap onto the
+                // centre texel — TAA stops resolving the rotating dither and the sky/horizon fills with grain.
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "pixelSizeX", CommonUniforms::getPixelSizeX)
+                .uniform1f(UniformUpdateFrequency.PER_FRAME, "pixelSizeY", CommonUniforms::getPixelSizeY)
                 .uniform1f(UniformUpdateFrequency.ONCE, "near", () -> 0.05f)
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "far", CommonUniforms::getFar)
                 // Distant Horizons / voxelization render distances. We ship neither, so report "absent" (0) — modern
@@ -381,6 +387,16 @@ public final class CommonUniforms {
 
     private static float getViewHeight() {
         return Minecraft.getMinecraft().displayHeight;
+    }
+
+    private static float getPixelSizeX() {
+        int width = Minecraft.getMinecraft().displayWidth;
+        return width > 0 ? 1.0f / width : 0.0f;
+    }
+
+    private static float getPixelSizeY() {
+        int height = Minecraft.getMinecraft().displayHeight;
+        return height > 0 ? 1.0f / height : 0.0f;
     }
 
     private static float getAspectRatio() {
