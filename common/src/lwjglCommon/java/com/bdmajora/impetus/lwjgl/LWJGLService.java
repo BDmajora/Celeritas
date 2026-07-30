@@ -142,6 +142,10 @@ public interface LWJGLService {
     void glCopyTexSubImage2D(int target, int level, int xoffset, int yoffset, int x, int y, int width, int height);
     void glReadPixels(int x, int y, int width, int height, int format, int type, ByteBuffer pixels);
     void glGenerateMipmap(int target);
+    int glGenSamplers();
+    void glDeleteSamplers(int sampler);
+    void glBindSampler(int unit, int sampler);
+    void glSamplerParameteri(int sampler, int pname, int param);
 
     void glDepthRange(double zNear, double zFar);
     void glPixelStorei(int pname, int param);
@@ -160,6 +164,7 @@ public interface LWJGLService {
         glClearTexImage(texture, level, format, type, (ByteBuffer) null);
     }
     void glTexParameteri(int target, int pname, int param);
+    void glTexParameteriv(int target, int pname, int[] params);
     void glTexParameterf(int target, int pname, float param);
 
     // ===================== FRAMEBUFFER OPERATIONS =====================
@@ -219,6 +224,7 @@ public interface LWJGLService {
     // ===================== MISC GL =====================
 
     int glGetInteger(int pname);
+    float glGetFloat(int pname);
     void glGetIntegerv(int pname, int[] params);
     boolean glGetBoolean(int pname);
     String glGetString(int pname);

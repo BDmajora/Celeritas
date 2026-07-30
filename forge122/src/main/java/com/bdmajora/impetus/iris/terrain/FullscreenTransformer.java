@@ -79,10 +79,17 @@ public final class FullscreenTransformer {
             "#define gl_TexCoord iris_TexCoord",
             "in float iris_FogFragCoord;",
             "#define gl_FogFragCoord iris_FogFragCoord",
-            "const vec4 iris_FogColor = vec4(0.0);",
-            "const float iris_FogDensity = 0.0;",
-            "const float iris_FogStart = 0.0;",
-            "const float iris_FogEnd = 1.0;",
+            // gl_Fog.* stand-ins. These MUST be real per-frame uniforms (fed by CommonUniforms), not
+            // constants: on OptiFine 1.12.2 (where IS_IRIS is undefined and MC_VERSION < 11802) packs such
+            // as Sildur's read gl_Fog.start/end/color in their composite fog and expect the live linear
+            // terrain-fog values. Emitting them as const 0.0/1.0/vec4(0) forces (dist - 0)/(1 - 0) >= 1 ->
+            // full-strength fog, washing the whole scene to the sky colour (the "everything above water is
+            // blue" haze). Unused ones are stripped by the compiler, so this is a no-op for packs that
+            // don't reference gl_Fog.
+            "uniform vec4 iris_FogColor;",
+            "uniform float iris_FogDensity;",
+            "uniform float iris_FogStart;",
+            "uniform float iris_FogEnd;",
             "const float iris_FogScale = 1.0;",
             "vec4 iris_shadow2D(sampler2DShadow s, vec3 p) { return vec4(texture(s, p)); }",
             "vec4 iris_shadow2DLod(sampler2DShadow s, vec3 p, float l) { return vec4(textureLod(s, p, l)); }",
@@ -151,6 +158,7 @@ public final class FullscreenTransformer {
     }
 
     private static String modernize(String source) {
+        source = rewriteLegacyProjectionProducts(source);
         source = rewriteFogParameters(source);
         // A sampler literally named "texture" clashes with the 330 builtin; rename it first (the word boundary keeps
         // texture2D/texture2DLod untouched). The sampler-unit table maps "gtexture" to the same unit.
@@ -162,6 +170,18 @@ public final class FullscreenTransformer {
         source = source.replaceAll("\\bshadow2DLod\\b", "iris_shadow2DLod");
         source = source.replaceAll("\\bshadow2D\\b", "iris_shadow2D");
         return source;
+    }
+
+    /**
+     * Some GLSL 120 OptiFine-era packs project a view-space direction as {@code vec4(dir, 1.0) * gbufferProjection}.
+     * With our normal column-major matrix uploads that treats the perspective matrix as transposed, sending effects
+     * such as Sildur's godray source far off-screen. Normalize those projection products to the GLSL column-vector
+     * form while leaving model-view and inverse math alone.
+     */
+    private static String rewriteLegacyProjectionProducts(String source) {
+        return source.replaceAll(
+                "\\bvec4\\s*\\(([^;\\n]+)\\)\\s*\\*\\s*\\b(gbufferProjection|gbufferPreviousProjection|shadowProjection)\\b",
+                "$2 * vec4($1)");
     }
 
     private static String rewriteFogParameters(String source) {

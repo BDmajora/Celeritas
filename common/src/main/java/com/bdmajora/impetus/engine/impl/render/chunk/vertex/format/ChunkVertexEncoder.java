@@ -32,9 +32,11 @@ public interface ChunkVertexEncoder {
         public float midTexU;
         /** {@code mc_midTexCoord.y} — V of the sprite center ({@code (minV+maxV)/2}). */
         public float midTexV;
-        /** {@code mc_Entity.x} — block registry id ({@code Block.getIdFromBlock}). */
+        /** {@code mc_Entity.x} - shader-facing block id: block.properties id when mapped, raw block id otherwise. */
         public int blockId;
-        /** {@code mc_Entity.y} — block metadata ({@code Block.getMetaFromState}). */
+        /** {@code mc_Entity.y} - 1.12.2 OptiFine render type ordinal. */
+        public int blockRenderType;
+        /** {@code mc_Entity.z} - 1.12.2 block metadata ({@code Block.getMetaFromState}). */
         public int blockData;
         /** {@code at_tangent} — packed tangent (xyz signed bytes + handedness), same packing as a normal. */
         public int tangent;

@@ -15,7 +15,76 @@ public final class ShaderMacros {
     /** Minecraft version encoded the OptiFine way: 1.12.2 -> 11202. */
     public static final int MC_VERSION = 11202;
 
+    /**
+     * Programs that compile as plain OptiFine 1.12.2 — {@code IS_IRIS}/{@code IRIS_VERSION} are withheld so the pack
+     * takes the path it authored for this MC version rather than its Iris path.
+     * <p>
+     * Packs gate real behaviour on {@code defined(IS_IRIS) || MC_VERSION >= 11604}, not just uniform declarations.
+     * Sildur's {@code gbuffers_water} uses it to choose between doing the water reflection inline (Iris: {@code F0=0.5},
+     * layered over water that is already 85% opaque, so the floor never shows) and deferring it to {@code composite1}
+     * (OptiFine 1.12.2: {@code F0=0.25}, applied after the water has alpha-blended with the floor — see-through water).
+     * The two programs must be listed together: the 1.12.2 branch writes the wave normal to {@code gl_FragData[2]}
+     * ({@code DRAWBUFFERS:412}) and composite1 reads it from colortex2. Pack-driven detection
+     * ({@link #setPackLegacyPrograms}) pairs them automatically because the pack guards both with the same directive.
+     * <p>
+     * This set is the manual override: {@code -Dimpetus.iris.legacyPrograms=gbuffers_water,composite1}. Empty by
+     * default; normally {@link #setPackLegacyPrograms} supplies the list.
+     */
+    private static final java.util.Set<String> FORCED_LEGACY_PROGRAMS = parseLegacyPrograms();
+
+    /**
+     * Programs the currently loaded pack itself marked as having an authored pre-Iris path — see
+     * {@code ShaderPack.detectLegacyPrograms}. Replaced on every pack load, so it must not be final.
+     */
+    private static volatile java.util.Set<String> packLegacyPrograms = java.util.Collections.emptySet();
+
+    /**
+     * Installs the pack-detected legacy program list. Called once per pack load, before any program is compiled, so
+     * both the terrain and composite compile paths see the same set.
+     */
+    public static void setPackLegacyPrograms(java.util.Set<String> names) {
+        java.util.Set<String> lowered = new java.util.HashSet<>();
+        for (String name : names) {
+            lowered.add(name.toLowerCase(Locale.ROOT));
+        }
+        packLegacyPrograms = lowered;
+    }
+
     private ShaderMacros() {
+    }
+
+    private static java.util.Set<String> parseLegacyPrograms() {
+        String value = System.getProperty("impetus.iris.legacyPrograms", "");
+        java.util.Set<String> names = new java.util.HashSet<>();
+        for (String name : value.split(",")) {
+            String trimmed = name.trim();
+            if (!trimmed.isEmpty()) {
+                names.add(trimmed.toLowerCase(Locale.ROOT));
+            }
+        }
+        return names;
+    }
+
+    /**
+     * The macro set {@code programName} compiles against. Identical to the input unless the program is listed in
+     * {@code impetus.iris.legacyPrograms}, in which case the Iris identity macros are withheld.
+     * <p>
+     * Callers must use the returned map for BOTH {@code DrawBuffers.parseActive} and {@link #injectDefines} on the same
+     * program: the two branches disagree on DRAWBUFFERS, so parsing the layout with one macro set and compiling with
+     * the other points a {@code gl_FragData} write at an unbound slot.
+     */
+    public static Map<String, String> forProgram(Map<String, String> macros, String programName) {
+        if (programName == null) {
+            return macros;
+        }
+        String key = programName.toLowerCase(Locale.ROOT);
+        if (!FORCED_LEGACY_PROGRAMS.contains(key) && !packLegacyPrograms.contains(key)) {
+            return macros;
+        }
+        Map<String, String> scoped = new LinkedHashMap<>(macros);
+        scoped.remove("IS_IRIS");
+        scoped.remove("IRIS_VERSION");
+        return scoped;
     }
 
     /** Macros that need no GL context (Minecraft version, host OS, baseline quality knobs). */

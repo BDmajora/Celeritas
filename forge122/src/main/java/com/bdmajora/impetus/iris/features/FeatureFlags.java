@@ -15,9 +15,9 @@ public enum FeatureFlags {
     COMPUTE_SHADERS(true),
     SSBO(true),
     BLOCK_EMISSION_ATTRIBUTE(true),
+    SEPARATE_HARDWARE_SAMPLERS(true),
     // Not (yet) honored by this port — packs requiring these get a visible error rather than broken visuals.
     ENTITY_TRANSLUCENT(false),
-    SEPARATE_HARDWARE_SAMPLERS(false),
     PER_BUFFER_BLENDING(false),
     HIGHER_SHADOWCOLOR(false),
     REVERSED_CULLING(false),

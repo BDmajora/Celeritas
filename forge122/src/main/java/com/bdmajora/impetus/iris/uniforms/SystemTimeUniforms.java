@@ -3,6 +3,10 @@ package com.bdmajora.impetus.iris.uniforms;
 import com.bdmajora.impetus.iris.gl.program.ProgramUniforms;
 import com.bdmajora.impetus.iris.gl.uniform.UniformCollector;
 import com.bdmajora.impetus.iris.gl.uniform.UniformUpdateFrequency;
+import org.joml.Vector2i;
+import org.joml.Vector3i;
+
+import java.time.LocalDateTime;
 
 /**
  * The wall-clock frame uniforms: {@code frameTimeCounter} (seconds since load, wrapping at 3600 to preserve float
@@ -20,7 +24,29 @@ public final class SystemTimeUniforms {
         uniforms
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "frameTimeCounter", COUNTER::getFrameTimeCounter)
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "frameTime", COUNTER::getLastFrameTime)
-                .uniform1i(UniformUpdateFrequency.PER_FRAME, "frameCounter", COUNTER::getFrameCounter);
+                .uniform1i(UniformUpdateFrequency.PER_FRAME, "frameCounter", COUNTER::getFrameCounter)
+                .uniform3i(UniformUpdateFrequency.PER_TICK, "currentDate", SystemTimeUniforms::getCurrentDate)
+                .uniform3i(UniformUpdateFrequency.PER_TICK, "currentTime", SystemTimeUniforms::getCurrentTime)
+                .uniform2i(UniformUpdateFrequency.PER_TICK, "currentYearTime", SystemTimeUniforms::getCurrentYearTime);
+    }
+
+    private static Vector3i getCurrentDate() {
+        LocalDateTime now = LocalDateTime.now();
+        return new Vector3i(now.getYear(), now.getMonthValue(), now.getDayOfMonth());
+    }
+
+    private static Vector3i getCurrentTime() {
+        LocalDateTime now = LocalDateTime.now();
+        return new Vector3i(now.getHour(), now.getMinute(), now.getSecond());
+    }
+
+    private static Vector2i getCurrentYearTime() {
+        LocalDateTime now = LocalDateTime.now();
+        int elapsed = ((now.getDayOfYear() - 1) * 86400)
+                + (now.getHour() * 3600)
+                + (now.getMinute() * 60)
+                + now.getSecond();
+        return new Vector2i(elapsed, now.toLocalDate().lengthOfYear() * 86400 - elapsed);
     }
 
     public static final class Timer {

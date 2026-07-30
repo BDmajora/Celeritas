@@ -739,6 +739,26 @@ public record LWJGL2Service(
     }
 
     @Override
+    public int glGenSamplers() {
+        return GL33.glGenSamplers();
+    }
+
+    @Override
+    public void glDeleteSamplers(int sampler) {
+        GL33.glDeleteSamplers(sampler);
+    }
+
+    @Override
+    public void glBindSampler(int unit, int sampler) {
+        GL33.glBindSampler(unit, sampler);
+    }
+
+    @Override
+    public void glSamplerParameteri(int sampler, int pname, int param) {
+        GL33.glSamplerParameteri(sampler, pname, param);
+    }
+
+    @Override
     public void glDepthRange(double zNear, double zFar) {
         GL11.glDepthRange(zNear, zFar);
     }
@@ -786,6 +806,17 @@ public record LWJGL2Service(
     @Override
     public void glTexParameteri(int target, int pname, int param) {
         GL11.glTexParameteri(target, pname, param);
+    }
+
+    @Override
+    public void glTexParameteriv(int target, int pname, int[] params) {
+        IntBuffer buf = MemoryUtilities.memAllocInt(params.length);
+        try {
+            buf.put(params).flip();
+            GL11.glTexParameter(target, pname, buf);
+        } finally {
+            MemoryUtilities.memFree(buf);
+        }
     }
 
     @Override
@@ -974,6 +1005,11 @@ public record LWJGL2Service(
     @Override
     public int glGetInteger(int pname) {
         return GL11.glGetInteger(pname);
+    }
+
+    @Override
+    public float glGetFloat(int pname) {
+        return GL11.glGetFloat(pname);
     }
 
     @Override

@@ -254,30 +254,27 @@ public class VintageBlockRenderer {
             midV = (sprite.getMinV() + sprite.getMaxV()) * 0.5f;
         }
 
-        var v0 = vertices[0];
-        var v1 = vertices[1];
-        var v2 = vertices[2];
+        // Read positions/UVs straight off the source quad, never off `vertices`: those have already been rewritten in
+        // ModelQuadOrientation order (the AO diagonal flip), and a rotated vertex triple yields a tangent turned 90°
+        // about the face normal. Iris computes this from the unrotated ModelQuadView for the same reason — with the
+        // rotated triple, water blocks alternate tangents block-to-block and Sildur's wave normals (bump * tbnMatrix)
+        // checkerboard, which is invisible head-on but glaring once grazing-angle fresnel drives the reflection.
         int tangent = NormalHelper.computeTangent(
                 NormI8.unpackX(trueNormal), NormI8.unpackY(trueNormal), NormI8.unpackZ(trueNormal),
-                v0.x, v0.y, v0.z, v0.u, v0.v,
-                v1.x, v1.y, v1.z, v1.u, v1.v,
-                v2.x, v2.y, v2.z, v2.u, v2.v);
+                quad.getX(0), quad.getY(0), quad.getZ(0), quad.getTexU(0), quad.getTexV(0),
+                quad.getX(1), quad.getY(1), quad.getZ(1), quad.getTexU(1), quad.getTexV(1),
+                quad.getX(2), quad.getY(2), quad.getZ(2), quad.getTexU(2), quad.getTexV(2));
 
         int blockId = 0;
+        int blockRenderType = 0;
         int blockData = 0;
         int blockEmission = 0;
         IBlockState state = this.currentState;
         if (state != null) {
-            int[] idTable = com.bdmajora.impetus.iris.material.WorldRenderingSettings.getBlockStateIds();
-            if (idTable != null) {
-                // Pack ships block.properties: mc_Entity = (pack id or -1, fluid flag) — Iris semantics.
-                blockId = idTable[Block.getStateId(state) & 0xFFFF];
-                blockData = state.getMaterial().isLiquid() ? 1 : 0;
-            } else {
-                // No block.properties: raw 1.12.2 id + metadata, the classic OptiFine-pack contract.
-                blockId = Block.getIdFromBlock(state.getBlock());
-                blockData = state.getBlock().getMetaFromState(state);
-            }
+            int metadata = state.getBlock().getMetaFromState(state);
+            blockRenderType = state.getRenderType().ordinal();
+            blockId = com.bdmajora.impetus.iris.material.WorldRenderingSettings.getBlockStateId(state);
+            blockData = metadata;
             if (this.currentBlockAccess != null) {
                 blockEmission = clampBlockEmission(state.getLightValue(this.currentBlockAccess, pos));
             }
@@ -289,6 +286,7 @@ public class VintageBlockRenderer {
             out.midTexV = midV;
             out.tangent = tangent;
             out.blockId = blockId;
+            out.blockRenderType = blockRenderType;
             out.blockData = blockData;
             out.blockEmission = blockEmission;
         }

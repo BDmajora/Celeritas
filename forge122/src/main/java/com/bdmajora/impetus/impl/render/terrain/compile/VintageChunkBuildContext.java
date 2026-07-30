@@ -38,13 +38,14 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
     private final boolean[] usedWorldRenderers = new boolean[LAYERS.length];
     /**
      * Per layer, the block attribution of the vanilla-sourced quads (fluids and other non-model renders) as runs of
-     * {@code (quadEndExclusive, mcEntityId, mcEntityAux, blockEmission, localX, localY, localZ)}, recorded while a
-     * shader pack is active so {@code mc_Entity} and {@code at_midBlock} survive the vanilla BufferBuilder round-trip.
+     * {@code (quadEndExclusive, mcEntityId, mcEntityRenderType, mcEntityMetadata, blockEmission, localX, localY, localZ)},
+     * recorded while a shader pack is active so {@code mc_Entity} and {@code at_midBlock} survive the vanilla
+     * BufferBuilder round-trip.
      * See {@link #recordVanillaBlockAttribution}.
      */
     private final it.unimi.dsi.fastutil.ints.IntArrayList[] vanillaBlockRuns =
             new it.unimi.dsi.fastutil.ints.IntArrayList[LAYERS.length];
-    private static final int VANILLA_BLOCK_RUN_STRIDE = 7;
+    private static final int VANILLA_BLOCK_RUN_STRIDE = 8;
     @Getter
     private int offX, offY, offZ;
     @Getter
@@ -115,21 +116,13 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
         if (quadCount <= lastEnd) {
             return; // the block emitted nothing into this layer
         }
-        int id;
-        int aux;
-        int[] idTable = com.bdmajora.impetus.iris.material.WorldRenderingSettings.getBlockStateIds();
-        if (idTable != null) {
-            // Pack ships block.properties: mc_Entity = (pack id or -1, fluid flag) — Iris semantics.
-            id = idTable[net.minecraft.block.Block.getStateId(state) & 0xFFFF];
-            aux = state.getMaterial().isLiquid() ? 1 : 0;
-        } else {
-            // No block.properties: raw 1.12.2 id + metadata, the classic OptiFine-pack contract.
-            id = net.minecraft.block.Block.getIdFromBlock(state.getBlock());
-            aux = state.getBlock().getMetaFromState(state);
-        }
+        int renderType = state.getRenderType().ordinal();
+        int metadata = state.getBlock().getMetaFromState(state);
+        int id = com.bdmajora.impetus.iris.material.WorldRenderingSettings.getBlockStateId(state);
         runs.add(quadCount);
         runs.add(id);
-        runs.add(aux);
+        runs.add(renderType);
+        runs.add(metadata);
         runs.add(clampBlockEmission(state.getLightValue(this.worldSlice, pos)));
         runs.add(pos.getX() & 15);
         runs.add(pos.getY() & 15);
@@ -199,7 +192,8 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
         // Walk the per-block attribution runs in lockstep with the quads (see recordVanillaBlockAttribution).
         int runCursor = 0;
         int runId = 0;
-        int runAux = 0;
+        int runRenderType = 0;
+        int runMetadata = 0;
         int runEmission = 0;
         int runLocalX = 0;
         int runLocalY = 0;
@@ -213,11 +207,12 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
                 if (runCursor < blockRuns.size()) {
                     hasRun = true;
                     runId = blockRuns.getInt(runCursor + 1);
-                    runAux = blockRuns.getInt(runCursor + 2);
-                    runEmission = blockRuns.getInt(runCursor + 3);
-                    runLocalX = blockRuns.getInt(runCursor + 4);
-                    runLocalY = blockRuns.getInt(runCursor + 5);
-                    runLocalZ = blockRuns.getInt(runCursor + 6);
+                    runRenderType = blockRuns.getInt(runCursor + 2);
+                    runMetadata = blockRuns.getInt(runCursor + 3);
+                    runEmission = blockRuns.getInt(runCursor + 4);
+                    runLocalX = blockRuns.getInt(runCursor + 5);
+                    runLocalY = blockRuns.getInt(runCursor + 6);
+                    runLocalZ = blockRuns.getInt(runCursor + 7);
                 }
             }
             float uSum = 0, vSum = 0, xSum = 0, ySum = 0, zSum = 0;
@@ -266,7 +261,8 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
                 int localY = hasRun ? runLocalY : clampSectionCoord((int)Math.floor(ySum * 0.25f));
                 int localZ = hasRun ? runLocalZ : clampSectionCoord((int)Math.floor(zSum * 0.25f));
                 int id = hasRun ? runId : 0;
-                int aux = hasRun ? runAux : 0;
+                int renderType = hasRun ? runRenderType : 0;
+                int metadata = hasRun ? runMetadata : 0;
                 int emission = hasRun ? runEmission : 0;
                 for (int v = 0; v < 4; v++) {
                     var vertex = quad[v];
@@ -274,7 +270,8 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
                     vertex.midTexV = midV;
                     vertex.tangent = tangent;
                     vertex.blockId = id;
-                    vertex.blockData = aux;
+                    vertex.blockRenderType = renderType;
+                    vertex.blockData = metadata;
                     vertex.blockEmission = emission;
                     vertex.midBlockX = localX + 0.5f - vertex.x;
                     vertex.midBlockY = localY + 0.5f - vertex.y;

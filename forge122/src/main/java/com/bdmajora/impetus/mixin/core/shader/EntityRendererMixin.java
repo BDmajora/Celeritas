@@ -167,13 +167,6 @@ public class EntityRendererMixin {
         impetus$setPhase(ProgramId.Weather);
     }
 
-    @Inject(method = "renderWorldPass", at = {
-            @At(value = "INVOKE_STRING", target = PROFILER_END_START, args = "ldc=aboveClouds"),
-            @At(value = "INVOKE_STRING", target = PROFILER_END_START, args = "ldc=clouds")})
-    private void impetus$phaseClouds(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
-        impetus$setPhase(ProgramId.Clouds);
-    }
-
     @Inject(method = "renderWorldPass",
             at = @At(value = "INVOKE_STRING", target = PROFILER_END_START, args = "ldc=forge_render_last"))
     private void impetus$phaseRenderLast(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {

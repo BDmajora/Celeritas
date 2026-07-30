@@ -37,7 +37,7 @@ public final class ImpetusTerrainTransformer {
             "in vec4 iris_Normal;",      // true face normal, NormI8 (normalized signed bytes)
             "in vec4 iris_Tangent;",     // at_tangent, w = handedness
             "in vec2 iris_MidTexCoord;", // sprite center in atlas UV
-            "in vec2 iris_BlockInfo;",   // (block id, metadata)
+            "in vec4 iris_BlockInfo;",   // mc_Entity: (block id, render type, metadata, 1)
             "in vec4 iris_MidBlock;",    // at_midBlock: xyz offset-to-block-center * 64, w block emission
             "uniform mat4 u_ModelViewMatrix;",
             "uniform mat4 u_ProjectionMatrix;",
@@ -83,10 +83,13 @@ public final class ImpetusTerrainTransformer {
             "#define ftransform() (u_ProjectionMatrix * (u_ModelViewMatrix * iris_Vertex))",
             "out float iris_FogFragCoord;",
             "#define gl_FogFragCoord iris_FogFragCoord",
-            "const vec4 iris_FogColor = vec4(0.0);",
-            "const float iris_FogDensity = 0.0;",
-            "const float iris_FogStart = 0.0;",
-            "const float iris_FogEnd = 1.0;",
+            // gl_Fog.* stand-ins: real per-frame uniforms (fed by CommonUniforms), NOT constants. See the
+            // matching note in FullscreenTransformer — const 0.0/1.0/vec4(0) forces full-strength fog for
+            // packs that read gl_Fog.start/end/color. Unused ones are stripped by the compiler.
+            "uniform vec4 iris_FogColor;",
+            "uniform float iris_FogDensity;",
+            "uniform float iris_FogStart;",
+            "uniform float iris_FogEnd;",
             "const float iris_FogScale = 1.0;",
             "out vec4 iris_TexCoordArr[4];",
             "#define gl_TexCoord iris_TexCoordArr",
@@ -94,6 +97,9 @@ public final class ImpetusTerrainTransformer {
             "// and discards in-shader instead; mirror its per-material cutoff (bits 1-2 of the material byte).",
             "const float[4] _IRIS_ALPHA_CUTOFF = float[4](0.0, 0.1, 0.5, 1.0);",
             "flat out float iris_AlphaCutoff;",
+            // DEBUG: 1.0 on any vertex whose clip position came out non-finite (see the NaN/Inf guard in main()).
+            // Interpolated (not flat) so the fragment tint reveals the whole flung triangle, not just its provoking vertex.
+            "out float iris_nanFlag;",
             "// ---- end generated prologue ----",
             ""
     ) + "\n";
@@ -114,8 +120,9 @@ public final class ImpetusTerrainTransformer {
                 + "    uint skyLight = (lightData >> 24u) & 0xFFu;\n"
                 + "    iris_MultiTexCoord1 = vec4(float(blockLight), float(skyLight), 0.0, 1.0);\n"
                 + "    iris_MidTexFull = vec4(iris_MidTexCoord, 0.0, 1.0);\n"
-                + "    iris_EntityFull = vec4(iris_BlockInfo, 0.0, 1.0);\n"
+                + "    iris_EntityFull = iris_BlockInfo;\n"
                 + "    iris_AlphaCutoff = _IRIS_ALPHA_CUTOFF[int((lightData >> 1u) & 3u)];\n"
+                + "    iris_nanFlag = 0.0;\n"
                 + hoistedAssignments
                 + "    irisMain();\n"
                 // Diagnostic + robustness guard: if the pack's vertex math produced a non-finite clip position, a single
@@ -124,6 +131,7 @@ public final class ImpetusTerrainTransformer {
                 // If enabling this makes the artifacts vanish, the corruption is a vertex-stage NaN/Inf (not raster).
                 + "    if (any(isnan(gl_Position)) || any(isinf(gl_Position))) {\n"
                 + "        gl_Position = vec4(0.0, 0.0, 2.0, 1.0);\n"
+                + "        iris_nanFlag = 1.0;\n"
                 + "    }\n"
                 + "}\n";
     }
@@ -140,6 +148,17 @@ public final class ImpetusTerrainTransformer {
             ""
     );
 
+    /**
+     * DEBUG tint: paints any terrain/water/shadow fragment red when its vertex tripped the NaN/Inf clip guard. Opt-in
+     * with {@code -Dimpetus.iris.tintNaN=true}; the guard itself remains active as a last-ditch robustness measure.
+     * If the wedge turns red, the corruption is a non-finite vertex in that gbuffer pass (gbuffers_water is the prime
+     * suspect); if it stays its normal colour, the geometry is finite and the artifact is real (e.g. actual water).
+     */
+    private static final String NAN_TINT_SNIPPET =
+            "true".equalsIgnoreCase(System.getProperty("impetus.iris.tintNaN", "false"))
+                    ? "    if (iris_nanFlag > 0.001) { iris_FragData[0] = vec4(1.0, 0.0, 0.0, 1.0); }\n"
+                    : "";
+
     /** Fragment prologue: promote GLSL 120 fragment built-ins to 330 core outputs/keywords. */
     private static final String FRAGMENT_PROLOGUE = String.join("\n",
             "#version 330 core",
@@ -154,14 +173,18 @@ public final class ImpetusTerrainTransformer {
             "#define gl_TextureMatrix iris_TextureMatrix",
             "in float iris_FogFragCoord;",
             "#define gl_FogFragCoord iris_FogFragCoord",
-            "const vec4 iris_FogColor = vec4(0.0);",
-            "const float iris_FogDensity = 0.0;",
-            "const float iris_FogStart = 0.0;",
-            "const float iris_FogEnd = 1.0;",
+            // gl_Fog.* stand-ins: real per-frame uniforms (fed by CommonUniforms), NOT constants. See the
+            // matching note in FullscreenTransformer — const 0.0/1.0/vec4(0) forces full-strength fog for
+            // packs that read gl_Fog.start/end/color. Unused ones are stripped by the compiler.
+            "uniform vec4 iris_FogColor;",
+            "uniform float iris_FogDensity;",
+            "uniform float iris_FogStart;",
+            "uniform float iris_FogEnd;",
             "const float iris_FogScale = 1.0;",
             "in vec4 iris_TexCoordArr[4];",
             "#define gl_TexCoord iris_TexCoordArr",
             "flat in float iris_AlphaCutoff;",
+            "in float iris_nanFlag;",   // DEBUG: >0 where the vertex stage produced a non-finite clip position
             "// ---- end generated prologue ----",
             ""
     ) + "\n";
@@ -191,6 +214,7 @@ public final class ImpetusTerrainTransformer {
         GlslGlobalInitHoister.Result hoist = GlslGlobalInitHoister.hoist(body);
         String transformed = FRAGMENT_PROLOGUE + FRAGMENT_FRAGDATA_BLOCK + hoist.body
                 + "\nvoid main() {\n" + hoist.hoistedAssignments + "    irisMain();\n"
+                + NAN_TINT_SNIPPET
                 + "    if (iris_FragData[0].a < iris_AlphaCutoff) { discard; }\n}\n";
         return transformed;
     }

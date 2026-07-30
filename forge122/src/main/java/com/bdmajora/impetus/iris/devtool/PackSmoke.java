@@ -79,10 +79,13 @@ public final class PackSmoke {
                 System.out.println("  (skipping disabled program " + source.getName() + ")");
                 continue;
             }
+            // Per-program macro scoping, exactly as the compile paths do it: a program the pack guards with
+            // !defined(IS_IRIS) compiles without the Iris identity macros.
+            Map<String, String> scoped = ShaderMacros.forProgram(macros, source.getName());
             if (id == ProgramId.Terrain || id == ProgramId.Water) {
-                dumpTerrain(source, macros, outDir);
+                dumpTerrain(source, scoped, outDir);
             } else {
-                dumpGbuffer(source, macros, outDir);
+                dumpGbuffer(source, scoped, outDir);
             }
         }
         for (ProgramArrayId arrayId : ProgramArrayId.values()) {
@@ -98,7 +101,7 @@ public final class PackSmoke {
                     System.out.println("  (skipping disabled program " + source.getName() + ")");
                     continue;
                 }
-                dumpFullscreen(source, macros, outDir);
+                dumpFullscreen(source, ShaderMacros.forProgram(macros, source.getName()), outDir);
             }
         }
     }
@@ -165,13 +168,17 @@ public final class PackSmoke {
                 ? ImpetusTerrainTransformer.transformVertexShaderModern(
                         IrisRenderingPipeline.stabilizeShaderSource(source.getName(),
                                 ShaderMacros.injectDefines(vshSource, macros)))
-                : ImpetusTerrainTransformer.transformVertexShader(vshSource);
+                // The 120 path injects AFTER the 330 rewrite, like IrisTerrainProgramOverride does — the layout
+                // parseActive computed above and the branch the driver compiles must agree.
+                : ShaderMacros.injectDefines(ImpetusTerrainTransformer.transformVertexShader(vshSource), macros);
         String fsh = modern
                 ? ImpetusTerrainTransformer.transformFragmentShaderModern(
                         IrisRenderingPipeline.stabilizeShaderSource(source.getName(),
                                 ShaderMacros.injectDefines(fshSource, macros)),
                         drawBuffers)
-                : ImpetusTerrainTransformer.transformFragmentShader(fshSource, drawBuffers);
+                : ShaderMacros.injectDefines(
+                        ImpetusTerrainTransformer.transformFragmentShader(fshSource, drawBuffers), macros);
+        System.out.println("    " + source.getName() + " resolved DRAWBUFFERS " + Arrays.toString(drawBuffers));
         write(outDir, source.getName() + ".vsh", vsh);
         write(outDir, source.getName() + ".fsh", fsh);
     }

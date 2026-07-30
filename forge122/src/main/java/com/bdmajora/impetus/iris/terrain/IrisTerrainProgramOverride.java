@@ -107,20 +107,34 @@ public final class IrisTerrainProgramOverride {
             // Modern (#version 130+) dual-stage packs (Complementary) use the compatibility stage normalizer; the
             // GLSL-120 Chocapic family (LIGHT) keeps the full rewrite.
             boolean modern = ModernPackTransformer.isModernSource(fshSource);
-            Map<String, String> macros = pack.getEnvironmentDefines();
+            // Scoped per program: a program listed in `impetus.iris.legacyPrograms` compiles without IS_IRIS. The same
+            // map feeds parseActive below and injectDefines further down, so the DRAWBUFFERS layout and the branch the
+            // shader actually compiles always agree (mismatching them is what corrupted colortex1 on water pixels).
+            Map<String, String> macros = com.bdmajora.impetus.iris.gl.shader.ShaderMacros.forProgram(
+                    pack.getEnvironmentDefines(), programId.getSourceName());
             int[] drawBuffers = IrisRenderingPipeline.sanitizeDrawBuffers(
                     programId.getSourceName(), DrawBuffers.parseActive(fshSource, macros));
+            // The GLSL-120 terrain path (Chocapic family: Sildur's, BSL, ...) needs the same
+            // MC_*/IS_IRIS/IRIS_VERSION macro environment the 120 gbuffers path and the modern path
+            // already get. Without it gbuffers_water compiles its pre-Iris/pre-1.16 branch: it writes
+            // gl_FragData[2] and skips the SSR reflection + water-fog blocks (both gated behind
+            // `defined(IS_IRIS) || MC_VERSION >= 11604`). Worse, DrawBuffers.parseActive above IS given
+            // the macro env (so it lays out DRAWBUFFERS:41), leaving the gl_FragData[2] write pointed at
+            // an unbound slot and corrupting colortex1 on water pixels. Injecting the macros after the
+            // 330 rewrite makes the shader and the framebuffer layout agree and turns water reflections on.
             String vsh = modern
                     ? ImpetusTerrainTransformer.transformVertexShaderModern(
                             IrisRenderingPipeline.stabilizeShaderSource(programId.getSourceName(),
                                     com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(vshSource, macros)))
-                    : ImpetusTerrainTransformer.transformVertexShader(vshSource);
+                    : com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(
+                            ImpetusTerrainTransformer.transformVertexShader(vshSource), macros);
             String fsh = modern
                     ? ImpetusTerrainTransformer.transformFragmentShaderModern(
                             IrisRenderingPipeline.stabilizeShaderSource(programId.getSourceName(),
                                     com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(fshSource, macros)),
                             drawBuffers)
-                    : ImpetusTerrainTransformer.transformFragmentShader(fshSource, drawBuffers);
+                    : com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(
+                            ImpetusTerrainTransformer.transformFragmentShader(fshSource, drawBuffers), macros);
             com.bdmajora.impetus.iris.pipeline.IrisDebugDump.dumpText(
                     "src_" + programId.getSourceName() + ".vsh", vsh);
             com.bdmajora.impetus.iris.pipeline.IrisDebugDump.dumpText(

@@ -1,14 +1,17 @@
 package com.bdmajora.impetus.iris.gl.program;
 
 import net.minecraft.client.Minecraft;
+import org.joml.Matrix3fc;
 import org.joml.Matrix4fc;
 import org.joml.Vector2i;
 import org.joml.Vector3f;
 import org.joml.Vector3i;
 import org.joml.Vector4f;
+import org.joml.Vector4i;
 import com.bdmajora.impetus.iris.gl.uniform.FloatSupplier;
 import com.bdmajora.impetus.iris.gl.uniform.FloatUniform;
 import com.bdmajora.impetus.iris.gl.uniform.IntUniform;
+import com.bdmajora.impetus.iris.gl.uniform.Matrix3Uniform;
 import com.bdmajora.impetus.iris.gl.uniform.MatrixUniform;
 import com.bdmajora.impetus.iris.gl.uniform.Uniform;
 import com.bdmajora.impetus.iris.gl.uniform.UniformCollector;
@@ -17,6 +20,7 @@ import com.bdmajora.impetus.iris.gl.uniform.Vector2IntUniform;
 import com.bdmajora.impetus.iris.gl.uniform.Vector2Uniform;
 import com.bdmajora.impetus.iris.gl.uniform.Vector3IntUniform;
 import com.bdmajora.impetus.iris.gl.uniform.Vector3Uniform;
+import com.bdmajora.impetus.iris.gl.uniform.Vector4IntUniform;
 import com.bdmajora.impetus.iris.gl.uniform.Vector4Uniform;
 import org.joml.Vector2f;
 
@@ -103,6 +107,8 @@ public class ProgramUniforms {
         private static final int GL_FLOAT_VEC4_T = 0x8B52;
         private static final int GL_INT_VEC2_T = 0x8B53;
         private static final int GL_INT_VEC3_T = 0x8B54;
+        private static final int GL_INT_VEC4_T = 0x8B55;
+        private static final int GL_FLOAT_MAT3_T = 0x8B5B;
         private static final int GL_FLOAT_MAT4_T = 0x8B5C;
         private static final int GL_SAMPLER_1D_T = 0x8B5D;
         private static final int GL_SAMPLER_2D_T = 0x8B5E;
@@ -115,7 +121,7 @@ public class ProgramUniforms {
 
         /** The GL type family a builder setter uploads with; compared against the program's declared type. */
         private enum ProvidedType {
-            FLOAT, INT, VEC2, VEC2I, VEC3, VEC3I, VEC4, MAT4
+            FLOAT, INT, VEC2, VEC2I, VEC3, VEC3I, VEC4, VEC4I, MAT3, MAT4
         }
 
         private static final class PendingUniform {
@@ -123,18 +129,35 @@ public class ProgramUniforms {
             final ProvidedType provided;
             final UniformUpdateFrequency frequency;
             final Uniform uniform;
+            // Scalar suppliers + location are retained so a FLOAT/INT type mismatch against the program's declared
+            // type can be adapted (re-uploaded through the other family) instead of dropped. Null/-1 for non-scalars.
+            final int location;
+            final FloatSupplier floatSupplier;
+            final IntSupplier intSupplier;
 
-            PendingUniform(String uniformName, ProvidedType provided, UniformUpdateFrequency frequency, Uniform uniform) {
+            PendingUniform(String uniformName, ProvidedType provided, UniformUpdateFrequency frequency, Uniform uniform,
+                    int location, FloatSupplier floatSupplier, IntSupplier intSupplier) {
                 this.uniformName = uniformName;
                 this.provided = provided;
                 this.frequency = frequency;
                 this.uniform = uniform;
+                this.location = location;
+                this.floatSupplier = floatSupplier;
+                this.intSupplier = intSupplier;
             }
         }
 
         private final String name;
         private final int program;
-        private final List<PendingUniform> pending = new ArrayList<>();
+        /**
+         * Keyed by uniform name so a later registration <em>replaces</em> an earlier one instead of stacking a second
+         * provider on the same GL location. Program build sites call {@code CommonUniforms.addCommonUniforms} and then
+         * {@code ActiveCustomUniforms.assignTo}, so pack-declared custom uniforms win over built-ins of the same name —
+         * which is Iris's rule (it has no built-in for names packs define themselves, e.g. Sildur's
+         * {@code uniform.int.framemod8 = fmod(frameCounter, 8)}). With a plain list both providers uploaded to the same
+         * location every frame and the winner depended on registration order. Insertion order is preserved.
+         */
+        private final java.util.LinkedHashMap<String, PendingUniform> pending = new java.util.LinkedHashMap<>();
 
         private Builder(String name, int program) {
             this.name = name;
@@ -149,14 +172,19 @@ public class ProgramUniforms {
             return LWJGL.glGetUniformLocation(this.program, uniformName);
         }
 
+        private void put(PendingUniform uniform) {
+            this.pending.put(uniform.uniformName, uniform);
+        }
+
         private void add(String uniformName, ProvidedType provided, UniformUpdateFrequency frequency, Uniform uniform) {
-            this.pending.add(new PendingUniform(uniformName, provided, frequency, uniform));
+            put(new PendingUniform(uniformName, provided, frequency, uniform, -1, null, null));
         }
 
         public Builder uniform1f(UniformUpdateFrequency frequency, String uniformName, FloatSupplier value) {
             int location = location(uniformName);
             if (location != -1) {
-                add(uniformName, ProvidedType.FLOAT, frequency, new FloatUniform(location, value));
+                put(new PendingUniform(uniformName, ProvidedType.FLOAT, frequency,
+                        new FloatUniform(location, value), location, value, null));
             }
             return this;
         }
@@ -172,7 +200,8 @@ public class ProgramUniforms {
         public Builder uniform1i(UniformUpdateFrequency frequency, String uniformName, IntSupplier value) {
             int location = location(uniformName);
             if (location != -1) {
-                add(uniformName, ProvidedType.INT, frequency, new IntUniform(location, value));
+                put(new PendingUniform(uniformName, ProvidedType.INT, frequency,
+                        new IntUniform(location, value), location, null, value));
             }
             return this;
         }
@@ -205,6 +234,22 @@ public class ProgramUniforms {
             int location = location(uniformName);
             if (location != -1) {
                 add(uniformName, ProvidedType.VEC4, frequency, new Vector4Uniform(location, value));
+            }
+            return this;
+        }
+
+        public Builder uniform4i(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector4i> value) {
+            int location = location(uniformName);
+            if (location != -1) {
+                add(uniformName, ProvidedType.VEC4I, frequency, new Vector4IntUniform(location, value));
+            }
+            return this;
+        }
+
+        public Builder uniformMatrix3(UniformUpdateFrequency frequency, String uniformName, Supplier<Matrix3fc> value) {
+            int location = location(uniformName);
+            if (location != -1) {
+                add(uniformName, ProvidedType.MAT3, frequency, new Matrix3Uniform(location, value));
             }
             return this;
         }
@@ -243,6 +288,10 @@ public class ProgramUniforms {
                     return ProvidedType.VEC3I;
                 case GL_FLOAT_VEC4_T:
                     return ProvidedType.VEC4;
+                case GL_INT_VEC4_T:
+                    return ProvidedType.VEC4I;
+                case GL_FLOAT_MAT3_T:
+                    return ProvidedType.MAT3;
                 case GL_FLOAT_MAT4_T:
                     return ProvidedType.MAT4;
                 default:
@@ -281,21 +330,37 @@ public class ProgramUniforms {
             List<Uniform> once = new ArrayList<>();
             List<Uniform> perTick = new ArrayList<>();
             List<Uniform> perFrame = new ArrayList<>();
-            for (PendingUniform entry : this.pending) {
-                if (declared.containsKey(entry.uniformName) && declared.get(entry.uniformName) != entry.provided) {
-                    LOGGER.warn("[{}] Wrong uniform type for {}: providing {} but the program declares a different"
-                                    + " type. Disabling that uniform.",
-                            this.name, entry.uniformName, entry.provided);
-                    continue;
+            for (PendingUniform entry : this.pending.values()) {
+                Uniform uniform = entry.uniform;
+                ProvidedType declaredType = declared.get(entry.uniformName);
+                if (declared.containsKey(entry.uniformName) && declaredType != entry.provided) {
+                    // Packs disagree on whether OptiFine scalars (framemod8, worldTime, isEyeInWater, ...) are int
+                    // or float. Rather than drop the uniform on a scalar int<->float mismatch — which leaves the
+                    // program reading GLSL's default 0 (e.g. Sildur declares `uniform int framemod8`, breaking TAA
+                    // jitter) — re-upload through the family the program actually declares.
+                    if (entry.provided == ProvidedType.FLOAT && declaredType == ProvidedType.INT
+                            && entry.floatSupplier != null) {
+                        FloatSupplier fs = entry.floatSupplier;
+                        uniform = new IntUniform(entry.location, () -> Math.round(fs.getAsFloat()));
+                    } else if (entry.provided == ProvidedType.INT && declaredType == ProvidedType.FLOAT
+                            && entry.intSupplier != null) {
+                        IntSupplier is = entry.intSupplier;
+                        uniform = new FloatUniform(entry.location, () -> (float) is.getAsInt());
+                    } else {
+                        LOGGER.warn("[{}] Wrong uniform type for {}: providing {} but the program declares a different"
+                                        + " type. Disabling that uniform.",
+                                this.name, entry.uniformName, entry.provided);
+                        continue;
+                    }
                 }
                 if (entry.frequency == UniformUpdateFrequency.DYNAMIC) {
-                    dynamic.add(entry.uniform);
+                    dynamic.add(uniform);
                 } else if (entry.frequency == UniformUpdateFrequency.ONCE) {
-                    once.add(entry.uniform);
+                    once.add(uniform);
                 } else if (entry.frequency == UniformUpdateFrequency.PER_TICK) {
-                    perTick.add(entry.uniform);
+                    perTick.add(uniform);
                 } else {
-                    perFrame.add(entry.uniform);
+                    perFrame.add(uniform);
                 }
             }
             return new ProgramUniforms(dynamic, once, perTick, perFrame);

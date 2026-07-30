@@ -12,8 +12,9 @@ import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
  * {@code VanillaLikeChunkVertex} (float position, byte color, float UV, packed light/draw-params — the layout
  * {@code ImpetusTerrainTransformer}'s prologue decodes) with the OptiFine per-vertex attributes appended:
  * the true face normal ({@code gl_Normal}), {@code at_tangent}, {@code mc_midTexCoord} (sprite center in atlas UV),
- * and {@code mc_Entity} — with a pack {@code block.properties} that is (pack block id or -1, fluid flag), Iris
- * semantics; without one it is (raw 1.12.2 block id, metadata), the classic OptiFine contract. The extra data comes straight off
+ * and {@code mc_Entity}. The entity attribute follows the shader-facing OptiFine/Iris shape:
+ * {@code (block id, render type, metadata, 1)}. With a pack {@code block.properties}, the block id is the pack's
+ * mapped id; without one it is the raw 1.12.2 block id. The extra data comes straight off
  * {@link ChunkVertexEncoder.Vertex}'s Iris fields, which the meshing pipeline populates when shaders are on.
  * Only selected by {@code ImpetusWorldRenderer.chooseVertexType} while a pack is loaded, so the wider stride
  * costs nothing otherwise.
@@ -27,7 +28,7 @@ public class IrisChunkVertexType implements ChunkVertexType {
     private static final int OFFSET_NORMAL = 28;   // NormI8-packed face normal (4 normalized signed bytes)
     private static final int OFFSET_TANGENT = 32;  // NormI8-packed tangent, w = handedness
     private static final int OFFSET_MID_TEX = 36;  // 2 x float, sprite center in atlas UV space
-    private static final int OFFSET_ENTITY = 44;   // 2 x float, mc_Entity.xy (see class doc)
+    private static final int OFFSET_ENTITY = 44;   // 4 x short, mc_Entity.xyzw (see class doc)
     private static final int OFFSET_MID_BLOCK = 52; // at_midBlock: 3 signed bytes (offset * 64) + emission byte
 
     public static final GlVertexFormat VERTEX_FORMAT = GlVertexFormat.builder(STRIDE)
@@ -38,7 +39,7 @@ public class IrisChunkVertexType implements ChunkVertexType {
             .addElement("iris_Normal", OFFSET_NORMAL, GlVertexAttributeFormat.BYTE, 4, true, false)
             .addElement("iris_Tangent", OFFSET_TANGENT, GlVertexAttributeFormat.BYTE, 4, true, false)
             .addElement("iris_MidTexCoord", OFFSET_MID_TEX, GlVertexAttributeFormat.FLOAT, 2, false, false)
-            .addElement("iris_BlockInfo", OFFSET_ENTITY, GlVertexAttributeFormat.FLOAT, 2, false, false)
+            .addElement("iris_BlockInfo", OFFSET_ENTITY, GlVertexAttributeFormat.SHORT, 4, false, false)
             // at_midBlock: raw bytes. xyz are signed *64-scaled offsets, w is block emission.
             .addElement("iris_MidBlock", OFFSET_MID_BLOCK, GlVertexAttributeFormat.BYTE, 4, false, false)
             .build();
@@ -83,8 +84,10 @@ public class IrisChunkVertexType implements ChunkVertexType {
             LWJGL.memPutInt(ptr + OFFSET_TANGENT, vertex.tangent);
             LWJGL.memPutFloat(ptr + OFFSET_MID_TEX, vertex.midTexU);
             LWJGL.memPutFloat(ptr + OFFSET_MID_TEX + 4, vertex.midTexV);
-            LWJGL.memPutFloat(ptr + OFFSET_ENTITY, vertex.blockId);
-            LWJGL.memPutFloat(ptr + OFFSET_ENTITY + 4, vertex.blockData);
+            LWJGL.memPutShort(ptr + OFFSET_ENTITY, clampShort(vertex.blockId));
+            LWJGL.memPutShort(ptr + OFFSET_ENTITY + 2, clampShort(vertex.blockRenderType));
+            LWJGL.memPutShort(ptr + OFFSET_ENTITY + 4, clampShort(vertex.blockData));
+            LWJGL.memPutShort(ptr + OFFSET_ENTITY + 6, (short) 1);
 
             // at_midBlock: offset-to-block-center (block units) * 64 plus block emission in w, like upstream Iris.
             int mbx = clampByte(Math.round(vertex.midBlockX * 64.0f));
@@ -103,6 +106,10 @@ public class IrisChunkVertexType implements ChunkVertexType {
 
     private static int clampUnsignedByte(int value) {
         return value < 0 ? 0 : (value > 255 ? 255 : value);
+    }
+
+    private static short clampShort(int value) {
+        return (short) (value < Short.MIN_VALUE ? Short.MIN_VALUE : Math.min(value, Short.MAX_VALUE));
     }
 
     private static int encodeDrawParameters(int materialBits, int sectionIndex) {

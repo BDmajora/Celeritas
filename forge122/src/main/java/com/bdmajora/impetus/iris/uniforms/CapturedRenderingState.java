@@ -4,14 +4,12 @@ import org.joml.Matrix4f;
 import org.joml.Vector2i;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
+import org.joml.Vector4f;
 
 /**
  * A singleton snapshot of per-frame render state captured from the vanilla render loop, for uniforms that cannot be
- * derived from world state alone (camera matrices, camera position, partial ticks, the active alpha-test threshold).
- * <p>
- * The Phase 3/4 {@code EntityRenderer.renderWorld} mixin populates these each frame <em>before</em> the shader passes
- * run; the uniform providers read them. Until those hooks exist the values stay at their identity/zero defaults, which
- * is what keeps the GL foundation compilable and side-effect-free ahead of the render integration.
+ * derived from world state alone: camera matrices/position, partial ticks, render stage, alpha-test threshold, and the
+ * entity or block-entity currently being submitted.
  */
 public final class CapturedRenderingState {
     public static final CapturedRenderingState INSTANCE = new CapturedRenderingState();
@@ -23,6 +21,7 @@ public final class CapturedRenderingState {
     private final Matrix4f shadowModelView = new Matrix4f();
     private final Matrix4f shadowProjection = new Matrix4f();
     private final Vector2i atlasSize = new Vector2i();
+    private final Vector4f colorModulator = new Vector4f(1.0f, 1.0f, 1.0f, 1.0f);
 
     private float tickDelta;
     /** Iris {@code renderStage} uniform value: the current WorldRenderingPhase ordinal (MC_RENDER_STAGE_*). */
@@ -30,6 +29,8 @@ public final class CapturedRenderingState {
     private float currentAlphaTest;
     private int currentRenderedBlockEntity = -1;
     private int currentRenderedEntity = -1;
+    private int currentRenderedItem = -1;
+    private int textureReloadCount;
 
     private CapturedRenderingState() {
     }
@@ -90,6 +91,14 @@ public final class CapturedRenderingState {
         this.fogColor.set(red, green, blue);
     }
 
+    public Vector4f getColorModulator() {
+        return this.colorModulator;
+    }
+
+    public void setColorModulator(float red, float green, float blue, float alpha) {
+        this.colorModulator.set(red, green, blue, alpha);
+    }
+
     public int getRenderStage() {
         return this.renderStage;
     }
@@ -128,5 +137,21 @@ public final class CapturedRenderingState {
 
     public void setCurrentRenderedEntity(int id) {
         this.currentRenderedEntity = id;
+    }
+
+    public int getCurrentRenderedItem() {
+        return this.currentRenderedItem;
+    }
+
+    public void setCurrentRenderedItem(int id) {
+        this.currentRenderedItem = id;
+    }
+
+    public int getTextureReloadCount() {
+        return this.textureReloadCount;
+    }
+
+    public void incrementTextureReloadCount() {
+        this.textureReloadCount++;
     }
 }

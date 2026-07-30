@@ -1,9 +1,12 @@
 package com.bdmajora.impetus.iris.uniforms;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.boss.EntityDragon;
 import net.minecraft.world.World;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
+import org.joml.Vector3d;
 import org.joml.Vector4f;
 import com.bdmajora.impetus.iris.gl.program.ProgramUniforms;
 import com.bdmajora.impetus.iris.gl.uniform.UniformCollector;
@@ -49,6 +52,7 @@ public final class CelestialUniforms {
                 .uniform3f(UniformUpdateFrequency.PER_FRAME, "sunPosition", CelestialUniforms::getSunPosition)
                 .uniform3f(UniformUpdateFrequency.PER_FRAME, "moonPosition", CelestialUniforms::getMoonPosition)
                 .uniform3f(UniformUpdateFrequency.PER_FRAME, "shadowLightPosition", CelestialUniforms::getShadowLightPosition)
+                .uniform3f(UniformUpdateFrequency.PER_FRAME, "endFlashPosition", CelestialUniforms::getEndFlashPosition)
                 .uniform3f(UniformUpdateFrequency.PER_FRAME, "upPosition", CelestialUniforms::getUpPosition);
     }
 
@@ -89,6 +93,27 @@ public final class CelestialUniforms {
         Vector4f up = new Vector4f(0.0f, 100.0f, 0.0f, 0.0f);
         new Matrix4f(CapturedRenderingState.INSTANCE.getGbufferModelView()).transform(up);
         return new Vector3f(up.x, up.y, up.z);
+    }
+
+    private static Vector3f getEndFlashPosition() {
+        World world = Minecraft.getMinecraft().world;
+        if (world == null || world.provider.getDimension() != 1) {
+            return new Vector3f();
+        }
+
+        float tickDelta = CapturedRenderingState.INSTANCE.getTickDelta();
+        Vector3d camera = CameraUniforms.getCurrentCameraPositionUnshifted();
+        for (Entity entity : world.loadedEntityList) {
+            if (entity instanceof EntityDragon && ((EntityDragon) entity).deathTicks > 0) {
+                double x = entity.lastTickPosX + (entity.posX - entity.lastTickPosX) * tickDelta - camera.x;
+                double y = entity.lastTickPosY + (entity.posY - entity.lastTickPosY) * tickDelta - camera.y;
+                double z = entity.lastTickPosZ + (entity.posZ - entity.lastTickPosZ) * tickDelta - camera.z;
+                Vector4f position = new Vector4f((float) x, (float) y, (float) z, 1.0f);
+                new Matrix4f(CapturedRenderingState.INSTANCE.getGbufferModelView()).transform(position);
+                return new Vector3f(position.x, position.y, position.z);
+            }
+        }
+        return new Vector3f();
     }
 
     public static float getCelestialAngle() {

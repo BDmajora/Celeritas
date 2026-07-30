@@ -446,8 +446,10 @@ public final class ExpressionParser {
             float up = upExpr != null ? upExpr.evaluate(ctx).x() : 1.0f;
             float down = downExpr != null ? downExpr.evaluate(ctx).x() : up;
             float halfLife = target > state.value ? up : down;
-            // Exponential approach; halfLife in seconds (0 => instant).
-            float rate = halfLife <= 0.0f ? 1.0f : (float) (1.0 - Math.pow(0.5, ctx.frameTime() / halfLife));
+            // Matches Iris SmoothFloat: shaderpack fade values are tenths of a second.
+            float scaledHalfLife = halfLife * 0.1f;
+            float rate = scaledHalfLife <= 0.0f ? 1.0f
+                    : (float) (1.0 - Math.pow(0.5, ctx.frameTime() / scaledHalfLife));
             state.value += (target - state.value) * rate;
             return CustomUniformValue.scalar(state.value);
         };

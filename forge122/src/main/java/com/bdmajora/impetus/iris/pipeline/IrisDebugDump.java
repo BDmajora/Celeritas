@@ -27,13 +27,20 @@ public final class IrisDebugDump {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Iris");
     private static final String DEBUG_DIR_NAME = "impetus_debug";
     private static final long MIB = 1024L * 1024L;
+    // A pack's own GLSL source dumps are ~2 files per stage (Sildur's alone writes 64), so a small file cap is
+    // self-defeating: it is exhausted before any image dump is attempted. MAX_DUMP_BYTES is the real disk guard.
     private static final int MAX_DUMP_FILES =
-            Integer.getInteger("impetus.iris.debugDumpMaxFiles", 64);
+            Integer.getInteger("impetus.iris.debugDumpMaxFiles", 256);
     private static final long MAX_DUMP_BYTES =
             Long.getLong("impetus.iris.debugDumpMaxBytes", 64L * MIB);
     private static final long MAX_RAW_IMAGE_BYTES =
             Long.getLong("impetus.iris.debugDumpMaxImageBytes", 16L * MIB);
-    private static boolean budgetWarningLogged;
+    /**
+     * Names already warned about. Per-name rather than a single latch: a one-shot warning means the second and later
+     * skipped dumps vanish without a trace, which is exactly how a budget-refused PNG got mistaken for a broken tap.
+     */
+    private static final java.util.Set<String> budgetWarnedNames =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
 
     private IrisDebugDump() {
     }
@@ -84,7 +91,7 @@ public final class IrisDebugDump {
             File dir = debugDir();
             File out = new File(dir, name);
             byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
-            if (!canWriteFile(dir, out, bytes.length)) {
+            if (!canWriteFile(name, dir, out, bytes.length)) {
                 return;
             }
             Files.write(out.toPath(), bytes);
@@ -120,7 +127,7 @@ public final class IrisDebugDump {
         byte[] data = encoded.toByteArray();
         File dir = debugDir();
         File out = new File(dir, name + ".png");
-        if (!canWriteFile(dir, out, data.length)) {
+        if (!canWriteFile(name, dir, out, data.length)) {
             return;
         }
         Files.write(out.toPath(), data);
@@ -144,14 +151,14 @@ public final class IrisDebugDump {
             return false;
         }
         if (MAX_RAW_IMAGE_BYTES >= 0L && rawBytes > MAX_RAW_IMAGE_BYTES) {
-            warnBudgetOnce("raw image {}x{} would allocate {} MiB (limit {} MiB)",
+            warnBudgetOnce(name, "raw image {}x{} would allocate {} MiB (limit {} MiB)",
                     width, height, rawBytes / MIB, MAX_RAW_IMAGE_BYTES / MIB);
             return false;
         }
         return true;
     }
 
-    private static boolean canWriteFile(File dir, File out, long incomingBytes) {
+    private static boolean canWriteFile(String name, File dir, File out, long incomingBytes) {
         if (!ensureDebugDir(dir)) {
             return false;
         }
@@ -162,11 +169,11 @@ public final class IrisDebugDump {
         long projectedBytes = stats.bytes - existingBytes + Math.max(0L, incomingBytes);
 
         if (MAX_DUMP_FILES >= 0 && projectedFiles > MAX_DUMP_FILES) {
-            warnBudgetOnce("{} file(s) would exceed the {} file limit", projectedFiles, MAX_DUMP_FILES);
+            warnBudgetOnce(name, "{} file(s) would exceed the {} file limit", projectedFiles, MAX_DUMP_FILES);
             return false;
         }
         if (MAX_DUMP_BYTES >= 0L && projectedBytes > MAX_DUMP_BYTES) {
-            warnBudgetOnce("{} MiB would exceed the {} MiB limit", projectedBytes / MIB, MAX_DUMP_BYTES / MIB);
+            warnBudgetOnce(name, "{} MiB would exceed the {} MiB limit", projectedBytes / MIB, MAX_DUMP_BYTES / MIB);
             return false;
         }
         return true;
@@ -202,12 +209,11 @@ public final class IrisDebugDump {
         return stats;
     }
 
-    private static void warnBudgetOnce(String format, Object... args) {
-        if (budgetWarningLogged) {
+    private static void warnBudgetOnce(String name, String format, Object... args) {
+        if (!budgetWarnedNames.add(name)) {
             return;
         }
-        budgetWarningLogged = true;
-        LOGGER.warn("[Iris] impetus_debug budget reached; skipping further debug dumps: " + format, args);
+        LOGGER.warn("[Iris] impetus_debug budget reached; skipping dump " + name + ": " + format, args);
     }
 
     private static final class DebugDirStats {

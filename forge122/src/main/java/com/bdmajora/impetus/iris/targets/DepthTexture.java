@@ -2,6 +2,7 @@ package com.bdmajora.impetus.iris.targets;
 
 import com.bdmajora.impetus.iris.gl.GlResource;
 import com.bdmajora.impetus.lwjgl.GL11;
+import com.bdmajora.impetus.lwjgl.GL12;
 
 import java.nio.ByteBuffer;
 
@@ -35,6 +36,8 @@ public class DepthTexture extends GlResource {
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, getGlId());
         LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST);
         LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_NEAREST);
+        LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
+        LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
         LWJGL.glTexImage2D(GL11.GL_TEXTURE_2D, 0, this.internalFormat, this.width, this.height, 0,
                 this.pixelFormat, this.pixelType, NULL_BUFFER);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);

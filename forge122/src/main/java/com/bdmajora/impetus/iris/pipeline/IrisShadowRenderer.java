@@ -21,8 +21,11 @@ import com.bdmajora.impetus.iris.targets.DepthTexture;
 import com.bdmajora.impetus.iris.uniforms.CapturedRenderingState;
 import com.bdmajora.impetus.iris.uniforms.CelestialUniforms;
 import com.bdmajora.impetus.lwjgl.GL11;
+import com.bdmajora.impetus.lwjgl.GL12;
 import com.bdmajora.impetus.lwjgl.GL13;
 import com.bdmajora.impetus.lwjgl.GL14;
+import com.bdmajora.impetus.lwjgl.GL30;
+import com.bdmajora.impetus.lwjgl.GL33;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -43,9 +46,9 @@ import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
  * <li>translucent terrain, blended, writing color into {@code shadowcolor0}/{@code shadowcolor1} — colored/water
  * shadows — while its depth still lands in {@code shadowtex0}.</li>
  * </ol>
- * Hardware depth compare follows the pack's {@code const bool shadowHardwareFiltering[0/1]} declarations, OptiFine's
- * contract: LIGHT declares {@code shadowHardwareFiltering0} for its {@code shadow2D} lookups; Complementary declares
- * the both-textures form. Packs that declare nothing get raw depth reads.
+ * Hardware depth compare follows the pack's {@code const bool shadowHardwareFiltering[0/1]} declarations via sampler
+ * objects bound by {@link IrisRenderingPipeline}; the depth textures themselves stay raw so fullscreen passes that
+ * declare {@code sampler2D shadowtex0} can fetch the shadow depth directly.
  * <p>
  * The shadow camera is modern Iris's construction — an orthographic frustum of {@code shadowDistance} half-extent,
  * rotated by the shadow angle, snapped to {@code shadowIntervalSize} world intervals so texels don't swim.
@@ -80,6 +83,10 @@ public class IrisShadowRenderer {
     private final int colorTexture0;
     private final int colorTexture1;
     private final IrisFramebuffer framebuffer;
+    private final boolean[] hardwareFiltering;
+    private final boolean[] mipmapDepth;
+    private final boolean[] nearestDepth;
+    private final boolean separateHardwareSamplers;
     /** Both shadowcolor attachments, for the frame-start clear. */
     private static final int[] CLEAR_MASK = {0, 1};
     /** The pack's shadow DRAWBUFFERS mask (only shadowcolor0/1 exist), applied for the geometry draws. */
@@ -107,12 +114,16 @@ public class IrisShadowRenderer {
     /**
      * @param shadowSource      the pack's {@code shadow} program source (for the fixed-function entity flavor).
      * @param samplerUnits      the standard sampler-unit table (with gbuffers-stage custom-texture overrides applied).
-     * @param hardwareFiltering per-texture {@code shadowHardwareFiltering} flags: [0] = shadowtex0, [1] = shadowtex1.
+     * @param hardwareFiltering       per-texture {@code shadowHardwareFiltering} flags: [0] = shadowtex0, [1] = shadowtex1.
+     * @param mipmapDepth             per-texture shadow depth mipmap flags.
+     * @param nearestDepth            per-texture shadow depth nearest-filter flags.
+     * @param separateHardwareSamplers whether hardware compare is exposed through {@code shadowtex*HW} aliases.
      */
     public IrisShadowRenderer(int resolution, float shadowDistance, float nearPlane, float farPlane,
                               float intervalSize, Float shadowMapFov, float sunPathRotation,
                               ProgramSource shadowSource, Map<String, Integer> samplerUnits,
                               Map<String, String> shaderDefines, boolean[] hardwareFiltering,
+                              boolean[] mipmapDepth, boolean[] nearestDepth, boolean separateHardwareSamplers,
                               Runnable shaderPackResourceRestorer) {
         this.resolution = resolution;
         this.halfPlaneLength = shadowDistance;
@@ -122,9 +133,15 @@ public class IrisShadowRenderer {
         this.shadowMapFov = shadowMapFov;
         this.sunPathRotation = sunPathRotation;
         this.shaderPackResourceRestorer = shaderPackResourceRestorer;
+        this.hardwareFiltering = hardwareFiltering.clone();
+        this.mipmapDepth = mipmapDepth.clone();
+        this.nearestDepth = nearestDepth.clone();
+        this.separateHardwareSamplers = separateHardwareSamplers;
 
-        this.depthTexture = createShadowDepthTexture(resolution, hardwareFiltering[0]);
-        this.depthTextureNoTranslucents = createShadowDepthTexture(resolution, hardwareFiltering[1]);
+        this.depthTexture = createShadowDepthTexture(resolution, this.hardwareFiltering[0],
+                this.mipmapDepth[0], this.nearestDepth[0], this.separateHardwareSamplers);
+        this.depthTextureNoTranslucents = createShadowDepthTexture(resolution, this.hardwareFiltering[1],
+                this.mipmapDepth[1], this.nearestDepth[1], this.separateHardwareSamplers);
 
         // shadowcolor0/1: the shadow program's color outputs (white where nothing draws = untinted shadows).
         this.colorTexture0 = createShadowColorTexture(resolution);
@@ -148,24 +165,36 @@ public class IrisShadowRenderer {
             LOGGER.warn("[Iris] Fixed-function shadow program failed to compile; entity shadows disabled");
         }
 
-        LOGGER.info("[Iris] Shadow map ready: {}x{}, distance {}, near {}, far {}, interval {}, fov {}, hardware filtering [{}, {}]",
+        LOGGER.info("[Iris] Shadow map ready: {}x{}, distance {}, near {}, far {}, interval {}, fov {}, hardware filtering [{}, {}], mipmaps [{}, {}], nearest [{}, {}], separate hardware samplers {}",
                 resolution, resolution, shadowDistance, nearPlane, farPlane, intervalSize,
-                shadowMapFov == null ? "ortho" : shadowMapFov, hardwareFiltering[0], hardwareFiltering[1]);
+                shadowMapFov == null ? "ortho" : shadowMapFov, hardwareFiltering[0], hardwareFiltering[1],
+                mipmapDepth[0], mipmapDepth[1], nearestDepth[0], nearestDepth[1], separateHardwareSamplers);
     }
 
-    private static DepthTexture createShadowDepthTexture(int resolution, boolean hardwareFiltering) {
+    private static DepthTexture createShadowDepthTexture(int resolution, boolean hardwareFiltering,
+                                                         boolean mipmap, boolean nearest,
+                                                         boolean separateHardwareSamplers) {
         DepthTexture texture = new DepthTexture(resolution, resolution,
                 GL14.GL_DEPTH_COMPONENT24, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture.getTextureId());
-        if (hardwareFiltering) {
-            // sampler2DShadow lookups (shadow2D / textureProj) return an in-shadow test result.
-            LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL14.GL_TEXTURE_COMPARE_MODE, GL14.GL_COMPARE_R_TO_TEXTURE);
-            LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL14.GL_TEXTURE_COMPARE_FUNC, GL11.GL_LEQUAL);
+        if (hardwareFiltering && !separateHardwareSamplers) {
+            LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL14.GL_TEXTURE_COMPARE_MODE, GL30.GL_COMPARE_REF_TO_TEXTURE);
         }
-        LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
-        LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+        LWJGL.glTexParameteriv(GL11.GL_TEXTURE_2D, GL33.GL_TEXTURE_SWIZZLE_RGBA,
+                new int[]{GL11.GL_RED, GL11.GL_RED, GL11.GL_RED, GL11.GL_ONE});
+        LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
+        LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
+        LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, shadowMinFilter(mipmap, nearest));
+        LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, nearest ? GL11.GL_NEAREST : GL11.GL_LINEAR);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
         return texture;
+    }
+
+    private static int shadowMinFilter(boolean mipmap, boolean nearest) {
+        if (mipmap) {
+            return nearest ? GL11.GL_NEAREST_MIPMAP_NEAREST : GL11.GL_LINEAR_MIPMAP_LINEAR;
+        }
+        return nearest ? GL11.GL_NEAREST : GL11.GL_LINEAR;
     }
 
     private static int createShadowColorTexture(int resolution) {
@@ -299,6 +328,7 @@ public class IrisShadowRenderer {
                 RenderDevice.exitManagedCode();
             }
             GlStateManager.disableBlend();
+            generateMipmaps();
         } catch (Throwable t) {
             // The very first frames can race renderer setup (no viewport/render lists yet) — only give up for good
             // after repeated failures.
@@ -322,6 +352,24 @@ public class IrisShadowRenderer {
 
     private static void bindBlockAtlas(Minecraft mc) {
         mc.getTextureManager().bindTexture(net.minecraft.client.renderer.texture.TextureMap.LOCATION_BLOCKS_TEXTURE);
+    }
+
+    private void generateMipmaps() {
+        generateDepthMipmap(this.depthTexture, this.mipmapDepth[0], this.nearestDepth[0]);
+        generateDepthMipmap(this.depthTextureNoTranslucents, this.mipmapDepth[1], this.nearestDepth[1]);
+        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        this.shaderPackResourceRestorer.run();
+    }
+
+    private static void generateDepthMipmap(DepthTexture texture, boolean mipmap, boolean nearest) {
+        if (!mipmap) {
+            return;
+        }
+        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + 31);
+        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture.getTextureId());
+        LWJGL.glGenerateMipmap(GL11.GL_TEXTURE_2D);
+        LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, shadowMinFilter(true, nearest));
+        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
     }
 
     /**

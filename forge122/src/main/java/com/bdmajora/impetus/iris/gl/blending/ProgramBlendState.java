@@ -87,6 +87,11 @@ public final class ProgramBlendState {
         }
 
         if (this.perTargetModes.isEmpty()) {
+            if (this.baseSpecified && LWJGL.supportsBufferBlending()) {
+                for (int slot = 0; slot < drawBuffers.length; slot++) {
+                    applySlotMode(slot, this.baseMode);
+                }
+            }
             return;
         }
         if (!LWJGL.supportsBufferBlending()) {

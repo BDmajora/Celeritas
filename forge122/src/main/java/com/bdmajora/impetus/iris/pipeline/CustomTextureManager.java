@@ -113,12 +113,14 @@ public class CustomTextureManager {
 
     /**
      * @param pack         the pack whose resolved custom-texture data to upload.
-     * @param samplerUnits the pipeline's standard sampler-name → unit table, used to expand a directive's sampler
-     *                     name to every alias of the same unit.
+     * @param samplerUnitsByStage the pipeline's standard sampler-name -> unit table for each stage, used to expand a
+     *                            directive's sampler name to every alias of the same unit.
+     * @param colorTargetsByName sampler name -> logical colortex index, used for Iris override deactivation.
      * @param firstUnit    first dedicated texture unit available for custom textures.
      * @param lastUnit     last usable texture unit (inclusive); directives beyond it are skipped with an error.
      */
-    public CustomTextureManager(ShaderPack pack, Map<String, Integer> samplerUnits, int firstUnit, int lastUnit) {
+    public CustomTextureManager(ShaderPack pack, Map<TextureStage, Map<String, Integer>> samplerUnitsByStage,
+                                Map<String, Integer> colorTargetsByName, int firstUnit, int lastUnit) {
         this.firstUnit = firstUnit;
         this.lastUnit = lastUnit;
         this.nextUnit = firstUnit;
@@ -142,7 +144,9 @@ public class CustomTextureManager {
 
         pack.getCustomTextureDataMap().forEach((stage, stageTextures) ->
                 stageTextures.forEach((samplerName, data) ->
-                        addOverride(stage, samplerName, samplerUnits, data)));
+                        addOverride(stage, samplerName,
+                                samplerUnitsByStage.getOrDefault(stage, Collections.<String, Integer>emptyMap()),
+                                colorTargetsByName, data)));
 
         // customTexture.<name> samplers exist in every stage, exactly like Iris passing getIrisCustomTextures()
         // to each stage's sampler setup. One texture/unit is shared by all stages.
@@ -165,7 +169,7 @@ public class CustomTextureManager {
     }
 
     private void addOverride(TextureStage stage, String samplerName, Map<String, Integer> samplerUnits,
-                             CustomTextureData data) {
+                             Map<String, Integer> colorTargetsByName, CustomTextureData data) {
         TextureRef texture = createTexture(stage + "." + samplerName, data);
         if (texture == null) {
             return;
@@ -184,7 +188,8 @@ public class CustomTextureManager {
         } else {
             // Override the name and every alias sharing its unit (gaux4 <-> colortex7, composite <-> colortex3, ...),
             // matching Iris's getOverride(names...) which checks all alias names of a binding.
-            int colorTarget = standardUnit < 16 ? standardUnit : -1;
+            Integer colorTargetIndex = colorTargetsByName.get(samplerName);
+            int colorTarget = colorTargetIndex == null ? -1 : colorTargetIndex;
             Override override = new Override(unit, colorTarget);
             for (Map.Entry<String, Integer> entry : samplerUnits.entrySet()) {
                 if (entry.getValue().intValue() == standardUnit.intValue()) {

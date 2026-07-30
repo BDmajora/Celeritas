@@ -661,6 +661,26 @@ public record LWJGL3Service(
     }
 
     @Override
+    public int glGenSamplers() {
+        return GL33C.glGenSamplers();
+    }
+
+    @Override
+    public void glDeleteSamplers(int sampler) {
+        GL33C.glDeleteSamplers(sampler);
+    }
+
+    @Override
+    public void glBindSampler(int unit, int sampler) {
+        GL33C.glBindSampler(unit, sampler);
+    }
+
+    @Override
+    public void glSamplerParameteri(int sampler, int pname, int param) {
+        GL33C.glSamplerParameteri(sampler, pname, param);
+    }
+
+    @Override
     public void glDepthRange(double zNear, double zFar) {
         GL11C.glDepthRange(zNear, zFar);
     }
@@ -708,6 +728,11 @@ public record LWJGL3Service(
     @Override
     public void glTexParameteri(int target, int pname, int param) {
         GL11C.glTexParameteri(target, pname, param);
+    }
+
+    @Override
+    public void glTexParameteriv(int target, int pname, int[] params) {
+        GL11C.glTexParameteriv(target, pname, params);
     }
 
     @Override
@@ -896,6 +921,11 @@ public record LWJGL3Service(
     @Override
     public int glGetInteger(int pname) {
         return GL11C.glGetInteger(pname);
+    }
+
+    @Override
+    public float glGetFloat(int pname) {
+        return GL11C.glGetFloat(pname);
     }
 
     @Override

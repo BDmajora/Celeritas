@@ -45,6 +45,13 @@ public final class ShaderPack {
     /** Overworld override directory checked before the pack root. */
     private static final String OVERWORLD_DIR = "/world0";
 
+    /** {@code !defined(IS_IRIS) && MC_VERSION < 11604} — see {@link #detectLegacyPrograms}. */
+    private static final java.util.regex.Pattern LEGACY_BRANCH_PATTERN = java.util.regex.Pattern.compile(
+            "!\\s*defined\\s*\\(?\\s*IS_IRIS\\s*\\)?\\s*&&\\s*MC_VERSION\\s*<\\s*(\\d+)");
+    /** File extensions that make a pack file a shader stage rather than an include. */
+    private static final Set<String> STAGE_EXTENSIONS =
+            new java.util.HashSet<>(java.util.Arrays.asList("vsh", "fsh", "gsh", "csh", "tcs", "tes"));
+
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Iris");
 
     private final Map<AbsolutePackPath, String> sources;
@@ -161,6 +168,68 @@ public final class ShaderPack {
                 LOGGER.error("[Iris] Unable to read the custom texture at {}: {}", path, e.getMessage());
             }
         });
+
+        // Must run before anything compiles: both the terrain and the composite compile paths ask
+        // ShaderMacros.forProgram which programs take their pre-Iris branch.
+        ShaderMacros.setPackLegacyPrograms(detectLegacyPrograms(this.sources));
+    }
+
+    /**
+     * The {@code !defined(IS_IRIS) && MC_VERSION < <newer than ours>} directive: the pack saying "here is the path I
+     * authored for an OptiFine this old". Those programs get compiled without {@code IS_IRIS}/{@code IRIS_VERSION}
+     * (see {@code ShaderMacros.setPackLegacyPrograms}) so they take that path instead of the Iris one, which on 1.12.2
+     * is both what the pack intends and what actually works — Sildur's water does its reflection inline behind
+     * {@code IS_IRIS} at {@code F0=0.5} over 85%-opaque water (opaque, mirror-like), while the 1.12.2 path defers it
+     * to {@code composite1} at {@code F0=0.25} after the water has alpha-blended with the floor (see-through water).
+     * <p>
+     * The {@code &&} and the {@code <} are both load-bearing, and keep this from firing on packs that merely mention
+     * {@code IS_IRIS}: BSL's {@code deferred1} has {@code MC_VERSION >= 10900 && !defined IS_IRIS} and
+     * Complementary's {@code common.glsl} has {@code !defined IS_IRIS || MC_VERSION < 12109}; neither matches. Across
+     * the nine packs on hand this selects exactly Sildur's {@code gbuffers_water} and {@code composite1} — the pair
+     * that has to move together, since the 1.12.2 water branch writes the wave normal to {@code gl_FragData[2]}
+     * ({@code DRAWBUFFERS:412}) and {@code composite1} reads it back from colortex2.
+     * <p>
+     * Scans the raw (un-flattened) sources on purpose: a match inside an {@code #include}d library says nothing about
+     * which program should switch branches.
+     */
+    private static Set<String> detectLegacyPrograms(Map<AbsolutePackPath, String> rawSources) {
+        Set<String> legacy = new java.util.HashSet<>();
+        for (Map.Entry<AbsolutePackPath, String> entry : rawSources.entrySet()) {
+            String name = programName(entry.getKey());
+            if (name == null || legacy.contains(name)) {
+                continue;
+            }
+            java.util.regex.Matcher matcher = LEGACY_BRANCH_PATTERN.matcher(entry.getValue());
+            while (matcher.find()) {
+                int version;
+                try {
+                    version = Integer.parseInt(matcher.group(1));
+                } catch (NumberFormatException e) {
+                    continue;
+                }
+                // Only a cutoff ABOVE ours means the legacy branch is the one 1.12.2 would take.
+                if (version > ShaderMacros.MC_VERSION) {
+                    legacy.add(name);
+                    LOGGER.info("[Iris] {} has a pre-Iris path for MC < {}; compiling it without IS_IRIS", name, version);
+                    break;
+                }
+            }
+        }
+        return legacy;
+    }
+
+    /** {@code /world1/composite1.fsh} → {@code composite1}; {@code null} for anything that is not a shader stage. */
+    private static String programName(AbsolutePackPath path) {
+        String file = path.getPathString();
+        int slash = file.lastIndexOf('/');
+        if (slash >= 0) {
+            file = file.substring(slash + 1);
+        }
+        int dot = file.lastIndexOf('.');
+        if (dot < 0 || !STAGE_EXTENSIONS.contains(file.substring(dot + 1))) {
+            return null;
+        }
+        return file.substring(0, dot);
     }
 
     /**

@@ -187,9 +187,9 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
     }
 
     @Inject(method = "renderClouds", at = @At("HEAD"), cancellable = true)
-    private void obeyShaderPackFastCloudMode(float partialTicks, int pass, double x, double y, double z,
+    private void obeyShaderPackCloudMode(float partialTicks, int pass, double x, double y, double z,
             CallbackInfo ci) {
-        if (!shouldRenderVanillaClouds(false)) {
+        if (!shouldDispatchVanillaClouds()) {
             ci.cancel();
         }
     }
@@ -199,6 +199,22 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
             CallbackInfo ci) {
         if (!shouldRenderVanillaClouds(true)) {
             ci.cancel();
+        }
+    }
+
+    private static boolean shouldDispatchVanillaClouds() {
+        ShaderPack pack = Iris.getCurrentPack();
+        if (pack == null) {
+            return true;
+        }
+        String mode = pack.getProperties().getCloudMode().orElse("");
+        switch (mode) {
+            case "off":
+            case "none":
+            case "false":
+                return false;
+            default:
+                return true;
         }
     }
 
