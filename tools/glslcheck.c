@@ -1,6 +1,7 @@
 // Headless GLSL compile+link checker for the Impetus/Iris port.
 // No EGL/GL headers on this box, so every entry point is declared by hand and resolved through dlopen.
-// Usage: glslcheck <dir> [<program> ...]   (defaults to every <program>.vsh/<program>.fsh pair in <dir>)
+// Usage: glslcheck <dir> [<program> ...]   (defaults to every <program>.vsh/<program>.fsh pair plus every
+//                                            <program>.csh compute program in <dir>)
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +28,7 @@ typedef int EGLint, GLint, GLsizei;
 
 #define GL_VERTEX_SHADER 0x8B31
 #define GL_FRAGMENT_SHADER 0x8B30
+#define GL_COMPUTE_SHADER 0x91B9
 #define GL_COMPILE_STATUS 0x8B81
 #define GL_LINK_STATUS 0x8B82
 #define GL_RENDERER 0x1F01
@@ -133,6 +135,38 @@ static int check_program(const char *dir, const char *name) {
     return linked ? 1 : 0;
 }
 
+/* Compute programs (`<name>.csh`) link on their own — Iris's letter-suffixed compute variants
+   (deferred4_a.csh) have no vertex/fragment pair at all. */
+static int check_compute(const char *dir, const char *name) {
+    char cpath[4096];
+    snprintf(cpath, sizeof(cpath), "%s/%s.csh", dir, name);
+    char *csrc = slurp(cpath);
+    if (!csrc) return 1;
+
+    GLuint cs = 0;
+    int ok = compile_stage(GL_COMPUTE_SHADER, csrc, name, &cs);
+    free(csrc);
+    if (!ok) { if (cs) glDeleteShader(cs); return 0; }
+
+    GLuint prog = glCreateProgram();
+    glAttachShader(prog, cs);
+    glLinkProgram(prog);
+    GLint linked = 0;
+    glGetProgramiv(prog, GL_LINK_STATUS, &linked);
+    if (!linked) {
+        char log[16384];
+        GLsizei len = 0;
+        glGetProgramInfoLog(prog, sizeof(log) - 1, &len, log);
+        log[len] = 0;
+        printf("  LINK FAIL %s (compute)\n%s\n", name, log);
+    } else {
+        printf("  ok %-22s  (compute)  colorimg4=%d  colortex4=%d\n", name,
+               glGetUniformLocation(prog, "colorimg4"), glGetUniformLocation(prog, "colortex4"));
+    }
+    glDeleteShader(cs); glDeleteProgram(prog);
+    return linked ? 1 : 0;
+}
+
 #define GET(lib, sym) do { *(void **)(&sym) = dlsym(lib, #sym); \
     if (!sym) { fprintf(stderr, "missing %s\n", #sym); return 2; } } while (0)
 #define GETGL(sym) do { *(void **)(&sym) = eglGetProcAddress(#sym); \
@@ -192,15 +226,21 @@ int main(int argc, char **argv) {
         if (!d) { fprintf(stderr, "opendir %s\n", argv[1]); return 2; }
         struct dirent *e;
         char names[512][128]; int n = 0;
-        while ((e = readdir(d)) && n < 512) {
+        char computes[512][128]; int nc = 0;
+        while ((e = readdir(d)) && n < 512 && nc < 512) {
             char *dot = strrchr(e->d_name, '.');
-            if (!dot || strcmp(dot, ".fsh") != 0) continue;
+            if (!dot) continue;
             size_t len = dot - e->d_name;
             if (len >= sizeof(names[0])) continue;
-            memcpy(names[n], e->d_name, len); names[n][len] = 0; n++;
+            if (strcmp(dot, ".fsh") == 0) {
+                memcpy(names[n], e->d_name, len); names[n][len] = 0; n++;
+            } else if (strcmp(dot, ".csh") == 0) {
+                memcpy(computes[nc], e->d_name, len); computes[nc][len] = 0; nc++;
+            }
         }
         closedir(d);
         for (int i = 0; i < n; i++) { total++; failures += !check_program(argv[1], names[i]); }
+        for (int i = 0; i < nc; i++) { total++; failures += !check_compute(argv[1], computes[i]); }
     }
     printf("%d/%d programs linked\n", total - failures, total);
     return failures ? 1 : 0;

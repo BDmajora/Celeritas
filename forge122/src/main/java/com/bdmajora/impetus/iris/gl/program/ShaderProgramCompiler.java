@@ -8,8 +8,11 @@ import com.bdmajora.impetus.iris.pipeline.IrisDebugDump;
 import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
 import com.bdmajora.impetus.iris.shaderpack.ProgramSource;
 import com.bdmajora.impetus.iris.shaderpack.preprocessor.GlslPreprocessor;
+import com.bdmajora.impetus.iris.shaderpack.texture.CustomTextureTransformer;
+import com.bdmajora.impetus.iris.shaderpack.texture.TextureStage;
 import com.bdmajora.impetus.iris.targets.IrisRenderTargets;
 import com.bdmajora.impetus.iris.terrain.ModernPackTransformer;
+import com.bdmajora.impetus.iris.terrain.VanillaNameTransformer;
 import com.bdmajora.impetus.iris.vertices.IrisVertexAttributes;
 
 import java.util.ArrayList;
@@ -33,7 +36,27 @@ public final class ShaderProgramCompiler {
     private ShaderProgramCompiler() {
     }
 
-    public static IrisProgram compile(String name, ProgramSource source, Map<String, String> defines) {
+    /**
+     * The driver-visible source for one gbuffer/shadow program, and the dense draw-buffer routing that goes with it.
+     * Split out of {@link #compile} so the headless {@code PackSmoke} tool can exercise the exact same string patching
+     * without a GL context — a copy of it there had already drifted, hiding the {@code impetus_HandLightmap}
+     * regression from the smoke checks.
+     */
+    public static final class PatchedSource {
+        public final String vertex;
+        public final String fragment;
+        public final String geometry;
+        public final int[] drawBuffers;
+
+        PatchedSource(String vertex, String fragment, String geometry, int[] drawBuffers) {
+            this.vertex = vertex;
+            this.fragment = fragment;
+            this.geometry = geometry;
+            this.drawBuffers = drawBuffers;
+        }
+    }
+
+    public static PatchedSource patchSource(String name, ProgramSource source, Map<String, String> defines) {
         String vertexSource = source.getVertexSource().orElse(null);
         String fragmentSource = source.getFragmentSource().orElse(null);
         String geometrySource = source.getGeometrySource().orElse(null);
@@ -41,6 +64,12 @@ public final class ShaderProgramCompiler {
         if (vertexSource == null || fragmentSource == null) {
             throw new ProgramCreationException("Program '" + name + "' is missing a vertex or fragment stage");
         }
+
+        // Raw texture.gbuffers.<sampler> directives: redirect the identifier to its minted customtexN name wherever
+        // the declared sampler type matches the directive's target (Iris TextureTransformer).
+        vertexSource = CustomTextureTransformer.transform(name, vertexSource, TextureStage.GBUFFERS_AND_SHADOW);
+        fragmentSource = CustomTextureTransformer.transform(name, fragmentSource, TextureStage.GBUFFERS_AND_SHADOW);
+        geometrySource = CustomTextureTransformer.transform(name, geometrySource, TextureStage.GBUFFERS_AND_SHADOW);
 
         // Modern packs (#version 130+ single-source dual-stage, e.g. Complementary) need the #version bumped to
         // "330 compatibility" to compile on the 1.12.2 compat context — exactly like the fullscreen/terrain modern
@@ -58,16 +87,34 @@ public final class ShaderProgramCompiler {
                 geometrySource = ModernPackTransformer.transform(geometrySource);
             }
         }
+        // Modern (1.17+) attribute/matrix names -> fixed-function built-ins. Before the hand bridge, so a hand
+        // program written against vaUV2 still ends up going through impetus_HandLightmap.
+        vertexSource = VanillaNameTransformer.transform(vertexSource);
+        fragmentSource = VanillaNameTransformer.transform(fragmentSource);
+        if (geometrySource != null) {
+            geometrySource = VanillaNameTransformer.transform(geometrySource);
+        }
         vertexSource = neutralizeUnfedVanillaAttributes(vertexSource);
         if (isFirstPersonHandProgram(name)) {
             vertexSource = injectHandLightmapBridge(vertexSource);
         }
         fragmentSource = DrawBuffers.rewriteFragmentOutputs(fragmentSource, drawBuffers);
 
-        String processedVertex = IrisRenderingPipeline.stabilizeShaderSource(name,
-                applyDefines(vertexSource, defines));
-        String processedFragment = IrisRenderingPipeline.stabilizeShaderSource(name,
-                applyDefines(fragmentSource, defines));
+        return new PatchedSource(
+                IrisRenderingPipeline.stabilizeShaderSource(name, applyDefines(vertexSource, defines)),
+                IrisRenderingPipeline.stabilizeShaderSource(name, applyDefines(fragmentSource, defines)),
+                geometrySource == null
+                        ? null
+                        : IrisRenderingPipeline.stabilizeShaderSource(name, applyDefines(geometrySource, defines)),
+                drawBuffers);
+    }
+
+    public static IrisProgram compile(String name, ProgramSource source, Map<String, String> defines) {
+        PatchedSource patched = patchSource(name, source, defines);
+        String processedVertex = patched.vertex;
+        String processedFragment = patched.fragment;
+        String geometrySource = patched.geometry;
+        int[] drawBuffers = patched.drawBuffers;
 
         // Dump the driver-visible source for every gbuffer program (entities, hand, block, …). The terrain/fullscreen
         // paths dump their own; these immediate-mode programs were the blind spot when debugging entity/hand artifacts.
@@ -86,13 +133,11 @@ public final class ShaderProgramCompiler {
                     .attach(fragmentShader);
 
             if (geometrySource != null) {
-                geometryShader = new GlShader(ShaderType.GEOMETRY, name + ".gsh",
-                        IrisRenderingPipeline.stabilizeShaderSource(name,
-                                applyDefines(geometrySource, defines)));
+                geometryShader = new GlShader(ShaderType.GEOMETRY, name + ".gsh", geometrySource);
                 builder.attach(geometryShader);
             }
 
-            bindOptifineAttributes(builder, vertexSource);
+            bindOptifineAttributes(builder, processedVertex);
 
             GlProgram program = builder.link();
             LOGGER.info("[Iris] {} resolved DRAWBUFFERS {}", name, Arrays.toString(drawBuffers));
@@ -170,6 +215,16 @@ public final class ShaderProgramCompiler {
         return "gbuffers_hand".equals(name) || "gbuffers_hand_water".equals(name);
     }
 
+    /**
+     * Replaces {@code gl_MultiTexCoord1} with a uniform the hand renderer feeds, because vanilla lights held items
+     * through GL lighting rather than the lightmap texcoord, so the fixed-function coord arrives at ~0.
+     * <p>
+     * The declaration goes immediately after the {@code #version} line and any {@code #extension} directives that
+     * <em>contiguously</em> follow it. Scanning the whole file for the last {@code #extension} (as this used to) breaks
+     * on packs whose flattened include tree contains a guarded {@code #extension} deep inside — Photon's
+     * {@code include/global.glsl} has three, so the declaration landed thousands of lines after the first use and
+     * {@code gbuffers_hand} failed to compile with "undefined variable {@code impetus_HandLightmap}".
+     */
     private static String injectHandLightmapBridge(String source) {
         List<String> lines = new ArrayList<>(Arrays.asList(source.split("\n", -1)));
         int insertIndex = -1;
@@ -183,9 +238,12 @@ public final class ShaderProgramCompiler {
             lines.add(0, "#version " + GlslPreprocessor.DEFAULT_VERSION);
             insertIndex = 1;
         }
-        for (int i = insertIndex; i < lines.size(); i++) {
-            if (lines.get(i).trim().startsWith("#extension")) {
-                insertIndex = i + 1;
+        while (insertIndex < lines.size()) {
+            String line = lines.get(insertIndex).trim();
+            if (line.isEmpty() || line.startsWith("//") || line.startsWith("#extension")) {
+                insertIndex++;
+            } else {
+                break;
             }
         }
 

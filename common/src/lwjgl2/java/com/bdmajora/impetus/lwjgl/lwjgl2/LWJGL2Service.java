@@ -348,6 +348,23 @@ public record LWJGL2Service(
         GL20.glEnableVertexAttribArray(index);
     }
 
+    @Override
+    public void glDisableVertexAttribArray(int index) {
+        GL20.glDisableVertexAttribArray(index);
+    }
+
+    @Override
+    public int glGetVertexAttribi(int index, int pname) {
+        // LWJGL2's GL20 only exposes the buffer form of glGetVertexAttrib.
+        IntBuffer params = MemoryUtilities.memAllocInt(4);
+        try {
+            GL20.glGetVertexAttrib(index, pname, params);
+            return params.get(0);
+        } finally {
+            MemoryUtilities.memFree(params);
+        }
+    }
+
     // ===================== SHADER OPERATIONS =====================
 
     @Override

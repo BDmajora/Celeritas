@@ -1,6 +1,7 @@
 package com.bdmajora.impetus.iris.devtool;
 
 import com.bdmajora.impetus.iris.gl.program.DrawBuffers;
+import com.bdmajora.impetus.iris.gl.program.ShaderProgramCompiler;
 import com.bdmajora.impetus.iris.gl.shader.ShaderMacros;
 import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
 import com.bdmajora.impetus.iris.shaderpack.ProgramSet;
@@ -10,9 +11,12 @@ import com.bdmajora.impetus.iris.shaderpack.ShaderPackLoader;
 import com.bdmajora.impetus.iris.shaderpack.loading.ProgramArrayId;
 import com.bdmajora.impetus.iris.shaderpack.loading.ProgramId;
 import com.bdmajora.impetus.iris.shaderpack.preprocessor.GlslPreprocessor;
+import com.bdmajora.impetus.iris.shaderpack.texture.CustomTextureTransformer;
+import com.bdmajora.impetus.iris.shaderpack.texture.TextureStage;
 import com.bdmajora.impetus.iris.terrain.FullscreenTransformer;
 import com.bdmajora.impetus.iris.terrain.ImpetusTerrainTransformer;
 import com.bdmajora.impetus.iris.terrain.ModernPackTransformer;
+import com.bdmajora.impetus.iris.terrain.VanillaNameTransformer;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
@@ -84,6 +88,9 @@ public final class PackSmoke {
             Map<String, String> scoped = ShaderMacros.forProgram(macros, source.getName());
             if (id == ProgramId.Terrain || id == ProgramId.Water) {
                 dumpTerrain(source, scoped, outDir);
+            } else if (id == ProgramId.Final) {
+                // `final` is a full-screen quad program, not a gbuffer one — it goes through the composite path.
+                dumpFullscreen(source, TextureStage.COMPOSITE_AND_FINAL, scoped, outDir);
             } else {
                 dumpGbuffer(source, scoped, outDir);
             }
@@ -93,6 +100,7 @@ public final class PackSmoke {
             if (sources == null) {
                 continue;
             }
+            TextureStage stage = textureStageOf(arrayId);
             for (ProgramSource source : sources) {
                 if (source == null) {
                     continue;
@@ -101,34 +109,51 @@ public final class PackSmoke {
                     System.out.println("  (skipping disabled program " + source.getName() + ")");
                     continue;
                 }
-                dumpFullscreen(source, ShaderMacros.forProgram(macros, source.getName()), outDir);
+                dumpFullscreen(source, stage, ShaderMacros.forProgram(macros, source.getName()), outDir);
             }
         }
     }
 
-    /** Mirrors {@code ShaderProgramCompiler.compile}'s string stage (gbuffers + shadow). */
+    private static TextureStage textureStageOf(ProgramArrayId arrayId) {
+        switch (arrayId) {
+            case Setup:
+                return TextureStage.SETUP;
+            case Begin:
+                return TextureStage.BEGIN;
+            case Prepare:
+                return TextureStage.PREPARE;
+            case ShadowComposite:
+                return TextureStage.SHADOWCOMP;
+            case Deferred:
+                return TextureStage.DEFERRED;
+            default:
+                return TextureStage.COMPOSITE_AND_FINAL;
+        }
+    }
+
+    /** Runs {@code ShaderProgramCompiler}'s string stage verbatim (gbuffers + shadow), stopping short of the GL calls. */
     private static void dumpGbuffer(ProgramSource source, Map<String, String> macros, Path outDir) throws Exception {
-        String vsh = source.getVertexSource().orElse(null);
-        String fsh = source.getFragmentSource().orElse(null);
-        if (vsh == null || fsh == null) {
+        if (!source.hasRasterStages()) {
             return;
         }
-        int[] drawBuffers = DrawBuffers.sanitize(DrawBuffers.parseActive(fsh, macros), 16);
-        if (ModernPackTransformer.isModernSource(fsh)) {
-            vsh = ModernPackTransformer.transform(vsh);
-            fsh = ModernPackTransformer.transform(fsh);
+        ShaderProgramCompiler.PatchedSource patched =
+                ShaderProgramCompiler.patchSource(source.getName(), source, macros);
+        write(outDir, source.getName() + ".vsh", patched.vertex);
+        write(outDir, source.getName() + ".fsh", patched.fragment);
+        if (patched.geometry != null) {
+            write(outDir, source.getName() + ".gsh", patched.geometry);
         }
-        fsh = DrawBuffers.rewriteFragmentOutputs(fsh, drawBuffers);
-        write(outDir, source.getName() + ".vsh",
-                IrisRenderingPipeline.stabilizeShaderSource(source.getName(), applyDefines(vsh, macros)));
-        write(outDir, source.getName() + ".fsh",
-                IrisRenderingPipeline.stabilizeShaderSource(source.getName(), applyDefines(fsh, macros)));
     }
 
     /** Mirrors {@code IrisRenderingPipeline.buildCompositePass}'s string stage (deferred/composite/final + csh). */
-    private static void dumpFullscreen(ProgramSource source, Map<String, String> macros, Path outDir) throws Exception {
-        String vshRaw = source.getVertexSource().orElse(null);
-        String fshRaw = source.getFragmentSource().orElse(null);
+    private static void dumpFullscreen(ProgramSource source, TextureStage stage, Map<String, String> macros,
+                                       Path outDir) throws Exception {
+        String vshRaw = CustomTextureTransformer.transform(
+                source.getName(), source.getVertexSource().orElse(null), stage);
+        String fshRaw = CustomTextureTransformer.transform(
+                source.getName(), source.getFragmentSource().orElse(null), stage);
+        vshRaw = VanillaNameTransformer.transform(vshRaw);
+        fshRaw = VanillaNameTransformer.transform(fshRaw);
         if (vshRaw != null && fshRaw != null) {
             int[] drawBuffers = DrawBuffers.parseActive(fshRaw, macros);
             String vsh;
@@ -147,20 +172,29 @@ public final class PackSmoke {
             write(outDir, source.getName() + ".vsh", vsh);
             write(outDir, source.getName() + ".fsh", fsh);
         }
-        String csh = source.getComputeSource().orElse(null);
-        if (csh != null) {
-            write(outDir, source.getName() + ".csh", IrisRenderingPipeline.stabilizeShaderSource(
-                    source.getName(), ShaderMacros.injectDefines(csh, macros)));
+        String[] computes = source.getComputeSources();
+        for (int variant = 0; variant < computes.length; variant++) {
+            if (computes[variant] == null) {
+                continue;
+            }
+            String name = ProgramSource.computeVariantName(source.getName(), variant);
+            write(outDir, name + ".csh", IrisRenderingPipeline.stabilizeShaderSource(
+                    name, ShaderMacros.injectDefines(
+                            CustomTextureTransformer.transform(name, computes[variant], stage), macros)));
         }
     }
 
     /** Mirrors {@code IrisTerrainProgramOverride}'s string stage (gbuffers_terrain / gbuffers_water). */
     private static void dumpTerrain(ProgramSource source, Map<String, String> macros, Path outDir) throws Exception {
-        String vshSource = source.getVertexSource().orElse(null);
-        String fshSource = source.getFragmentSource().orElse(null);
+        String vshSource = CustomTextureTransformer.transform(
+                source.getName(), source.getVertexSource().orElse(null), TextureStage.GBUFFERS_AND_SHADOW);
+        String fshSource = CustomTextureTransformer.transform(
+                source.getName(), source.getFragmentSource().orElse(null), TextureStage.GBUFFERS_AND_SHADOW);
         if (vshSource == null || fshSource == null) {
             return;
         }
+        vshSource = VanillaNameTransformer.transform(vshSource);
+        fshSource = VanillaNameTransformer.transform(fshSource);
         boolean modern = ModernPackTransformer.isModernSource(fshSource);
         int[] drawBuffers = IrisRenderingPipeline.sanitizeDrawBuffers(
                 source.getName(), DrawBuffers.parseActive(fshSource, macros));

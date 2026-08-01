@@ -29,13 +29,6 @@ public final class ActiveCustomUniforms {
         }
     }
 
-    public static void logValues() {
-        CustomUniforms current = active;
-        if (current != null) {
-            current.logValues();
-        }
-    }
-
     public static void assignTo(UniformCollector collector) {
         CustomUniforms current = active;
         if (current != null) {

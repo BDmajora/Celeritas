@@ -42,6 +42,8 @@ public interface LWJGLService {
     void glVertexAttribPointer(int index, int size, int type, boolean normalized, int stride, long pointer);
     void glVertexAttribIPointer(int index, int size, int type, int stride, long pointer);
     void glEnableVertexAttribArray(int index);
+    void glDisableVertexAttribArray(int index);
+    int glGetVertexAttribi(int index, int pname);
 
     // ===================== SHADER OPERATIONS =====================
 

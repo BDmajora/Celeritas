@@ -15,7 +15,7 @@ import java.util.Locale;
 public enum ProgramId {
     // --- "Basic"/sky/textured family ---
     Basic("gbuffers_basic"),
-    Line("gbuffers_line"),
+    Line("gbuffers_line", Basic),
     Textured("gbuffers_textured", Basic),
     TexturedLit("gbuffers_textured_lit", Textured),
     SkyBasic("gbuffers_skybasic", Basic),

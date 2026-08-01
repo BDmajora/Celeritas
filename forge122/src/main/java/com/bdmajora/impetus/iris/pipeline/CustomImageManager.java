@@ -69,12 +69,13 @@ public class CustomImageManager {
     private final Map<String, Image> imagesBySampler = new LinkedHashMap<>();
     /** Image uniform name → image unit AND sampler name → texture unit, for program uniform assignment. */
     private final Map<String, Integer> uniformOverrides = new LinkedHashMap<>();
+    /** The driver's {@code GL_MAX_IMAGE_UNITS}; the ceiling the render-target images allocate up to. */
+    private final int hardwareImageUnits;
 
     public CustomImageManager(List<CustomImageDefinition> definitions, int firstSamplerUnit, int lastSamplerUnit) {
         int reportedImageUnits = LWJGL.glGetInteger(GL_MAX_IMAGE_UNITS);
-        int imageUnitLimit = reportedImageUnits > 0
-                ? Math.min(MAX_DECLARED_IMAGES, reportedImageUnits)
-                : MAX_DECLARED_IMAGES;
+        this.hardwareImageUnits = reportedImageUnits > 0 ? reportedImageUnits : MAX_DECLARED_IMAGES;
+        int imageUnitLimit = Math.min(MAX_DECLARED_IMAGES, this.hardwareImageUnits);
         int nextSamplerUnit = firstSamplerUnit;
         for (CustomImageDefinition definition : definitions) {
             if (this.images.size() >= imageUnitLimit) {
@@ -192,6 +193,19 @@ public class CustomImageManager {
         return this.uniformOverrides;
     }
 
+    /**
+     * First image unit not taken by an {@code image.<name>} directive. The render-target images ({@code colorimgN},
+     * Iris's {@code IrisImages.addRenderTargetImages}) are allocated upward from here.
+     */
+    public int getNextAvailableImageUnit() {
+        return this.images.size();
+    }
+
+    /** The driver's {@code GL_MAX_IMAGE_UNITS}, i.e. the exclusive upper bound for any image unit. */
+    public int getHardwareImageUnits() {
+        return this.hardwareImageUnits;
+    }
+
     /** The first 3D image's dimensions, used to derive the shadowcomp dispatch size (voxel volume / local size). */
     public int[] getFirst3DImageSize() {
         for (Image image : this.images) {
@@ -271,146 +285,9 @@ public class CustomImageManager {
         for (Image image : this.images) {
             LWJGL.glDeleteTextures(image.texture);
         }
-        if (this.probeFramebuffer != 0) {
-            LWJGL.glDeleteFramebuffers(this.probeFramebuffer);
-            this.probeFramebuffer = 0;
-        }
         this.images.clear();
         this.imagesBySampler.clear();
         this.uniformOverrides.clear();
     }
 
-    // ------------------------------------------------------------------ flicker probe
-
-    private static final int GL_READ_FRAMEBUFFER = 0x8CA8;
-    private static final int GL_READ_FRAMEBUFFER_BINDING = 0x8CAA;
-    private static final int GL_COLOR_ATTACHMENT0 = 0x8CE0;
-    private static final int GL_FRAMEBUFFER_COMPLETE = 0x8CD5;
-    private static final int GL_RED_INTEGER = 0x8D94;
-    private static final int PROBE_WINDOW = 64;
-    private int probeFramebuffer;
-    private ByteBuffer probeReadback;
-    /** Per volume: this probe frame's decoded window values, last frame's, and the one before (delta baselines). */
-    private final Map<String, float[][]> probeHistory = new LinkedHashMap<>();
-    /** The floodfill main volume's decoded values this frame, for the main-vs-copy pair delta. */
-    private float[] probePairBaseline;
-
-    /**
-     * Flicker-probe readback: hashes a {@value #PROBE_WINDOW}² window of the three central Z slices of every 3D
-     * image (the voxel/floodfill volumes are camera-centered, so this covers the geometry around the player). A
-     * hash that alternates between consecutive probe frames while standing still pinpoints which volume's CONTENT
-     * is unstable, separating voxelization bugs from compute-scheduling and sampler-side bugs.
-     */
-    public void logProbeHashes(String suffix) {
-        int previousReadFbo = LWJGL.glGetInteger(GL_READ_FRAMEBUFFER_BINDING);
-        try {
-            if (this.probeFramebuffer == 0) {
-                this.probeFramebuffer = LWJGL.glGenFramebuffers();
-            }
-            LWJGL.glBindFramebuffer(GL_READ_FRAMEBUFFER, this.probeFramebuffer);
-            for (Image image : this.images) {
-                if (image.definition.sizeZ <= 0) {
-                    continue;
-                }
-                int w = Math.min(PROBE_WINDOW, image.definition.sizeX);
-                int h = Math.min(PROBE_WINDOW, image.definition.sizeY);
-                int x0 = (image.definition.sizeX - w) / 2;
-                int y0 = (image.definition.sizeY - h) / 2;
-                boolean integerFormat = image.definition.internalFormat.endsWith("i");
-                // Integer volumes (single-channel voxel ids) read back as R32UI; float volumes as full RGBA floats
-                // so alternation in any light channel is caught.
-                int format = integerFormat ? GL_RED_INTEGER : GL11.GL_RGBA;
-                int type = integerFormat ? GL11.GL_UNSIGNED_INT : GL11.GL_FLOAT;
-                int bytesNeeded = w * h * (integerFormat ? 4 : 16);
-                if (this.probeReadback == null || this.probeReadback.capacity() < bytesNeeded) {
-                    // Native byte order: glReadPixels writes native-endian data, and Java ByteBuffers default to
-                    // big-endian — without this the decoded floats are byte-swapped garbage.
-                    this.probeReadback = ByteBuffer.allocateDirect(bytesNeeded)
-                            .order(java.nio.ByteOrder.nativeOrder());
-                }
-                long hash = 0xcbf29ce484222325L; // FNV-1a
-                int centerZ = image.definition.sizeZ / 2;
-                boolean ok = true;
-                int valuesPerLayer = w * h * (integerFormat ? 1 : 4);
-                float[] values = new float[valuesPerLayer * 3];
-                int layerIndex = 0;
-                for (int layer = centerZ - 1; layer <= centerZ + 1; layer++, layerIndex++) {
-                    LWJGL.glFramebufferTextureLayer(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                            image.texture, 0, layer);
-                    if (LWJGL.glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-                        ok = false;
-                        break;
-                    }
-                    LWJGL.glReadBuffer(GL_COLOR_ATTACHMENT0);
-                    this.probeReadback.clear();
-                    LWJGL.glReadPixels(x0, y0, w, h, format, type, this.probeReadback);
-                    for (int i = 0; i < bytesNeeded; i++) {
-                        hash = (hash ^ (this.probeReadback.get(i) & 0xFF)) * 0x100000001b3L;
-                    }
-                    for (int i = 0; i < valuesPerLayer; i++) {
-                        values[layerIndex * valuesPerLayer + i] = integerFormat
-                                ? (float) (this.probeReadback.getInt(i * 4) & 0xFFFFFFFFL)
-                                : this.probeReadback.getFloat(i * 4);
-                    }
-                }
-                LOGGER.info("[Iris] Flicker probe {} volume '{}': hash={} window={}x{}x3@z{} {}",
-                        suffix, image.definition.name, ok ? Long.toHexString(hash) : "READBACK_INCOMPLETE",
-                        w, h, centerZ, image.definition.internalFormat);
-                if (ok) {
-                    logProbeDeltas(suffix, image.definition.name, values);
-                }
-            }
-        } catch (Throwable t) {
-            LOGGER.warn("[Iris] Flicker probe volume readback failed: {}", t.toString());
-        } finally {
-            LWJGL.glBindFramebuffer(GL_READ_FRAMEBUFFER, previousReadFbo);
-        }
-    }
-
-    /**
-     * Numeric convergence/oscillation stats for one probed volume window. delta1 = mean |now − last probe frame|,
-     * delta2 = mean |now − two probe frames ago|. A converging floodfill shows delta2 → 0; a frame-parity
-     * oscillation shows delta1 large while delta2 ≈ 0. pairDelta (floodfill copy vs main, same frame) is the exact
-     * field difference a parity-alternating reader flips between on screen.
-     */
-    private void logProbeDeltas(String suffix, String name, float[] values) {
-        float[][] history = this.probeHistory.get(name);
-        if (history == null) {
-            history = new float[2][];
-            this.probeHistory.put(name, history);
-        }
-        String stats = "meanAbs=" + meanAbs(values)
-                + " delta1=" + meanAbsDelta(values, history[0])
-                + " delta2=" + meanAbsDelta(values, history[1]);
-        if (name.equals("floodfill_img")) {
-            this.probePairBaseline = values;
-        } else if (name.equals("floodfill_img_copy")) {
-            stats += " pairDeltaVsMain=" + meanAbsDelta(values, this.probePairBaseline);
-        }
-        LOGGER.info("[Iris] Flicker probe {} volume '{}' stats: {}", suffix, name, stats);
-        history[1] = history[0];
-        history[0] = values;
-    }
-
-    private static String meanAbs(float[] values) {
-        double sum = 0.0;
-        for (float value : values) {
-            sum += Math.abs(value);
-        }
-        return String.format("%.6g", sum / values.length);
-    }
-
-    private static String meanAbsDelta(float[] now, float[] before) {
-        if (before == null || before.length != now.length) {
-            return "n/a";
-        }
-        double sum = 0.0;
-        double max = 0.0;
-        for (int i = 0; i < now.length; i++) {
-            double d = Math.abs(now[i] - before[i]);
-            sum += d;
-            max = Math.max(max, d);
-        }
-        return String.format("%.6g(max %.6g)", sum / now.length, max);
-    }
 }

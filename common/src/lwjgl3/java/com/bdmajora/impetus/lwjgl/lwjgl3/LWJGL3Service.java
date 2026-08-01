@@ -291,6 +291,16 @@ public record LWJGL3Service(
         GL20C.glEnableVertexAttribArray(index);
     }
 
+    @Override
+    public void glDisableVertexAttribArray(int index) {
+        GL20C.glDisableVertexAttribArray(index);
+    }
+
+    @Override
+    public int glGetVertexAttribi(int index, int pname) {
+        return GL20C.glGetVertexAttribi(index, pname);
+    }
+
     // ===================== SHADER OPERATIONS =====================
 
     @Override

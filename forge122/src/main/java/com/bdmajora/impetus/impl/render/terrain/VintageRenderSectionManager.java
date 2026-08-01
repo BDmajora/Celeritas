@@ -81,6 +81,13 @@ public class VintageRenderSectionManager extends RenderSectionManager {
             // colored-lighting floodfill chase a different voxel field every frame (permanent strobing).
             return false;
         }
+        // `occlusion.culling = false`: the pack needs geometry the player cannot see (it is sampling the gbuffer
+        // from another angle, e.g. for reflections or its own shadow logic).
+        com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline pipeline =
+                com.bdmajora.impetus.iris.Iris.getRenderingPipeline();
+        if (pipeline != null && pipeline.shouldDisableOcclusionCulling()) {
+            return false;
+        }
         final boolean useOcclusionCulling;
         var camBlockPos = positionedViewport.getBlockCoord();
         BlockPos origin = new BlockPos(camBlockPos.x(), camBlockPos.y(), camBlockPos.z());

@@ -80,6 +80,14 @@ public class IrisShadowRenderer {
     private final DepthTexture depthTexture;
     /** shadowtex1: copied from shadowtex0 just before translucent shadow geometry draws. */
     private final DepthTexture depthTextureNoTranslucents;
+    /** What the pack allows this pass to draw ({@code shadowTerrain}, {@code shadowEntities}, ...). */
+    private final ShadowContentSettings content;
+    /** {@code voxelDistance} — the safe-zone radius for {@code shadow.culling = reversed}; 0 when undeclared. */
+    private final float voxelDistance;
+    /** Whether the pack voxelizes in the shadow pass (geometry stage or custom images), per Iris's detection. */
+    private final boolean packVoxelizes;
+    /** {@code shadowDistance * shadowDistanceRenderMul} — the distance the shadow pass culls against. */
+    private final float cullDistance;
     private final int colorTexture0;
     private final int colorTexture1;
     private final IrisFramebuffer framebuffer;
@@ -124,7 +132,8 @@ public class IrisShadowRenderer {
                               ProgramSource shadowSource, Map<String, Integer> samplerUnits,
                               Map<String, String> shaderDefines, boolean[] hardwareFiltering,
                               boolean[] mipmapDepth, boolean[] nearestDepth, boolean separateHardwareSamplers,
-                              Runnable shaderPackResourceRestorer) {
+                              Runnable shaderPackResourceRestorer, ShadowContentSettings content,
+                              float voxelDistance, float cullDistance, boolean packVoxelizes) {
         this.resolution = resolution;
         this.halfPlaneLength = shadowDistance;
         this.nearPlane = nearPlane;
@@ -133,6 +142,10 @@ public class IrisShadowRenderer {
         this.shadowMapFov = shadowMapFov;
         this.sunPathRotation = sunPathRotation;
         this.shaderPackResourceRestorer = shaderPackResourceRestorer;
+        this.content = content;
+        this.voxelDistance = voxelDistance;
+        this.cullDistance = cullDistance;
+        this.packVoxelizes = packVoxelizes;
         this.hardwareFiltering = hardwareFiltering.clone();
         this.mipmapDepth = mipmapDepth.clone();
         this.nearestDepth = nearestDepth.clone();
@@ -196,6 +209,9 @@ public class IrisShadowRenderer {
         }
         return nearest ? GL11.GL_NEAREST : GL11.GL_LINEAR;
     }
+
+    /** The internal format of shadowcolor0/1, needed to bind them through the image API (shadowcolorimgN). */
+    public static final int SHADOW_COLOR_INTERNAL_FORMAT = GL11.GL_RGBA8;
 
     private static int createShadowColorTexture(int resolution) {
         int texture = LWJGL.glGenTextures();
@@ -288,9 +304,17 @@ public class IrisShadowRenderer {
             // frame and never converged — visible as permanent strobing on every colored-lit surface.
             RenderDevice.enterManagedCode();
             try {
+                // `shadow.culling`: `off` keeps every loaded section, otherwise the pass is bounded to a box of the
+                // pack's own shadowDistance (Iris BoxCuller). Position-only, so the section set stays frame-stable.
+                // The advanced/safe-zone frustums are derived from THIS frame's camera matrices, so the filter is
+                // rebuilt every pass rather than cached.
                 worldRenderer.setupTerrain(
                         new com.bdmajora.impetus.engine.impl.render.viewport.Viewport(
-                                (minX, minY, minZ, maxX, maxY, maxZ) -> true,
+                                com.bdmajora.impetus.iris.pipeline.shadow.ShadowFrustums.create(
+                                        this.content.getCulling(), this.cullDistance, this.voxelDistance,
+                                        this.packVoxelizes,
+                                        Minecraft.getMinecraft().gameSettings.renderDistanceChunks * 16,
+                                        this.sunPathRotation),
                                 new Vector3d(camera.x, camera.y, camera.z)),
                         ImpetusWorldRenderer.captureCameraState(mc.getRenderPartialTicks()),
                         ++this.shadowListFrame, false, false);
@@ -299,13 +323,15 @@ public class IrisShadowRenderer {
             }
 
             // 1) Solid + cutout terrain (Iris order). Impetus requires draws inside its managed-device scope.
-            RenderDevice.enterManagedCode();
-            try {
-                worldRenderer.drawChunkLayer(BlockRenderLayer.SOLID, camera.x, camera.y, camera.z);
-                worldRenderer.drawChunkLayer(BlockRenderLayer.CUTOUT_MIPPED, camera.x, camera.y, camera.z);
-                worldRenderer.drawChunkLayer(BlockRenderLayer.CUTOUT, camera.x, camera.y, camera.z);
-            } finally {
-                RenderDevice.exitManagedCode();
+            if (this.content.shouldRenderTerrain()) {
+                RenderDevice.enterManagedCode();
+                try {
+                    worldRenderer.drawChunkLayer(BlockRenderLayer.SOLID, camera.x, camera.y, camera.z);
+                    worldRenderer.drawChunkLayer(BlockRenderLayer.CUTOUT_MIPPED, camera.x, camera.y, camera.z);
+                    worldRenderer.drawChunkLayer(BlockRenderLayer.CUTOUT, camera.x, camera.y, camera.z);
+                } finally {
+                    RenderDevice.exitManagedCode();
+                }
             }
 
             // 2) Entities + block entities, fixed-function under the shadow matrices.
@@ -316,18 +342,20 @@ public class IrisShadowRenderer {
 
             // 4) Translucent terrain, blended: color tints shadowcolor0 (colored/water shadows), depth still writes
             // (OptiFine's shadow-pass beginWater keeps depthMask on).
-            bindBlockAtlas(mc);
-            GlStateManager.enableBlend();
-            GlStateManager.tryBlendFuncSeparate(
-                    GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA,
-                    GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ZERO);
-            RenderDevice.enterManagedCode();
-            try {
-                worldRenderer.drawChunkLayer(BlockRenderLayer.TRANSLUCENT, camera.x, camera.y, camera.z);
-            } finally {
-                RenderDevice.exitManagedCode();
+            if (this.content.shouldRenderTranslucent() && this.content.shouldRenderTerrain()) {
+                bindBlockAtlas(mc);
+                GlStateManager.enableBlend();
+                GlStateManager.tryBlendFuncSeparate(
+                        GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA,
+                        GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ZERO);
+                RenderDevice.enterManagedCode();
+                try {
+                    worldRenderer.drawChunkLayer(BlockRenderLayer.TRANSLUCENT, camera.x, camera.y, camera.z);
+                } finally {
+                    RenderDevice.exitManagedCode();
+                }
+                GlStateManager.disableBlend();
             }
-            GlStateManager.disableBlend();
             generateMipmaps();
         } catch (Throwable t) {
             // The very first frames can race renderer setup (no viewport/render lists yet) — only give up for good
@@ -382,6 +410,10 @@ public class IrisShadowRenderer {
         if (this.entityShadowProgram == null) {
             return;
         }
+        if (!this.content.shouldRenderEntities() && !this.content.shouldRenderPlayer()
+                && !this.content.shouldRenderAnyBlockEntities()) {
+            return;
+        }
         World world = mc.world;
         Entity viewEntity = mc.getRenderViewEntity();
         if (world == null || viewEntity == null) {
@@ -412,24 +444,47 @@ public class IrisShadowRenderer {
             this.shaderPackResourceRestorer.run();
             this.entityShadowProgram.getUniforms().update();
 
-            for (Entity entity : world.loadedEntityList) {
-                if (entity.isDead
-                        || Math.abs(entity.posX - camera.x) > cullRange
-                        || Math.abs(entity.posZ - camera.z) > cullRange) {
-                    continue;
+            // Entities and TESRs draw fixed-function, straight after Embeddium rendered shadow terrain from its own
+            // VAO. Hand the vertex pipeline back clean, or a leftover generic attribute array wins over the aliased
+            // client array (see IrisRenderingPipeline#resetVanillaVertexArrayState). This is also where the player
+            // model's ModelRenderer display lists are first compiled — and a display list bakes its vertex data at
+            // compile time, so a bad state here would flatten the first-person arm's texcoords for the whole session.
+            IrisRenderingPipeline.resetVanillaVertexArrayState();
+
+            if (this.content.shouldRenderEntities() || this.content.shouldRenderPlayer()) {
+                for (Entity entity : world.loadedEntityList) {
+                    if (entity.isDead
+                            || Math.abs(entity.posX - camera.x) > cullRange
+                            || Math.abs(entity.posZ - camera.z) > cullRange) {
+                        continue;
+                    }
+                    // shadowPlayer and shadowEntities are independent switches, so the player is filtered separately.
+                    boolean isPlayer = entity instanceof net.minecraft.entity.player.EntityPlayer;
+                    if (isPlayer ? !this.content.shouldRenderPlayer() : !this.content.shouldRenderEntities()) {
+                        continue;
+                    }
+                    mc.getRenderManager().renderEntityStatic(entity, partialTicks, false);
                 }
-                mc.getRenderManager().renderEntityStatic(entity, partialTicks, false);
             }
 
-            for (TileEntity tileEntity : world.loadedTileEntityList) {
-                if (TileEntityRendererDispatcher.instance.getRenderer(tileEntity) == null) {
-                    continue;
+            if (this.content.shouldRenderAnyBlockEntities()) {
+                boolean lightOnly = this.content.shouldRenderLightBlockEntitiesOnly();
+                for (TileEntity tileEntity : world.loadedTileEntityList) {
+                    if (TileEntityRendererDispatcher.instance.getRenderer(tileEntity) == null) {
+                        continue;
+                    }
+                    BlockPos pos = tileEntity.getPos();
+                    if (Math.abs(pos.getX() - camera.x) > cullRange || Math.abs(pos.getZ() - camera.z) > cullRange) {
+                        continue;
+                    }
+                    // shadowLightBlockEntities without shadowBlockEntities: only emitters, so a pack doing voxel
+                    // lighting still sees light sources without paying for every chest and sign.
+                    if (lightOnly && tileEntity.getBlockType().getLightValue(
+                            world.getBlockState(pos), world, pos) <= 0) {
+                        continue;
+                    }
+                    TileEntityRendererDispatcher.instance.render(tileEntity, partialTicks, -1);
                 }
-                BlockPos pos = tileEntity.getPos();
-                if (Math.abs(pos.getX() - camera.x) > cullRange || Math.abs(pos.getZ() - camera.z) > cullRange) {
-                    continue;
-                }
-                TileEntityRendererDispatcher.instance.render(tileEntity, partialTicks, -1);
             }
         } finally {
             LWJGL.glUseProgram(0);

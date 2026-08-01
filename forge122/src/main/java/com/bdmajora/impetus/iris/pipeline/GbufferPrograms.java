@@ -7,6 +7,7 @@ import com.bdmajora.impetus.iris.gl.program.GlProgram;
 import com.bdmajora.impetus.iris.gl.program.IrisProgram;
 import com.bdmajora.impetus.iris.gl.program.ProgramUniforms;
 import com.bdmajora.impetus.iris.gl.program.ShaderProgramCompiler;
+import com.bdmajora.impetus.iris.gl.blending.ProgramAlphaTest;
 import com.bdmajora.impetus.iris.gl.blending.ProgramBlendState;
 import com.bdmajora.impetus.iris.shaderpack.ProgramSource;
 import com.bdmajora.impetus.iris.shaderpack.ShaderPack;
@@ -40,7 +41,8 @@ public class GbufferPrograms {
     /** The phases driven from the vanilla render loop anchors in {@code EntityRendererMixin}. */
     private static final ProgramId[] PHASES = {
             ProgramId.SkyBasic, ProgramId.SkyTextured, ProgramId.Entities, ProgramId.DamagedBlock,
-            ProgramId.TexturedLit, ProgramId.Weather, ProgramId.Clouds, ProgramId.Hand
+            ProgramId.TexturedLit, ProgramId.Weather, ProgramId.Clouds, ProgramId.Hand,
+            ProgramId.Line
     };
 
     /** One compiled gbuffer program plus its uniform driver and (sanitized) DRAWBUFFERS mask. */
@@ -49,14 +51,16 @@ public class GbufferPrograms {
         final ProgramUniforms uniforms;
         final int[] drawBuffers;
         final ProgramBlendState blendState;
+        final ProgramAlphaTest alphaTest;
         final int handLightmapLocation;
 
         Entry(IrisProgram program, ProgramUniforms uniforms, int[] drawBuffers, ProgramBlendState blendState,
-              int handLightmapLocation) {
+              ProgramAlphaTest alphaTest, int handLightmapLocation) {
             this.program = program;
             this.uniforms = uniforms;
             this.drawBuffers = drawBuffers == null ? DrawBuffers.DEFAULT.clone() : drawBuffers.clone();
             this.blendState = blendState;
+            this.alphaTest = alphaTest;
             this.handLightmapLocation = handLightmapLocation;
         }
 
@@ -74,6 +78,11 @@ public class GbufferPrograms {
 
         public ProgramBlendState getBlendState() {
             return this.blendState;
+        }
+
+        /** The pack's {@code alphaTest.<program>} override, or an empty one when it declared none. */
+        public ProgramAlphaTest getAlphaTest() {
+            return this.alphaTest;
         }
 
         public void setHandLightmap(float blockLight, float skyLight) {
@@ -119,7 +128,8 @@ public class GbufferPrograms {
                 entry = bySourceName.get(sourceName); // may be null: a failed compile is not retried
             } else {
                 entry = compile(source.get(), defines, gbufferSamplers,
-                        ProgramBlendState.from(pack.getProperties(), sourceName));
+                        ProgramBlendState.from(pack.getProperties(), sourceName),
+                        ProgramAlphaTest.from(pack.getProperties(), sourceName));
                 bySourceName.put(sourceName, entry);
                 if (entry != null) {
                     this.ownedEntries.add(entry);
@@ -134,11 +144,11 @@ public class GbufferPrograms {
 
     /** Also used by {@link IrisShadowRenderer} to compile the fixed-function flavor of the {@code shadow} program. */
     static Entry compile(ProgramSource source, Map<String, String> defines, Map<String, Integer> samplerUnits) {
-        return compile(source, defines, samplerUnits, ProgramBlendState.empty());
+        return compile(source, defines, samplerUnits, ProgramBlendState.empty(), ProgramAlphaTest.empty());
     }
 
     static Entry compile(ProgramSource source, Map<String, String> defines, Map<String, Integer> samplerUnits,
-                         ProgramBlendState blendState) {
+                         ProgramBlendState blendState, ProgramAlphaTest alphaTest) {
         try {
             IrisProgram program = ShaderProgramCompiler.compile(source.getName(), source, defines);
 
@@ -158,7 +168,7 @@ public class GbufferPrograms {
             MatrixUniforms.addMatrixUniforms(builder);
             com.bdmajora.impetus.iris.uniforms.custom.ActiveCustomUniforms.assignTo(builder);
             int[] drawBuffers = IrisRenderingPipeline.sanitizeDrawBuffers(source.getName(), program.getDrawBuffers());
-            return new Entry(program, builder.buildUniforms(), drawBuffers, blendState, handLightmapLocation);
+            return new Entry(program, builder.buildUniforms(), drawBuffers, blendState, alphaTest, handLightmapLocation);
         } catch (Exception e) {
             LOGGER.error("[Iris] Failed to compile gbuffer program '{}'; its phases render vanilla-style: {}",
                     source.getName(), e.getMessage());

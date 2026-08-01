@@ -38,12 +38,18 @@ public final class IdMap {
     /** {@code entity.<id>} entries. Parsed for completeness; not yet consumed by the pipeline. */
     private final Map<NamespacedId, Integer> entityIdMap;
     private final boolean hasBlockProperties;
+    /**
+     * {@code layer.<rendertype> = <block> ...} from block.properties — the pack reassigning which chunk render layer
+     * a block meshes into (OptiFine shaders.txt "Block render layers"). Keyed by block id, value is the target
+     * {@link net.minecraft.util.BlockRenderLayer}.
+     */
+    private final Map<NamespacedId, net.minecraft.util.BlockRenderLayer> blockRenderLayerMap;
 
     public IdMap(Map<AbsolutePackPath, String> sources, Map<String, String> preprocessorDefines) {
         String blockProperties = sources.get(BLOCK_PROPERTIES);
         this.hasBlockProperties = blockProperties != null;
         this.blockPropertiesMap = blockProperties != null
-                ? parseBlockMap(PropertiesPreprocessor.preprocess(blockProperties, preprocessorDefines))
+                ? parseBlockMapWithModernFallback(blockProperties, preprocessorDefines)
                 : Collections.emptyMap();
 
         String itemProperties = sources.get(ITEM_PROPERTIES);
@@ -56,9 +62,117 @@ public final class IdMap {
                 ? parseIdMap(PropertiesPreprocessor.preprocess(entityProperties, preprocessorDefines), "entity.")
                 : Collections.emptyMap();
 
+        this.blockRenderLayerMap = blockProperties != null
+                ? parseRenderLayerMap(PropertiesPreprocessor.preprocess(blockProperties, preprocessorDefines))
+                : Collections.emptyMap();
+
         if (this.hasBlockProperties) {
-            LOGGER.info("[Iris] block.properties: {} block ID(s) declared", this.blockPropertiesMap.size());
+            LOGGER.info("[Iris] block.properties: {} block ID(s) declared, {} render-layer override(s)",
+                    this.blockPropertiesMap.size(), this.blockRenderLayerMap.size());
         }
+    }
+
+    /** {@code layer.<rendertype>} overrides: block id → the layer the pack wants it meshed into. */
+    public Map<NamespacedId, net.minecraft.util.BlockRenderLayer> getBlockRenderLayerMap() {
+        return this.blockRenderLayerMap;
+    }
+
+    /**
+     * Parses {@code layer.solid|cutout|cutout_mipped|translucent = <block> ...}. OptiFine's own list is exactly these
+     * four; anything else is a pack error. Tag entries ({@code %name}) are rejected the same way Iris rejects them —
+     * a render layer has to resolve to concrete blocks.
+     */
+    private static Map<NamespacedId, net.minecraft.util.BlockRenderLayer> parseRenderLayerMap(String preprocessed) {
+        Map<NamespacedId, net.minecraft.util.BlockRenderLayer> overrides = new LinkedHashMap<>();
+        for (String rawLine : preprocessed.split("\r\n|\r|\n")) {
+            String line = rawLine.trim();
+            if (line.isEmpty() || line.charAt(0) == '#' || !line.startsWith("layer.")) {
+                continue;
+            }
+            int eq = line.indexOf('=');
+            if (eq < 0) {
+                continue;
+            }
+            String type = line.substring("layer.".length(), eq).trim();
+            net.minecraft.util.BlockRenderLayer layer = parseRenderLayer(type);
+            if (layer == null) {
+                LOGGER.warn("[Iris] block.properties: invalid block render type \"{}\", ignoring it", type);
+                continue;
+            }
+            for (String part : line.substring(eq + 1).trim().split("\\s+")) {
+                if (part.isEmpty()) {
+                    continue;
+                }
+                if (part.startsWith("%")) {
+                    LOGGER.warn("[Iris] block.properties: cannot use the tag \"{}\" in a render-layer override", part);
+                    continue;
+                }
+                // Strip any block-state qualifier (`minecraft:glass:color=red`); the layer applies to the block.
+                String id = part.split(":(?=[^:]*=)")[0];
+                overrides.put(new NamespacedId(id), layer);
+            }
+        }
+        return overrides;
+    }
+
+    private static net.minecraft.util.BlockRenderLayer parseRenderLayer(String name) {
+        switch (name) {
+            case "solid":
+                return net.minecraft.util.BlockRenderLayer.SOLID;
+            case "cutout":
+                return net.minecraft.util.BlockRenderLayer.CUTOUT;
+            case "cutout_mipped":
+                return net.minecraft.util.BlockRenderLayer.CUTOUT_MIPPED;
+            case "translucent":
+                return net.minecraft.util.BlockRenderLayer.TRANSLUCENT;
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * The version this pretends to be when a pack turns out to have no 1.12.2 mapping at all. 11300 is the first
+     * flattened version, so it selects the oldest — and therefore closest — set of modern names.
+     */
+    private static final String FALLBACK_MC_VERSION = "11300";
+
+    /**
+     * Preprocesses {@code block.properties} honestly for 1.12.2, and only if that leaves the pack with no block IDs
+     * whatsoever, re-reads it as a 1.13+ pack and translates the names back ({@link ModernBlockNames}).
+     * <p>
+     * Packs that never targeted 1.12 (Photon, and most post-1.16 packs) put their entire ID map behind
+     * {@code #if MC_VERSION >= 11300} with an empty {@code #else}. Honest preprocessing then declares nothing, every
+     * block arrives at the shader as {@code mc_Entity.x == 0}, and the pack's material tests all fail — water is not
+     * recognised as water (flat, no waves, no reflections), nothing waves, nothing is emissive. A pack that does ship
+     * a 1.12 branch is left strictly alone: this only runs when the honest result is empty.
+     */
+    private static Map<Integer, List<BlockEntry>> parseBlockMapWithModernFallback(
+            String blockProperties, Map<String, String> preprocessorDefines) {
+        Map<Integer, List<BlockEntry>> declared =
+                parseBlockMap(PropertiesPreprocessor.preprocess(blockProperties, preprocessorDefines));
+        if (!declared.isEmpty()) {
+            return declared;
+        }
+
+        Map<String, String> modernDefines = new LinkedHashMap<>(preprocessorDefines);
+        modernDefines.put("MC_VERSION", FALLBACK_MC_VERSION);
+        Map<Integer, List<BlockEntry>> modern =
+                parseBlockMap(PropertiesPreprocessor.preprocess(blockProperties, modernDefines));
+        if (modern.isEmpty()) {
+            return declared;
+        }
+
+        Map<Integer, List<BlockEntry>> translated = new LinkedHashMap<>();
+        modern.forEach((intId, entries) -> {
+            List<BlockEntry> legacy = new ArrayList<>(entries.size());
+            for (BlockEntry entry : entries) {
+                legacy.addAll(ModernBlockNames.translate(entry));
+            }
+            translated.put(intId, Collections.unmodifiableList(legacy));
+        });
+        LOGGER.info("[Iris] block.properties declares no 1.12.2 blocks; using its 1.13+ mapping instead "
+                + "({} ID(s), names translated back to 1.12.2)", translated.size());
+        return translated;
     }
 
     /** Parses {@code block.<id> = entry entry ...} lines from preprocessed properties text. */

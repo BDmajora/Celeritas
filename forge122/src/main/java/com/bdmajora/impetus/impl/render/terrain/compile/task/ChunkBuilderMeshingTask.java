@@ -113,8 +113,27 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
 
                         buildContext.getBlockRenderer().resetSharedState();
 
+                        // block.properties `layer.<rendertype>`: the pack can move a block to a different chunk
+                        // render layer than the block itself reports (OptiFine's block render layer override).
+                        BlockRenderLayer forcedLayer =
+                                com.bdmajora.impetus.iris.material.WorldRenderingSettings.getForcedRenderLayer(block);
+
+                        // `voxelizeLightBlocks`: a block that emits light but draws nothing is invisible to a pack's
+                        // shadow-pass voxelization. Iris solves this for 1.17+'s `minecraft:light`; the 1.12.2
+                        // equivalent is any INVISIBLE-render-type block with a non-zero light value (modded light
+                        // sources, mostly). Attributing it to the solid layer gives the voxelizer something to see.
+                        if (com.bdmajora.impetus.iris.material.WorldRenderingSettings.isVoxelizeLightBlocks()
+                                && blockState.getRenderType() == EnumBlockRenderType.INVISIBLE
+                                && blockState.getLightValue(slice, blockPos) > 0) {
+                            buildContext.recordVanillaBlockAttribution(
+                                    BlockRenderLayer.SOLID, blockState, blockPos);
+                        }
+
                         for (BlockRenderLayer layer : VintageChunkBuildContext.LAYERS) {
-                            if (block.canRenderInLayer(blockState, layer)) {
+                            boolean renderHere = forcedLayer != null
+                                    ? layer == forcedLayer
+                                    : block.canRenderInLayer(blockState, layer);
+                            if (renderHere) {
                                 ForgeHooksClient.setRenderLayer(layer);
                                 if (blockState.getRenderType() == EnumBlockRenderType.MODEL && USE_NEW_BLOCK_RENDERER) {
                                     buildContext.getBlockRenderer().renderBlock(blockState, blockPos, slice, layer);

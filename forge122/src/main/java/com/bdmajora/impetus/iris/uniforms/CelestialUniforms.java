@@ -76,6 +76,21 @@ public final class CelestialUniforms {
         return getSunAngle() <= 0.5f ? getSunPosition() : getMoonPosition();
     }
 
+    /**
+     * The shadow light direction in <em>world</em> space (Iris's {@code getShadowLightPositionInWorldSpace}). Same
+     * construction as {@link #getCelestialPosition} but without {@code gbufferModelView}, because the shadow frustum
+     * reasons about world-space plane normals rather than eye space.
+     */
+    public static Vector3f getShadowLightPositionInWorldSpace() {
+        Vector4f position = new Vector4f(0.0f, getSunAngle() <= 0.5f ? 100.0f : -100.0f, 0.0f, 0.0f);
+        Matrix4f celestial = new Matrix4f();
+        celestial.rotateY((float) Math.toRadians(-90.0));
+        celestial.rotateZ((float) Math.toRadians(sunPathRotation));
+        celestial.rotateX((float) Math.toRadians(getCelestialAngle() * 360.0f));
+        celestial.transform(position);
+        return new Vector3f(position.x, position.y, position.z);
+    }
+
     private static Vector3f getCelestialPosition(float y) {
         Vector4f position = new Vector4f(0.0f, y, 0.0f, 0.0f);
         Matrix4f celestial = new Matrix4f(CapturedRenderingState.INSTANCE.getGbufferModelView());

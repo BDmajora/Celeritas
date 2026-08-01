@@ -58,6 +58,90 @@ public final class WorldRenderingSettings {
         entityIds = table;
     }
 
+    /**
+     * {@code dynamicHandLight} — when false the pack does not want the held item to emit light, so the
+     * {@code heldBlockLightValue}/{@code heldBlockLightColor} uniforms report "nothing held".
+     */
+    private static boolean dynamicHandLight = true;
+    /** {@code separateAo} — vanilla ambient occlusion is fed as its own vertex channel rather than baked into light. */
+    private static boolean separateAo;
+    /** {@code oldLighting} — keep vanilla's fixed-function directional face shading. */
+    private static boolean oldLighting;
+    /**
+     * {@code oldHandLight} (default true) — when the offhand item emits more light than the mainhand, the
+     * {@code heldItemId}/{@code heldBlockLightValue} uniforms report the offhand instead. OptiFine
+     * {@code Shaders.java} does exactly this swap before uploading them.
+     */
+    private static boolean oldHandLight = true;
+    /** {@code voxelizeLightBlocks} — emit geometry for light-emitting blocks so the shadow pass can voxelize them. */
+    private static boolean voxelizeLightBlocks;
+    /** {@code breaksAnisotropy} — the pack is incompatible with anisotropic filtering on the block atlas. */
+    private static boolean breaksAnisotropy;
+
+    public static boolean isOldHandLight() {
+        return oldHandLight;
+    }
+
+    public static void setOldHandLight(boolean value) {
+        oldHandLight = value;
+    }
+
+    /**
+     * {@code layer.<rendertype>} overrides from block.properties: block → the chunk render layer the pack wants it
+     * meshed into, replacing the block's own {@code canRenderInLayer} answer. Null when the pack declares none.
+     */
+    private static Map<net.minecraft.block.Block, net.minecraft.util.BlockRenderLayer> blockRenderLayers;
+
+    public static void setBlockRenderLayers(
+            Map<net.minecraft.block.Block, net.minecraft.util.BlockRenderLayer> table) {
+        blockRenderLayers = table == null || table.isEmpty() ? null : table;
+    }
+
+    /**
+     * @return the layer the pack forces for this block, or null to keep vanilla's choice. Kept as a fast null check
+     * because it is consulted for every block in every chunk rebuild.
+     */
+    public static net.minecraft.util.BlockRenderLayer getForcedRenderLayer(net.minecraft.block.Block block) {
+        Map<net.minecraft.block.Block, net.minecraft.util.BlockRenderLayer> table = blockRenderLayers;
+        return table == null ? null : table.get(block);
+    }
+
+    public static boolean isVoxelizeLightBlocks() {
+        return voxelizeLightBlocks;
+    }
+
+    public static void setVoxelizeLightBlocks(boolean value) {
+        voxelizeLightBlocks = value;
+    }
+
+    public static void setBreaksAnisotropy(boolean value) {
+        breaksAnisotropy = value;
+    }
+
+    public static boolean isDynamicHandLight() {
+        return dynamicHandLight;
+    }
+
+    public static void setDynamicHandLight(boolean value) {
+        dynamicHandLight = value;
+    }
+
+    public static void setSeparateAo(boolean value) {
+        separateAo = value;
+        // The mesher bakes this into every chunk's vertex colour. Selecting a pack already calls
+        // RenderGlobal.loadRenderers() (ShaderPackSelectScreen/ShaderPackConfigScreen), so the rebuild that
+        // re-encodes the terrain with the new writer is already scheduled by the time this runs.
+        com.bdmajora.impetus.engine.impl.render.chunk.ChunkColorWriter.SeparateAoState.set(value);
+    }
+
+    public static boolean isOldLighting() {
+        return oldLighting;
+    }
+
+    public static void setOldLighting(boolean value) {
+        oldLighting = value;
+    }
+
     public static int getVoxelRenderDistanceChunks() {
         return voxelRenderDistanceChunks;
     }

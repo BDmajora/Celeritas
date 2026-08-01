@@ -172,6 +172,10 @@ public final class ShaderPack {
         // Must run before anything compiles: both the terrain and the composite compile paths ask
         // ShaderMacros.forProgram which programs take their pre-Iris branch.
         ShaderMacros.setPackLegacyPrograms(detectLegacyPrograms(this.sources));
+        // Likewise for the raw-custom-texture renames: the gbuffers/terrain/shadow compile paths reach the transform
+        // from static contexts with no pack handle.
+        com.bdmajora.impetus.iris.shaderpack.texture.CustomTextureTransformer.setActivePatches(
+                this.properties.getCustomTexturePatches());
     }
 
     /**
@@ -363,7 +367,26 @@ public final class ShaderPack {
      * identifiers (SuperDuperVanilla's {@code VERTEX}/{@code FRAGMENT} guards select which {@code main} to compile).
      */
     public Map<String, String> getEnvironmentDefines() {
-        return ShaderMacros.standard();
+        Map<String, String> macros = ShaderMacros.standard();
+
+        // OptiFine's ShaderMacros: two shaders.properties switches are exposed to GLSL as macros so a pack can adapt
+        // its own lighting to the setting it asked for. Both default to true when the pack says nothing, matching
+        // Shaders.isOldHandLight()/isOldLighting().
+        if (this.properties.getOldHandLight().orElse(Boolean.TRUE)) {
+            macros.put("MC_OLD_HAND_LIGHT", "");
+        }
+        if (this.properties.getOldLighting().orElse(Boolean.TRUE)) {
+            macros.put("MC_OLD_LIGHTING", "");
+        }
+        // `supportsColorCorrection` means the pack converts to the output colour space itself, so Iris hands it the
+        // COLOR_SPACE_* enumeration to compare `currentColorSpace` against.
+        if (this.properties.getSupportsColorCorrection().orElse(Boolean.FALSE)) {
+            for (com.bdmajora.impetus.iris.pipeline.ColorSpaceConverter.ColorSpace space
+                    : com.bdmajora.impetus.iris.pipeline.ColorSpaceConverter.ColorSpace.values()) {
+                macros.put("COLOR_SPACE_" + space.name(), Integer.toString(space.ordinal()));
+            }
+        }
+        return macros;
     }
 
     private Set<String> activeProfileDisabledPrograms(ShaderProperties parsedProperties) {
@@ -453,20 +476,45 @@ public final class ShaderPack {
     }
 
     /**
-     * Reads and flattens a program's stages by source name, or returns {@code null} if neither a vertex nor a fragment
-     * stage exists for it anywhere in the pack.
+     * Reads and flattens a program's stages by source name, or returns {@code null} if neither a raster stage nor any
+     * compute stage exists for it anywhere in the pack.
      */
     private ProgramSource readProgram(String sourceName) {
         String vertex = readStage(sourceName, "vsh");
         String fragment = readStage(sourceName, "fsh");
-        String compute = readStage(sourceName, "csh");
-        if (vertex == null && fragment == null && compute == null) {
+        String[] computes = readComputeVariants(sourceName);
+        if (vertex == null && fragment == null && computes.length == 0) {
             return null;
         }
         String geometry = readStage(sourceName, "gsh");
         String tessControl = readStage(sourceName, "tcs");
         String tessEval = readStage(sourceName, "tes");
-        return new ProgramSource(sourceName, vertex, geometry, tessControl, tessEval, fragment, compute);
+        return new ProgramSource(sourceName, vertex, geometry, tessControl, tessEval, fragment, computes);
+    }
+
+    /**
+     * Reads a program's compute stages: {@code <name>.csh} plus the letter-suffixed {@code <name>_a.csh} ..
+     * {@code <name>_z.csh} Iris extension. Like Iris's {@code ProgramSet.readComputeArray}, the letter scan stops at
+     * the first missing suffix, so a pack that ships {@code _a} and {@code _c} but no {@code _b} only gets {@code _a}.
+     *
+     * @return an empty array when the program has no compute stage at all, otherwise a 27-entry array (with nulls).
+     */
+    private String[] readComputeVariants(String sourceName) {
+        String[] computes = new String[ProgramSource.MAX_COMPUTE_VARIANTS];
+        boolean any = false;
+
+        computes[0] = readStage(sourceName, "csh");
+        any = computes[0] != null;
+
+        for (int variant = 1; variant < computes.length; variant++) {
+            computes[variant] = readStage(ProgramSource.computeVariantName(sourceName, variant), "csh");
+            if (computes[variant] == null) {
+                break;
+            }
+            any = true;
+        }
+
+        return any ? computes : new String[0];
     }
 
     private String readStage(String sourceName, String extension) {

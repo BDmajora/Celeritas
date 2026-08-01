@@ -36,6 +36,31 @@ public final class BlockMaterialMapping {
      * @return the state-id → pack-id table, or {@code null} when the pack has no {@code block.properties} (raw
      * 1.12.2 IDs remain the contract then).
      */
+    /**
+     * Resolves the pack's {@code layer.<rendertype>} overrides to concrete blocks. Unknown ids are skipped with a
+     * warning rather than failing the pack — a pack commonly lists blocks from mods the user does not have.
+     */
+    public static java.util.Map<net.minecraft.block.Block, net.minecraft.util.BlockRenderLayer> createBlockRenderLayerTable(
+            IdMap idMap) {
+        java.util.Map<com.bdmajora.impetus.iris.shaderpack.materialmap.NamespacedId,
+                net.minecraft.util.BlockRenderLayer> declared = idMap.getBlockRenderLayerMap();
+        if (declared.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        java.util.Map<net.minecraft.block.Block, net.minecraft.util.BlockRenderLayer> resolved =
+                new java.util.HashMap<>();
+        declared.forEach((id, layer) -> {
+            net.minecraft.block.Block block = net.minecraft.block.Block.REGISTRY.getObject(
+                    new net.minecraft.util.ResourceLocation(id.getNamespace(), id.getName()));
+            if (block == null || block == net.minecraft.init.Blocks.AIR) {
+                LOGGER.warn("[Iris] block.properties: unknown block \"{}\" in a render-layer override", id);
+                return;
+            }
+            resolved.put(block, layer);
+        });
+        return resolved;
+    }
+
     public static int[] createBlockStateIdTable(IdMap idMap) {
         if (!idMap.hasBlockProperties()) {
             return null;

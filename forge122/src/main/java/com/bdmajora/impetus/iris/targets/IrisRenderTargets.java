@@ -25,6 +25,13 @@ public class IrisRenderTargets {
 
     private final IrisRenderTarget[] targets = new IrisRenderTarget[MAX_COLOR_BUFFERS];
     private final InternalTextureFormat[] formats = new InternalTextureFormat[MAX_COLOR_BUFFERS];
+    /**
+     * {@code size.buffer.colortexN} overrides: {@code {width, height}} per target, or null for "follow the render
+     * size". Absolute entries are texel counts; relative ones are fractions of the render size.
+     */
+    private final float[][] sizeOverrides = new float[MAX_COLOR_BUFFERS][];
+    /** Per target, {@code {xRelative, yRelative}} — Iris decides this per axis, so {@code 512 0.5} is valid. */
+    private final boolean[][] sizeRelative = new boolean[MAX_COLOR_BUFFERS][];
 
     private DepthTexture depthTexture;
     private DepthTexture noTranslucents; // depthtex1
@@ -53,6 +60,45 @@ public class IrisRenderTargets {
                 GL14.GL_DEPTH_COMPONENT24, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT);
     }
 
+    /**
+     * Declares an explicit size for a color buffer ({@code size.buffer.colortexN}). Must be called before the buffer
+     * is first materialised, like {@link #setColorFormat}.
+     *
+     * @param relative when true, {@code x}/{@code y} are fractions of the render size rather than texel counts
+     */
+    public void setColorSize(int index, float x, float y, boolean[] relative) {
+        requireValid();
+        if (this.targets[index] != null) {
+            throw new IllegalStateException("Color buffer " + index + " has already been created; cannot resize it");
+        }
+        this.sizeOverrides[index] = new float[]{x, y};
+        this.sizeRelative[index] = relative.clone();
+    }
+
+    /** The width this target is (or would be) created at, honouring any {@code size.buffer} override. */
+    public int getWidth(int index) {
+        float[] override = this.sizeOverrides[index];
+        if (override == null) {
+            return this.width;
+        }
+        // Iris truncates the relative product ((int)(originalX * relativeX)); the clamp to 1 keeps a tiny fraction
+        // from producing a zero-sized texture.
+        return Math.max(1, this.sizeRelative[index][0] ? (int) (this.width * override[0]) : (int) override[0]);
+    }
+
+    public int getHeight(int index) {
+        float[] override = this.sizeOverrides[index];
+        if (override == null) {
+            return this.height;
+        }
+        return Math.max(1, this.sizeRelative[index][1] ? (int) (this.height * override[1]) : (int) override[1]);
+    }
+
+    /** True when this target does not match the main render size, so passes writing it need their own viewport. */
+    public boolean hasCustomSize(int index) {
+        return this.sizeOverrides[index] != null;
+    }
+
     /** Overrides the internal format for a color buffer. Must be called before the buffer is first materialised. */
     public void setColorFormat(int index, InternalTextureFormat format) {
         requireValid();
@@ -65,7 +111,7 @@ public class IrisRenderTargets {
     public IrisRenderTarget getOrCreate(int index) {
         requireValid();
         if (this.targets[index] == null) {
-            this.targets[index] = new IrisRenderTarget(this.formats[index], this.width, this.height);
+            this.targets[index] = new IrisRenderTarget(this.formats[index], getWidth(index), getHeight(index));
         }
         return this.targets[index];
     }
@@ -167,9 +213,10 @@ public class IrisRenderTargets {
         }
         this.width = newWidth;
         this.height = newHeight;
-        for (IrisRenderTarget target : this.targets) {
-            if (target != null) {
-                target.resize(newWidth, newHeight);
+        for (int i = 0; i < this.targets.length; i++) {
+            if (this.targets[i] != null) {
+                // An absolutely-sized buffer keeps its size across a window resize; a relative one rescales.
+                this.targets[i].resize(getWidth(i), getHeight(i));
             }
         }
         this.depthTexture.resize(newWidth, newHeight);

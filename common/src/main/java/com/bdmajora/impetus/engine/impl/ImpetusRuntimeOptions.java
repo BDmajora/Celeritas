@@ -50,8 +50,18 @@ public final class ImpetusRuntimeOptions {
         performance.alwaysDeferChunkUpdates = performance.deferChunkUpdatesMode.defersVisible();
     }
 
+    /**
+     * Set by the Iris pipeline for a pack that declares {@code breaksAnisotropy}: its parallax/POM sampling relies on
+     * exact texel derivatives that anisotropic filtering perturbs, so the pack asks for it off regardless of the
+     * user's video setting.
+     */
+    public static boolean anisotropyForcedOff = false;
+
     /** {@return the maximum anisotropy factor to request, or 1.0 when disabled} */
     public static float anisotropyLevel() {
-        return anisotropicFilteringBit <= 0 ? 1.0f : (float) (1 << anisotropicFilteringBit);
+        if (anisotropyForcedOff || anisotropicFilteringBit <= 0) {
+            return 1.0f;
+        }
+        return (float) (1 << anisotropicFilteringBit);
     }
 }

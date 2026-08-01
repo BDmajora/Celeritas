@@ -26,6 +26,7 @@ import com.bdmajora.impetus.iris.Iris;
 import com.bdmajora.impetus.iris.shaderpack.ShaderPack;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -158,11 +159,29 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         RenderDevice.enterManagedCode();
 
         try {
-            this.renderer.setupTerrain(((ViewportProvider)camera).impetus$createViewport(), ImpetusWorldRenderer.captureCameraState(tick),
+            // `frustum.culling = false`: the pack wants off-screen geometry drawn too, so the frustum test is
+            // replaced with one that accepts everything (the same trick the shadow pass uses).
+            com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline pipeline =
+                    com.bdmajora.impetus.iris.Iris.getRenderingPipeline();
+            com.bdmajora.impetus.engine.impl.render.viewport.Viewport viewport =
+                    (pipeline != null && pipeline.shouldDisableFrustumCulling())
+                            ? unculledViewport(((ViewportProvider) camera).impetus$createViewport())
+                            : ((ViewportProvider) camera).impetus$createViewport();
+            this.renderer.setupTerrain(viewport, ImpetusWorldRenderer.captureCameraState(tick),
                     frame, spectator, false);
         } finally {
             RenderDevice.exitManagedCode();
         }
+    }
+
+    /** Same viewport, but with a frustum that accepts every section ({@code frustum.culling = false}). */
+    @Unique
+    private static com.bdmajora.impetus.engine.impl.render.viewport.Viewport unculledViewport(
+            com.bdmajora.impetus.engine.impl.render.viewport.Viewport source) {
+        var transform = source.getTransform();
+        return new com.bdmajora.impetus.engine.impl.render.viewport.Viewport(
+                (minX, minY, minZ, maxX, maxY, maxZ) -> true,
+                new org.joml.Vector3d(transform.x, transform.y, transform.z));
     }
 
     /**

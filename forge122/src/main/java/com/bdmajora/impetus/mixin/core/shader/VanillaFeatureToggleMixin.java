@@ -1,0 +1,24 @@
+package com.bdmajora.impetus.mixin.core.shader;
+
+import com.bdmajora.impetus.iris.pipeline.VanillaFeatureToggles;
+import net.minecraft.client.renderer.EntityRenderer;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+/**
+ * The {@code weather} shaders.properties toggle: a pack that renders its own precipitation asks vanilla to stop
+ * drawing rain and snow particles.
+ *
+ * @see VanillaFeatureToggles
+ */
+@Mixin(EntityRenderer.class)
+public class VanillaFeatureToggleMixin {
+    @Inject(method = "renderRainSnow", at = @At("HEAD"), cancellable = true, require = 0)
+    private void impetus$suppressWeather(float partialTicks, CallbackInfo ci) {
+        if (!VanillaFeatureToggles.shouldRenderWeather()) {
+            ci.cancel();
+        }
+    }
+}

@@ -803,9 +803,8 @@ public final class CommonUniforms {
     }
 
     private static int getAnisotropicFiltering() {
-        return ImpetusRuntimeOptions.anisotropicFilteringBit <= 0
-                ? 0
-                : Math.max(1, Math.round(ImpetusRuntimeOptions.anisotropyLevel()));
+        float level = ImpetusRuntimeOptions.anisotropyLevel();
+        return level <= 1.0f ? 0 : Math.max(1, Math.round(level));
     }
 
     private static float getChunkFadeTimeInv() {
@@ -1050,16 +1049,32 @@ public final class CommonUniforms {
         return player == null ? ItemStack.EMPTY : player.getHeldItemMainhand();
     }
 
+    /**
+     * The item the {@code heldItemId}/{@code heldBlockLightValue} uniforms describe. With {@code oldHandLight} on
+     * (OptiFine's default) a brighter offhand item wins, so a torch in the offhand still lights the world — that is
+     * the swap {@code Shaders.java} performs right before uploading these uniforms.
+     */
+    private static ItemStack brightestHeldItem() {
+        ItemStack main = heldItem();
+        if (!WorldRenderingSettings.isOldHandLight()) {
+            return main;
+        }
+        ItemStack off = offhandItem();
+        return blockLightValue(off) > blockLightValue(main) ? off : main;
+    }
+
     private static int getHeldItemId() {
-        return WorldRenderingSettings.getItemId(heldItem());
+        return WorldRenderingSettings.getItemId(brightestHeldItem());
     }
 
     private static int getHeldBlockLightValue() {
-        return blockLightValue(heldItem());
+        // dynamicHandLight = false: the pack does not want held items lighting the world, so report nothing held.
+        return WorldRenderingSettings.isDynamicHandLight() ? blockLightValue(brightestHeldItem()) : 0;
     }
 
     private static Vector3f getHeldBlockLightColor() {
-        return heldLightColor(heldItem());
+        return WorldRenderingSettings.isDynamicHandLight()
+                ? heldLightColor(brightestHeldItem()) : new Vector3f(0.0f, 0.0f, 0.0f);
     }
 
     private static ItemStack offhandItem() {
@@ -1072,10 +1087,13 @@ public final class CommonUniforms {
     }
 
     private static int getHeldBlockLightValue2() {
-        return blockLightValue(offhandItem());
+        return WorldRenderingSettings.isDynamicHandLight() ? blockLightValue(offhandItem()) : 0;
     }
 
     private static Vector3f getHeldBlockLightColor2() {
+        if (!WorldRenderingSettings.isDynamicHandLight()) {
+            return new Vector3f(0.0f, 0.0f, 0.0f);
+        }
         return heldLightColor(offhandItem());
     }
 

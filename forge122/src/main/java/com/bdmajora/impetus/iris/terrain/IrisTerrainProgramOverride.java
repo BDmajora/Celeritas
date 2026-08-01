@@ -8,6 +8,7 @@ import com.bdmajora.impetus.engine.impl.gl.shader.ShaderType;
 import com.bdmajora.impetus.engine.impl.render.chunk.shader.ChunkShaderInterface;
 import com.bdmajora.impetus.engine.impl.render.chunk.shader.ChunkShaderOptions;
 import com.bdmajora.impetus.iris.Iris;
+import com.bdmajora.impetus.iris.gl.blending.ProgramAlphaTest;
 import com.bdmajora.impetus.iris.gl.blending.ProgramBlendState;
 import com.bdmajora.impetus.iris.gl.program.DrawBuffers;
 import com.bdmajora.impetus.iris.gl.program.ProgramUniforms;
@@ -103,6 +104,16 @@ public final class IrisTerrainProgramOverride {
             if (vshSource == null || fshSource == null) {
                 return null;
             }
+            // Raw texture.gbuffers.<sampler> directives: type-checked rename to the minted customtexN sampler.
+            vshSource = com.bdmajora.impetus.iris.shaderpack.texture.CustomTextureTransformer.transform(
+                    source.getName(), vshSource,
+                    com.bdmajora.impetus.iris.shaderpack.texture.TextureStage.GBUFFERS_AND_SHADOW);
+            fshSource = com.bdmajora.impetus.iris.shaderpack.texture.CustomTextureTransformer.transform(
+                    source.getName(), fshSource,
+                    com.bdmajora.impetus.iris.shaderpack.texture.TextureStage.GBUFFERS_AND_SHADOW);
+            // Modern (1.17+) attribute/matrix names -> fixed-function built-ins.
+            vshSource = VanillaNameTransformer.transform(vshSource);
+            fshSource = VanillaNameTransformer.transform(fshSource);
 
             // Modern (#version 130+) dual-stage packs (Complementary) use the compatibility stage normalizer; the
             // GLSL-120 Chocapic family (LIGHT) keeps the full rewrite.
@@ -152,9 +163,10 @@ public final class IrisTerrainProgramOverride {
             LOGGER.info("[Iris] {} resolved DRAWBUFFERS {}", programId.getSourceName(),
                     Arrays.toString(drawBuffers));
             ProgramBlendState blendState = ProgramBlendState.from(pack.getProperties(), source.getName());
+            ProgramAlphaTest alphaTest = ProgramAlphaTest.from(pack.getProperties(), source.getName());
             IrisRenderingPipeline.drainGlError();
             GlProgram<ChunkShaderInterface> program =
-                    builder.link(context -> new IrisTerrainShaderInterface(context, drawBuffers, blendState));
+                    builder.link(context -> new IrisTerrainShaderInterface(context, drawBuffers, blendState, alphaTest));
             IrisRenderingPipeline.reportGlError("terrain '" + programId.getSourceName() + "' link");
 
             // The pack program needs the full OptiFine uniform set: shaders like LIGHT round-trip positions through

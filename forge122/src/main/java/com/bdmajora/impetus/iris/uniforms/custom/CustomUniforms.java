@@ -91,21 +91,6 @@ public final class CustomUniforms {
         }
     }
 
-    /** Logs every variable's current evaluated value — the in-game truth the headless probes can't see. */
-    public void logValues() {
-        for (Variable variable : this.variables) {
-            StringBuilder s = new StringBuilder();
-            for (int i = 0; i < variable.current.width; i++) {
-                if (i > 0) {
-                    s.append(", ");
-                }
-                s.append(String.format(Locale.ROOT, "%.4f", variable.current.components[i]));
-            }
-            LOGGER.info("[Iris] PassTap custom {} {} = ({})",
-                    variable.isUniform ? "uniform" : "variable", variable.name, s);
-        }
-    }
-
     public boolean isEmpty() {
         return this.variables.isEmpty();
     }

@@ -9,6 +9,7 @@ import net.minecraft.entity.EntityLivingBase;
 import org.lwjgl.util.glu.Project;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -161,10 +162,44 @@ public class EntityRendererMixin {
         impetus$setPhase(ProgramId.TexturedLit);
     }
 
+    /**
+     * {@code particles.ordering}. 1.12.2's {@code renderWorldPass} already draws particles after the "translucent"
+     * anchor, which is where the deferred chain runs — so the vanilla order is Iris's {@code after}, and that is also
+     * Iris's default for a pack with a deferred chain. Only {@code before} needs anything done: the vanilla draw is
+     * suppressed here and re-issued ahead of the deferred chain.
+     * <p>
+     * {@code mixed} would need the opaque and translucent particles split across the deferred chain, but 1.12.2
+     * emits them from a single {@code renderParticles} call with no such distinction, so it resolves to
+     * {@code after} — the closest available ordering, and the one vanilla already gives.
+     */
+    @Redirect(method = "renderWorldPass",
+            at = @At(value = "INVOKE",
+                    target = "Lnet/minecraft/client/particle/ParticleManager;renderParticles"
+                            + "(Lnet/minecraft/entity/Entity;F)V"),
+            require = 0)
+    private void impetus$orderParticles(net.minecraft.client.particle.ParticleManager manager,
+                                        net.minecraft.entity.Entity entity, float partialTicks) {
+        if (impetus$particlesDrawnEarly) {
+            impetus$particlesDrawnEarly = false;
+            return;
+        }
+        manager.renderParticles(entity, partialTicks);
+    }
+
+    @Unique
+    private boolean impetus$particlesDrawnEarly;
+
     @Inject(method = "renderWorldPass",
             at = @At(value = "INVOKE_STRING", target = PROFILER_END_START, args = "ldc=weather"))
     private void impetus$phaseWeather(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
         impetus$setPhase(ProgramId.Weather);
+        // `rain.depth`: vanilla draws rain and snow with depth writes off. A pack that wants precipitation in
+        // depthtex (so its composites can find it) asks for them back. No restore is needed — vanilla itself calls
+        // depthMask(true) on the line right after renderRainSnow.
+        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        if (pipeline != null && pipeline.shouldWriteRainAndSnowToDepthBuffer()) {
+            net.minecraft.client.renderer.GlStateManager.depthMask(true);
+        }
     }
 
     @Inject(method = "renderWorldPass",
@@ -202,6 +237,15 @@ public class EntityRendererMixin {
                 // Vanilla bound the block atlas for the translucent layer just before this anchor; the hand render
                 // bound skin/item textures over it.
                 this.mc.getTextureManager().bindTexture(TextureMap.LOCATION_BLOCKS_TEXTURE);
+            }
+            // particles.ordering = before: draw them into the pre-deferred gbuffer so the deferred chain lights them.
+            if ("before".equals(pipeline.getParticleOrdering())) {
+                net.minecraft.entity.Entity viewEntity = this.mc.getRenderViewEntity();
+                if (viewEntity != null) {
+                    impetus$setPhase(ProgramId.TexturedLit);
+                    this.mc.effectRenderer.renderParticles(viewEntity, partialTicks);
+                    this.impetus$particlesDrawnEarly = true;
+                }
             }
             pipeline.beginTranslucents();
         }
@@ -263,6 +307,8 @@ public class EntityRendererMixin {
                     && !this.mc.gameSettings.hideGUI && !this.mc.playerController.isSpectator()) {
                 this.enableLightmap();
                 this.itemRenderer.renderItemInFirstPerson(partialTicks);
+                // Unit 0 still holds whatever the arm draw sampled; identify it once (see the probe's javadoc).
+                IrisRenderingPipeline.logHandBoundTextureProbe();
                 this.disableLightmap();
             }
         } finally {

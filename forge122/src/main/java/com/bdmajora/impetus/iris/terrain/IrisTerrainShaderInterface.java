@@ -14,8 +14,7 @@ import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
 import com.bdmajora.impetus.iris.Iris;
 import com.bdmajora.impetus.iris.uniforms.CapturedRenderingState;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.bdmajora.impetus.iris.gl.blending.ProgramAlphaTest;
 import com.bdmajora.impetus.iris.gl.blending.ProgramBlendState;
 import com.bdmajora.impetus.iris.gl.program.DrawBuffers;
 import com.bdmajora.impetus.iris.gl.program.ProgramUniforms;
@@ -39,6 +38,7 @@ public class IrisTerrainShaderInterface implements ChunkShaderInterface {
     /** The program's sanitized {@code DRAWBUFFERS} mask, applied to the gbuffer FBO whenever this program binds. */
     private final int[] drawBuffers;
     private final ProgramBlendState blendState;
+    private final ProgramAlphaTest alphaTest;
     /**
      * The pack's OptiFine uniform set ({@code gbufferModelView(Inverse)}, {@code cameraPosition}, time…), uploaded on
      * every bind. Without these the pack's world-space round-trip (through {@code gbufferModelViewInverse}) multiplies
@@ -50,21 +50,11 @@ public class IrisTerrainShaderInterface implements ChunkShaderInterface {
     private boolean restoreAfterDraw;
     private int activeDrawBufferSlots;
 
-    // --- one-shot water SSR matrix probe (remove after diagnosis) ---
-    // The water shader's screen-space reflection assumes gl_ProjectionMatrix (== our chunk u_ProjectionMatrix, which
-    // builds vReflData[1]) is byte-identical to the gbufferProjection uniform (which builds the march's clipTarget).
-    // If they differ, the SSR direction smears per-pixel -> the radial/diagonal blocky fan. This can't be proven
-    // statically (both come from ActiveRenderInfo, but at different times/copies), so log the actual numeric delta
-    // at the translucent (water) draw, a handful of times, then go quiet.
-    private static final Logger PROBE_LOGGER = LogManager.getLogger("ImpetusWaterProbe");
-    private static int waterProbeRemaining =
-            Integer.getInteger("impetus.iris.waterMatrixProbe", 3);
-    private final Matrix4f lastChunkProjection = new Matrix4f();
-    private final Matrix4f lastChunkModelView = new Matrix4f();
-
-    public IrisTerrainShaderInterface(ShaderBindingContext context, int[] drawBuffers, ProgramBlendState blendState) {
+    public IrisTerrainShaderInterface(ShaderBindingContext context, int[] drawBuffers, ProgramBlendState blendState,
+                                      ProgramAlphaTest alphaTest) {
         this.drawBuffers = drawBuffers == null ? DrawBuffers.DEFAULT.clone() : drawBuffers.clone();
         this.blendState = blendState;
+        this.alphaTest = alphaTest;
         this.uModelViewMatrix = context.bindUniformIfPresent("u_ModelViewMatrix", GlUniformMatrix4f::new);
         this.uProjectionMatrix = context.bindUniformIfPresent("u_ProjectionMatrix", GlUniformMatrix4f::new);
         this.uRegionOffset = context.bindUniformIfPresent("u_RegionOffset", GlUniformFloat3v::new);
@@ -106,9 +96,8 @@ public class IrisTerrainShaderInterface implements ChunkShaderInterface {
             boolean translucentPass = pass.isReverseOrder();
             if (translucentPass) {
                 restoreOptifineWaterState();
-                logWaterMatrixProbe();
             }
-            pipeline.onTerrainDraw(this.drawBuffers, this.blendState, translucentPass);
+            pipeline.onTerrainDraw(this.drawBuffers, this.blendState, this.alphaTest, translucentPass);
             this.restoreAfterDraw = true;
             this.activeDrawBufferSlots = this.drawBuffers.length;
         }
@@ -148,7 +137,6 @@ public class IrisTerrainShaderInterface implements ChunkShaderInterface {
 
     @Override
     public void setProjectionMatrix(Matrix4fc matrix) {
-        this.lastChunkProjection.set(matrix);
         if (this.uProjectionMatrix != null) {
             this.uProjectionMatrix.set(matrix);
         }
@@ -156,44 +144,9 @@ public class IrisTerrainShaderInterface implements ChunkShaderInterface {
 
     @Override
     public void setModelViewMatrix(Matrix4fc matrix) {
-        this.lastChunkModelView.set(matrix);
         if (this.uModelViewMatrix != null) {
             this.uModelViewMatrix.set(matrix);
         }
-    }
-
-    /**
-     * One-shot diagnostic: compares the chunk terrain matrices (which drive the water program's
-     * {@code gl_ProjectionMatrix}/{@code gl_ModelViewMatrix}, i.e. {@code vReflData[1]} and the vertex view position)
-     * against the captured {@code gbufferProjection}/{@code gbufferModelView} uniforms (which drive the SSR march's
-     * {@code clipTarget} and the world-space round-trip). A non-zero delta on projection is the SSR screen-mapping
-     * bug. Gated by {@code -Dimpetus.iris.waterMatrixProbe=N} (default 3 logs). Remove once diagnosed.
-     */
-    private void logWaterMatrixProbe() {
-        if (waterProbeRemaining <= 0) {
-            return;
-        }
-        waterProbeRemaining--;
-        Matrix4f gbufProj = CapturedRenderingState.INSTANCE.getGbufferProjection();
-        Matrix4f gbufMv = CapturedRenderingState.INSTANCE.getGbufferModelView();
-        float projDelta = maxElementDelta(this.lastChunkProjection, gbufProj);
-        float mvDelta = maxElementDelta(this.lastChunkModelView, gbufMv);
-        PROBE_LOGGER.info("[WaterProbe] projDelta(chunk_u_Projection vs gbufferProjection)={}  "
-                + "mvDelta(chunk_u_ModelView vs gbufferModelView)={}", projDelta, mvDelta);
-        PROBE_LOGGER.info("[WaterProbe]   chunk u_ProjectionMatrix = {}", this.lastChunkProjection);
-        PROBE_LOGGER.info("[WaterProbe]   gbufferProjection        = {}", gbufProj);
-        PROBE_LOGGER.info("[WaterProbe]   chunk u_ModelViewMatrix  = {}", this.lastChunkModelView);
-        PROBE_LOGGER.info("[WaterProbe]   gbufferModelView         = {}", gbufMv);
-    }
-
-    private static float maxElementDelta(Matrix4fc a, Matrix4fc b) {
-        float max = 0.0f;
-        for (int c = 0; c < 4; c++) {
-            for (int r = 0; r < 4; r++) {
-                max = Math.max(max, Math.abs(a.get(c, r) - b.get(c, r)));
-            }
-        }
-        return max;
     }
 
     @Override

@@ -216,7 +216,7 @@ public class VintageBlockRenderer {
             out.y = localY + quad.getY(srcIndex) + (float) offset.y;
             out.z = localZ + quad.getZ(srcIndex) + (float) offset.z;
 
-            out.color = ChunkColorWriter.IMPETUS.writeColor(ModelQuadUtil.mixARGBColors(colors[srcIndex], quad.getColor(srcIndex)), light.br[srcIndex]);
+            out.color = ChunkColorWriter.active().writeColor(ModelQuadUtil.mixARGBColors(colors[srcIndex], quad.getColor(srcIndex)), light.br[srcIndex]);
 
             out.u = quad.getTexU(srcIndex);
             out.v = quad.getTexV(srcIndex);
