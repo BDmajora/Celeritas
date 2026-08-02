@@ -4,6 +4,9 @@
   "package": "com.bdmajora.impetus.iris.mixin",
   "compatibilityLevel": "JAVA_8",
   "client": [
+    "compat.GlStateManagerBlendGuardMixin",
+    "compat.IrisRenderingPipelineBlendGuardMixin",
+    "compat.ProgramBlendStateBlendGuardMixin"
   ],
   "injectors": {
     "defaultRequire": 1

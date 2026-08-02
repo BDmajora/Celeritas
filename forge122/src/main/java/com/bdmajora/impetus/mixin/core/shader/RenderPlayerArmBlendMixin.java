@@ -25,14 +25,16 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * and because that destination changes at the base arm's silhouette (arm gbuffer data inside, terrain gbuffer data
  * outside) the arm comes out as a correctly-shaded centre inside a differently-coloured rim.
  * <p>
- * Scoped to the arm only, and only while the pack's hand pass is actually bound — the render stage is set by
- * {@code IrisRenderingPipeline.beginHandRendering()} and cleared by {@code endHandRendering()}, so third-person
- * bodies, other players and the no-shaders path are untouched.
+ * Scoped to the arm only, and only while a pack hand pass is actually bound — the render stage is set by
+ * {@code IrisRenderingPipeline.beginHandRendering()} / {@code beginHandTranslucentRendering()} and cleared by
+ * {@code endHandRendering()}, so third-person bodies, other players and the no-shaders path are untouched.
  */
 @Mixin(RenderPlayer.class)
 public class RenderPlayerArmBlendMixin {
     /** {@code MC_RENDER_STAGE_HAND_SOLID}; see {@code ShaderMacros}. */
     private static final int HAND_SOLID = 16;
+    /** {@code MC_RENDER_STAGE_HAND_TRANSLUCENT}; see {@code ShaderMacros}. */
+    private static final int HAND_TRANSLUCENT = 23;
 
     @Redirect(
             method = {"renderRightArm", "renderLeftArm"},
@@ -40,7 +42,8 @@ public class RenderPlayerArmBlendMixin {
                     target = "Lnet/minecraft/client/renderer/GlStateManager;enableBlend()V"),
             require = 0)
     private void impetus$keepArmUnblended() {
-        if (CapturedRenderingState.INSTANCE.getRenderStage() != HAND_SOLID) {
+        int renderStage = CapturedRenderingState.INSTANCE.getRenderStage();
+        if (renderStage != HAND_SOLID && renderStage != HAND_TRANSLUCENT) {
             GlStateManager.enableBlend();
         }
     }

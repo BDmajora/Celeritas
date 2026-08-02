@@ -230,7 +230,7 @@ public class EntityRendererMixin {
             if (this.renderHand && pipeline.beginHandRendering()) {
                 this.impetus$shaderHandRendered = true;
                 try {
-                    this.impetus$renderFirstPersonItemForShader(partialTicks, pass);
+                    this.impetus$renderFirstPersonItemForShader(partialTicks, pass, true);
                 } finally {
                     pipeline.endHandRendering();
                 }
@@ -260,6 +260,15 @@ public class EntityRendererMixin {
     private void impetus$compositeBeforeHand(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
         IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
         if (pipeline != null) {
+            this.impetus$renderLateLocalPlayerBodyForShader(pipeline, partialTicks);
+            if (this.impetus$shaderHandRendered && pipeline.beginHandTranslucentRendering()) {
+                try {
+                    this.impetus$renderFirstPersonItemForShader(partialTicks, pass, false);
+                } finally {
+                    pipeline.endHandRendering();
+                }
+                this.mc.getTextureManager().bindTexture(TextureMap.LOCATION_BLOCKS_TEXTURE);
+            }
             pipeline.finishWorldRendering();
         }
     }
@@ -284,7 +293,7 @@ public class EntityRendererMixin {
      * them. OptiFine's {@code Shaders.beginHand()}/{@code endHand()} push/pop both matrices around the hand for the
      * same reason.
      */
-    private void impetus$renderFirstPersonItemForShader(float partialTicks, int pass) {
+    private void impetus$renderFirstPersonItemForShader(float partialTicks, int pass, boolean fireForgeHook) {
         if (this.debugView) {
             return;
         }
@@ -302,7 +311,8 @@ public class EntityRendererMixin {
 
             boolean sleeping = this.mc.getRenderViewEntity() instanceof EntityLivingBase
                     && ((EntityLivingBase) this.mc.getRenderViewEntity()).isPlayerSleeping();
-            boolean renderVanillaHand = !ForgeHooksClient.renderFirstPersonHand(this.mc.renderGlobal, partialTicks, pass);
+            boolean renderVanillaHand = !fireForgeHook
+                    || !ForgeHooksClient.renderFirstPersonHand(this.mc.renderGlobal, partialTicks, pass);
             if (renderVanillaHand && this.mc.gameSettings.thirdPersonView == 0 && !sleeping
                     && !this.mc.gameSettings.hideGUI && !this.mc.playerController.isSpectator()) {
                 this.enableLightmap();
@@ -318,6 +328,22 @@ public class EntityRendererMixin {
             GlStateManager.popMatrix();
             // OptiFine Shaders.endHand(): restore the standard alpha blend func the hand pass may have changed.
             GlStateManager.blendFunc(770, 771);
+        }
+    }
+
+    private void impetus$renderLateLocalPlayerBodyForShader(IrisRenderingPipeline pipeline, float partialTicks) {
+        boolean sleeping = this.mc.getRenderViewEntity() instanceof EntityLivingBase
+                && ((EntityLivingBase) this.mc.getRenderViewEntity()).isPlayerSleeping();
+        if (this.mc.player == null || this.mc.playerController.isSpectator()
+                || (this.mc.gameSettings.thirdPersonView == 0 && !sleeping)) {
+            return;
+        }
+        if (pipeline.beginLocalPlayerBodyRendering()) {
+            try {
+                this.mc.getRenderManager().renderEntityStatic(this.mc.player, partialTicks, false);
+            } finally {
+                pipeline.endLocalPlayerBodyRendering();
+            }
         }
     }
 

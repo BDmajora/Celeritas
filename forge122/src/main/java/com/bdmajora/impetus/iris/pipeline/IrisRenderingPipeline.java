@@ -2330,6 +2330,19 @@ public class IrisRenderingPipeline {
      * @return true when hand rendering should proceed and {@link #endHandRendering()} must be called
      */
     public boolean beginHandRendering() {
+        return beginHandRendering(ProgramId.Hand, 16); // MC_RENDER_STAGE_HAND_SOLID
+    }
+
+    /**
+     * Starts OptiFine's late hand pass ({@code renderHand1}) after translucent world geometry has drawn but before the
+     * composite/final chain consumes the gbuffer. This keeps nearby translucent collision panes from being blended over
+     * the first-person hand until it appears to vanish.
+     */
+    public boolean beginHandTranslucentRendering() {
+        return beginHandRendering(ProgramId.HandWater, 23); // MC_RENDER_STAGE_HAND_TRANSLUCENT
+    }
+
+    private boolean beginHandRendering(ProgramId programId, int renderStage) {
         if (this.destroyed || !this.worldRenderingActive) {
             return false;
         }
@@ -2340,18 +2353,21 @@ public class IrisRenderingPipeline {
 
         GlStateManager.enableDepth();
         GlStateManager.depthMask(true);
-        GlStateManager.depthFunc(GL11.GL_LEQUAL);
+        // The hand is drawn into an already-populated world depth buffer. When the camera is pressed into collision
+        // geometry, even the squeezed OptiFine hand projection can fail LEQUAL and vanish; force it to win only for
+        // this pass, then restore LEQUAL in endHandRendering before translucent/world drawing resumes.
+        GlStateManager.depthFunc(GL11.GL_ALWAYS);
         GlStateManager.enableAlpha();
         GlStateManager.enableBlend();
         logHandVertexStateProbe();
         resyncTextureUnitZero();
         resetVanillaVertexArrayState();
 
-        GbufferPrograms.Entry entry = this.gbufferPrograms != null ? this.gbufferPrograms.get(ProgramId.Hand) : null;
+        GbufferPrograms.Entry entry = this.gbufferPrograms != null ? this.gbufferPrograms.get(programId) : null;
         int packedLight = getHandPackedLight();
         setupHandLightmap(packedLight);
         bindGbufferPbrSamplers();
-        CapturedRenderingState.INSTANCE.setRenderStage(16); // MC_RENDER_STAGE_HAND_SOLID (see ShaderMacros)
+        CapturedRenderingState.INSTANCE.setRenderStage(renderStage);
         if (entry == null) {
             LWJGL.glUseProgram(0);
             drawGbufferBuffers(this.currentGbuffer, FIXED_FUNCTION_MASK);
@@ -2488,7 +2504,33 @@ public class IrisRenderingPipeline {
 
     public void endHandRendering() {
         LWJGL.glUseProgram(0);
+        GlStateManager.depthFunc(GL11.GL_LEQUAL);
         CapturedRenderingState.INSTANCE.setRenderStage(0); // MC_RENDER_STAGE_NONE
+    }
+
+    /**
+     * Replays only the local third-person body after translucent collision panes, matching the late-hand fix without
+     * changing visibility or depth behaviour for other entities.
+     */
+    public boolean beginLocalPlayerBodyRendering() {
+        if (this.destroyed || !this.worldRenderingActive) {
+            return false;
+        }
+        this.currentGbuffer.bind();
+        LWJGL.glViewport(0, 0, this.renderTargets.getWidth(), this.renderTargets.getHeight());
+        LWJGL.glDepthRange(0.0, 1.0);
+        this.skyAtFarPlane = false;
+        setPhase(ProgramId.Entities);
+        GlStateManager.enableDepth();
+        GlStateManager.depthMask(true);
+        GlStateManager.depthFunc(GL11.GL_ALWAYS);
+        GlStateManager.enableAlpha();
+        return true;
+    }
+
+    public void endLocalPlayerBodyRendering() {
+        GlStateManager.depthFunc(GL11.GL_LEQUAL);
+        setPhase(null);
     }
 
     /**

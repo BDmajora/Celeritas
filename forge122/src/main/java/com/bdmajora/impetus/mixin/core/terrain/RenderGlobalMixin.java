@@ -372,17 +372,21 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
                 * (ImpetusVintage.options().quality.entityDistance / 100.0D));
 
         for(Entity entity : impetus$collectedEntities[pass]) {
+            boolean isSleeping = renderViewEntity instanceof EntityLivingBase && ((EntityLivingBase) renderViewEntity).isPlayerSleeping();
+            boolean isLocalPlayerBody = player != null && entity == player
+                    && (this.mc.gameSettings.thirdPersonView != 0 || isSleeping);
+
             // Do regular vanilla checks for visibility
-            if(!this.renderManager.shouldRender(entity, camera, renderViewX, renderViewY, renderViewZ) && !entity.isRidingOrBeingRiddenBy(player)) {
+            if(!isLocalPlayerBody
+                    && !this.renderManager.shouldRender(entity, camera, renderViewX, renderViewY, renderViewZ)
+                    && !entity.isRidingOrBeingRiddenBy(player)) {
                 continue;
             }
 
             // Check if any corners of the bounding box are in a visible subchunk
-            if(!ImpetusWorldRenderer.instance().isEntityVisible(entity)) {
+            if(!isLocalPlayerBody && !ImpetusWorldRenderer.instance().isEntityVisible(entity)) {
                 continue;
             }
-
-            boolean isSleeping = renderViewEntity instanceof EntityLivingBase && ((EntityLivingBase) renderViewEntity).isPlayerSleeping();
 
             if ((entity != renderViewEntity || this.mc.gameSettings.thirdPersonView != 0 || isSleeping)
                     && (entity.posY < 0.0D || entity.posY >= 256.0D || this.world.isBlockLoaded(entityBlockPos.setPos(entity))))

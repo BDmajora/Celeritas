@@ -42,7 +42,7 @@ public class GbufferPrograms {
     private static final ProgramId[] PHASES = {
             ProgramId.SkyBasic, ProgramId.SkyTextured, ProgramId.Entities, ProgramId.DamagedBlock,
             ProgramId.TexturedLit, ProgramId.Weather, ProgramId.Clouds, ProgramId.Hand,
-            ProgramId.Line
+            ProgramId.HandWater, ProgramId.Line
     };
 
     /** One compiled gbuffer program plus its uniform driver and (sanitized) DRAWBUFFERS mask. */
