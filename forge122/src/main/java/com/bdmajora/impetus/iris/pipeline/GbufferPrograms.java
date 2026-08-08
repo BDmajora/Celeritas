@@ -40,7 +40,8 @@ public class GbufferPrograms {
 
     /** The phases driven from the vanilla render loop anchors in {@code EntityRendererMixin}. */
     private static final ProgramId[] PHASES = {
-            ProgramId.SkyBasic, ProgramId.SkyTextured, ProgramId.Entities, ProgramId.DamagedBlock,
+            ProgramId.SkyBasic, ProgramId.SkyTextured, ProgramId.Entities, ProgramId.EntitiesTrans,
+            ProgramId.DamagedBlock,
             ProgramId.TexturedLit, ProgramId.Weather, ProgramId.Clouds, ProgramId.Hand,
             ProgramId.HandWater, ProgramId.Line
     };
@@ -113,7 +114,9 @@ public class GbufferPrograms {
 
         Map<String, Entry> bySourceName = new HashMap<>();
         for (ProgramId phase : PHASES) {
-            Optional<ProgramSource> source = pack.getProgramSet().get(phase);
+            Optional<ProgramSource> source = phase == ProgramId.EntitiesTrans
+                    ? pack.getProgramSet().getDirect(phase)
+                    : pack.getProgramSet().get(phase);
             if (!source.isPresent()) {
                 continue;
             }

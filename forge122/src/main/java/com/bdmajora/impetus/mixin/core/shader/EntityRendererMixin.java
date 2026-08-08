@@ -260,7 +260,6 @@ public class EntityRendererMixin {
     private void impetus$compositeBeforeHand(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
         IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
         if (pipeline != null) {
-            this.impetus$renderLateLocalPlayerBodyForShader(pipeline, partialTicks);
             if (this.impetus$shaderHandRendered && pipeline.beginHandTranslucentRendering()) {
                 try {
                     this.impetus$renderFirstPersonItemForShader(partialTicks, pass, false);
@@ -328,22 +327,6 @@ public class EntityRendererMixin {
             GlStateManager.popMatrix();
             // OptiFine Shaders.endHand(): restore the standard alpha blend func the hand pass may have changed.
             GlStateManager.blendFunc(770, 771);
-        }
-    }
-
-    private void impetus$renderLateLocalPlayerBodyForShader(IrisRenderingPipeline pipeline, float partialTicks) {
-        boolean sleeping = this.mc.getRenderViewEntity() instanceof EntityLivingBase
-                && ((EntityLivingBase) this.mc.getRenderViewEntity()).isPlayerSleeping();
-        if (this.mc.player == null || this.mc.playerController.isSpectator()
-                || (this.mc.gameSettings.thirdPersonView == 0 && !sleeping)) {
-            return;
-        }
-        if (pipeline.beginLocalPlayerBodyRendering()) {
-            try {
-                this.mc.getRenderManager().renderEntityStatic(this.mc.player, partialTicks, false);
-            } finally {
-                pipeline.endLocalPlayerBodyRendering();
-            }
         }
     }
 

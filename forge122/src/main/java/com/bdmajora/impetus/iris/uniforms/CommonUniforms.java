@@ -372,7 +372,7 @@ public final class CommonUniforms {
         return cachedFrameTimeSmooth;
     }
 
-    private static float getEyeBrightnessM() {
+    public static float getEyeBrightnessM() {
         updateComplementaryCustomUniforms();
         return cachedEyeBrightnessM;
     }

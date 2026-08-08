@@ -8,13 +8,17 @@ import com.bdmajora.impetus.mixin.core.terrain.ChunkAccessor;
 import com.bdmajora.impetus.mixin.core.terrain.ChunkProviderClientAccessor;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 
 public class EntityGatherer {
     public static final int NUM_PASSES = 2;
 
     private final List<Entity>[] entityLists;
+    private final Set<Entity> seenEntities = Collections.newSetFromMap(new IdentityHashMap<>());
     private final Consumer<Entity> addEntity;
 
     @SuppressWarnings("unchecked")
@@ -25,6 +29,9 @@ public class EntityGatherer {
         }
         var entityLists = this.entityLists;
         this.addEntity = entity -> {
+            if (!this.seenEntities.add(entity)) {
+                return;
+            }
             for (int i = 0; i < NUM_PASSES; i++) {
                 if (entity.shouldRenderInPass(i)) {
                     entityLists[i].add(entity);
@@ -37,6 +44,7 @@ public class EntityGatherer {
         for (int i = 0; i < NUM_PASSES; i++) {
             entityLists[i].clear();
         }
+        this.seenEntities.clear();
     }
 
     public List<Entity>[] getLoadedEntityList(WorldClient world) {
@@ -54,10 +62,9 @@ public class EntityGatherer {
                     map.forEach(addEntity);
                 }
             }
-        } else {
-            // Best we can do is the loaded entity list - this will miss some multipart entities
-            world.loadedEntityList.forEach(addEntity);
         }
+        // Keep the vanilla loaded list too; some mods keep renderable proxies here without reliable chunk membership.
+        world.loadedEntityList.forEach(addEntity);
         return this.entityLists;
     }
 }

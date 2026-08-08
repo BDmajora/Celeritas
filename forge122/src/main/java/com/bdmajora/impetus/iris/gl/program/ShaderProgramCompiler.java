@@ -195,6 +195,8 @@ public final class ShaderProgramCompiler {
      *       {@code midCoord == texCoord}: the tile size collapses to zero, parallax becomes a no-op, and the albedo is
      *       sampled at {@code texCoord} exactly. (POM on standalone entity/hand textures is meaningless anyway.)</li>
      * </ul>
+     * Photon declares this attribute as {@code vec2}, while older packs commonly declare {@code vec4}; handle the
+     * scalar/vector shapes Iris's transformer accepts instead of leaving Photon's generic attribute unfed.
      *
      * Only the {@code ShaderProgramCompiler} path (vanilla geometry) is affected; terrain/water get real tangents and
      * sprite centers from the chunk vertex format via {@code ImpetusTerrainTransformer} and are compiled elsewhere.
@@ -206,6 +208,12 @@ public final class ShaderProgramCompiler {
                         + "vec3 t = abs(n.y) < 0.99 ? cross(n, vec3(0.0, 1.0, 0.0)) : vec3(1.0, 0.0, 0.0); "
                         + "return vec4(normalize(t), 1.0); }\n"
                         + "#define at_tangent (iris_tangentFallback())");
+        source = source.replaceAll("(?m)^\\s*(?:attribute|in)\\s+float\\s+mc_midTexCoord\\s*;",
+                "#define mc_midTexCoord gl_MultiTexCoord0.x");
+        source = source.replaceAll("(?m)^\\s*(?:attribute|in)\\s+vec2\\s+mc_midTexCoord\\s*;",
+                "#define mc_midTexCoord gl_MultiTexCoord0.xy");
+        source = source.replaceAll("(?m)^\\s*(?:attribute|in)\\s+vec3\\s+mc_midTexCoord\\s*;",
+                "#define mc_midTexCoord vec3(gl_MultiTexCoord0.xy, 0.0)");
         source = source.replaceAll("(?m)^\\s*(?:attribute|in)\\s+vec4\\s+mc_midTexCoord\\s*;",
                 "#define mc_midTexCoord gl_MultiTexCoord0");
         return source;

@@ -60,6 +60,13 @@ public final class ShaderPack {
     private final IncludeProcessor includeProcessor;
     private final ShaderProperties properties;
     private final ProgramSet baseProgramSet;
+    /**
+     * The Iris features this pack <em>declared</em> in {@code iris.features.required}/{@code optional} and that this
+     * port can honor. Distinct from the {@code IRIS_FEATURE_<NAME>} GLSL defines, which advertise everything the port
+     * supports so packs can {@code #ifdef} on availability — Iris draws exactly the same distinction
+     * ({@code ShaderPack.hasFeature} reads {@code activeFeatures}, while the defines come from {@code isUsable()}).
+     */
+    private final Set<com.bdmajora.impetus.iris.features.FeatureFlags> activeFeatures;
     /** The pack's ID maps (block/item/entity.properties), preprocessed with the active option values. */
     private final IdMap idMap;
 
@@ -119,6 +126,9 @@ public final class ShaderPack {
 
         // Feature-flag validation: a pack *requiring* a flag this port cannot honor must fail loudly and visibly
         // instead of rendering subtly wrong. Optional flags simply stay undefined for the pack to detect.
+        this.activeFeatures = com.bdmajora.impetus.iris.features.FeatureFlags.parseDeclared(
+                this.properties.getRaw().get("iris.features.required"),
+                this.properties.getRaw().get("iris.features.optional"));
         java.util.List<String> unsupportedRequired = com.bdmajora.impetus.iris.features.FeatureFlags
                 .findUnsupported(this.properties.getRaw().get("iris.features.required"));
         if (!unsupportedRequired.isEmpty()) {
@@ -441,6 +451,17 @@ public final class ShaderPack {
 
     public ProgramSet getProgramSet() {
         return this.baseProgramSet;
+    }
+
+    /**
+     * Whether the pack <em>asked</em> for an Iris feature, which is not the same question as whether this port can
+     * provide it. Iris gates real pipeline behaviour on this (its {@code separateHardwareSamplers} comes from
+     * {@code programSet.getPack().hasFeature(...)}), and the distinction matters: a pack that never opted into
+     * {@code SEPARATE_HARDWARE_SAMPLERS} expects {@code shadowtex0}/{@code shadowtex1} to carry hardware depth
+     * comparison themselves rather than through the {@code *HW} aliases.
+     */
+    public boolean hasFeature(com.bdmajora.impetus.iris.features.FeatureFlags feature) {
+        return this.activeFeatures.contains(feature);
     }
 
     public Map<AbsolutePackPath, String> getSources() {

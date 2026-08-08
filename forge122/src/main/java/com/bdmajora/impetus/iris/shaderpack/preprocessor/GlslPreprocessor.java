@@ -101,6 +101,36 @@ public final class GlslPreprocessor {
     }
 
     /**
+     * Drops the branches of {@code #if}/{@code #ifdef} conditionals the given macro set does not take, so a scanner
+     * sees only the declarations the GPU will actually compile. <b>For directive extraction only</b> — the result is
+     * not compilable source (every {@code #} line, {@code #version} and {@code #extension} included, is consumed).
+     * <p>
+     * Iris scans source that JCPP has already preprocessed ({@code ShaderPack}'s source provider feeds
+     * {@code ProgramSet}, which runs {@code ConstDirectiveParser} over it), so a directive sitting in a dead branch is
+     * simply not there. A raw-text regex instead takes the first textual match, which happily reads a value out of a
+     * branch the pack disabled.
+     * <p>
+     * Resolve one stage at a time: define state and {@code #if} nesting must not leak from one file into the next, and
+     * packs select which half of a shared body to compile with a {@code #define VERTEX_SHADER}/{@code FRAGMENT_SHADER}
+     * at the top of each entry point. Note that resolving consumes the {@code #define} lines it evaluates, so
+     * {@code #define}-form directives ({@code SHADOWRES}, {@code SHADOWFOV}) must still be read from the raw source.
+     *
+     * @return the resolved source, or {@code source} unchanged if the conditionals could not be evaluated
+     */
+    public static String resolveConditionals(String source, Map<String, String> defines) {
+        if (source == null || source.isEmpty()) {
+            return source;
+        }
+        try {
+            String resolved = PropertiesPreprocessor.preprocess(source, defines);
+            // An unterminated #if can swallow the rest of the file; keep the raw source rather than scan nothing.
+            return resolved.trim().isEmpty() ? source : resolved;
+        } catch (RuntimeException e) {
+            return source;
+        }
+    }
+
+    /**
      * Seam for later phases: rewrite legacy fixed-function built-ins to explicit {@code in}/attribute names.
      * Because Impetus renders chunks through VAOs, the fixed-function attribute slots are never populated, so a
      * GLSL-150+ translation needs to map e.g. {@code gl_MultiTexCoord0 -> vec4(mc_midTexCoord, 0.0, 1.0)}.

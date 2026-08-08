@@ -177,8 +177,24 @@ public class VintageRenderSectionManager extends RenderSectionManager {
             super(device, renderPassConfiguration);
         }
 
+        /**
+         * Never in the shadow pass — Iris disables this the same way
+         * ({@code MixinDefaultChunkRenderer#iris$disableBlockFaceCullingInShadowPass}).
+         * <p>
+         * {@code getVisibleFaces} drops each section's quads by facing relative to the OCCLUSION camera, which is
+         * always the player's. That is correct for the gbuffer pass and completely wrong for the shadow pass, which
+         * draws the same geometry from the sun. Standing 20 blocks underground, every section above the player fails
+         * {@code originY > boundsMinY - 3}, so {@code MODEL_POS_Y} is cleared and every upward-facing block top in
+         * those sections is dropped — precisely the surfaces the sun hits. The ground overhead then never reaches the
+         * shadow map, those texels keep the 1.0 depth clear, and Complementary's light-shaft march reads
+         * {@code clamp((1.0 - shadowPos.z) * 65536.0, 0.0, 1.0) == 1.0} — fully lit — for samples sitting under solid
+         * rock. That is the sunlight leaking through the ground into caves.
+         */
         @Override
         public boolean useBlockFaceCulling(){
+            if (com.bdmajora.impetus.iris.pipeline.IrisShadowRenderer.isShadowPass()) {
+                return false;
+            }
             return ImpetusVintage.options().performance.useBlockFaceCulling;
         }
 

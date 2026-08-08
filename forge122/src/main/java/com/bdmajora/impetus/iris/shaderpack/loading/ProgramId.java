@@ -34,6 +34,7 @@ public enum ProgramId {
 
     // --- Entity family ---
     Entities("gbuffers_entities", TexturedLit),
+    EntitiesTrans("gbuffers_entities_translucent", Entities),
     EntitiesGlowing("gbuffers_entities_glowing", Entities),
     ArmorGlint("gbuffers_armor_glint", Textured),
     SpiderEyes("gbuffers_spidereyes", Textured),

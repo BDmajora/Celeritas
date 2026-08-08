@@ -2,7 +2,6 @@ package com.bdmajora.impetus.iris.uniforms;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.Entity;
-import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import org.joml.Vector2f;
 import org.joml.Vector2i;
@@ -38,9 +37,14 @@ public final class EyeBrightnessTracker {
         if (camera == null || world == null) {
             return;
         }
-        BlockPos eyePosition = new BlockPos(camera.posX, camera.posY + camera.getEyeHeight(), camera.posZ);
-        int combined = world.getCombinedLight(eyePosition, 0);
-        eyeBrightness.set(combined & 0xFFFF, (combined >> 16) & 0xFFFF);
+        // OptiFine reads this straight off the entity (Shaders.java: `eyeBrightness = entity.getBrightnessForRender()`),
+        // and so do we. The hand-rolled `world.getCombinedLight(new BlockPos(posX, posY + eyeHeight, posZ), 0)` this
+        // replaces looked equivalent but reported (0,0) — total darkness — for a camera standing in open daylight,
+        // which makes Complementary believe the player is sealed underground: eyeBrightnessM collapses to 0 and the
+        // scene-aware light shafts latch into their extreme cave mode. getBrightnessForRender() applies the
+        // isBlockLoaded guard and the Y clamp that the direct call skips, and is what every 1.12 pack is tuned against.
+        int combined = camera.getBrightnessForRender();
+        eyeBrightness.set(combined & 0xFFFF, combined >> 16);
 
         // Exponential approach with a ~0.5s half-life — matches the feel of OptiFine's smoothing.
         float factor = 1.0f - (float) Math.pow(0.5, deltaSeconds * 2.0);

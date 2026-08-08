@@ -62,16 +62,6 @@ public abstract class IrisRenderingPipelineBlendGuardMixin {
         BlendOverrideGuard.release();
     }
 
-    @Inject(method = "beginLocalPlayerBodyRendering()Z", at = @At("HEAD"))
-    private void impetus$releaseAtLocalPlayerBodyRendering(CallbackInfoReturnable<Boolean> cir) {
-        BlendOverrideGuard.release();
-    }
-
-    @Inject(method = "endLocalPlayerBodyRendering()V", at = @At("HEAD"))
-    private void impetus$releaseAtLocalPlayerBodyEnd(CallbackInfo ci) {
-        BlendOverrideGuard.release();
-    }
-
     @Inject(method = "finishWorldRendering()V", at = @At("HEAD"))
     private void impetus$releaseAtWorldFinish(CallbackInfo ci) {
         BlendOverrideGuard.release();

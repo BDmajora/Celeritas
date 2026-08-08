@@ -53,6 +53,12 @@ public final class ProgramSet {
         return Optional.empty();
     }
 
+    /** @return the directly-declared source for {@code id}, without walking the fallback chain. */
+    public Optional<ProgramSource> getDirect(ProgramId id) {
+        ProgramSource source = this.programs.get(id);
+        return (source != null && source.isValid()) ? Optional.of(source) : Optional.empty();
+    }
+
     /**
      * @return the program at {@code index} within a numbered family ({@code composite}, {@code deferred},
      * {@code shadowcomp}), or empty if not present.

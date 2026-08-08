@@ -27,6 +27,7 @@ import com.bdmajora.impetus.iris.shaderpack.ProgramSource;
 import com.bdmajora.impetus.iris.shaderpack.ShaderPack;
 import com.bdmajora.impetus.iris.shaderpack.loading.ProgramArrayId;
 import com.bdmajora.impetus.iris.shaderpack.loading.ProgramId;
+import com.bdmajora.impetus.iris.shaderpack.preprocessor.GlslPreprocessor;
 import com.bdmajora.impetus.iris.shaderpack.texture.CustomTextureTransformer;
 import com.bdmajora.impetus.iris.shaderpack.texture.TextureStage;
 import com.bdmajora.impetus.iris.targets.BufferFlipper;
@@ -119,11 +120,17 @@ public class IrisRenderingPipeline {
      * Unit 11 is the one gap in OptiFine's 1.12 gbuffers layout (7..10 are gaux1..4, 12 is depthtex1).
      */
     private static final int GBUFFER_OVERLAY_UNIT = 11;
-    private static final int OVERLAY_TEX_UNIT = 27;
+    /**
+     * {@code iris_overlay} for the gbuffers stage lives on {@link #GBUFFER_OVERLAY_UNIT}; this is the fullscreen-stage
+     * bind of the same 1x1 dummy. It sits ABOVE the sampleable range on purpose — no composite/deferred/final program
+     * declares {@code iris_overlay} (it is an entity hurt-flash concept), so reserving a scarce low unit for it just
+     * starved the pack's own samplers.
+     */
+    private static final int OVERLAY_TEX_UNIT = 34;
     /** Highest logical colortex index shader-pack gbuffer stages may address. FBO attachment points are packed. */
     private static final int GBUFFER_ATTACHMENT_LIMIT = IrisRenderTargets.MAX_COLOR_BUFFERS;
     /** High texture unit used transiently for depth-copy binds so no vanilla-tracked unit is disturbed. */
-    private static final int DEPTH_COPY_SCRATCH_UNIT = 26;
+    private static final int DEPTH_COPY_SCRATCH_UNIT = 33;
     /**
      * Scratch unit for mipmap generation/reset, ABOVE every sampler allocation (colortex 0..15, depth 16..18,
      * shadow 19..25, noise 23, custom textures 26+, custom images 27..31). Mipmap ops bind textures raw; doing
@@ -136,7 +143,13 @@ public class IrisRenderingPipeline {
      * Dedicated units for the pack's custom textures and image samplers, above every reserved sampler. The first custom
      * unit is shared only by transient depth-copy/capture helpers; custom textures are rebound after those scratch uses.
      */
-    private static final int CUSTOM_TEX_FIRST_UNIT = DEPTH_COPY_SCRATCH_UNIT;
+    /**
+     * Lowest unit the pack's custom textures/images may use. The {@code shadowtex*HW} units above it are only real
+     * when the pack declared SEPARATE_HARDWARE_SAMPLERS; otherwise nothing samples them and they are handed to the
+     * pack instead — Complementary needs seven custom sampler units (gaux4, colortex3, voxel, floodfill x2, wsr,
+     * wsr_lod) and silently lost the last two when the budget stopped at 26.
+     */
+    private static final int CUSTOM_TEX_FIRST_UNIT = SHADOW_TEX_0_HW_UNIT;
     private static final int GL_MAX_TEXTURE_IMAGE_UNITS = 0x8872;
     private static final int GL_BACK_BUFFER = 0x0405;
     private static final int SHADER_PACK_RESOURCE_BARRIERS = 0x00000020 | 0x00000008 | 0x00002000;
@@ -190,7 +203,6 @@ public class IrisRenderingPipeline {
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "shadowcolor1", SHADOW_COLOR_1_UNIT);
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "shadowcolor0", SHADOW_COLOR_0_UNIT);
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "shadowcolor", SHADOW_COLOR_0_UNIT);
-        putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "iris_overlay", OVERLAY_TEX_UNIT);
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "shadowtex0", SHADOW_TEX_0_UNIT);
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "shadowtex0DH", SHADOW_TEX_0_UNIT);
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "shadow", SHADOW_TEX_0_UNIT);
@@ -303,7 +315,16 @@ public class IrisRenderingPipeline {
     private final PlainTexture noOverlayTexture;
     /** "Always lit" 1×1 shadow map on the shadowtex units until the real shadow pass exists. */
     private final StubShadowMap stubShadowMap;
-    private final boolean separateHardwareSamplers = FeatureFlags.SEPARATE_HARDWARE_SAMPLERS.isUsable();
+    /**
+     * Whether the pack DECLARED {@code SEPARATE_HARDWARE_SAMPLERS}, not whether this port could provide it — Iris
+     * reads {@code programSet.getPack().hasFeature(...)} for exactly this
+     * ({@code IrisRenderingPipeline.java:222}). Keying it off {@code isUsable()} made it permanently true, which
+     * suppressed the {@code GL_TEXTURE_COMPARE_MODE} that {@code IrisShadowRenderer.createShadowDepthTexture}
+     * otherwise sets on the shadow depth textures, leaving hardware depth compare supplied only by per-unit sampler
+     * objects. Any path that rebinds a shadow unit without also restoring its sampler object then leaves a
+     * {@code sampler2DShadow} reading a texture whose compare mode is NONE — undefined, and "fully lit" on NVIDIA.
+     */
+    private boolean separateHardwareSamplers;
     private final boolean[] shadowHardwareFiltering = new boolean[2];
     private final boolean[] shadowMipmap = new boolean[2];
     private final boolean[] shadowNearest = new boolean[2];
@@ -548,6 +569,7 @@ public class IrisRenderingPipeline {
         Minecraft mc = Minecraft.getMinecraft();
         this.renderTargets = new IrisRenderTargets(mc.displayWidth, mc.displayHeight);
         this.shaderDefines = pack.getEnvironmentDefines();
+        this.separateHardwareSamplers = pack.hasFeature(FeatureFlags.SEPARATE_HARDWARE_SAMPLERS);
         java.util.Arrays.fill(this.colorBufferClears, true);
         CameraUniforms.attach(this.frameUpdateNotifier);
 
@@ -599,8 +621,10 @@ public class IrisRenderingPipeline {
 
             // Custom images/textures must exist before any program compiles: sampler-unit assignment consults
             // the overrides (image uniforms are plain glUniform1i assignments like samplers).
+            int firstCustomUnit = this.separateHardwareSamplers
+                    ? SHADOW_TEX_1_HW_UNIT + 1 : CUSTOM_TEX_FIRST_UNIT;
             this.customTextureManager = new CustomTextureManager(pack, samplerUnitsByStage(), COLOR_TARGETS_BY_NAME,
-                    CUSTOM_TEX_FIRST_UNIT, maxProgrammableTextureUnit());
+                    firstCustomUnit, maxProgrammableTextureUnit());
             this.customImageManager = new CustomImageManager(pack.getProperties().getIrisCustomImages(),
                     this.customTextureManager.getNextAvailableUnit(), maxProgrammableTextureUnit());
             allocateRenderTargetImageUnits(collectAllProgramSources(pack));
@@ -1019,20 +1043,23 @@ public class IrisRenderingPipeline {
         // Const directives may live in ANY source (packs put them in shared includes flattened into every program),
         // so scan the gbuffer programs and the whole fullscreen chain.
         StringBuilder allSources = new StringBuilder();
+        StringBuilder activeSources = new StringBuilder();
         for (ProgramId id : new ProgramId[]{ProgramId.Shadow, ProgramId.Terrain, ProgramId.Water, ProgramId.Final}) {
             pack.getProgramSet().get(id).ifPresent(source -> {
-                source.getVertexSource().ifPresent(allSources::append);
-                source.getFragmentSource().ifPresent(allSources::append);
+                appendDirectiveSource(allSources, activeSources, source, source.getVertexSource());
+                appendDirectiveSource(allSources, activeSources, source, source.getFragmentSource());
             });
         }
         for (ProgramSource source : collectFullscreenSources(pack)) {
-            source.getFragmentSource().ifPresent(allSources::append);
+            appendDirectiveSource(allSources, activeSources, source, source.getFragmentSource());
         }
+        // `text` keeps the raw sources for the `#define`-form directives, which conditional resolution consumes.
         String text = allSources.toString();
+        String activeText = activeSources.toString();
 
         // Tilt of the sun/moon's daily arc. Needed by the celestial-position uniforms whether or not the pack draws
         // shadows, so set it before the no-shadow early-out.
-        float sunPathRotation = parseConstFloat(text, "sunPathRotation", 0.0f);
+        float sunPathRotation = parseConstFloat(activeText, "sunPathRotation", 0.0f);
         CelestialUniforms.setSunPathRotation(sunPathRotation);
 
         Optional<ProgramSource> shadowSource = pack.getProgramSet().get(ProgramId.Shadow);
@@ -1042,12 +1069,12 @@ public class IrisRenderingPipeline {
         }
         // OptiFine's pre-const spelling of the same three settings: `#define SHADOWRES 2048` etc. Iris accepts both
         // (PackShadowDirectives), and the shaders.properties keys override either.
-        int resolution = parseConstInt(text, "shadowMapResolution", parseDefineInt(text, "SHADOWRES", 1024));
-        float distance = parseConstFloat(text, "shadowDistance", parseDefineFloat(text, "SHADOWHPL", 160.0f));
-        float nearPlane = parseConstFloat(text, "shadowNearPlane", IrisShadowRenderer.DEFAULT_NEAR_PLANE);
-        float farPlane = parseConstFloat(text, "shadowFarPlane", IrisShadowRenderer.DEFAULT_FAR_PLANE);
-        float intervalSize = parseConstFloat(text, "shadowIntervalSize", IrisShadowRenderer.DEFAULT_INTERVAL_SIZE);
-        Float shadowMapFov = parseConstFloat(text, "shadowMapFov");
+        int resolution = parseConstInt(activeText, "shadowMapResolution", parseDefineInt(text, "SHADOWRES", 1024));
+        float distance = parseConstFloat(activeText, "shadowDistance", parseDefineFloat(text, "SHADOWHPL", 160.0f));
+        float nearPlane = parseConstFloat(activeText, "shadowNearPlane", IrisShadowRenderer.DEFAULT_NEAR_PLANE);
+        float farPlane = parseConstFloat(activeText, "shadowFarPlane", IrisShadowRenderer.DEFAULT_FAR_PLANE);
+        float intervalSize = parseConstFloat(activeText, "shadowIntervalSize", IrisShadowRenderer.DEFAULT_INTERVAL_SIZE);
+        Float shadowMapFov = parseConstFloat(activeText, "shadowMapFov");
         if (shadowMapFov == null) {
             Matcher legacyFov = Pattern.compile("(?m)^\\s*#define\\s+SHADOWFOV\\s+([0-9.]+)").matcher(text);
             if (legacyFov.find()) {
@@ -1064,11 +1091,11 @@ public class IrisRenderingPipeline {
                 ? pack.getProperties().getShadowDistance().getAsInt() : distance;
         // `const float voxelDistance` overrides the shadow distance for voxelization only: packs that voxelize for
         // colored lighting want a tighter radius than their shadow map covers (Iris PackShadowDirectives).
-        float voxelDistance = parseConstFloat(text, "voxelDistance", 0.0f);
+        float voxelDistance = parseConstFloat(activeText, "voxelDistance", 0.0f);
         // `shadowDistanceRenderMul` scales the shadow pass's CULLING distance (not the projection). Iris's unset
         // sentinel is -1, where it falls back to the user's shadow-distance setting; there is no such setting here,
         // so an unset or negative value simply means "no scaling".
-        float shadowDistanceRenderMul = parseConstFloat(text, "shadowDistanceRenderMul", -1.0f);
+        float shadowDistanceRenderMul = parseConstFloat(activeText, "shadowDistanceRenderMul", -1.0f);
         float cullDistance = shadowDistanceRenderMul >= 0.0f ? distance * shadowDistanceRenderMul : distance;
         if (shadowDistanceRenderMul >= 0.0f && shadowDistanceRenderMul != 1.0f) {
             LOGGER.info("[Iris] shadowDistanceRenderMul={} scales the shadow culling distance to {} blocks",
@@ -1080,7 +1107,7 @@ public class IrisRenderingPipeline {
         if (voxelDistance > 0.0f) {
             LOGGER.info("[Iris] voxelDistance={} overrides shadowDistance={} for voxelization", voxelDistance, distance);
         }
-        parseShadowDepthSamplingSettings(text);
+        parseShadowDepthSamplingSettings(activeText);
         // The FF shadow program (entities/block entities) belongs to the gbuffers custom-texture stage.
         Map<String, Integer> shadowSamplerUnits = new LinkedHashMap<>(GBUFFER_SAMPLER_UNITS);
         shadowSamplerUnits.putAll(gbufferSamplerOverrideUnits());
@@ -1100,6 +1127,31 @@ public class IrisRenderingPipeline {
             LOGGER.error("[Iris] Failed to create the shadow renderer; shadows disabled", e);
             return null;
         }
+    }
+
+    /**
+     * Appends one shader stage to both directive scans: {@code raw} as authored, {@code active} with the pack's own
+     * preprocessor conditionals resolved against the macro set that stage compiles with.
+     * <p>
+     * The {@code const} directives must be read from {@code active}, because a raw first-textual-match happily reads a
+     * value the pack disabled. Complementary Reimagined declares {@code const int shadowMapResolution = 4096;} under
+     * {@code #if SHADOW_QUALITY >= 5 || SHADOW_SMOOTHING < 3} and {@code 2048} under its {@code #else}; at its default
+     * 3/4 the 4096 map we allocated left every {@code texelFetch(shadowtex0, ivec2(pos * shadowMapResolution))} in the
+     * pack — its volumetric light shafts, and the scene-aware light-shaft probe — addressing one quadrant of the map.
+     * That quadrant is mostly cleared depth, which reads as "lit", so light shafts shone straight through terrain.
+     * Normalized {@code shadow2D} lookups are resolution-independent, which is why surface shadows looked correct.
+     */
+    private void appendDirectiveSource(StringBuilder raw, StringBuilder active, ProgramSource source,
+                                       Optional<String> stage) {
+        if (!stage.isPresent()) {
+            return;
+        }
+        raw.append(stage.get());
+        active.append(GlslPreprocessor.resolveConditionals(stage.get(),
+                com.bdmajora.impetus.iris.gl.shader.ShaderMacros.forProgram(this.shaderDefines, source.getName())));
+        // Stages are resolved individually, so terminate the appended text: an unterminated construct in one file
+        // must not run into the next.
+        active.append('\n');
     }
 
     private static int parseConstInt(String text, String name, int fallback) {
@@ -2012,6 +2064,15 @@ public class IrisRenderingPipeline {
         return this.worldRenderingActive && this.gbufferPrograms != null && this.gbufferPrograms.get(phase) != null;
     }
 
+    public boolean isRenderingPostDeferredTranslucents() {
+        return this.worldRenderingActive && !this.deferredPasses.isEmpty()
+                && this.currentGbuffer == this.translucentGbufferFramebuffer;
+    }
+
+    public ProgramId getTranslucentEntityPhase() {
+        return hasGbufferProgram(ProgramId.EntitiesTrans) ? ProgramId.EntitiesTrans : ProgramId.TexturedLit;
+    }
+
     public void setPhase(ProgramId phase) {
         if (!this.worldRenderingActive) {
             return;
@@ -2509,31 +2570,6 @@ public class IrisRenderingPipeline {
     }
 
     /**
-     * Replays only the local third-person body after translucent collision panes, matching the late-hand fix without
-     * changing visibility or depth behaviour for other entities.
-     */
-    public boolean beginLocalPlayerBodyRendering() {
-        if (this.destroyed || !this.worldRenderingActive) {
-            return false;
-        }
-        this.currentGbuffer.bind();
-        LWJGL.glViewport(0, 0, this.renderTargets.getWidth(), this.renderTargets.getHeight());
-        LWJGL.glDepthRange(0.0, 1.0);
-        this.skyAtFarPlane = false;
-        setPhase(ProgramId.Entities);
-        GlStateManager.enableDepth();
-        GlStateManager.depthMask(true);
-        GlStateManager.depthFunc(GL11.GL_ALWAYS);
-        GlStateManager.enableAlpha();
-        return true;
-    }
-
-    public void endLocalPlayerBodyRendering() {
-        GlStateManager.depthFunc(GL11.GL_LEQUAL);
-        setPhase(null);
-    }
-
-    /**
      * Feeds the first-person hand its lightmap coordinate. BSL's {@code gbuffers_hand} derives all its
      * brightness from {@code lmCoord = gl_TextureMatrix[1] * gl_MultiTexCoord1} (it never samples the lightmap texture),
      * while Sodium/Embeddium can leave the fixed-function lightmap coord stale. Set both the legacy current texcoord
@@ -2905,21 +2941,18 @@ public class IrisRenderingPipeline {
 
     private static final Pattern UNINITIALIZED_LIGHT_VOLUME =
             Pattern.compile("(?m)^([\\t ]*)vec4\\s+lightVolume\\s*;[\\t ]*$");
-    private static final Pattern TEMPORAL_DITHER_ASSIGN = Pattern.compile(
-            "(\\w+)\\s*=\\s*fract\\(\\1\\s*\\+\\s*goldenRatio\\s*\\*\\s*mod\\(float\\(frameCounter\\),\\s*3600\\.0\\)\\);");
-    private static final Pattern TEMPORAL_DITHER_RETURN = Pattern.compile(
-            "return\\s+fract\\((\\w+)\\s*\\+\\s*goldenRatio\\s*\\*\\s*mod\\(float\\(frameCounter\\),\\s*3600\\.0\\)\\);");
-    private static final Pattern TEMPORAL_DITHER_WSR = Pattern.compile(
-            "fract\\((\\w+)\\s*\\+\\s*frameCounter\\s*\\*\\s*0\\.618\\)");
-
     /**
-     * Source stabilizers for hazards proven by the shader pins:
+     * Source stabilizer for a hazard proven by the shader pins: Complementary's {@code GetComplexLightVolume} can
+     * accumulate into an uninitialized {@code vec4}, and zero-init is required under our transformed sources.
      * <p>
-     * 1. Complementary's {@code GetComplexLightVolume} can accumulate into an uninitialized {@code vec4}; zero-init is
-     *    required under our transformed sources.
-     * 2. Its TAA-era dither helpers deliberately re-roll blue-noise with {@code frameCounter}. The old dither pin
-     *    proved that this escaped our current feedback path as visible stutter, so stabilize only those reroll idioms.
-     *    Other {@code frameCounter} uses remain untouched.
+     * A companion rewrite used to flatten the pack's {@code fract(d + goldenRatio * mod(float(frameCounter), 3600.0))}
+     * dither reroll into a no-op {@code fract(d)}, dating from the era when block-edge shimmer was being chased. That
+     * root cause turned out to be the zeroed {@code at_midBlock} attribute, and the rewrite outlived it — while
+     * silently breaking every raymarch that depends on the reroll. Complementary's light shafts take only ~15 samples
+     * over the whole ray and rely on a per-frame dither offset for TAA to converge them; frozen, the sample planes
+     * become static screen-space slabs of lit fog that cut straight across terrain. Iris never rewrites pack source
+     * this way, and {@link com.bdmajora.impetus.iris.uniforms.SystemTimeUniforms} advances {@code frameCounter}
+     * per frame exactly as Iris does, so the pack's own reroll is left to run as authored.
      */
     /** {@code #version <number>} — the first one wins, matching the driver preprocessor. */
     private static final Pattern VERSION_DIRECTIVE = Pattern.compile("(?m)^\\s*#version\\s+(\\d+)");
@@ -2984,32 +3017,6 @@ public class IrisRenderingPipeline {
             LOGGER.info("[Iris] Program '{}': zero-initializing colored-lighting volume accumulator (pack declares it uninitialized)",
                     name);
             source = declaration.replaceAll("$1vec4 lightVolume = vec4(0.0);");
-        }
-        if (!source.contains("gl_GlobalInvocationID")) {
-            source = stabilizeTemporalDither(name, source);
-        }
-        return source;
-    }
-
-    private static String stabilizeTemporalDither(String name, String source) {
-        int stabilized = 0;
-        Matcher assign = TEMPORAL_DITHER_ASSIGN.matcher(source);
-        if (assign.find()) {
-            source = assign.replaceAll("$1 = fract($1); /* Impetus: stabilize temporal dither reroll */");
-            stabilized++;
-        }
-        Matcher returned = TEMPORAL_DITHER_RETURN.matcher(source);
-        if (returned.find()) {
-            source = returned.replaceAll("return fract($1); /* Impetus: stabilize temporal dither reroll */");
-            stabilized++;
-        }
-        Matcher wsr = TEMPORAL_DITHER_WSR.matcher(source);
-        if (wsr.find()) {
-            source = wsr.replaceAll("fract($1) /* Impetus: stabilize temporal dither reroll */");
-            stabilized++;
-        }
-        if (stabilized > 0) {
-            LOGGER.info("[Iris] Program '{}': stabilized {} temporal dither reroll idiom(s)", name, stabilized);
         }
         return source;
     }
@@ -3592,13 +3599,23 @@ public class IrisRenderingPipeline {
         }
         int sampler0 = shadowHardwareSamplerFor(0);
         int sampler1 = shadowHardwareSamplerFor(1);
-        // OptiFine 1.12 packs declare sampler2DShadow shadowtex0/1 directly when shadowHardwareFiltering is enabled.
-        bindShadowDepthUnit(SHADOW_TEX_0_UNIT, depth0, sampler0);
-        bindShadowDepthUnit(SHADOW_TEX_1_UNIT, depth1, sampler1);
-        bindShadowDepthUnit(SHADOW_TEX_0_HW_UNIT, depth0, sampler0);
-        bindShadowDepthUnit(SHADOW_TEX_1_HW_UNIT, depth1, sampler1);
-        bindShadowDepthUnit(GBUFFER_SHADOW_TEX_0_UNIT, depth0, sampler0);
-        bindShadowDepthUnit(GBUFFER_SHADOW_TEX_1_UNIT, depth1, sampler1);
+        // OptiFine 1.12 packs declare sampler2DShadow shadowtex0/1 directly when shadowHardwareFiltering is enabled,
+        // so the plain names keep the comparison sampler. Only a pack that opted into SEPARATE_HARDWARE_SAMPLERS
+        // expects them to read raw depth, with comparison moved to the *HW aliases (Iris IrisSamplers:151).
+        int plain0 = this.separateHardwareSamplers ? 0 : sampler0;
+        int plain1 = this.separateHardwareSamplers ? 0 : sampler1;
+        bindShadowDepthUnit(SHADOW_TEX_0_UNIT, depth0, plain0);
+        bindShadowDepthUnit(SHADOW_TEX_1_UNIT, depth1, plain1);
+        // The *HW aliases exist only for packs that declared SEPARATE_HARDWARE_SAMPLERS. For every other pack
+        // nothing samples them, and holding two units hostage starves the pack's own custom textures and images —
+        // which is exactly how Complementary's wsr_sampler/wsr_lod_sampler ended up with no unit at all and fell
+        // back to unit 0, making its world-space reflections trace an empty voxel volume.
+        if (this.separateHardwareSamplers) {
+            bindShadowDepthUnit(SHADOW_TEX_0_HW_UNIT, depth0, sampler0);
+            bindShadowDepthUnit(SHADOW_TEX_1_HW_UNIT, depth1, sampler1);
+        }
+        bindShadowDepthUnit(GBUFFER_SHADOW_TEX_0_UNIT, depth0, plain0);
+        bindShadowDepthUnit(GBUFFER_SHADOW_TEX_1_UNIT, depth1, plain1);
         bindTextureUnit(SHADOW_COLOR_0_UNIT, color0);
         bindTextureUnit(SHADOW_COLOR_1_UNIT, color1);
         bindTextureUnit(GBUFFER_SHADOW_COLOR_0_UNIT, color0);
@@ -3623,10 +3640,13 @@ public class IrisRenderingPipeline {
         }
     }
 
+    /**
+     * The comparison sampler for a shadow depth texture. This is bound only to the {@code *HW} units, which only
+     * programs that declared a {@code sampler2DShadow} are pointed at — and such a program is undefined without
+     * depth comparison. So comparison is unconditional here; {@code shadowHardwareFiltering} only selects the
+     * filtering flavour, exactly as it does for the raw units through the texture's own parameters.
+     */
     private int shadowHardwareSamplerFor(int index) {
-        if (!this.shadowHardwareFiltering[index]) {
-            return 0;
-        }
         if (this.shadowMipmap[index]) {
             return this.shadowNearest[index] ? this.shadowMippedNearestHwSampler : this.shadowMippedLinearHwSampler;
         }

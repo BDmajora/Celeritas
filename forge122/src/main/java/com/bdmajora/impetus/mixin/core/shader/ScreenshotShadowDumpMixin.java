@@ -1,0 +1,31 @@
+package com.bdmajora.impetus.mixin.core.shader;
+
+import com.bdmajora.impetus.iris.devtool.ShadowMapDump;
+import net.minecraft.client.shader.Framebuffer;
+import net.minecraft.util.ScreenShotHelper;
+import net.minecraft.util.text.ITextComponent;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+import java.io.File;
+
+/**
+ * Ties the shadow map dump to F2, so a screenshot captures what the player sees and what the sun sees in the same
+ * moment. Comparing the two is the only practical way to tell whether geometry that should be casting a shadow is
+ * actually present in the shadow map — depth statistics alone cannot distinguish "holds the terrain overhead" from
+ * "holds only the walls the player can see".
+ * <p>
+ * The screenshot runs after the frame is complete, so this only flags the request; the next shadow pass performs the
+ * readback, while it still owns the shadow framebuffer.
+ */
+@Mixin(ScreenShotHelper.class)
+public class ScreenshotShadowDumpMixin {
+    @Inject(method = "saveScreenshot(Ljava/io/File;Ljava/lang/String;IILnet/minecraft/client/shader/Framebuffer;)"
+            + "Lnet/minecraft/util/text/ITextComponent;", at = @At("HEAD"), require = 0)
+    private static void impetus$requestShadowMapDump(File gameDirectory, String screenshotName, int width, int height,
+                                                     Framebuffer buffer, CallbackInfoReturnable<ITextComponent> cir) {
+        ShadowMapDump.request();
+    }
+}

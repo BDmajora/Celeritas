@@ -57,6 +57,30 @@ public enum FeatureFlags {
         return missing;
     }
 
+    /**
+     * The usable flags a pack actually declared, across {@code iris.features.required} and
+     * {@code iris.features.optional} (both space-separated; either may be null).
+     * <p>
+     * Iris keeps this set deliberately separate from the {@code IRIS_FEATURE_<NAME>} defines and gates pipeline
+     * behaviour on it, so a pack that never asked for a feature keeps the pre-feature behaviour even on an
+     * implementation that could provide it.
+     */
+    public static java.util.Set<FeatureFlags> parseDeclared(String required, String optional) {
+        java.util.Set<FeatureFlags> declared = java.util.EnumSet.noneOf(FeatureFlags.class);
+        for (String list : new String[]{required, optional}) {
+            if (list == null || list.trim().isEmpty()) {
+                continue;
+            }
+            for (String token : list.trim().split("\\s+")) {
+                FeatureFlags flag = byName(token);
+                if (flag != UNKNOWN && flag.isUsable()) {
+                    declared.add(flag);
+                }
+            }
+        }
+        return declared;
+    }
+
     /** Adds an {@code IRIS_FEATURE_<NAME>} define for every flag this port can honor. */
     public static void addUsableDefines(java.util.Map<String, String> macros) {
         for (FeatureFlags flag : values()) {
