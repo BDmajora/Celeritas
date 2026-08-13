@@ -90,7 +90,8 @@ public final class ImpetusTerrainTransformer {
             "uniform float iris_FogDensity;",
             "uniform float iris_FogStart;",
             "uniform float iris_FogEnd;",
-            "const float iris_FogScale = 1.0;",
+            // gl_Fog.scale is inlined as an expression by FogParameters (Iris's 1/(end-start)), so there is
+            // deliberately no iris_FogScale declaration here.
             "out vec4 iris_TexCoordArr[4];",
             "#define gl_TexCoord iris_TexCoordArr",
             "// OptiFine packs rely on fixed-function GL_ALPHA_TEST for cutout transparency, but Impetus disables it",
@@ -180,7 +181,8 @@ public final class ImpetusTerrainTransformer {
             "uniform float iris_FogDensity;",
             "uniform float iris_FogStart;",
             "uniform float iris_FogEnd;",
-            "const float iris_FogScale = 1.0;",
+            // gl_Fog.scale is inlined as an expression by FogParameters (Iris's 1/(end-start)), so there is
+            // deliberately no iris_FogScale declaration here.
             "in vec4 iris_TexCoordArr[4];",
             "#define gl_TexCoord iris_TexCoordArr",
             "flat in float iris_AlphaCutoff;",
@@ -394,10 +396,6 @@ public final class ImpetusTerrainTransformer {
     }
 
     private static String rewriteFogParameters(String source) {
-        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*color\\b", "iris_FogColor");
-        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*density\\b", "iris_FogDensity");
-        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*start\\b", "iris_FogStart");
-        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*end\\b", "iris_FogEnd");
-        return source.replaceAll("\\bgl_Fog\\s*\\.\\s*scale\\b", "iris_FogScale");
+        return FogParameters.rewrite(source);
     }
 }

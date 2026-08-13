@@ -13,9 +13,22 @@ import org.joml.Vector2i;
  * ({@code update()} from the frame hook), not from the uniform suppliers (which run once per program).
  */
 public final class EyeBrightnessTracker {
-    /** OptiFine defaults, in ticks: it takes ~30s of rain to get fully wet and ~10s to dry off. */
-    private static final float WETNESS_HALF_LIFE_TICKS = 600.0f;
-    private static final float DRYNESS_HALF_LIFE_TICKS = 200.0f;
+    /**
+     * Iris's defaults, in <em>deciseconds</em> — the unit its {@code SmoothedFloat} takes, which scales the half-life
+     * by {@code 0.1f} to get seconds ({@code SmoothedFloat.java:53}). So the shipped values mean 60s to get fully wet,
+     * 20s to dry off, and 1s of eye-brightness smoothing.
+     * <p>
+     * These were previously hardcoded and, worse, interpreted as <em>ticks</em> ({@code halfLife / 20}), which halved
+     * every one of them: 30s/10s/0.5s. Packs are tuned against the Iris/OptiFine rates.
+     */
+    private static final float DEFAULT_WETNESS_HALF_LIFE = 600.0f;
+    private static final float DEFAULT_DRYNESS_HALF_LIFE = 200.0f;
+    private static final float DEFAULT_EYE_BRIGHTNESS_HALF_LIFE = 10.0f;
+
+    /** Deciseconds. Overwritten per pack load from the {@code const float *Halflife} directives. */
+    private static volatile float wetnessHalfLife = DEFAULT_WETNESS_HALF_LIFE;
+    private static volatile float drynessHalfLife = DEFAULT_DRYNESS_HALF_LIFE;
+    private static volatile float eyeBrightnessHalfLife = DEFAULT_EYE_BRIGHTNESS_HALF_LIFE;
 
     private static final Vector2i eyeBrightness = new Vector2i();
     private static final Vector2f smoothed = new Vector2f();
@@ -23,6 +36,30 @@ public final class EyeBrightnessTracker {
     private static long lastUpdateNanos = -1L;
 
     private EyeBrightnessTracker() {
+    }
+
+    /**
+     * Installs the pack's {@code wetnessHalflife} / {@code drynessHalflife} / {@code eyeBrightnessHalflife}, in
+     * deciseconds. Called once per pack load; a non-positive value means "snap instantly", which is what a half-life
+     * of zero degenerates to.
+     */
+    public static void setHalfLives(float wetnessDeciseconds, float drynessDeciseconds,
+                                   float eyeBrightnessDeciseconds) {
+        wetnessHalfLife = wetnessDeciseconds;
+        drynessHalfLife = drynessDeciseconds;
+        eyeBrightnessHalfLife = eyeBrightnessDeciseconds;
+    }
+
+    /**
+     * The exponential-smoothing blend factor for one frame: the fraction of the way to move toward the target so that
+     * half the remaining distance is covered every {@code halfLifeDeciseconds}. Iris expresses the same thing as
+     * {@code 1 - e^(-kt)} with {@code k = ln2 / (halfLife * 0.1)}.
+     */
+    private static float smoothingFactor(float halfLifeDeciseconds, float deltaSeconds) {
+        if (halfLifeDeciseconds <= 0.0f) {
+            return 1.0f;
+        }
+        return 1.0f - (float) Math.pow(0.5, deltaSeconds / (halfLifeDeciseconds * 0.1f));
     }
 
     /** Advances the tracker one frame. Called from the pipeline's frame-begin hook on the render thread. */
@@ -46,14 +83,14 @@ public final class EyeBrightnessTracker {
         int combined = camera.getBrightnessForRender();
         eyeBrightness.set(combined & 0xFFFF, combined >> 16);
 
-        // Exponential approach with a ~0.5s half-life — matches the feel of OptiFine's smoothing.
-        float factor = 1.0f - (float) Math.pow(0.5, deltaSeconds * 2.0);
+        float factor = smoothingFactor(eyeBrightnessHalfLife, deltaSeconds);
         smoothed.x += (eyeBrightness.x - smoothed.x) * factor;
         smoothed.y += (eyeBrightness.y - smoothed.y) * factor;
 
+        // Rising toward rain uses the wetness half-life, falling back uses dryness — Iris's SmoothedFloat(up, down).
         float rainStrength = world.getRainStrength(CapturedRenderingState.INSTANCE.getTickDelta());
-        float halfLifeTicks = rainStrength > wetness ? WETNESS_HALF_LIFE_TICKS : DRYNESS_HALF_LIFE_TICKS;
-        float wetnessFactor = 1.0f - (float) Math.pow(0.5, deltaSeconds * 20.0f / halfLifeTicks);
+        float wetnessFactor =
+                smoothingFactor(rainStrength > wetness ? wetnessHalfLife : drynessHalfLife, deltaSeconds);
         wetness += (rainStrength - wetness) * wetnessFactor;
     }
 

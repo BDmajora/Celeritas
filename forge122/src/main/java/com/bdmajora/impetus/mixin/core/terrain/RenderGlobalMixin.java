@@ -22,18 +22,17 @@ import com.bdmajora.impetus.ImpetusVintage;
 import com.bdmajora.impetus.engine.impl.gl.device.RenderDevice;
 import com.bdmajora.impetus.engine.impl.render.terrain.SimpleWorldRenderer;
 import com.bdmajora.impetus.engine.impl.render.viewport.ViewportProvider;
+import com.bdmajora.impetus.impl.render.clouds.SodiumCloudRenderer;
 import com.bdmajora.impetus.iris.Iris;
 import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
-import com.bdmajora.impetus.iris.shaderpack.ShaderPack;
+import com.bdmajora.impetus.iris.shaderpack.loading.ProgramId;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.bdmajora.impetus.impl.render.entity.EntityGatherer;
@@ -53,7 +52,12 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
     @Final
     private RenderManager renderManager;
     @Shadow
+    @Final
+    private net.minecraft.client.renderer.texture.TextureManager renderEngine;
+    @Shadow
     private int countEntitiesRendered;
+    @Shadow
+    private int cloudTickCounter;
 
     @Shadow
     protected abstract boolean isOutlineActive(Entity entityIn, Entity viewer, ICamera camera);
@@ -206,58 +210,57 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         return true;
     }
 
+    /**
+     * Takes over both cloud modes with {@link SodiumCloudRenderer}, which is upstream Sodium's face-culled cloud mesh
+     * rather than vanilla's draw-everything-and-hide-it-with-a-depth-prepass one. See that class for why the vanilla
+     * mesh cannot survive a shader pipeline.
+     * <p>
+     * The pack's {@code clouds} directive is not consulted here: {@code GameSettingsCloudsMixin} has already folded it
+     * into {@code shouldRenderClouds()}, so by this point the mode is the effective one and every other caller
+     * (notably {@code EntityRenderer#renderCloudsCheck}) agrees with it.
+     */
     @Inject(method = "renderClouds", at = @At("HEAD"), cancellable = true)
-    private void obeyShaderPackCloudMode(float partialTicks, int pass, double x, double y, double z,
+    private void impetus$renderCloudsSodium(float partialTicks, int pass, double x, double y, double z,
             CallbackInfo ci) {
-        if (!shouldDispatchVanillaClouds()) {
+        int mode = this.mc.gameSettings.shouldRenderClouds();
+        if (mode == 0) {
             ci.cancel();
+            return;
+        }
+
+        if (!ImpetusVintage.options().performance.useFasterClouds
+                || !this.world.provider.isSurfaceWorld()
+                // A mod owning this dimension's clouds gets vanilla's dispatch, including the Forge render handler
+                // that runs ahead of any cloud geometry.
+                || this.world.provider.getCloudRenderer() != null
+                || !SodiumCloudRenderer.isReady(this.mc)) {
+            return;
+        }
+
+        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        if (pipeline != null) {
+            pipeline.setPhase(ProgramId.Clouds);
+        }
+
+        try {
+            if (SodiumCloudRenderer.render(this.mc, this.world, this.renderEngine, this.cloudTickCounter, partialTicks,
+                    pass, x, y, z, mode == 2, impetus$cloudRadiusCells(),
+                    ImpetusVintage.options().quality.cloudHeight)) {
+                ci.cancel();
+            }
+        } finally {
+            if (pipeline != null) {
+                pipeline.setPhase(null);
+            }
         }
     }
 
-    @Inject(method = "renderCloudsFancy", at = @At("HEAD"), cancellable = true)
-    private void obeyShaderPackFancyCloudMode(float partialTicks, int pass, double x, double y, double z,
-            CallbackInfo ci) {
-        if (!shouldRenderVanillaClouds(true)) {
-            ci.cancel();
-        }
-    }
-
-    private static boolean shouldDispatchVanillaClouds() {
-        ShaderPack pack = Iris.getCurrentPack();
-        if (pack == null) {
-            return true;
-        }
-        String mode = pack.getProperties().getCloudMode().orElse("");
-        switch (mode) {
-            case "off":
-            case "none":
-            case "false":
-                return false;
-            default:
-                return true;
-        }
-    }
-
-    private static boolean shouldRenderVanillaClouds(boolean fancy) {
-        ShaderPack pack = Iris.getCurrentPack();
-        if (pack == null) {
-            return true;
-        }
-        String mode = pack.getProperties().getCloudMode().orElse("");
-        switch (mode) {
-            case "off":
-            case "none":
-            case "false":
-                return false;
-            case "fast":
-                return !fancy;
-            case "fancy":
-                return fancy;
-            default:
-                return true;
-        }
-    }
-
+    /**
+     * The vanilla fallback still honours the cloud-height option. The cloud <em>distance</em> options are deliberately
+     * not applied to it: vanilla's fancy mesh emits its walls under hardcoded {@code l2 > -1} / {@code l2 <= 1} guards
+     * that are relative to its own {@code -3..4} tile range, so widening the range without widening those guards just
+     * multiplies the wall count. The Sodium path owns the distance slider instead, where culling makes it meaningful.
+     */
     @Redirect(method = "renderClouds", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/WorldProvider;getCloudHeight()F"))
     private float getConfiguredFastCloudHeight(WorldProvider provider) {
         return getConfiguredCloudHeight(provider);
@@ -272,32 +275,16 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         return ImpetusVintage.options().quality.cloudHeight;
     }
 
-    @ModifyConstant(method = "renderClouds", constant = @Constant(intValue = -256))
-    private int getConfiguredFastCloudDistanceMin(int distance) {
-        return -getConfiguredCloudDistanceBlocks();
-    }
-
-    @ModifyConstant(method = "renderClouds", constant = @Constant(intValue = 256))
-    private int getConfiguredFastCloudDistanceMax(int distance) {
-        return getConfiguredCloudDistanceBlocks();
-    }
-
-    @ModifyConstant(method = "renderCloudsFancy", constant = @Constant(intValue = -3))
-    private int getConfiguredFancyCloudDistanceMin(int distance) {
-        return -getConfiguredCloudDistanceTiles();
-    }
-
-    @ModifyConstant(method = "renderCloudsFancy", constant = @Constant(intValue = 4), require = 0)
-    private int getConfiguredFancyCloudDistanceMax(int distance) {
-        return getConfiguredCloudDistanceTiles();
-    }
-
-    private int getConfiguredCloudDistanceBlocks() {
-        return Math.max(8, ImpetusVintage.options().quality.cloudDistance) * 16;
-    }
-
-    private int getConfiguredCloudDistanceTiles() {
-        return Math.max(2, (int)Math.ceil(getConfiguredCloudDistanceBlocks() / 96.0D));
+    /**
+     * Cloud radius in cells. Clamped at the bottom to vanilla's own extent (8 tiles of 8 cells, so 32 either side of
+     * the camera) and at the top to the cloud projection's far plane — {@code renderCloudsCheck} builds it at
+     * {@code farPlaneDistance * 4}, and cells past that are clipped away anyway.
+     */
+    @Unique
+    private int impetus$cloudRadiusCells() {
+        int requested = Math.max(8, ImpetusVintage.options().quality.cloudDistance) * 16;
+        int farPlane = this.mc.gameSettings.renderDistanceChunks * 16 * 4;
+        return Math.max(32, (int) Math.ceil(Math.min(requested, farPlane) / 12.0D));
     }
 
     @Inject(method = "loadRenderers", at = @At("RETURN"))

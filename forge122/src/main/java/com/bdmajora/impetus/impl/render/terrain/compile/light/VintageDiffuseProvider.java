@@ -10,9 +10,21 @@ import static com.bdmajora.impetus.engine.impl.model.quad.properties.ModelQuadFa
 public enum VintageDiffuseProvider implements DiffuseProvider {
     INSTANCE;
 
+    /**
+     * {@return {@code true} when the pack's {@code oldLighting=false} means vanilla's per-face shading must not be
+     * baked into the vertex colour}
+     * <p>
+     * A pack that lights from the face normal itself (Body Camera's {@code lightBrightness}) would otherwise get
+     * vanilla's 0.5/0.6/0.8 face multiplier applied on top of its own, i.e. shaded twice. Iris suppresses this by
+     * forcing the shade lookup to {@code Direction.UP}; OptiFine by setting its shade constants to 1.0.
+     */
+    private static boolean directionalShadingDisabled() {
+        return com.bdmajora.impetus.iris.material.WorldRenderingSettings.shouldDisableDirectionalShading();
+    }
+
     @Override
     public float getDiffuse(float normalX, float normalY, float normalZ, boolean shade) {
-        if (!shade) {
+        if (!shade || directionalShadingDisabled()) {
             return 1.0f;
         }
         return LightUtil.diffuseLight(normalX, normalY, normalZ);
@@ -50,7 +62,7 @@ public enum VintageDiffuseProvider implements DiffuseProvider {
 
     @Override
     public float getDiffuse(ModelQuadFacing lightFace, boolean shade) {
-        if (!shade) {
+        if (!shade || directionalShadingDisabled()) {
             return 1.0f;
         }
         return LightUtil.diffuseLight(toEnumFacing(lightFace));

@@ -11,7 +11,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.bdmajora.impetus.iris.Iris;
 import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
 import com.bdmajora.impetus.iris.pipeline.VanillaFeatureToggles;
-import com.bdmajora.impetus.iris.shaderpack.ShaderPack;
 import com.bdmajora.impetus.iris.shaderpack.loading.ProgramId;
 
 /**
@@ -61,6 +60,9 @@ public class RenderGlobalMixin {
      * {@code LevelRenderer.renderClouds} at method entry/return. Do this at the geometry boundary instead of at
      * {@code EntityRenderer}'s profiler label; shader-pack properties can cancel the dispatcher, and a leaked
      * {@code gbuffers_clouds} phase leaves colortex4 selected until the composite chain.
+     * <p>
+     * These anchors only fire on the vanilla fallback path — {@code RenderGlobalMixin} in {@code core.terrain}
+     * normally replaces the geometry with Sodium's cloud renderer and brackets the phase itself.
      */
     @Inject(method = "renderClouds(FIDDD)V",
             at = @At(value = "INVOKE",
@@ -81,18 +83,18 @@ public class RenderGlobalMixin {
         impetus$setPhase(null);
     }
 
+    /**
+     * No {@code clouds} directive check here any more: {@code GameSettingsCloudsMixin} folds the pack's setting into
+     * {@code shouldRenderClouds()}, so reaching this method already means fancy clouds are the effective mode.
+     */
     @Inject(method = "renderCloudsFancy(FIDDD)V", at = @At("HEAD"), require = 0)
     private void impetus$beginFancyClouds(float partialTicks, int pass, double x, double y, double z, CallbackInfo ci) {
-        if (!impetus$shaderPackForcesFastOrOffClouds()) {
-            impetus$setPhase(ProgramId.Clouds);
-        }
+        impetus$setPhase(ProgramId.Clouds);
     }
 
     @Inject(method = "renderCloudsFancy(FIDDD)V", at = @At("RETURN"), require = 0)
     private void impetus$endFancyClouds(float partialTicks, int pass, double x, double y, double z, CallbackInfo ci) {
-        if (!impetus$shaderPackForcesFastOrOffClouds()) {
-            impetus$setPhase(null);
-        }
+        impetus$setPhase(null);
     }
 
     /**
@@ -258,15 +260,6 @@ public class RenderGlobalMixin {
 
     @Unique
     private static net.minecraft.util.ResourceLocation impetus$transparent;
-
-    private static boolean impetus$shaderPackForcesFastOrOffClouds() {
-        ShaderPack pack = Iris.getCurrentPack();
-        if (pack == null) {
-            return false;
-        }
-        String mode = pack.getProperties().getCloudMode().orElse("");
-        return "fast".equals(mode) || "off".equals(mode) || "none".equals(mode) || "false".equals(mode);
-    }
 
     private static void impetus$setPhase(ProgramId phase) {
         IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();

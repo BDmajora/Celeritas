@@ -162,6 +162,11 @@ public class IrisRenderingPipeline {
             {"gcolor", "gdepth", "gnormal", "composite", "gaux1", "gaux2", "gaux3", "gaux4"};
     private static final Pattern MIPMAP_DIRECTIVE =
             Pattern.compile("const\\s+bool\\s+(\\w+?)MipmapEnabled\\s*=\\s*(true|false)\\s*;");
+    /** Iris's {@code PackDirectives} defaults. The half-lives are in deciseconds (1/10 s = 2 ticks). */
+    private static final float DEFAULT_CENTER_DEPTH_HALF_LIFE = 1.0f;
+    private static final float DEFAULT_WETNESS_HALF_LIFE = 600.0f;
+    private static final float DEFAULT_DRYNESS_HALF_LIFE = 200.0f;
+    private static final float DEFAULT_EYE_BRIGHTNESS_HALF_LIFE = 10.0f;
     /** Sampler name -> logical colortex index, independent from the texture unit chosen for a stage. */
     private static final Map<String, Integer> COLOR_TARGETS_BY_NAME = new LinkedHashMap<>();
     /** Sampler name -> texture unit for deferred/composite/final programs. */
@@ -500,7 +505,17 @@ public class IrisRenderingPipeline {
 
     /** centerDepthSmooth producer + its pack-configurable smoothing half-life (seconds). */
     private final CenterDepthSampler centerDepthSampler = new CenterDepthSampler();
-    private float centerDepthHalfLife = 1.0f;
+    private float centerDepthHalfLife = DEFAULT_CENTER_DEPTH_HALF_LIFE;
+
+    /**
+     * The pack-wide scalar {@code const} directives, with Iris's defaults ({@code PackDirectives}'s constructor).
+     * The three half-lives are in <em>deciseconds</em>, the unit Iris's {@code SmoothedFloat} takes.
+     */
+    private int noiseTextureResolution = NoiseTexture.DEFAULT_RESOLUTION;
+    private float ambientOcclusionLevel = 1.0f;
+    private float wetnessHalfLife = DEFAULT_WETNESS_HALF_LIFE;
+    private float drynessHalfLife = DEFAULT_DRYNESS_HALF_LIFE;
+    private float eyeBrightnessHalfLife = DEFAULT_EYE_BRIGHTNESS_HALF_LIFE;
 
     /** Optional final-presentation wide-gamut conversion (user-configured, defaults to sRGB = off). */
     private final ColorSpaceConverter colorSpaceConverter = new ColorSpaceConverter();
@@ -576,7 +591,6 @@ public class IrisRenderingPipeline {
         boolean initialized = false;
         try {
             this.quadRenderer = new FullscreenQuadRenderer();
-            this.noiseTexture = new NoiseTexture(NoiseTexture.DEFAULT_RESOLUTION);
             this.defaultNormals = new PlainTexture(127, 127, 255, 255);
             this.defaultSpecular = new PlainTexture(0, 0, 0, 0);
             // Transparent, so a pack doing `mix(color, overlay.rgb, overlay.a)` gets its colour back unchanged.
@@ -593,6 +607,9 @@ public class IrisRenderingPipeline {
             // (R11F_G11F_B10F, RGB16F) inside gbuffers_textured.fsh, so a fullscreen-only scan leaves every
             // target at RGBA8 and its HDR lighting/PCSS/bloom/TAA buffers clamp. Scan all sources.
             applyPackFormatDirectives(collectAllProgramSources(pack));
+            // After the directive scan: `const int noiseTextureResolution` sizes this, and a pack that samples
+            // noisetex at an assumed resolution gets the wrong spatial frequency if we guess 256.
+            this.noiseTexture = new NoiseTexture(this.noiseTextureResolution);
             // size.buffer.colortexN must land before anything materialises a target: Photon's sky map is authored
             // against a 192x108 colortex4 and indexes it by absolute texel, so at full resolution its light/ambient
             // column lands mid-screen instead of at the edge.
@@ -899,11 +916,7 @@ public class IrisRenderingPipeline {
     private void applyLegacyGaux4Format(List<ProgramSource> sources) {
         Pattern directive = Pattern.compile("/\\*\\s*GAUX4FORMAT\\s*:\\s*(\\w+)\\s*\\*/");
         for (ProgramSource source : sources) {
-            for (String stage : new String[]{source.getFragmentSource().orElse(null),
-                    source.getVertexSource().orElse(null)}) {
-                if (stage == null) {
-                    continue;
-                }
+            for (String stage : activeDirectiveStages(source)) {
                 Matcher matcher = directive.matcher(stage);
                 while (matcher.find()) {
                     String name = matcher.group(1);
@@ -922,31 +935,56 @@ public class IrisRenderingPipeline {
         }
     }
 
-    private void applyPackFormatDirectives(List<ProgramSource> sources) {
-        Pattern halfLifeDirective = Pattern.compile("const\\s+float\\s+centerDepthHalflife\\s*=\\s*([0-9.]+)f?\\s*;");
-        for (ProgramSource source : sources) {
-            String fragment = source.getFragmentSource().orElse(null);
-            if (fragment != null) {
-                Matcher halfLife = halfLifeDirective.matcher(fragment);
-                if (halfLife.find()) {
-                    try {
-                        this.centerDepthHalfLife = Float.parseFloat(halfLife.group(1));
-                    } catch (NumberFormatException ignored) {
-                    }
-                }
+    /**
+     * The stages of {@code source} that a pack directive may be declared in, each with the pack's own preprocessor
+     * conditionals resolved against the macro set that stage actually compiles with.
+     * <p>
+     * <strong>Directives must never be read from raw source.</strong> These scans take the LAST textual match, so a
+     * directive the pack declared under a disabled {@code #if} silently wins over the live one. Iris is immune because
+     * it scans source JCPP has already preprocessed ({@code ShaderPack.java:317} feeds {@code ProgramSet} ->
+     * {@code ConstDirectiveParser}); OptiFine 1.12.2 does not preprocess, but its matchers filter on the VALUE
+     * ({@code isConstBoolSuffix("Clear", false)} / {@code ("MipmapEnabled", true)}, {@code Shaders.java:2470/2499}), so
+     * it only ever reads the polarity that is not the default and is accidentally immune to the common
+     * {@code #if}/{@code #else} pair. Impetus declares {@code IS_IRIS}, so it owes the pack Iris's semantics.
+     * <p>
+     * Body Camera Shader v1.6.1 is the case that proved it: {@code colortex0Format} (R11F_G11F_B10F vs RGB8),
+     * {@code colortex5Clear} (false vs true) and {@code colortex0MipmapEnabled} (true vs false) are each declared once
+     * per branch of an {@code #if}, and all three resolved to the dead branch. That killed the pack's auto-exposure
+     * (a wiped accumulator makes its `color /= tempExposure + 0.125` a flat 8x) and clipped its HDR buffer, for a
+     * uniformly white screen.
+     * <p>
+     * Option values reach the resolver even though {@code getEnvironmentDefines()} excludes them, because Impetus
+     * applies them in place as real {@code #define} lines ahead of the {@code #if} — do NOT add options to the macro
+     * map instead, that reintroduces the macro-redefinition failure across every non-Complementary pack.
+     * <p>
+     * Vertex first, fragment last: the scans are last-match-wins, and Iris only ever trusts the fragment stage
+     * ({@code ProgramSet.java:263}), so when the two disagree the fragment value has to be the one that survives.
+     * Scanning the vertex stage at all is a deliberate superset of Iris, matching OptiFine, which scans every file in
+     * the pack — Sildur declares real formats in a {@code .vsh}.
+     */
+    private List<String> activeDirectiveStages(ProgramSource source) {
+        Map<String, String> macros =
+                com.bdmajora.impetus.iris.gl.shader.ShaderMacros.forProgram(this.shaderDefines, source.getName());
+        List<String> stages = new ArrayList<>(2);
+        for (Optional<String> stage : java.util.Arrays.asList(source.getVertexSource(), source.getFragmentSource())) {
+            if (stage.isPresent()) {
+                stages.add(GlslPreprocessor.resolveConditionals(stage.get(), macros));
             }
         }
+        return stages;
+    }
 
+    private void applyPackFormatDirectives(List<ProgramSource> sources) {
         Pattern formatDirective = Pattern.compile("const\\s+int\\s+(\\w+?)Format\\s*=\\s*(\\w+)\\s*;");
         Pattern clearDirective = Pattern.compile("const\\s+bool\\s+(\\w+?)Clear\\s*=\\s*(true|false)\\s*;");
         Pattern clearColorDirective = Pattern.compile("const\\s+vec4\\s+(\\w+?)ClearColor\\s*=\\s*vec4\\s*\\(([^)]*)\\)\\s*;");
         applyLegacyGaux4Format(sources);
+        StringBuilder scalarText = new StringBuilder();
         for (ProgramSource source : sources) {
-            String[] stages = {source.getFragmentSource().orElse(null), source.getVertexSource().orElse(null)};
-            for (String stage : stages) {
-                if (stage == null) {
-                    continue;
-                }
+            for (String stage : activeDirectiveStages(source)) {
+                // The pack-wide scalar directives are name-keyed rather than target-keyed, so they can be read from
+                // one concatenation. Terminate each stage: an unterminated construct must not run into the next.
+                scalarText.append(stage).append('\n');
                 Matcher matcher = formatDirective.matcher(stage);
                 while (matcher.find()) {
                     Integer index = COLOR_TARGETS_BY_NAME.get(matcher.group(1));
@@ -985,6 +1023,51 @@ public class IrisRenderingPipeline {
                 }
             }
         }
+        applyPackScalarDirectives(scalarText.toString());
+    }
+
+    /**
+     * The pack-wide scalar {@code const} directives Iris collects into {@code PackDirectives}
+     * ({@code PackDirectives.acceptDirectivesFrom}). {@code sunPathRotation} and the shadow directives are read on the
+     * shadow path instead, which owns their consumers.
+     * <p>
+     * Defaults and units are Iris's: the half-lives are in <em>deciseconds</em> ({@code SmoothedFloat} scales by
+     * {@code 0.1f}), and {@code ambientOcclusionLevel} is clamped to 0..1.
+     */
+    private void applyPackScalarDirectives(String activeText) {
+        this.centerDepthHalfLife = parseConstFloat(activeText, "centerDepthHalflife", DEFAULT_CENTER_DEPTH_HALF_LIFE);
+
+        // noisetex size. A pack that samples `texture2D(noisetex, uv * 32)` against a 256x256 noise texture gets the
+        // wrong spatial frequency everywhere it uses noise — Body Camera's water normals are built from it.
+        int noiseResolution = parseConstInt(activeText, "noiseTextureResolution", NoiseTexture.DEFAULT_RESOLUTION);
+        if (noiseResolution > 0) {
+            // NoiseTexture allocates resolution^2 * 4 bytes twice (a byte[] and a direct buffer), so a pack typo like
+            // 65536 would OOM the client outright rather than render badly. 4096 is far past anything real.
+            if (noiseResolution > 4096) {
+                LOGGER.warn("[Iris] Pack requests noiseTextureResolution={}; clamping to 4096", noiseResolution);
+                noiseResolution = 4096;
+            }
+            this.noiseTextureResolution = noiseResolution;
+        }
+
+        // Vanilla's baked AO strength. Iris pushes this into WorldRenderingSettings, where the block-model AO
+        // computation reads it; 1.0 is vanilla, 0.0 disables vanilla AO so the pack can do its own.
+        float aoLevel = parseConstFloat(activeText, "ambientOcclusionLevel", 1.0f);
+        this.ambientOcclusionLevel = Math.max(0.0f, Math.min(1.0f, aoLevel));
+        com.bdmajora.impetus.iris.material.WorldRenderingSettings
+                .setAmbientOcclusionLevel(this.ambientOcclusionLevel);
+
+        // `wetness` and `eyeBrightnessSmooth` smoothing rates.
+        this.wetnessHalfLife = parseConstFloat(activeText, "wetnessHalflife", DEFAULT_WETNESS_HALF_LIFE);
+        this.drynessHalfLife = parseConstFloat(activeText, "drynessHalflife", DEFAULT_DRYNESS_HALF_LIFE);
+        this.eyeBrightnessHalfLife =
+                parseConstFloat(activeText, "eyeBrightnessHalflife", DEFAULT_EYE_BRIGHTNESS_HALF_LIFE);
+        EyeBrightnessTracker.setHalfLives(this.wetnessHalfLife, this.drynessHalfLife, this.eyeBrightnessHalfLife);
+
+        LOGGER.info("[Iris] Pack directives: noiseTextureResolution={}, ambientOcclusionLevel={}, "
+                        + "centerDepthHalflife={}, wetnessHalflife={}, drynessHalflife={}, eyeBrightnessHalflife={}",
+                this.noiseTextureResolution, this.ambientOcclusionLevel, this.centerDepthHalfLife,
+                this.wetnessHalfLife, this.drynessHalfLife, this.eyeBrightnessHalfLife);
     }
 
     private static float[] parseVec4(String value) {
@@ -1070,6 +1153,13 @@ public class IrisRenderingPipeline {
         // OptiFine's pre-const spelling of the same three settings: `#define SHADOWRES 2048` etc. Iris accepts both
         // (PackShadowDirectives), and the shaders.properties keys override either.
         int resolution = parseConstInt(activeText, "shadowMapResolution", parseDefineInt(text, "SHADOWRES", 1024));
+        if (resolution <= 0) {
+            // A pack error, but the literal grammar now admits a sign, and a non-positive texture size would fail
+            // allocation rather than degrade. E-LITE declares `shadowMapResolution = 10` in its shadows-off branch,
+            // which conditional resolution already hides; this only backstops the value actually reaching GL.
+            LOGGER.warn("[Iris] Pack declares shadowMapResolution={}; falling back to 1024", resolution);
+            resolution = 1024;
+        }
         float distance = parseConstFloat(activeText, "shadowDistance", parseDefineFloat(text, "SHADOWHPL", 160.0f));
         float nearPlane = parseConstFloat(activeText, "shadowNearPlane", IrisShadowRenderer.DEFAULT_NEAR_PLANE);
         float farPlane = parseConstFloat(activeText, "shadowFarPlane", IrisShadowRenderer.DEFAULT_FAR_PLANE);
@@ -1154,9 +1244,41 @@ public class IrisRenderingPipeline {
         active.append('\n');
     }
 
+    /**
+     * The GLSL float literal grammar, as permissive as {@link Float#parseFloat}: optional sign, {@code .5} and
+     * {@code 1.} forms, and an exponent. The narrower {@code -?[0-9]+(\.[0-9]+)?} this replaces silently fell back to
+     * the default for a pack writing {@code const float x = .5;} or {@code 1e-3}.
+     */
+    private static final String FLOAT_LITERAL = "([-+]?(?:[0-9]+\\.?[0-9]*|\\.[0-9]+)(?:[eE][-+]?[0-9]+)?)[fF]?";
+
+    /**
+     * {@return the LAST match of {@code pattern} in {@code text}, or {@code null}}
+     * <p>
+     * Last-wins is Iris's and OptiFine's rule: Iris dispatches every directive it finds in file order and each
+     * overwrites the previous ({@code DispatchingDirectiveHolder}), OptiFine likewise assigns per line
+     * ({@code Shaders.java:2555}). These scans read text concatenated from several stages/programs, so a pack that
+     * declares a directive more than once must resolve the same way it does under Iris. First-match-wins was the old
+     * behaviour and is a silent divergence whenever the values differ.
+     */
+    private static String lastMatch(Pattern pattern, String text, int group) {
+        Matcher matcher = pattern.matcher(text);
+        String value = null;
+        while (matcher.find()) {
+            value = matcher.group(group);
+        }
+        return value;
+    }
+
     private static int parseConstInt(String text, String name, int fallback) {
-        Matcher matcher = Pattern.compile("const\\s+int\\s+" + name + "\\s*=\\s*(\\d+)").matcher(text);
-        return matcher.find() ? Integer.parseInt(matcher.group(1)) : fallback;
+        String value = lastMatch(Pattern.compile("const\\s+int\\s+" + name + "\\s*=\\s*([-+]?\\d+)"), text, 1);
+        if (value == null) {
+            return fallback;
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
     }
 
     /** OptiFine's legacy {@code #define <NAME> <value>} spelling of a shadow directive. */
@@ -1182,8 +1304,8 @@ public class IrisRenderingPipeline {
     }
 
     private static Optional<Boolean> parseOptionalConstBool(String text, String name) {
-        Matcher matcher = Pattern.compile("const\\s+bool\\s+" + name + "\\s*=\\s*(true|false)").matcher(text);
-        return matcher.find() ? Optional.of(Boolean.parseBoolean(matcher.group(1))) : Optional.empty();
+        String value = lastMatch(Pattern.compile("const\\s+bool\\s+" + name + "\\s*=\\s*(true|false)"), text, 1);
+        return value != null ? Optional.of(Boolean.parseBoolean(value)) : Optional.empty();
     }
 
     private void parseShadowDepthSamplingSettings(String text) {
@@ -1226,14 +1348,28 @@ public class IrisRenderingPipeline {
     }
 
     private static float parseConstFloat(String text, String name, float fallback) {
-        // Allow a leading sign (sunPathRotation is often negative) and an optional f/F suffix (e.g. -40.0f).
-        Matcher matcher = Pattern.compile("const\\s+float\\s+" + name + "\\s*=\\s*(-?[0-9]+(?:\\.[0-9]+)?)[fF]?").matcher(text);
-        return matcher.find() ? Float.parseFloat(matcher.group(1)) : fallback;
+        Float value = parseConstFloat(text, name);
+        return value != null ? value : fallback;
     }
 
+    /**
+     * {@return the pack's {@code const float <name>}, or {@code null} when it declares none}
+     * <p>
+     * Also accepts {@code const int <name>} for the float-valued directives: GLSL would reject the implicit narrowing,
+     * but packs write {@code const float shadowDistance = 120;} anyway and both Iris (Float.parseFloat over the token)
+     * and OptiFine ({@code isConstFloat} on a value it later parses loosely) tolerate it.
+     */
     private static Float parseConstFloat(String text, String name) {
-        Matcher matcher = Pattern.compile("const\\s+float\\s+" + name + "\\s*=\\s*(-?[0-9]+(?:\\.[0-9]+)?)[fF]?").matcher(text);
-        return matcher.find() ? Float.parseFloat(matcher.group(1)) : null;
+        String value = lastMatch(
+                Pattern.compile("const\\s+(?:float|int)\\s+" + name + "\\s*=\\s*" + FLOAT_LITERAL), text, 1);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Float.parseFloat(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /** The color buffers the terrain program writes, per its {@code DRAWBUFFERS} directive. */
@@ -1667,14 +1803,21 @@ public class IrisRenderingPipeline {
         }
     }
 
-    private static BitSet parseMipmappedBuffers(ProgramSource source) {
+    /**
+     * The {@code colortexNMipmapEnabled} set for one pass. Per program, like Iris's {@code ProgramDirectives}, and read
+     * from the fragment stage with the pack's conditionals resolved — see {@link #activeDirectiveStages} for why raw
+     * source is not safe here (Body Camera declares {@code colortex0MipmapEnabled} true and false in the two branches
+     * of one {@code #if}, and the dead branch was winning, which broke its auto-exposure metering).
+     */
+    private BitSet parseMipmappedBuffers(ProgramSource source) {
         BitSet mipmappedBuffers = new BitSet(IrisRenderTargets.MAX_COLOR_BUFFERS);
         Optional<String> fragmentSource = source.getFragmentSource();
         if (!fragmentSource.isPresent()) {
             return mipmappedBuffers;
         }
 
-        Matcher matcher = MIPMAP_DIRECTIVE.matcher(fragmentSource.get());
+        Matcher matcher = MIPMAP_DIRECTIVE.matcher(GlslPreprocessor.resolveConditionals(fragmentSource.get(),
+                com.bdmajora.impetus.iris.gl.shader.ShaderMacros.forProgram(this.shaderDefines, source.getName())));
         while (matcher.find()) {
             Integer index = colorTargetIndex(matcher.group(1));
             if (index == null || index >= IrisRenderTargets.MAX_COLOR_BUFFERS) {
@@ -3069,13 +3212,13 @@ public class IrisRenderingPipeline {
         return pointers;
     }
 
+    /**
+     * Delegates to {@link GlslPreprocessor#resolveConditionals}, which additionally falls back to the raw source when
+     * resolution yields nothing — an unterminated {@code #if} otherwise swallows the rest of the file and the scan sees
+     * no directives at all. Kept as a named seam because the compute-directive callers pass their own define maps.
+     */
     private static String preprocessActiveShaderSource(String source, Map<String, String> defines) {
-        try {
-            return com.bdmajora.impetus.iris.shaderpack.preprocessor.PropertiesPreprocessor.preprocess(
-                    source, defines);
-        } catch (RuntimeException e) {
-            return source;
-        }
+        return GlslPreprocessor.resolveConditionals(source, defines);
     }
 
     private static int[] parseWorkGroupsDirect(String source) {

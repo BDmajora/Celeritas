@@ -94,12 +94,107 @@ public final class ModernPackTransformer {
         return source.substring(start);
     }
 
+    /**
+     * Substitutes the {@code gl_Fog.*} built-ins. {@code gl_Fog.color} maps to the live {@code iris_FogColor} uniform
+     * (the one {@link FullscreenTransformer} and {@link ImpetusTerrainTransformer} already use); the scalars keep the
+     * constant stand-ins they have always had.
+     * <p>
+     * {@code gl_Fog.color} used to be replaced with {@code vec4(0.0)}, on the assumption that only genuinely modern
+     * (1.17+) packs reach this transformer, where any {@code gl_Fog} reference sits in a dead branch. That assumption
+     * is wrong: {@link #isModernSource} keys off {@code #version >= 130}, and plenty of 1.12.2-era packs declare 130
+     * while still using the compatibility-profile fog built-ins for real. Body Camera Shader v1.6.1 guards its cloud
+     * distance-fade with {@code if (gl_Fog.color.rgb != vec3(0.0))}, which the substitution turned into
+     * {@code if (vec4(0.0).rgb != vec3(0.0))} — always false. Its clouds then never faded and rendered as one opaque
+     * slab out to the cloud limit. A constant is especially dangerous for the colour because packs use it as a
+     * <em>predicate</em>, not just a value.
+     * <p>
+     * The scalars used to be left as constants too. They are now mapped as well, for Iris parity — see
+     * {@link FogParameters}. That visibly changes packs which read them in live code: Complementary and Spooklementary
+     * both compute {@code float fog = (lViewPos * 3.0 - gl_Fog.start) * gl_Fog.scale;}, which was
+     * {@code (lViewPos * 3.0 - 0.0) * 1.0} — an unbounded value rather than the 0..1 linear fog factor the expression
+     * is meant to produce — and is now the real {@code (dist - start) / (end - start)}. Verify those two in game.
+     */
     private static String rewriteFogParameters(String source) {
-        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*color\\b", "vec4(0.0)");
-        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*density\\b", "0.0");
-        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*start\\b", "0.0");
-        source = source.replaceAll("\\bgl_Fog\\s*\\.\\s*end\\b", "1.0");
-        return source.replaceAll("\\bgl_Fog\\s*\\.\\s*scale\\b", "1.0");
+        if (!source.contains("gl_Fog")) {
+            return source;
+        }
+        // Names already declared upstream (a prologue-carrying path) must not be declared a second time.
+        boolean[] alreadyDeclared = new boolean[FogParameters.DECLARATIONS.length];
+        for (int i = 0; i < FogParameters.DECLARATIONS.length; i++) {
+            alreadyDeclared[i] = source.contains(identifierOf(FogParameters.DECLARATIONS[i]));
+        }
+
+        source = FogParameters.rewrite(source);
+
+        StringBuilder declarations = new StringBuilder();
+        for (int i = 0; i < FogParameters.DECLARATIONS.length; i++) {
+            String identifier = identifierOf(FogParameters.DECLARATIONS[i]);
+            if (!alreadyDeclared[i] && source.contains(identifier)) {
+                declarations.append(FogParameters.DECLARATIONS[i]).append('\n');
+            }
+        }
+        return declarations.length() == 0 ? source : injectAfterPreamble(source, declarations.toString());
+    }
+
+    /** {@code "uniform vec4 iris_FogColor;"} -> {@code "iris_FogColor"}. */
+    private static String identifierOf(String declaration) {
+        String trimmed = declaration.trim();
+        int end = trimmed.lastIndexOf(';');
+        int start = trimmed.lastIndexOf(' ', end);
+        return trimmed.substring(start + 1, end);
+    }
+
+    /**
+     * Inserts {@code declarations} immediately before the first line carrying a non-preprocessor token, skipping blank
+     * lines, comments and {@code #} directives. GLSL requires every {@code #extension} to precede any real token, so
+     * prepending to the top of the body would break the packs that use them.
+     */
+    private static String injectAfterPreamble(String source, String declarations) {
+        String[] lines = source.split("\n", -1);
+        boolean inBlockComment = false;
+        int insertAt = 0;
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            String trimmed = line.trim();
+            if (inBlockComment) {
+                int close = trimmed.indexOf("*/");
+                if (close < 0) {
+                    insertAt = i + 1;
+                    continue;
+                }
+                inBlockComment = false;
+                trimmed = trimmed.substring(close + 2).trim();
+            }
+            while (trimmed.startsWith("/*")) {
+                int close = trimmed.indexOf("*/", 2);
+                if (close < 0) {
+                    inBlockComment = true;
+                    trimmed = "";
+                    break;
+                }
+                trimmed = trimmed.substring(close + 2).trim();
+            }
+            if (inBlockComment || trimmed.isEmpty() || trimmed.startsWith("//") || trimmed.startsWith("#")) {
+                insertAt = i + 1;
+                continue;
+            }
+            insertAt = i;
+            break;
+        }
+        StringBuilder out = new StringBuilder(source.length() + declarations.length());
+        for (int i = 0; i < lines.length; i++) {
+            if (i == insertAt) {
+                out.append(declarations);
+            }
+            out.append(lines[i]);
+            if (i < lines.length - 1) {
+                out.append('\n');
+            }
+        }
+        if (insertAt >= lines.length) {
+            out.append(declarations);
+        }
+        return out.toString();
     }
 
     static String rewriteUnsignedStrictness(String source) {

@@ -1,8 +1,11 @@
 package com.bdmajora.impetus.iris.gl.texture;
 
 import com.bdmajora.impetus.lwjgl.GL11;
+import com.bdmajora.impetus.lwjgl.GL12;
 import com.bdmajora.impetus.lwjgl.GL30;
 import com.bdmajora.impetus.lwjgl.GL31;
+import com.bdmajora.impetus.lwjgl.GL33;
+import com.bdmajora.impetus.lwjgl.GL41;
 
 import java.util.Locale;
 import java.util.Optional;
@@ -92,7 +95,18 @@ public enum InternalTextureFormat {
     RGB5_A1(GL11.GL_RGB5_A1, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, false),
     RGB10_A2(GL11.GL_RGB10_A2, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, false),
     R11F_G11F_B10F(GL30.GL_R11F_G11F_B10F, GL11.GL_RGB, GL11.GL_FLOAT, false),
-    RGB9_E5(GL30.GL_RGB9_E5, GL11.GL_RGB, GL11.GL_FLOAT, false);
+    RGB9_E5(GL30.GL_RGB9_E5, GL11.GL_RGB, GL11.GL_FLOAT, false),
+
+    // Low-precision legacy formats. Rarely a good idea, but Iris accepts them
+    // (`InternalTextureFormat.java:78-86`) and a pack that asks for one and silently gets RGBA8 instead is a
+    // divergence: Body Camera Shader v1.6.1 requests `colortex4Format = RGBA2`. A pack may also legitimately pick
+    // one to save bandwidth on a mask buffer, and packs sometimes *rely* on the quantisation.
+    RGBA2(GL11.GL_RGBA2, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, false),
+    RGBA4(GL11.GL_RGBA4, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, false),
+    R3_G3_B2(GL11.GL_R3_G3_B2, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, false),
+    RGB565(GL41.GL_RGB565, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, false),
+    // Packed integer: needs an *_INTEGER client format, and the only legal type for the 2-10-10-10 packing.
+    RGB10_A2UI(GL33.GL_RGB10_A2UI, GL30.GL_RGBA_INTEGER, GL12.GL_UNSIGNED_INT_2_10_10_10_REV, true);
 
     private final int internalFormat;
     private final int pixelFormat;

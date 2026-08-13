@@ -65,8 +65,13 @@ public final class WorldRenderingSettings {
     private static boolean dynamicHandLight = true;
     /** {@code separateAo} — vanilla ambient occlusion is fed as its own vertex channel rather than baked into light. */
     private static boolean separateAo;
-    /** {@code oldLighting} — keep vanilla's fixed-function directional face shading. */
-    private static boolean oldLighting;
+    /**
+     * {@code oldLighting} — keep vanilla's fixed-function directional face shading (top 1.0, sides 0.8/0.6,
+     * bottom 0.5). Packs that compute their own lighting from the face normal set it to <em>false</em> so that
+     * shading is not applied twice; Body Camera Shader v1.6.1 does exactly that on line 1 of its
+     * {@code shaders.properties}. Read on chunk-build worker threads, hence {@code volatile}.
+     */
+    private static volatile boolean oldLighting = true;
     /**
      * {@code oldHandLight} (default true) — when the offhand item emits more light than the mainhand, the
      * {@code heldItemId}/{@code heldBlockLightValue} uniforms report the offhand instead. OptiFine
@@ -138,8 +143,63 @@ public final class WorldRenderingSettings {
         return oldLighting;
     }
 
+    /**
+     * {@return whether vanilla's per-face directional shading must be suppressed}
+     * <p>
+     * Iris expresses this as {@code shouldDisableDirectionalShading() { return !oldLighting; }}
+     * ({@code IrisRenderingPipeline.java:1167}) and applies it by forcing the shade lookup to {@code Direction.UP}
+     * ({@code MixinClientLevel}). OptiFine 1.12.2 does the same thing by setting its three shade constants to 1.0
+     * ({@code Shaders.updateBlockLightLevel}, {@code Shaders.java:1624}). Both therefore make every face full
+     * brightness; {@link com.bdmajora.impetus.impl.render.terrain.compile.light.VintageDiffuseProvider} is the
+     * equivalent site here.
+     * <p>
+     * <strong>Default divergence, deliberate.</strong> Iris defaults {@code oldLighting} to <em>false</em>
+     * ({@code PackDirectives.java:92}) — shading off unless a pack asks for it. OptiFine defaults it to
+     * <em>true</em> ({@code Shaders.java:1665}). Impetus keeps OptiFine's default because every pack here is a
+     * 1.12.2 pack authored against OptiFine, and flipping it would silently re-light every pack that does not
+     * declare the key. Packs that DO declare it are honoured exactly.
+     */
+    public static boolean shouldDisableDirectionalShading() {
+        return !oldLighting;
+    }
+
     public static void setOldLighting(boolean value) {
+        // Baked into chunk vertex colour, so a change needs the chunk rebuild that selecting a pack already
+        // schedules (RenderGlobal.loadRenderers()) — same situation as setSeparateAo above.
         oldLighting = value;
+    }
+
+    /**
+     * {@code const float ambientOcclusionLevel} — how much of vanilla's baked per-block ambient occlusion to keep.
+     * 1.0 is vanilla; 0.0 removes it entirely so a pack can supply its own AO without double-darkening corners.
+     * <p>
+     * Read on chunk-build worker threads ({@code LightDataCache}), hence {@code volatile}. Iris applies it by
+     * rewriting the block's shade brightness ({@code MixinBlockStateBehavior}); {@link #applyAmbientOcclusionLevel}
+     * is the same formula at the 1.12.2 equivalent site.
+     */
+    private static volatile float ambientOcclusionLevel = 1.0f;
+
+    public static float getAmbientOcclusionLevel() {
+        return ambientOcclusionLevel;
+    }
+
+    public static void setAmbientOcclusionLevel(float value) {
+        // Terrain meshes bake AO into vertex colour, so a change needs the same chunk rebuild that selecting a pack
+        // already schedules (RenderGlobal.loadRenderers()) — no extra invalidation needed here.
+        ambientOcclusionLevel = Math.max(0.0f, Math.min(1.0f, value));
+    }
+
+    /**
+     * Scales one block's vanilla AO value by the pack's {@code ambientOcclusionLevel}. Iris's exact expression
+     * ({@code 1.0 - level * (1.0 - original)}): at level 1 the value passes through, at level 0 it becomes 1.0
+     * (fully unoccluded).
+     */
+    public static float applyAmbientOcclusionLevel(float vanillaAo) {
+        float level = ambientOcclusionLevel;
+        if (level == 1.0f) {
+            return vanillaAo;
+        }
+        return 1.0f - level * (1.0f - vanillaAo);
     }
 
     public static int getVoxelRenderDistanceChunks() {
