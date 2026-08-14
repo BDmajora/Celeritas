@@ -2780,6 +2780,10 @@ public class IrisRenderingPipeline {
 
         bindDepthSamplers();
 
+        // Off unless -Dimpetus.iris.sunProbeFrame is set. Reads the celestial uniforms at exactly the point the
+        // composite/final passes consume them.
+        com.bdmajora.impetus.iris.devtool.SunProbe.sample();
+
         // centerDepthSmooth: sample depthtex0 at the screen centre now that all geometry (translucents included) has
         // landed in it, before any composite consumes the uniform — OptiFine's readCenterDepth in renderHand1.
         this.centerDepthSampler.sample(this.renderTargets.getDepthTexture().getTextureId(),

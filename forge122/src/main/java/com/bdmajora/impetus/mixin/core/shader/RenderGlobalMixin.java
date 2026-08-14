@@ -12,6 +12,7 @@ import com.bdmajora.impetus.iris.Iris;
 import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
 import com.bdmajora.impetus.iris.pipeline.VanillaFeatureToggles;
 import com.bdmajora.impetus.iris.shaderpack.loading.ProgramId;
+import com.bdmajora.impetus.iris.uniforms.CelestialUniforms;
 
 /**
  * Switches the sky phase to {@code gbuffers_skytextured} for the textured celestial bodies (sun and moon) inside
@@ -36,6 +37,36 @@ public class RenderGlobalMixin {
         IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.drawSkyHorizon();
+        }
+    }
+
+    /**
+     * OptiFine's {@code Shaders.preCelestialRotate()} ({@code Shaders.java:3918}): rotate the live modelview by the
+     * pack's {@code sunPathRotation} between vanilla's fixed {@code -90°} Y-rotation and its time-of-day X-rotation,
+     * so the sun, moon and stars are actually drawn on the tilted arc.
+     * <p>
+     * Without it the pack's idea of where the sun is and the sun you can see disagree. {@code sunPosition},
+     * {@code shadowLightPosition} and the shadow projection already include {@code sunPathRotation} (see
+     * {@code CelestialUniforms.getCelestialPosition}), but vanilla's {@code renderSky} does not — so the world is lit
+     * and shadowed from one direction while the sun disc is drawn at another. OptiFine cannot get this wrong by
+     * construction: it leaves the rotation in the modelview that draws the celestial quads, then reads
+     * {@code sunPosition} straight back out of that same matrix in {@code postCelestialRotate()}.
+     * <p>
+     * Iris does <em>not</em> do this — it rotates only the uniform and the shadow matrix. That is survivable there
+     * because modern versions draw the sky through a different renderer and packs that care paint their own; on
+     * 1.12 the vanilla sun disc goes through {@code gbuffers_skytextured} and the mismatch is plainly visible. This
+     * is not a corner case: 19 of the 22 packs installed here set a non-zero value, most of them -40°.
+     */
+    @Inject(method = "renderSky(FI)V",
+            at = @At(value = "INVOKE",
+                    target = "Lnet/minecraft/client/multiplayer/WorldClient;getCelestialAngle(F)F", ordinal = 1))
+    private void impetus$preCelestialRotate(float partialTicks, int pass, CallbackInfo ci) {
+        if (Iris.getRenderingPipeline() == null) {
+            return;
+        }
+        float rotation = CelestialUniforms.getSunPathRotation();
+        if (rotation != 0.0f) {
+            net.minecraft.client.renderer.GlStateManager.rotate(rotation, 0.0F, 0.0F, 1.0F);
         }
     }
 

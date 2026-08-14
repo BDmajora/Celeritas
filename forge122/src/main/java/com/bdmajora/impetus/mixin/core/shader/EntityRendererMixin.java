@@ -12,7 +12,9 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import net.minecraftforge.client.ForgeHooksClient;
@@ -129,6 +131,41 @@ public class EntityRendererMixin {
             at = @At(value = "INVOKE_STRING", target = PROFILER_END_START, args = "ldc=sky"))
     private void impetus$phaseSky(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
         impetus$setPhase(ProgramId.SkyBasic);
+    }
+
+    // --- Cloud ordering -------------------------------------------------------------------------------------------
+
+    /**
+     * Moves the cloud draw to where Iris has it: after the deferred chain, not before terrain.
+     * <p>
+     * 1.12 renders clouds at one of two call sites depending on the camera's altitude — before terrain when below
+     * {@code y=128} ({@code renderWorldPass} line 1361), after translucents when above it ({@code "aboveClouds"}).
+     * Modern Minecraft has no such split: the clouds pass is scheduled after the main pass, so it always runs after
+     * translucent terrain, which is after Iris takes the {@code depthtex1} snapshot in {@code beginTranslucents}.
+     * <p>
+     * Packs depend on that. Clouds write depth, so on 1.12's early call site they land in {@code depthtex1}, and any
+     * pack that identifies untouched sky as "{@code depthtex1} is still 1.0" then classifies cloud pixels as opaque
+     * world geometry. Body Camera's {@code composite} does exactly this: its pass-through branch is
+     * {@code Depthv2 == 1 && normal == 0}, and a cloud that misses it falls through to
+     * {@code Albedo * (LightmapColor + ShadowColor)} — with no lightmap ever written by {@code gbuffers_clouds}, that
+     * is black. Under Iris the same pack is correct, because there the clouds are simply not in that snapshot.
+     * <p>
+     * Rather than re-implement the draw at a new site, both altitude tests are moved below the world: the early one
+     * ({@code < 128}) then never fires and the late one ({@code >= 128}) always does, so vanilla itself issues the
+     * clouds from the "aboveClouds" site with its own cloud projection, fog setup and matrix handling intact.
+     * <p>
+     * Only while a pipeline is active. Vanilla draws translucent terrain with {@code depthMask(false)}, so clouds
+     * issued after it would fail to depth-test against water and paint over it; the pipeline turns depth writes back
+     * on for translucents ({@code beginTranslucents}, so shader water reaches {@code depthtex0}), which is precisely
+     * what makes the late slot safe.
+     */
+    @ModifyConstant(method = "renderWorldPass", constant = {
+            // The two occurrences are the only 128.0D in the method, and are the two halves of the same altitude
+            // split: `< 128` guards the early draw, `>= 128` the late one. Both move together.
+            @Constant(doubleValue = 128.0D, ordinal = 0),
+            @Constant(doubleValue = 128.0D, ordinal = 1)})
+    private double impetus$moveCloudsToIrisSlot(double cloudLayer) {
+        return Iris.getRenderingPipeline() != null ? Double.NEGATIVE_INFINITY : cloudLayer;
     }
 
     /**

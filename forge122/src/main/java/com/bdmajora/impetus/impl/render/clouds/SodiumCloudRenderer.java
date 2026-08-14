@@ -70,10 +70,17 @@ public final class SodiumCloudRenderer {
     private static final float TINT_X = 0.9F;
     private static final float TINT_Z = 0.8F;
 
-    /** Where the camera sits relative to the cloud layer — Sodium's {@code CloudRenderer.RelativeCameraPos}. */
+    /**
+     * Where the camera sits relative to the cloud layer — Sodium's {@code CloudRenderer.RelativeCameraPos}
+     * ({@code ViewOrientation}): below means top faces are not rendered, above means bottom faces are not, and inside
+     * means every face must be.
+     */
     private static final int BELOW = 0;
     private static final int INSIDE = 1;
     private static final int ABOVE = 2;
+
+    /** Sodium's epsilon on the layer boundaries, so the orientation does not flip-flop when flying at cloud level. */
+    private static final float ORIENTATION_EPSILON = 0.125F;
 
     private static CloudCells cachedCells;
     private static int cachedTextureReloadCount = -1;
@@ -117,9 +124,18 @@ public final class SodiumCloudRenderer {
         float subCellX = (float) (gridX - (double) cameraCellX);
         float subCellZ = (float) (gridZ - (double) cameraCellZ);
 
-        // Camera-relative altitude of the underside of the layer.
+        // Camera-relative altitude of the underside of the layer, so "camera below the layer" is bottomY > 0.
+        // Sodium tests cameraY <= minY + eps / cameraY >= maxY - eps; in these camera-relative terms that is
+        // bottomY >= -eps and bottomY + thickness <= eps.
         float bottomY = cloudHeight - (float) cameraY + 0.33F;
-        int cameraSide = bottomY > 0.0F ? BELOW : (bottomY + THICKNESS < 0.0F ? ABOVE : INSIDE);
+        int cameraSide;
+        if (bottomY >= -ORIENTATION_EPSILON) {
+            cameraSide = BELOW;
+        } else if (bottomY + THICKNESS <= ORIENTATION_EPSILON) {
+            cameraSide = ABOVE;
+        } else {
+            cameraSide = INSIDE;
+        }
 
         Vec3d cloudColour = world.getCloudColour(partialTicks);
         float red = (float) cloudColour.x;
@@ -401,8 +417,13 @@ public final class SodiumCloudRenderer {
             return ((float) cellZ + 0.5F) / (float) this.height;
         }
 
+        /**
+         * Sodium's threshold, inverted: {@code isTransparent(argb) = ColorARGB.unpackAlpha(argb) < 10}. It has to be
+         * well above zero — vanilla's clouds.png stores its gaps as {@code (255,255,255,1)}, not as alpha 0, so a
+         * plain {@code != 0} test would classify the whole texture as cloud.
+         */
         private boolean isOpaque(int[] pixels, int x, int z) {
-            return ((pixels[index(x, z)] >>> 24) & 255) > 1;
+            return ((pixels[index(x, z)] >>> 24) & 255) >= 10;
         }
 
         private int index(int x, int z) {
