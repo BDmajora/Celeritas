@@ -1,6 +1,8 @@
 package com.bdmajora.impetus.iris.terrain;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -50,13 +52,20 @@ public final class VanillaNameTransformer {
     }
 
     /**
-     * A declaration of one of the modern names as an attribute, varying input or uniform. Matched on a whole line so
-     * the qualifier list ({@code flat in ivec2 vaUV2;}) and any trailing comment are removed with it.
+     * A declaration of one or more names as an attribute, varying input or uniform. Matched on a whole line so the
+     * qualifier list ({@code flat in ivec2 vaUV2;}) and any trailing comment come with it.
+     * <p>
+     * The declarator list is captured as a whole rather than restricted to the modern names, because GLSL lets one
+     * declaration introduce several: Clarity writes {@code uniform mat4 modelViewMatrix, projectionMatrix;}. Matching
+     * only single declarators left that line in place, and the reference rewrite below then turned it into
+     * {@code uniform mat4 gl_ModelViewMatrix, gl_ProjectionMatrix;} — a user declaration in the reserved {@code gl_}
+     * namespace, which every driver rejects (C7528), taking both sky programs down with it. Declarators that are not
+     * modern names are kept; only the ones being replaced by a built-in are removed.
      */
     private static final Pattern DECLARATION = Pattern.compile(
-            "(?m)^[\\t ]*(?:flat[\\t ]+|smooth[\\t ]+|noperspective[\\t ]+|centroid[\\t ]+)*"
-                    + "(?:attribute|in|uniform)[\\t ]+(\\w+)[\\t ]+(" + String.join("|", REPLACEMENTS.keySet())
-                    + ")[\\t ]*;[^\\n]*$");
+            "(?m)^([\\t ]*(?:flat[\\t ]+|smooth[\\t ]+|noperspective[\\t ]+|centroid[\\t ]+)*"
+                    + "(?:attribute|in|uniform)[\\t ]+)(\\w+)([\\t ]+)"
+                    + "([A-Za-z_]\\w*(?:[\\t ]*,[\\t ]*[A-Za-z_]\\w*)*)[\\t ]*;[^\\n]*$");
 
     /**
      * The two-component attributes whose replacement has to match the type the pack declared. Iris declares
@@ -88,16 +97,36 @@ public final class VanillaNameTransformer {
             return source;
         }
 
-        // Read the declared types before stripping, so the two-component replacements can match them.
+        // Read the declared types before stripping, so the two-component replacements can match them, and strip the
+        // declarations in the same pass. A pack that declares `in vec3 vaPosition;` would otherwise end up with a
+        // dangling attribute that nothing feeds, and the reference rewrite below would not be able to help it.
         Map<String, String> declaredTypes = new LinkedHashMap<>();
         Matcher declarations = DECLARATION.matcher(source);
+        StringBuffer stripped = new StringBuffer(source.length());
         while (declarations.find()) {
-            declaredTypes.put(declarations.group(2), declarations.group(1));
+            String type = declarations.group(2);
+            List<String> kept = new ArrayList<>();
+            boolean sawModern = false;
+            for (String declarator : declarations.group(4).split(",")) {
+                String name = declarator.trim();
+                if (REPLACEMENTS.containsKey(name)) {
+                    declaredTypes.put(name, type);
+                    sawModern = true;
+                } else {
+                    kept.add(name);
+                }
+            }
+            if (!sawModern) {
+                declarations.appendReplacement(stripped, Matcher.quoteReplacement(declarations.group()));
+            } else {
+                // All declarators were modern names: the whole line goes. Otherwise re-emit the survivors.
+                declarations.appendReplacement(stripped, kept.isEmpty() ? ""
+                        : Matcher.quoteReplacement(declarations.group(1) + type + declarations.group(3)
+                                + String.join(", ", kept) + ";"));
+            }
         }
-
-        // Strip the declarations. A pack that declares `in vec3 vaPosition;` would otherwise end up with a dangling
-        // attribute that nothing feeds, and the reference rewrite below would not be able to help it.
-        String result = DECLARATION.matcher(source).replaceAll("");
+        declarations.appendTail(stripped);
+        String result = stripped.toString();
 
         for (Map.Entry<String, String> entry : REPLACEMENTS.entrySet()) {
             // \b alone would also rewrite a longer identifier that merely ends with the name (e.g. a pack's own

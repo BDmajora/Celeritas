@@ -195,6 +195,21 @@ public final class PropertiesPreprocessor {
         }
     }
 
+    /**
+     * Silent sibling of {@link #evaluateBooleanExpression}, for callers where "cannot evaluate this" is a normal
+     * outcome rather than a pack problem — chiefly {@code GlslPreprocessor.foldFloatConditionals}, which inspects
+     * every conditional in every shader and simply leaves the ones it cannot read to the driver. Photon alone has 20
+     * backslash-continued conditionals that a line-at-a-time reader can never evaluate; warning about each one on
+     * every compile would drown the log.
+     */
+    public static Optional<Boolean> tryEvaluateBooleanExpression(String expression, Map<String, String> defines) {
+        try {
+            return Optional.of(new ExpressionParser(expression, defines).parse() != 0);
+        } catch (RuntimeException e) {
+            return Optional.empty();
+        }
+    }
+
     /** Minimal recursive-descent parser over the C-preprocessor integer expression grammar. */
     private static final class ExpressionParser {
         private final String text;
@@ -327,17 +342,9 @@ public final class PropertiesPreprocessor {
                 throw new IllegalArgumentException("Unexpected end of expression");
             }
             char c = this.text.charAt(this.pos);
-            if (Character.isDigit(c)) {
-                int start = this.pos;
-                while (this.pos < this.text.length() && Character.isLetterOrDigit(this.text.charAt(this.pos))) {
-                    this.pos++;
-                }
-                String number = this.text.substring(start, this.pos);
-                try {
-                    return Long.decode(number);
-                } catch (NumberFormatException e) {
-                    throw new IllegalArgumentException("Bad number: " + number);
-                }
+            if (Character.isDigit(c) || (c == '.' && this.pos + 1 < this.text.length()
+                    && Character.isDigit(this.text.charAt(this.pos + 1)))) {
+                return parseNumber();
             }
             if (Character.isLetter(c) || c == '_') {
                 int start = this.pos;
@@ -367,6 +374,56 @@ public final class PropertiesPreprocessor {
                 return resolveDefine(name);
             }
             throw new IllegalArgumentException("Unexpected character '" + c + "'");
+        }
+
+        /**
+         * Scans one numeric literal. The C preprocessor grammar is integer-only, but JCPP — which is what Iris runs
+         * over both properties files and shader sources — accepts a float literal and takes its {@code longValue()},
+         * i.e. truncates toward zero. Packs rely on that: Clarity gates its motion blur on
+         * {@code #if MOTION_BLUR > 0.0} with {@code MOTION_BLUR} a {@code 0.00}..{@code 1.00} slider, so under Iris the
+         * branch only ever activates at exactly 1.00. Rejecting the literal instead (the previous behavior) failed the
+         * whole conditional and made the directive scan fall back to the raw source.
+         * <p>
+         * Integer suffixes ({@code u}, {@code l} and their combinations) are consumed and ignored, as JCPP does.
+         */
+        private long parseNumber() {
+            int start = this.pos;
+            boolean hex = this.text.startsWith("0x", this.pos) || this.text.startsWith("0X", this.pos);
+            if (hex) {
+                this.pos += 2;
+            }
+            boolean floating = false;
+            while (this.pos < this.text.length()) {
+                char c = this.text.charAt(this.pos);
+                if (Character.isLetterOrDigit(c)) {
+                    // A decimal exponent may carry a sign; in hex, 'e' is just a digit.
+                    if (!hex && (c == 'e' || c == 'E') && this.pos + 1 < this.text.length()
+                            && (this.text.charAt(this.pos + 1) == '+' || this.text.charAt(this.pos + 1) == '-')) {
+                        floating = true;
+                        this.pos += 2;
+                        continue;
+                    }
+                    this.pos++;
+                } else if (c == '.' && !hex) {
+                    floating = true;
+                    this.pos++;
+                } else {
+                    break;
+                }
+            }
+            String number = this.text.substring(start, this.pos);
+            if (!hex && (floating || number.indexOf('e') >= 0 || number.indexOf('E') >= 0)) {
+                try {
+                    return (long) Double.parseDouble(number.replaceAll("[fF]$", ""));
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("Bad number: " + number);
+                }
+            }
+            try {
+                return Long.decode(number.replaceAll("[uUlL]+$", ""));
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Bad number: " + number);
+            }
         }
 
         private long resolveDefine(String name) {

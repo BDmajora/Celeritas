@@ -29,6 +29,8 @@ import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 public class CustomImageManager {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Iris");
     private static final int MAX_DECLARED_IMAGES = 16;
+    /** Well above GlStateManager's eight cached units, so a raw bind here cannot desync it. */
+    private static final int RESIZE_SCRATCH_UNIT = 32;
     private static final int GL_MAX_IMAGE_UNITS = 0x8D57;
     private static final int GL_TEXTURE_MIN_LOD = 0x813A;
     private static final int GL_TEXTURE_MAX_LOD = 0x813B;
@@ -71,8 +73,14 @@ public class CustomImageManager {
     private final Map<String, Integer> uniformOverrides = new LinkedHashMap<>();
     /** The driver's {@code GL_MAX_IMAGE_UNITS}; the ceiling the render-target images allocate up to. */
     private final int hardwareImageUnits;
+    /** Current render size, for the viewport-relative images. */
+    private int renderWidth;
+    private int renderHeight;
 
-    public CustomImageManager(List<CustomImageDefinition> definitions, int firstSamplerUnit, int lastSamplerUnit) {
+    public CustomImageManager(List<CustomImageDefinition> definitions, int firstSamplerUnit, int lastSamplerUnit,
+                              int renderWidth, int renderHeight) {
+        this.renderWidth = renderWidth;
+        this.renderHeight = renderHeight;
         int reportedImageUnits = LWJGL.glGetInteger(GL_MAX_IMAGE_UNITS);
         this.hardwareImageUnits = reportedImageUnits > 0 ? reportedImageUnits : MAX_DECLARED_IMAGES;
         int imageUnitLimit = Math.min(MAX_DECLARED_IMAGES, this.hardwareImageUnits);
@@ -95,7 +103,9 @@ public class CustomImageManager {
             boolean is3D = definition.sizeZ > 0;
             int target = is3D ? GL12.GL_TEXTURE_3D : GL11.GL_TEXTURE_2D;
             // Integer texture formats must sample NEAREST; float formats get LINEAR for smooth floodfill lookups.
-            int filter = definition.internalFormat.endsWith("i") ? GL11.GL_NEAREST : GL11.GL_LINEAR;
+            int filter = isIntegerFormat(definition.internalFormat) ? GL11.GL_NEAREST : GL11.GL_LINEAR;
+            int sizeX = relativeSizeX(definition);
+            int sizeY = relativeSizeY(definition);
 
             int texture = LWJGL.glGenTextures();
             LWJGL.glBindTexture(target, texture);
@@ -111,10 +121,10 @@ public class CustomImageManager {
             LWJGL.glTexParameterf(target, GL_TEXTURE_LOD_BIAS, 0.0f);
             if (is3D) {
                 LWJGL.glTexParameteri(target, GL12.GL_TEXTURE_WRAP_R, GL12.GL_CLAMP_TO_EDGE);
-                LWJGL.glTexImage3D(target, 0, internalFormat, definition.sizeX, definition.sizeY, definition.sizeZ,
+                LWJGL.glTexImage3D(target, 0, internalFormat, sizeX, sizeY, definition.sizeZ,
                         0, format, pixelType, (ByteBuffer) null);
             } else {
-                LWJGL.glTexImage2D(target, 0, internalFormat, definition.sizeX, definition.sizeY,
+                LWJGL.glTexImage2D(target, 0, internalFormat, sizeX, sizeY,
                         0, format, pixelType, (ByteBuffer) null);
             }
             LWJGL.glBindTexture(target, 0);
@@ -140,30 +150,38 @@ public class CustomImageManager {
                 this.uniformOverrides.put(definition.samplerName, samplerUnit);
                 this.imagesBySampler.put(definition.samplerName, this.images.get(this.images.size() - 1));
             }
-            LOGGER.info("[Iris] Custom image '{}' ({}x{}x{} {}) on image unit {}{}",
-                    definition.name, definition.sizeX, definition.sizeY, definition.sizeZ,
+            LOGGER.info("[Iris] Custom image '{}' ({}x{}x{}{} {}) on image unit {}{}",
+                    definition.name, sizeX, sizeY, definition.sizeZ,
+                    definition.relative ? " relative" : "",
                     definition.internalFormat, imageUnit,
                     samplerUnit >= 0 ? ", sampler '" + definition.samplerName + "' on unit " + samplerUnit
                             : ", sampler '" + definition.samplerName + "' unbound");
         }
     }
 
+    /**
+     * Resolved through the shared render-target table rather than a local list, which is what Iris does too
+     * ({@code InternalTextureFormat.fromString}). The local list covered only the seven formats Complementary's
+     * floodfill uses, so an SMAA pack asking for a perfectly ordinary {@code rg8}/{@code rgba16} edge buffer had its
+     * images silently dropped.
+     */
     private static int glInternalFormat(String name) {
-        switch (name) {
-            case "r16ui": return GL30.GL_R16UI;
-            case "r32ui": return GL30.GL_R32UI;
-            case "r8ui": return GL30.GL_R8UI;
-            case "rgba16f": return GL30.GL_RGBA16F;
-            case "rgba32f": return GL30.GL_RGBA32F;
-            case "rgba8": return GL11.GL_RGBA8;
-            case "r32f": return GL30.GL_R32F;
-            default: return 0;
-        }
+        return com.bdmajora.impetus.iris.gl.texture.InternalTextureFormat.fromString(name)
+                .map(com.bdmajora.impetus.iris.gl.texture.InternalTextureFormat::getInternalFormat)
+                .orElse(0);
+    }
+
+    private static boolean isIntegerFormat(String name) {
+        return com.bdmajora.impetus.iris.gl.texture.InternalTextureFormat.fromString(name)
+                .map(com.bdmajora.impetus.iris.gl.texture.InternalTextureFormat::isInteger)
+                .orElse(Boolean.FALSE);
     }
 
     private static int glFormat(String name) {
         switch (name) {
             case "red_integer": return GL30.GL_RED_INTEGER;
+            case "rg_integer": return GL30.GL_RG_INTEGER;
+            case "rgb_integer": return GL30.GL_RGB_INTEGER;
             case "rgba_integer": return GL30.GL_RGBA_INTEGER;
             case "red": return GL11.GL_RED;
             case "rg": return GL30.GL_RG;
@@ -178,9 +196,56 @@ public class CustomImageManager {
             case "unsigned_int": return GL11.GL_UNSIGNED_INT;
             case "unsigned_short": return GL11.GL_UNSIGNED_SHORT;
             case "unsigned_byte": return GL11.GL_UNSIGNED_BYTE;
+            case "int": return GL11.GL_INT;
+            case "short": return GL11.GL_SHORT;
+            case "byte": return GL11.GL_BYTE;
             case "half_float": return GL30.GL_HALF_FLOAT;
             case "float": return GL11.GL_FLOAT;
             default: return 0;
+        }
+    }
+
+    private int relativeSizeX(CustomImageDefinition definition) {
+        return definition.relative ? Math.max(1, (int) (this.renderWidth * definition.relativeX)) : definition.sizeX;
+    }
+
+    private int relativeSizeY(CustomImageDefinition definition) {
+        return definition.relative ? Math.max(1, (int) (this.renderHeight * definition.relativeY)) : definition.sizeY;
+    }
+
+    /**
+     * Re-allocates the viewport-relative images at the new render size (Iris's {@code GlImage.Relative#updateNewSize}).
+     * Contents are not preserved — the storage is reallocated — which matches Iris and is what a screen-space image
+     * wants anyway; {@link #bindAll} re-establishes every binding on the next frame regardless.
+     * <p>
+     * The reallocation happens on a scratch unit far above the eight {@code GlStateManager} caches, because a raw
+     * bind on units 0-7 desynchronizes that cache and makes a later {@code bindTexture} there a silent no-op.
+     */
+    public void onResize(int width, int height) {
+        if (width == this.renderWidth && height == this.renderHeight) {
+            return;
+        }
+        this.renderWidth = width;
+        this.renderHeight = height;
+        boolean bound = false;
+        for (Image image : this.images) {
+            if (!image.definition.relative) {
+                continue;
+            }
+            if (!bound) {
+                LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + RESIZE_SCRATCH_UNIT);
+                bound = true;
+            }
+            LWJGL.glBindTexture(image.target, image.texture);
+            // Relative images are 2D by definition (Iris's GlImage.Relative).
+            LWJGL.glTexImage2D(image.target, 0, image.glInternalFormat,
+                    relativeSizeX(image.definition), relativeSizeY(image.definition),
+                    0, image.glFormat, image.glPixelType, (ByteBuffer) null);
+            clearTexture(image.texture, image.glFormat, image.glPixelType);
+        }
+        if (bound) {
+            LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+            LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
         }
     }
 

@@ -130,6 +130,163 @@ public final class GlslPreprocessor {
         }
     }
 
+    /** A GLSL floating-point literal: {@code 1.0}, {@code .5}, {@code 0.}, {@code 1e-3}. */
+    private static final Pattern FLOAT_LITERAL =
+            Pattern.compile("(?<![A-Za-z0-9_.])(?:\\d+\\.\\d*|\\.\\d+|\\d+[eE][-+]?\\d+)");
+    /** {@code defined X} / {@code defined(X)} — the one place an identifier must NOT be macro-expanded. */
+    private static final Pattern DEFINED_OPERATOR =
+            Pattern.compile("\\bdefined\\s*(?:\\(\\s*\\w+\\s*\\)|\\s+\\w+)");
+    private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_]\\w*");
+    private static final Pattern CONDITIONAL_DIRECTIVE =
+            Pattern.compile("(?m)^([\\t ]*#[\\t ]*)(if|elif)\\b([^\\n]*)$");
+
+    /**
+     * Folds {@code #if}/{@code #elif} conditionals whose expression works out to a floating-point comparison into a
+     * literal {@code 1}/{@code 0}, leaving every other directive for the driver.
+     * <p>
+     * The C (and therefore GLSL) preprocessor grammar is integer-only, so a driver rejects
+     * {@code #if MOTION_BLUR > 0.0} outright — NVIDIA with {@code C0105: Syntax error in #if}, which took Clarity's
+     * whole {@code composite.csh} down. Iris never hits this because it runs the entire source through JCPP before
+     * the driver sees it, and JCPP accepts float literals by truncating them toward zero. Rather than take on a full
+     * preprocessor, this resolves only the directives that cannot legally reach the driver, so everything else
+     * (including {@code #ifdef} trees and line numbering, since each folded directive stays on its own line) is
+     * untouched.
+     * <p>
+     * Macro state is tracked the way the driver would see it, one line at a time, so a macro defined differently in
+     * two branches still resolves to the definition in force at the directive being folded. A conditional this
+     * evaluator cannot parse counts as taken for that bookkeeping — the same conservative fallback
+     * {@link #resolveConditionals} uses — and is never itself folded. Backslash-continued conditionals therefore fall
+     * through untouched as well, which is correct: a directive spread over several lines cannot be replaced by a
+     * single one without shifting every line number after it.
+     */
+    public static String foldFloatConditionals(String source, Map<String, String> defines) {
+        if (source == null || source.indexOf('#') < 0) {
+            return source;
+        }
+        Map<String, String> active = new LinkedHashMap<>(defines);
+        StringBuilder out = new StringBuilder(source.length());
+        // Nesting levels, each [0] = this branch active, [1] = some branch already taken.
+        java.util.Deque<boolean[]> stack = new java.util.ArrayDeque<>();
+        String[] lines = source.split("\n", -1);
+        boolean inBlockComment = false;
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            // The real preprocessor strips comments before it looks for directives, so a `#if` commented out with
+            // /* */ is not one. Packs do exactly this (Clarity parks a dead #ifdef/#endif pair in a comment block);
+            // interpreting those would desync the macro bookkeeping below from what the driver sees.
+            boolean commented = inBlockComment;
+            inBlockComment = advanceBlockComment(line, inBlockComment);
+            out.append(commented ? line : foldDirective(line, active, stack));
+            if (i + 1 < lines.length) {
+                out.append('\n');
+            }
+        }
+        return out.toString();
+    }
+
+    /** {@return whether the line ends inside a block comment, given whether it started inside one} */
+    private static boolean advanceBlockComment(String line, boolean inBlockComment) {
+        for (int i = 0; i < line.length() - 1; i++) {
+            if (inBlockComment) {
+                if (line.charAt(i) == '*' && line.charAt(i + 1) == '/') {
+                    inBlockComment = false;
+                    i++;
+                }
+            } else if (line.charAt(i) == '/' && line.charAt(i + 1) == '/') {
+                return false;
+            } else if (line.charAt(i) == '/' && line.charAt(i + 1) == '*') {
+                inBlockComment = true;
+                i++;
+            }
+        }
+        return inBlockComment;
+    }
+
+    private static String foldDirective(String line, Map<String, String> defines, java.util.Deque<boolean[]> stack) {
+        Matcher conditional = CONDITIONAL_DIRECTIVE.matcher(line);
+        if (conditional.matches()) {
+            String expression = stripComment(conditional.group(3));
+            boolean[] frame = "elif".equals(conditional.group(2)) ? stack.poll() : null;
+            boolean alreadyTaken = frame != null && frame[1];
+            Boolean value = PropertiesPreprocessor.tryEvaluateBooleanExpression(expression, defines).orElse(null);
+            boolean taken = !alreadyTaken && allActive(stack) && (value == null || value);
+            stack.push(new boolean[]{taken, alreadyTaken || taken});
+            if (value != null && expandsToFloat(expression, defines, 0)) {
+                return conditional.group(1) + conditional.group(2) + " " + (value ? "1" : "0");
+            }
+            return line;
+        }
+
+        String trimmed = line.trim();
+        if (!trimmed.startsWith("#")) {
+            return line;
+        }
+        // Comments come off first, as the real preprocessor does: `#endif // label` and `#else /* label */` are
+        // idiomatic in packs, and a trailing label that stopped `#else` from being recognized would leave the
+        // branch stack — and every define recorded after it — out of step with the driver.
+        String directive = stripComment(trimmed.substring(1)).trim();
+        if (directive.startsWith("ifdef ") || directive.startsWith("ifndef ")) {
+            boolean defined = defines.containsKey(directive.substring(directive.indexOf(' ') + 1).trim());
+            boolean taken = allActive(stack) && (directive.startsWith("ifdef ") == defined);
+            stack.push(new boolean[]{taken, taken});
+        } else if (directive.equals("else")) {
+            boolean[] frame = stack.poll();
+            boolean alreadyTaken = frame != null && frame[1];
+            stack.push(new boolean[]{!alreadyTaken && allActive(stack), true});
+        } else if (directive.equals("endif")) {
+            stack.poll();
+        } else if (directive.startsWith("define ") && allActive(stack)) {
+            String body = directive.substring("define ".length()).trim();
+            int space = body.indexOf(' ');
+            int paren = body.indexOf('(');
+            if (paren >= 0 && (space < 0 || paren < space)) {
+                defines.put(body.substring(0, paren), "");
+            } else if (space < 0) {
+                defines.put(body, "");
+            } else {
+                defines.put(body.substring(0, space), body.substring(space + 1).trim());
+            }
+        } else if (directive.startsWith("undef ") && allActive(stack)) {
+            defines.remove(directive.substring("undef ".length()).trim());
+        }
+        return line;
+    }
+
+    private static boolean allActive(java.util.Deque<boolean[]> stack) {
+        for (boolean[] frame : stack) {
+            if (!frame[0]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Truncates at the first comment opener of either kind; a directive never carries meaning past one. */
+    private static String stripComment(String text) {
+        int line = text.indexOf("//");
+        int block = text.indexOf("/*");
+        int comment = line < 0 ? block : (block < 0 ? line : Math.min(line, block));
+        return comment < 0 ? text : text.substring(0, comment);
+    }
+
+    /** Whether the expression contains a float literal once its macros are substituted, as the driver would see it. */
+    private static boolean expandsToFloat(String expression, Map<String, String> defines, int depth) {
+        if (FLOAT_LITERAL.matcher(expression).find()) {
+            return true;
+        }
+        if (depth >= 8) {
+            return false;
+        }
+        Matcher identifiers = IDENTIFIER.matcher(DEFINED_OPERATOR.matcher(expression).replaceAll(""));
+        while (identifiers.find()) {
+            String value = defines.get(identifiers.group());
+            if (value != null && !value.isEmpty() && expandsToFloat(value, defines, depth + 1)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Seam for later phases: rewrite legacy fixed-function built-ins to explicit {@code in}/attribute names.
      * Because Impetus renders chunks through VAOs, the fixed-function attribute slots are never populated, so a

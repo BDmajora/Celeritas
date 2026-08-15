@@ -22,8 +22,11 @@ import java.util.Optional;
  * Names match OptiFine/Iris convention so {@code InternalTextureFormat.valueOf(name)} resolves a pack's string.
  */
 public enum InternalTextureFormat {
-    // Default (unsized) — OptiFine's implicit format.
-    RGBA(GL11.GL_RGBA, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, false),
+    // Default — OptiFine's implicit format. Iris resolves it to the SIZED RGBA8 rather than the base GL_RGBA
+    // constant, and the distinction is load-bearing: glBindImageTexture only accepts sized formats, so binding a
+    // default-format target as `colorimgN` with GL_RGBA raises GL_INVALID_VALUE and the binding never takes. Every
+    // imageStore into it is then silently dropped (Clarity's composite2 writes its finished frame that way).
+    RGBA(GL11.GL_RGBA8, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, false),
 
     // 8-bit normalized
     R8(GL30.GL_R8, GL11.GL_RED, GL11.GL_UNSIGNED_BYTE, false),

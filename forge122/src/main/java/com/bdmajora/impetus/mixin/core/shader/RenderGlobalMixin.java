@@ -24,6 +24,8 @@ import com.bdmajora.impetus.iris.uniforms.CelestialUniforms;
 public class RenderGlobalMixin {
     private static final String SUN_TEXTURES_FIELD =
             "Lnet/minecraft/client/renderer/RenderGlobal;SUN_TEXTURES:Lnet/minecraft/util/ResourceLocation;";
+    private static final String MOON_TEXTURES_FIELD =
+            "Lnet/minecraft/client/renderer/RenderGlobal;MOON_PHASES_TEXTURES:Lnet/minecraft/util/ResourceLocation;";
 
     /**
      * Right before the vanilla sky disc VBO is drawn (skybasic phase already active), draw OptiFine's horizon fill so
@@ -73,7 +75,20 @@ public class RenderGlobalMixin {
     @Inject(method = "renderSky(FI)V",
             at = @At(value = "FIELD", target = SUN_TEXTURES_FIELD, opcode = org.objectweb.asm.Opcodes.GETSTATIC))
     private void impetus$beginSunMoon(float partialTicks, int pass, CallbackInfo ci) {
-        impetus$setPhase(ProgramId.SkyTextured);
+        impetus$setPhase(ProgramId.SkyTextured, 4); // MC_RENDER_STAGE_SUN
+    }
+
+    /**
+     * The moon needs its own stage. Vanilla draws sun then moon through one program, so a single anchor would report
+     * {@code SUN} for both — and 13 call sites across the installed packs branch on {@code MC_RENDER_STAGE_MOON}
+     * (Spooklementary and Pastel key their moon tinting on it). Reporting the sun for the moon is worse than
+     * reporting nothing, which is what made this worth splitting rather than approximating.
+     */
+    @Inject(method = "renderSky(FI)V",
+            at = @At(value = "FIELD", target = MOON_TEXTURES_FIELD, opcode = org.objectweb.asm.Opcodes.GETSTATIC),
+            require = 0)
+    private void impetus$beginMoon(float partialTicks, int pass, CallbackInfo ci) {
+        impetus$setPhase(ProgramId.SkyTextured, 5); // MC_RENDER_STAGE_MOON
     }
 
     @Inject(method = "renderSky(FI)V",
@@ -82,7 +97,11 @@ public class RenderGlobalMixin {
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/client/renderer/GlStateManager;disableTexture2D()V", ordinal = 0))
     private void impetus$endSunMoon(float partialTicks, int pass, CallbackInfo ci) {
-        impetus$setPhase(ProgramId.SkyBasic);
+        // This injection point is vanilla's disableTexture2D() right after the sun/moon quads, which is exactly where
+        // renderSky begins the star field. The stars go back through gbuffers_skybasic, so ProgramId alone cannot tell
+        // a pack it is drawing stars rather than the sky dome — Clarity emits its star field only under
+        // MC_RENDER_STAGE_STARS, so the finer stage has to be published explicitly here.
+        impetus$setPhase(ProgramId.SkyBasic, 6); // MC_RENDER_STAGE_STARS
     }
 
     /**
@@ -296,6 +315,14 @@ public class RenderGlobalMixin {
         IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.setPhase(phase);
+        }
+    }
+
+    /** Same, for a phase whose {@code renderStage} is finer than its {@link ProgramId} (sky basic covers sky/stars/void). */
+    private static void impetus$setPhase(ProgramId phase, int renderStage) {
+        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        if (pipeline != null) {
+            pipeline.setPhase(phase, renderStage);
         }
     }
 }

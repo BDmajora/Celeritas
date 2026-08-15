@@ -394,7 +394,10 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         }
         IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
         if (pipeline != null && pass == 1 && pipeline.isRenderingPostDeferredTranslucents()) {
-            pipeline.setPhase(pipeline.getTranslucentEntityPhase());
+            // These are entities even when the pack ships no gbuffers_entities_translucent and the phase falls back to
+            // gbuffers_textured_lit — which this pipeline also uses for particles. State the stage here rather than
+            // derive it from the ProgramId, or a pack reading renderStage would be told "particles".
+            pipeline.setPhase(pipeline.getTranslucentEntityPhase(), 11); // MC_RENDER_STAGE_ENTITIES
         }
         EntityPlayerSP player = this.mc.player;
         BlockPos.MutableBlockPos entityBlockPos = new BlockPos.MutableBlockPos();

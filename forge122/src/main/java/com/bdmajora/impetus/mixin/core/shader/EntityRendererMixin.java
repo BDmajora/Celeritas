@@ -103,6 +103,18 @@ public class EntityRendererMixin {
         }
     }
 
+    /**
+     * Same, for a phase whose {@code renderStage} its {@link ProgramId} cannot imply. {@code gbuffers_textured_lit}
+     * carries both particles and translucent entities here, so the stage has to come from the call site that knows
+     * which one it is rather than from a guess in the pipeline.
+     */
+    private static void impetus$setPhase(ProgramId phase, int renderStage) {
+        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        if (pipeline != null) {
+            pipeline.setPhase(phase, renderStage);
+        }
+    }
+
     @Inject(method = "renderWorld", at = @At("HEAD"))
     private void impetus$beginShaderFrame(float partialTicks, long finishTimeNano, CallbackInfo ci) {
         IrisRenderingPipeline pipeline = Iris.beginFrame();
@@ -196,7 +208,7 @@ public class EntityRendererMixin {
             @At(value = "INVOKE_STRING", target = PROFILER_END_START, args = "ldc=litParticles"),
             @At(value = "INVOKE_STRING", target = PROFILER_END_START, args = "ldc=particles")})
     private void impetus$phaseParticles(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
-        impetus$setPhase(ProgramId.TexturedLit);
+        impetus$setPhase(ProgramId.TexturedLit, 19); // MC_RENDER_STAGE_PARTICLES
     }
 
     /**
@@ -279,7 +291,7 @@ public class EntityRendererMixin {
             if ("before".equals(pipeline.getParticleOrdering())) {
                 net.minecraft.entity.Entity viewEntity = this.mc.getRenderViewEntity();
                 if (viewEntity != null) {
-                    impetus$setPhase(ProgramId.TexturedLit);
+                    impetus$setPhase(ProgramId.TexturedLit, 19); // MC_RENDER_STAGE_PARTICLES
                     this.mc.effectRenderer.renderParticles(viewEntity, partialTicks);
                     this.impetus$particlesDrawnEarly = true;
                 }

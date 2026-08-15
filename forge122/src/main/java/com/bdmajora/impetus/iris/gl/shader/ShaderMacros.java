@@ -159,7 +159,20 @@ public final class ShaderMacros {
     public static void withGlInfo(Map<String, String> macros, int glslVersion, int glVersion, String vendor, String renderer) {
         macros.put("MC_GL_VERSION", Integer.toString(glVersion));
         macros.put("MC_GLSL_VERSION", Integer.toString(glslVersion));
+        withGpuIdentity(macros, vendor, renderer);
+    }
 
+    /**
+     * Adds only the vendor/renderer identity macros ({@code MC_GL_VENDOR_*}, {@code MC_GL_RENDERER_*}), which packs use
+     * exclusively to gate hardware workarounds — Clarity's {@code #define immut const} on NVIDIA, Photon's and Solas's
+     * Intel paths, Complementary's AMD path.
+     * <p>
+     * Deliberately does <em>not</em> publish {@code MC_GL_VERSION}/{@code MC_GLSL_VERSION}. Iris can report the driver's
+     * real GLSL version because it compiles everything at that version; this pipeline compiles individual programs at
+     * 120, 330 or 460 depending on the path, so advertising 460 would invite a pack to switch to syntax the GLSL-120
+     * programs cannot take. No installed pack reads either macro, so there is nothing to gain against that risk.
+     */
+    public static void withGpuIdentity(Map<String, String> macros, String vendor, String renderer) {
         String vendorMacro = vendorMacro(vendor);
         if (vendorMacro != null) {
             macros.put(vendorMacro, "");

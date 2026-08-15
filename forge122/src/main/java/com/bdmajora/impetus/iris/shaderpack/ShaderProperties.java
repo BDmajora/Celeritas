@@ -612,9 +612,23 @@ public final class ShaderProperties {
         return getBoolean("separateEntityDraws");
     }
 
-    /** {@code particles.ordering} = {@code mixed} | {@code after} | {@code before}. */
+    /**
+     * {@code particles.ordering} = {@code mixed} | {@code after} | {@code before}, falling back to OptiFine's older
+     * {@code particles.before.deferred} boolean.
+     * <p>
+     * Iris honours both, with the newer directive winning when present ({@code ShaderProperties} only applies
+     * {@code particles.before.deferred} while the setting is still {@code UNSET}). The legacy spelling is not a dead
+     * letter here: MakeUp-UltraFast and E-LITE both declare {@code particles.before.deferred = true} and nothing else,
+     * so ignoring it left their particles drawing after the deferred chain instead of before it.
+     */
     public Optional<String> getParticleOrdering() {
-        return get("particles.ordering").map(s -> s.toLowerCase(Locale.ROOT));
+        Optional<String> ordering = get("particles.ordering").map(s -> s.toLowerCase(Locale.ROOT));
+        if (ordering.isPresent()) {
+            return ordering;
+        }
+        return getBoolean("particles.before.deferred").orElse(Boolean.FALSE)
+                ? Optional.of("before")
+                : Optional.empty();
     }
 
     /** {@code prepareBeforeShadow} — run the prepare family before the shadow map instead of after. */

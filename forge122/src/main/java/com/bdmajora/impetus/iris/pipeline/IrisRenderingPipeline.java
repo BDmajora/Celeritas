@@ -584,6 +584,12 @@ public class IrisRenderingPipeline {
         Minecraft mc = Minecraft.getMinecraft();
         this.renderTargets = new IrisRenderTargets(mc.displayWidth, mc.displayHeight);
         this.shaderDefines = pack.getEnvironmentDefines();
+        // The GPU identity macros need a live GL context, so they are added here rather than baked into the pack's
+        // environment defines. Without them every hardware-workaround gate in every pack silently took its
+        // "unknown vendor" branch — Clarity's `#if ... defined MC_GL_VENDOR_NVIDIA` left `immut` expanding to nothing
+        // instead of `const`.
+        com.bdmajora.impetus.iris.gl.shader.ShaderMacros.withGpuIdentity(this.shaderDefines,
+                LWJGL.glGetString(GL11.GL_VENDOR), LWJGL.glGetString(GL11.GL_RENDERER));
         this.separateHardwareSamplers = pack.hasFeature(FeatureFlags.SEPARATE_HARDWARE_SAMPLERS);
         java.util.Arrays.fill(this.colorBufferClears, true);
         CameraUniforms.attach(this.frameUpdateNotifier);
@@ -643,7 +649,8 @@ public class IrisRenderingPipeline {
             this.customTextureManager = new CustomTextureManager(pack, samplerUnitsByStage(), COLOR_TARGETS_BY_NAME,
                     firstCustomUnit, maxProgrammableTextureUnit());
             this.customImageManager = new CustomImageManager(pack.getProperties().getIrisCustomImages(),
-                    this.customTextureManager.getNextAvailableUnit(), maxProgrammableTextureUnit());
+                    this.customTextureManager.getNextAvailableUnit(), maxProgrammableTextureUnit(),
+                    mc.displayWidth, mc.displayHeight);
             allocateRenderTargetImageUnits(collectAllProgramSources(pack));
             activeGbufferSamplerUnits = GBUFFER_SAMPLER_UNITS;
             activeGbufferSamplerOverrides = mergedStageOverrides(TextureStage.GBUFFERS_AND_SHADOW);
@@ -2106,6 +2113,7 @@ public class IrisRenderingPipeline {
             if (this.shaderStorageBuffers != null) {
                 this.shaderStorageBuffers.onResize(mc.displayWidth, mc.displayHeight);
             }
+            this.customImageManager.onResize(mc.displayWidth, mc.displayHeight);
         }
 
         if (this.shaderStorageBuffers != null && !this.shaderStorageBuffers.isEmpty()) {
@@ -2217,9 +2225,42 @@ public class IrisRenderingPipeline {
     }
 
     public void setPhase(ProgramId phase) {
+        setPhase(phase, defaultRenderStage(phase));
+    }
+
+    /**
+     * Iris's {@code WorldRenderingPhase} ordinals for the phases this pipeline can identify, published as the
+     * {@code renderStage} uniform. Iris sets one for every draw; before this, only the hand and terrain paths did, so
+     * every sky, cloud, weather, entity and outline draw reported {@code MC_RENDER_STAGE_NONE}. That is not a cosmetic
+     * gap: Clarity's {@code gbuffers_skybasic} draws stars only under
+     * {@code renderStage == MC_RENDER_STAGE_STARS}, so its star field could never appear — the star quads were painted
+     * with the plain sky gradient instead.
+     * <p>
+     * Only the unambiguous phases are mapped. {@code TexturedLit} is deliberately left at {@code NONE} because this
+     * pipeline uses it for both particles and translucent entities, and guessing either one would be a lie to the pack.
+     */
+    private static int defaultRenderStage(ProgramId phase) {
+        if (phase == null) {
+            return 0; // MC_RENDER_STAGE_NONE
+        }
+        switch (phase) {
+            case SkyBasic: return 1;    // MC_RENDER_STAGE_SKY
+            case SkyTextured: return 4; // MC_RENDER_STAGE_SUN (vanilla draws sun then moon under one anchor)
+            case Entities: return 11;   // MC_RENDER_STAGE_ENTITIES
+            case DamagedBlock: return 13; // MC_RENDER_STAGE_DESTROY
+            case Line: return 14;       // MC_RENDER_STAGE_OUTLINE
+            case Clouds: return 20;     // MC_RENDER_STAGE_CLOUDS
+            case Weather: return 21;    // MC_RENDER_STAGE_RAIN_SNOW
+            default: return 0;
+        }
+    }
+
+    /** Overload for callers that know a finer phase than {@link ProgramId} can express (sky basic covers sky/stars/void). */
+    public void setPhase(ProgramId phase, int renderStage) {
         if (!this.worldRenderingActive) {
             return;
         }
+        CapturedRenderingState.INSTANCE.setRenderStage(renderStage);
         // Every phase this switches to is vanilla fixed-function geometry (sky, entities, particles, block damage,
         // weather), submitted through client arrays that alias generic attribute slots. See
         // resetVanillaVertexArrayState: a leftover generic array wins over the aliased client array and flattens that
@@ -3157,6 +3198,13 @@ public class IrisRenderingPipeline {
     }
 
     public static String stabilizeShaderSource(String name, String source) {
+        // The macro environment is already inlined as #define lines by every caller, so the fold is self-contained.
+        String folded = GlslPreprocessor.foldFloatConditionals(source, java.util.Collections.emptyMap());
+        if (!folded.equals(source)) {
+            LOGGER.info("[Iris] Program '{}': folded floating-point #if conditional(s) the GLSL preprocessor cannot parse",
+                    name);
+            source = folded;
+        }
         source = normalizeArbTextureLookups(name, source);
         source = com.bdmajora.impetus.iris.terrain.GlslIntegerOverloadPolyfill.widenIntegerBuiltinCalls(name, source);
         Matcher declaration = UNINITIALIZED_LIGHT_VOLUME.matcher(source);
