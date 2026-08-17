@@ -1,5 +1,6 @@
 package com.bdmajora.impetus.iris.pipeline;
 
+import com.bdmajora.impetus.iris.gl.GlTextureUnits;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.bdmajora.impetus.iris.shaderpack.texture.CustomImageDefinition;
@@ -233,7 +234,7 @@ public class CustomImageManager {
                 continue;
             }
             if (!bound) {
-                LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + RESIZE_SCRATCH_UNIT);
+                GlTextureUnits.selectScratch(RESIZE_SCRATCH_UNIT);
                 bound = true;
             }
             LWJGL.glBindTexture(image.target, image.texture);
@@ -245,7 +246,7 @@ public class CustomImageManager {
         }
         if (bound) {
             LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
-            LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+            GlTextureUnits.resetToUnit0();
         }
     }
 
@@ -314,14 +315,14 @@ public class CustomImageManager {
             LWJGL.glBindImageTexture(image.imageUnit, image.texture, 0, true, 0, GL15.GL_READ_WRITE,
                     image.glInternalFormat);
             if (image.samplerUnit >= 0) {
-                LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + image.samplerUnit);
+                GlTextureUnits.selectScratch(image.samplerUnit);
                 LWJGL.glBindTexture(image.target, image.texture);
             }
         }
         if (stableVisibleFloodfill) {
             bindStableFloodfillReader();
         }
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        GlTextureUnits.resetToUnit0();
     }
 
     private void bindStableFloodfillReader() {
@@ -330,20 +331,20 @@ public class CustomImageManager {
         if (floodfill == null || copy == null || floodfill.samplerUnit < 0 || copy.samplerUnit < 0) {
             return;
         }
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + floodfill.samplerUnit);
+        GlTextureUnits.selectScratch(floodfill.samplerUnit);
         LWJGL.glBindTexture(floodfill.target, floodfill.texture);
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + copy.samplerUnit);
+        GlTextureUnits.selectScratch(copy.samplerUnit);
         LWJGL.glBindTexture(copy.target, floodfill.texture);
     }
 
     public void unbindAll() {
         for (Image image : this.images) {
             if (image.samplerUnit >= 0) {
-                LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + image.samplerUnit);
+                GlTextureUnits.selectScratch(image.samplerUnit);
                 LWJGL.glBindTexture(image.target, 0);
             }
         }
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        GlTextureUnits.resetToUnit0();
     }
 
     public void destroy() {

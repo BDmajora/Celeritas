@@ -27,6 +27,19 @@ public final class ShadowMapDump {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Iris");
     private static final String DEBUG_DIR_NAME = "impetus_debug";
 
+    /**
+     * Off unless {@code -Dimpetus.iris.shadowDump=true}. This runs on the SCREENSHOT key, so with it enabled every
+     * ordinary F2 pays for it: {@code readDepth} allocates a direct {@code ByteBuffer} and a {@code float[]} of
+     * resolution² each (67 MB apiece at 4096²) and runs twice, then each {@code writeDepth} builds a full
+     * {@code BufferedImage} of the same size and PNG-encodes 16.7 megapixels — roughly 400 MB of allocation and a
+     * multi-second stall per keypress. It also perturbs GL state the shadow pass owns (see
+     * {@code IrisShadowRenderer.dumpShadowMapIfRequested}: the readback leaves {@code GL_READ_FRAMEBUFFER} on the
+     * shadow framebuffer and the depth attachment is swapped mid-flight), and the shadow pass wraps it in a
+     * {@code catch (Throwable)} that silently absorbs an {@code OutOfMemoryError} while its {@code finally} restores
+     * neither the viewport nor the framebuffer. A diagnostic must not be able to damage the frame it is diagnosing.
+     */
+    private static final boolean ENABLED = Boolean.getBoolean("impetus.iris.shadowDump");
+
     private static volatile boolean requested;
 
     private ShadowMapDump() {
@@ -34,6 +47,9 @@ public final class ShadowMapDump {
 
     /** Called from the screenshot hook; the dump happens on the next shadow pass. */
     public static void request() {
+        if (!ENABLED) {
+            return;
+        }
         requested = true;
     }
 

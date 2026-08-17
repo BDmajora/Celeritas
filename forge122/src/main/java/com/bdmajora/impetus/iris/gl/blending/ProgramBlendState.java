@@ -36,12 +36,24 @@ public final class ProgramBlendState {
     }
 
     public static ProgramBlendState from(ShaderProperties properties, String programName) {
+        return from(properties, programName, null);
+    }
+
+    /**
+     * @param defaultBase the blend mode to fall back on when the pack declared no {@code blend.<program>}, or
+     *                    {@code null} for none. Iris hangs these off
+     *                    {@link com.bdmajora.impetus.iris.shaderpack.loading.ProgramId} and lets a pack directive win.
+     */
+    public static ProgramBlendState from(ShaderProperties properties, String programName, BlendMode defaultBase) {
         boolean baseSpecified = false;
         BlendMode baseMode = null;
         String base = properties.getBlendModeOverride(programName).orElse(null);
         if (base != null) {
             baseSpecified = true;
             baseMode = parseMode(programName, "blend." + programName, base);
+        } else if (defaultBase != null) {
+            baseSpecified = true;
+            baseMode = defaultBase;
         }
 
         Map<Integer, BlendMode> perTargetModes = new LinkedHashMap<>();

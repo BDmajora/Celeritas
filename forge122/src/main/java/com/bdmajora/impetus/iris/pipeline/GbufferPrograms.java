@@ -7,6 +7,7 @@ import com.bdmajora.impetus.iris.gl.program.GlProgram;
 import com.bdmajora.impetus.iris.gl.program.IrisProgram;
 import com.bdmajora.impetus.iris.gl.program.ProgramUniforms;
 import com.bdmajora.impetus.iris.gl.program.ShaderProgramCompiler;
+import com.bdmajora.impetus.iris.gl.blending.BlendMode;
 import com.bdmajora.impetus.iris.gl.blending.ProgramAlphaTest;
 import com.bdmajora.impetus.iris.gl.blending.ProgramBlendState;
 import com.bdmajora.impetus.iris.shaderpack.ProgramSource;
@@ -41,8 +42,8 @@ public class GbufferPrograms {
     /** The phases driven from the vanilla render loop anchors in {@code EntityRendererMixin}. */
     private static final ProgramId[] PHASES = {
             ProgramId.SkyBasic, ProgramId.SkyTextured, ProgramId.Entities, ProgramId.EntitiesTrans,
-            ProgramId.DamagedBlock,
-            ProgramId.TexturedLit, ProgramId.Weather, ProgramId.Clouds, ProgramId.Hand,
+            ProgramId.SpiderEyes, ProgramId.DamagedBlock,
+            ProgramId.Particles, ProgramId.Weather, ProgramId.Clouds, ProgramId.Hand,
             ProgramId.HandWater, ProgramId.Line
     };
 
@@ -114,8 +115,9 @@ public class GbufferPrograms {
 
         Map<String, Entry> bySourceName = new HashMap<>();
         for (ProgramId phase : PHASES) {
+            Optional<ProgramSource> direct = pack.getProgramSet().getDirect(phase);
             Optional<ProgramSource> source = phase == ProgramId.EntitiesTrans
-                    ? pack.getProgramSet().getDirect(phase)
+                    ? direct
                     : pack.getProgramSet().get(phase);
             if (!source.isPresent()) {
                 continue;
@@ -130,8 +132,14 @@ public class GbufferPrograms {
             if (bySourceName.containsKey(sourceName)) {
                 entry = bySourceName.get(sourceName); // may be null: a failed compile is not retried
             } else {
+                // A ProgramId's default blend mode belongs to that program's own file. When the phase resolved through
+                // the fallback chain the source is some *other* program, which keeps its own (absent) blend
+                // directives — Iris attaches the default at the direct read for exactly that reason. Keeping the
+                // default direct-only also guarantees a phase carrying one can never share an Entry with another
+                // phase, since the source name is then the program's own.
+                BlendMode defaultBlend = direct.isPresent() ? phase.getDefaultBlendMode() : null;
                 entry = compile(source.get(), defines, gbufferSamplers,
-                        ProgramBlendState.from(pack.getProperties(), sourceName),
+                        ProgramBlendState.from(pack.getProperties(), sourceName, defaultBlend),
                         ProgramAlphaTest.from(pack.getProperties(), sourceName));
                 bySourceName.put(sourceName, entry);
                 if (entry != null) {

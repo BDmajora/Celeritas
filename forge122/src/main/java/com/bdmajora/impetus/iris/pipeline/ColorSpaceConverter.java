@@ -1,5 +1,6 @@
 package com.bdmajora.impetus.iris.pipeline;
 
+import com.bdmajora.impetus.iris.gl.GlTextureUnits;
 import com.bdmajora.impetus.iris.gl.program.GlProgram;
 import com.bdmajora.impetus.iris.gl.program.ProgramBuilder;
 import com.bdmajora.impetus.iris.gl.shader.GlShader;
@@ -74,7 +75,7 @@ public final class ColorSpaceConverter {
             ensureProgram();
             ensureScratch(width, height);
 
-            LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+            GlTextureUnits.resetToUnit0();
             int previous = LWJGL.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
             LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, this.scratchTexture);
             LWJGL.glCopyTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
@@ -113,7 +114,7 @@ public final class ColorSpaceConverter {
         if (this.scratchTexture == -1) {
             this.scratchTexture = LWJGL.glGenTextures();
         }
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        GlTextureUnits.resetToUnit0();
         int previous = LWJGL.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, this.scratchTexture);
         LWJGL.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, width, height, 0,

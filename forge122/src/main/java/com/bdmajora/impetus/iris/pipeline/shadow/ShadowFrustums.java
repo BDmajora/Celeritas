@@ -24,7 +24,23 @@ public final class ShadowFrustums {
     /** Accepts every section; used when culling is off or the shadow distance exceeds the render distance. */
     public static final Frustum NON_CULLING = (minX, minY, minZ, maxX, maxY, maxZ) -> true;
 
+    /**
+     * The last culling decision logged. {@link #create} runs once per frame, and logging every call flooded the log
+     * with thousands of identical INFO lines per minute (measured: 6637 lines in a 90-second session, ~74/s). Each
+     * one is a synchronous log4j write to file and console, which stalls the client badly enough to look like a
+     * freeze. The decision string embeds the distances, so any change that matters still prints; the only thing lost
+     * is a repeat line when a reload lands on an identical decision.
+     */
+    private static String lastLoggedDecision;
+
     private ShadowFrustums() {
+    }
+
+    private static void logDecision(String decision) {
+        if (!decision.equals(lastLoggedDecision)) {
+            lastLoggedDecision = decision;
+            LOGGER.info("[Iris] Shadow culling: {}", decision);
+        }
     }
 
     /**
@@ -39,16 +55,15 @@ public final class ShadowFrustums {
         // Culling explicitly off, or a shadow distance that covers everything anyway: draw it all.
         if (culling == ShadowContentSettings.Culling.OFF || shadowDistance <= 0.0f
                 || shadowDistance > renderDistance) {
-            LOGGER.info("[Iris] Shadow culling: disabled ({})",
-                    culling == ShadowContentSettings.Culling.OFF
-                            ? "set by shader pack" : "shadow distance covers the render distance");
+            logDecision("disabled (" + (culling == ShadowContentSettings.Culling.OFF
+                    ? "set by shader pack" : "shadow distance covers the render distance") + ")");
             return NON_CULLING;
         }
 
         // Iris parity: a voxelizing pack that did not ask for a specific mode gets distance-only culling, because
         // the advanced frustum's view dependence would destabilize its voxel field.
         if (culling == ShadowContentSettings.Culling.ON && packVoxelizes) {
-            LOGGER.info("[Iris] Shadow culling: distance only, {} blocks (voxelization detected)", shadowDistance);
+            logDecision("distance only, " + shadowDistance + " blocks (voxelization detected)");
             return new ShadowBoxCuller(shadowDistance);
         }
 
@@ -61,13 +76,13 @@ public final class ShadowFrustums {
             // is the hard outer bound. Iris uses voxelDistance verbatim — a pack that declares none gets a
             // degenerate (zero-size) safe zone, i.e. plain advanced culling, so that is reproduced rather than
             // substituting the shadow distance.
-            LOGGER.info("[Iris] Shadow culling: safe-zone frustum, {} block safe zone inside {} blocks",
-                    voxelDistance, shadowDistance);
+            logDecision("safe-zone frustum, " + voxelDistance + " block safe zone inside "
+                    + shadowDistance + " blocks");
             return new SafeZoneCullingFrustum(projView, lightVector,
                     new ShadowBoxCuller(voxelDistance), new ShadowBoxCuller(shadowDistance));
         }
 
-        LOGGER.info("[Iris] Shadow culling: advanced frustum, {} blocks", shadowDistance);
+        logDecision("advanced frustum, " + shadowDistance + " blocks");
         return new AdvancedShadowCullingFrustum(projView, lightVector, new ShadowBoxCuller(shadowDistance));
     }
 

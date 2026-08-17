@@ -352,9 +352,25 @@ public final class ImpetusTerrainTransformer {
         return source.replaceAll("\\bvoid\\s+main\\s*\\(\\s*(void)?\\s*\\)", "void irisMain()");
     }
 
-    /** {@code varying} → {@code out} (vertex) or {@code in} (fragment). */
+    /**
+     * {@code varying} → {@code out} (vertex) or {@code in} (fragment), preserving any qualifier in front of it.
+     * <p>
+     * The qualifier prefix is NOT optional to handle. GLSL 120 permits {@code invariant}/{@code centroid} before
+     * {@code varying}, and packs additionally write {@code flat varying} — illegal by the letter of GLSL 120, but
+     * NVIDIA's compatibility compiler accepts it, so packs ship it. Anchoring this pattern at {@code ^\s*varying}
+     * silently skips every one of those lines, and the surviving {@code flat varying} is a hard error once the stage
+     * is lifted to 330 core: {@code C7560: OpenGL does not allow 'flat' with 'varying'} plus
+     * {@code C7561: OpenGL requires 'in/out' with 'flat'}. That killed miniature-shader's gbuffers_terrain (its
+     * {@code flat varying float lightSourceLevel}), so terrain silently fell back to the Impetus default program and
+     * the whole world rendered vanilla while every other stage used the pack.
+     * <p>
+     * GLSL 330 keeps the same qualifier order ({@code invariant} then interpolation then storage), so emitting the
+     * captured prefix verbatim in front of {@code in}/{@code out} is correct: {@code flat varying} → {@code flat out}.
+     */
     private static String convertVaryings(String source, String direction) {
-        return source.replaceAll("(?m)^(\\s*)varying\\b", "$1" + direction);
+        return source.replaceAll(
+                "(?m)^(\\s*)((?:(?:invariant|flat|smooth|noperspective|centroid)\\s+)*)varying\\b",
+                "$1$2" + direction);
     }
 
     /**

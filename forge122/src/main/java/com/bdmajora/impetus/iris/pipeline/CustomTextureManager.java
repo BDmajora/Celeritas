@@ -1,5 +1,6 @@
 package com.bdmajora.impetus.iris.pipeline;
 
+import com.bdmajora.impetus.iris.gl.GlTextureUnits;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.EntityRenderer;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -398,19 +399,19 @@ public class CustomTextureManager {
      */
     public void bindAll() {
         for (Binding binding : this.bindings) {
-            LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + binding.unit);
+            GlTextureUnits.selectScratch(binding.unit);
             LWJGL.glBindTexture(binding.target, binding.texture.getAsInt());
         }
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        GlTextureUnits.resetToUnit0();
     }
 
     /** Unbinds the custom-texture units (frame teardown, mirrors the pipeline's other unit restores). */
     public void unbindAll() {
         for (Binding binding : this.bindings) {
-            LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + binding.unit);
+            GlTextureUnits.selectScratch(binding.unit);
             LWJGL.glBindTexture(binding.target, 0);
         }
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        GlTextureUnits.resetToUnit0();
     }
 
     public void destroy() {

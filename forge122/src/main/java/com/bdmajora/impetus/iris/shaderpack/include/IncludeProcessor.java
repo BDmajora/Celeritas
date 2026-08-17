@@ -3,10 +3,15 @@ package com.bdmajora.impetus.iris.shaderpack.include;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * Resolves OptiFine-style {@code #include} directives by recursively inlining the referenced GLSL files.
@@ -23,7 +28,11 @@ public final class IncludeProcessor {
     private static final Pattern INCLUDE_PATTERN =
             Pattern.compile("^\\s*#include\\s+[\"<]([^\">]+)[\">].*$");
 
+    private static final Logger LOGGER = LogManager.getLogger("Impetus/Iris");
+
     private final Map<AbsolutePackPath, String> sources;
+    /** Unresolved targets already reported, so one bad include doesn't log once per including program. */
+    private final Set<String> reportedMissing = new HashSet<>();
 
     public IncludeProcessor(Map<AbsolutePackPath, String> sources) {
         this.sources = sources;
@@ -59,6 +68,19 @@ public final class IncludeProcessor {
                     if (included == null) {
                         // Tolerate generated/optional includes that don't exist as files. Emit a marker and continue
                         // rather than failing the whole pack load.
+                        //
+                        // But say so loudly. Both references treat this as FATAL: Iris throws an IOException listing
+                        // every unresolved include (ShaderPack.java: `if (!graph.getFailures().isEmpty()) throw ...`)
+                        // and OptiFine throws "Included file not found" from resolveIncludes. Skipping quietly turns
+                        // one precise error into a flood of downstream "undefined variable" compile failures with no
+                        // hint at the cause — that is exactly how miniature-shader's dropped /shader.h presented.
+                        // Across all 22 local packs, zero includes are genuinely absent, so nothing relies on this
+                        // tolerance; it could be tightened to match the references.
+                        if (this.reportedMissing.add(target.getPathString())) {
+                            LOGGER.warn("[Iris] Unresolved #include \"{}\" from {} — it resolved to {}, which is not in"
+                                    + " the pack. Everything that file defined will be undefined at compile time.",
+                                    matcher.group(1).trim(), path.getPathString(), target.getPathString());
+                        }
                         out.add("// [Impetus/Iris] skipped unresolved #include \"" + matcher.group(1) + "\"");
                     } else {
                         processInto(target, splitLines(included), out, stack);

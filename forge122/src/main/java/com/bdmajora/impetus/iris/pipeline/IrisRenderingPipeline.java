@@ -1,5 +1,6 @@
 package com.bdmajora.impetus.iris.pipeline;
 
+import com.bdmajora.impetus.iris.gl.GlTextureUnits;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.BufferBuilder;
 import net.minecraft.client.renderer.GlStateManager;
@@ -154,6 +155,8 @@ public class IrisRenderingPipeline {
     private static final int GL_BACK_BUFFER = 0x0405;
     private static final int SHADER_PACK_RESOURCE_BARRIERS = 0x00000020 | 0x00000008 | 0x00002000;
     private static final int FULL_BRIGHT_LIGHTMAP = 0x00F000F0;
+    /** Both halves of {@link #FULL_BRIGHT_LIGHTMAP} as the raw texcoord the lightmap texture matrix expects. */
+    private static final float FULL_BRIGHT_LIGHTMAP_COORD = 240.0f;
     private static final float LIGHTMAP_TEXTURE_SCALE = 1.0f / 256.0f;
     private static final float LIGHTMAP_TEXTURE_OFFSET = 8.0f / 256.0f;
     /** Draw-buffer mask for fixed-function content with no pack program: plain color into colortex0 only. */
@@ -2141,11 +2144,11 @@ public class IrisRenderingPipeline {
         // A pack-supplied texture.noise replaces the generated noise (Iris CustomTextureManager parity).
         bindNoiseTexture();
         bindOverlayTexture();
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + SHADOW_TEX_0_UNIT);
+        GlTextureUnits.selectScratch(SHADOW_TEX_0_UNIT);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, this.stubShadowMap.getTextureId());
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + SHADOW_TEX_1_UNIT);
+        GlTextureUnits.selectScratch(SHADOW_TEX_1_UNIT);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, this.stubShadowMap.getTextureId());
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        GlTextureUnits.resetToUnit0();
 
         // Custom images: honor the pack-declared clears, then bind image units + paired samplers.
         this.customImageManager.clearAll();
@@ -2220,8 +2223,14 @@ public class IrisRenderingPipeline {
                 && this.currentGbuffer == this.translucentGbufferFramebuffer;
     }
 
+    /**
+     * Iris's chain is {@code gbuffers_entities_translucent -> gbuffers_entities -> gbuffers_textured_lit}. Falling
+     * straight through to {@code TexturedLit} skipped the middle link, so a pack shipping {@code gbuffers_entities}
+     * but no {@code _translucent} variant (most of them) drew translucent entities with the generic textured program
+     * and lost whatever the entity program does with {@code entityColor}, normals and diffuse lighting.
+     */
     public ProgramId getTranslucentEntityPhase() {
-        return hasGbufferProgram(ProgramId.EntitiesTrans) ? ProgramId.EntitiesTrans : ProgramId.TexturedLit;
+        return hasGbufferProgram(ProgramId.EntitiesTrans) ? ProgramId.EntitiesTrans : ProgramId.Entities;
     }
 
     public void setPhase(ProgramId phase) {
@@ -2236,8 +2245,7 @@ public class IrisRenderingPipeline {
      * {@code renderStage == MC_RENDER_STAGE_STARS}, so its star field could never appear — the star quads were painted
      * with the plain sky gradient instead.
      * <p>
-     * Only the unambiguous phases are mapped. {@code TexturedLit} is deliberately left at {@code NONE} because this
-     * pipeline uses it for both particles and translucent entities, and guessing either one would be a lie to the pack.
+     * Only the unambiguous phases are mapped; anything else reports {@code NONE} rather than guess at the pack.
      */
     private static int defaultRenderStage(ProgramId phase) {
         if (phase == null) {
@@ -2246,9 +2254,11 @@ public class IrisRenderingPipeline {
         switch (phase) {
             case SkyBasic: return 1;    // MC_RENDER_STAGE_SKY
             case SkyTextured: return 4; // MC_RENDER_STAGE_SUN (vanilla draws sun then moon under one anchor)
-            case Entities: return 11;   // MC_RENDER_STAGE_ENTITIES
+            // Iris has no distinct phase for the eyes overlay; it draws inside the entity pass.
+            case Entities: case SpiderEyes: return 11; // MC_RENDER_STAGE_ENTITIES
             case DamagedBlock: return 13; // MC_RENDER_STAGE_DESTROY
             case Line: return 14;       // MC_RENDER_STAGE_OUTLINE
+            case Particles: return 19;  // MC_RENDER_STAGE_PARTICLES
             case Clouds: return 20;     // MC_RENDER_STAGE_CLOUDS
             case Weather: return 21;    // MC_RENDER_STAGE_RAIN_SNOW
             default: return 0;
@@ -2260,6 +2270,7 @@ public class IrisRenderingPipeline {
         if (!this.worldRenderingActive) {
             return;
         }
+        this.currentPhase = phase;
         CapturedRenderingState.INSTANCE.setRenderStage(renderStage);
         // Every phase this switches to is vanilla fixed-function geometry (sky, entities, particles, block damage,
         // weather), submitted through client arrays that alias generic attribute slots. See
@@ -2299,6 +2310,53 @@ public class IrisRenderingPipeline {
             }
         }
     }
+
+    /**
+     * The "eyes" overlay layers — spider, enderman and ender dragon — which is what {@code gbuffers_spidereyes} is
+     * for. OptiFine brackets the same three draws with {@code Shaders.beginSpiderEyes()}/{@code endSpiderEyes()};
+     * Iris routes them through {@code ShaderKey.ENTITIES_EYES}.
+     * <p>
+     * The lightmap coordinate has to be rewritten here. 1.12 signals "full bright" for these layers by pushing the
+     * raw sentinel {@code OpenGlHelper.setLightmapTextureCoords(unit, 61680, 0)}, which only works because
+     * {@code GL_CLAMP} pins the lightmap <em>texture lookup</em> to the brightest texel. A shader consumes the same
+     * value arithmetically — {@code gl_TextureMatrix[1] * gl_MultiTexCoord1} is {@code (61680 + 8) / 256 = 240.97},
+     * i.e. 256x outside the [0,1] range every pack assumes. Packs raise that coordinate to a power (Mellow uses
+     * {@code pow(lm.x, 2.4)}, so ~6e5), which overflows an {@code R11F_G11F_B10F} colortex and leaves an Inf/NaN
+     * pixel wrapped in an enormous bloom halo. Modern Minecraft has no such sentinel — its full-bright packed light
+     * is {@code 0xF000F0} — which is why Iris's {@code VanillaTransformer} substitutes a literal
+     * {@code vec4(240.0, 240.0, 0.0, 1.0)} for {@code gl_MultiTexCoord1} on every {@code FULLBRIGHT} draw. Do the
+     * same, from the GL side.
+     * <p>
+     * No-op in the shadow pass: Iris maps the eyes render type to the shadow entity program there, not to
+     * {@code gbuffers_spidereyes}.
+     */
+    public void beginEyes() {
+        if (!this.worldRenderingActive || IrisShadowRenderer.isShadowPass()) {
+            return;
+        }
+        this.phaseBeforeEyes = this.currentPhase;
+        this.phaseBeforeEyesStage = CapturedRenderingState.INSTANCE.getRenderStage();
+        LWJGL.glMultiTexCoord2f(OpenGlHelper.lightmapTexUnit, FULL_BRIGHT_LIGHTMAP_COORD, FULL_BRIGHT_LIGHTMAP_COORD);
+        setPhase(ProgramId.SpiderEyes);
+    }
+
+    /**
+     * Back to the entity program, as OptiFine's {@code endSpiderEyes} does — except that the eyes layers also run in
+     * the post-translucent entity batch, where the phase is {@code gbuffers_entities_translucent}. Restore what was
+     * actually bound instead of assuming, so a pack with a dedicated translucent-entity program keeps it for the rest
+     * of the batch. Vanilla puts the real lightmap coordinate back itself on the line after the model draw.
+     */
+    public void endEyes() {
+        if (!this.worldRenderingActive || IrisShadowRenderer.isShadowPass()) {
+            return;
+        }
+        setPhase(this.phaseBeforeEyes, this.phaseBeforeEyesStage);
+    }
+
+    /** The phase {@link #setPhase(ProgramId, int)} last selected, so {@link #endEyes()} can put it back. */
+    private ProgramId currentPhase;
+    private ProgramId phaseBeforeEyes;
+    private int phaseBeforeEyesStage;
 
     /**
      * Port of OptiFine's {@code Shaders.drawHorizon} ({@code preSkyList}): draws an octagonal ring at the
@@ -2452,7 +2510,7 @@ public class IrisRenderingPipeline {
         mc.getFramebuffer().bindFramebuffer(true);
         restoreMainDrawReadBuffers(mc);
         disableIndexedBlend(drawBufferSlots);
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        GlTextureUnits.resetToUnit0();
     }
 
     /**
@@ -2716,7 +2774,7 @@ public class IrisRenderingPipeline {
         }
         handBoundTextureProbeLogged = true;
         Minecraft mc = Minecraft.getMinecraft();
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        GlTextureUnits.resetToUnit0();
         int bound = LWJGL.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
         int width = LWJGL.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
         int height = LWJGL.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
@@ -2740,11 +2798,11 @@ public class IrisRenderingPipeline {
     private static boolean handBoundTextureProbeLogged;
 
     private static void resyncTextureUnitZero() {
-        GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + 1);
-        GlStateManager.setActiveTexture(GL13.GL_TEXTURE0);
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        // resetToUnit0 already performs the step-through-unit-1 dance that used to be inlined on the two lines above
+        // it, and the cached unbind below leaves real GL and the cache both holding 0 — so the trailing raw
+        // glBindTexture was redundant too. One coherent pair is the whole job.
+        GlTextureUnits.resetToUnit0();
         GlStateManager.bindTexture(0);
-        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
     }
 
     public void endHandRendering() {
@@ -2858,13 +2916,22 @@ public class IrisRenderingPipeline {
         // ALT side — copy it back to MAIN so next frame's baked FBOs and sampler snapshots read fresh data. NB:
         // glCopyTexSubImage2D reads the GL_READ_BUFFER of the framebuffer bound to GL_FRAMEBUFFER (bind(), not
         // bindAsReadBuffer() — Iris hit TAA breakage on many drivers with the read-framebuffer binding).
-        for (SwapPass swap : this.swapPasses) {
-            swap.from.bind();
-            LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, swap.targetTexture);
-            LWJGL.glCopyTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 0, 0, swap.width, swap.height);
-        }
         if (!this.swapPasses.isEmpty()) {
-            LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+            // glCopyTexSubImage2D needs the destination bound to a texture unit. Binding it on whatever unit happens
+            // to be selected — unit 0 in practice, since bindColorSamplers ends there — would rewrite a cached slot
+            // behind GlStateManager's back, after which its next cached bind of the value it still believes is there
+            // no-ops and the unit keeps this texture. Do the copy on a scratch unit no cached slot describes.
+            GlTextureUnits.selectScratch(DEPTH_COPY_SCRATCH_UNIT);
+            try {
+                for (SwapPass swap : this.swapPasses) {
+                    swap.from.bind();
+                    LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, swap.targetTexture);
+                    LWJGL.glCopyTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 0, 0, swap.width, swap.height);
+                }
+                LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+            } finally {
+                GlTextureUnits.releaseScratch();
+            }
         }
         // Hand control back to vanilla: its framebuffer bound, no program/VAO, texture units cleaned up.
         LWJGL.glUseProgram(0);
@@ -3554,7 +3621,7 @@ public class IrisRenderingPipeline {
         if (pass.mipmappedBuffers.nextSetBit(0) < 0) {
             return;
         }
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + MIPMAP_SCRATCH_UNIT);
+        GlTextureUnits.selectScratch(MIPMAP_SCRATCH_UNIT);
         for (int index = pass.mipmappedBuffers.nextSetBit(0); index >= 0;
              index = pass.mipmappedBuffers.nextSetBit(index + 1)) {
             IrisRenderTarget target = this.renderTargets.get(index);
@@ -3563,11 +3630,11 @@ public class IrisRenderingPipeline {
             }
         }
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        GlTextureUnits.resetToUnit0();
     }
 
     private void resetRenderTargetMipmaps() {
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + MIPMAP_SCRATCH_UNIT);
+        GlTextureUnits.selectScratch(MIPMAP_SCRATCH_UNIT);
         for (int i = 0; i < IrisRenderTargets.MAX_COLOR_BUFFERS; i++) {
             IrisRenderTarget target = this.renderTargets.get(i);
             if (target != null) {
@@ -3575,7 +3642,7 @@ public class IrisRenderingPipeline {
             }
         }
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        GlTextureUnits.resetToUnit0();
     }
 
     public static void drainGlError() {
@@ -3643,7 +3710,7 @@ public class IrisRenderingPipeline {
     }
 
     private static int bindScratchTexture2D(int texture) {
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + DEPTH_COPY_SCRATCH_UNIT);
+        GlTextureUnits.selectScratch(DEPTH_COPY_SCRATCH_UNIT);
         int previousTexture = LWJGL.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture);
         return previousTexture;
@@ -3651,7 +3718,7 @@ public class IrisRenderingPipeline {
 
     private static void restoreScratchTexture2D(int texture) {
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture);
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        GlTextureUnits.resetToUnit0();
     }
 
     private static void bindMainRenderTarget(Minecraft mc) {
@@ -3682,14 +3749,17 @@ public class IrisRenderingPipeline {
                     GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + i);
                     GlStateManager.bindTexture(pass.colorSamplers[i]);
                 } else {
-                    // colortex8..15 live beyond GlStateManager's 8-slot cache (indexing it there throws); vanilla
-                    // never touches these units, so a raw bind is correct and safe.
-                    LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + i);
+                    // colortex8..15 live beyond GlStateManager's cache (indexing it there throws); vanilla never
+                    // touches these units, so a raw bind is correct — the tail below hands the selector back.
+                    GlTextureUnits.selectScratch(i);
                     LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, pass.colorSamplers[i]);
                 }
             }
         }
-        GlStateManager.setActiveTexture(GL13.GL_TEXTURE0);
+        // Deliberately not a bare setActiveTexture(GL_TEXTURE0). If the loop took the raw branch above, real GL is on
+        // a high unit while the cache still reads 0 — and setActiveTexture would then swallow the return as a no-op,
+        // stranding the selector there for every later cached bind. resetToUnit0 steps through unit 1 so it issues.
+        GlTextureUnits.resetToUnit0();
     }
 
     /**
@@ -3739,7 +3809,7 @@ public class IrisRenderingPipeline {
         bindDepthSampler(DEPTH_TEX_2_UNIT, this.renderTargets.getDepthTextureNoHand());
         bindDepthSampler(GBUFFER_DEPTH_TEX_0_UNIT, this.renderTargets.getDepthTexture());
         bindDepthSampler(GBUFFER_DEPTH_TEX_1_UNIT, this.renderTargets.getDepthTextureNoTranslucents());
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        GlTextureUnits.resetToUnit0();
     }
 
     private void bindGbufferPbrSamplers() {
@@ -3764,7 +3834,7 @@ public class IrisRenderingPipeline {
     private void bindOverlayTexture() {
         bindTextureUnit(OVERLAY_TEX_UNIT, this.noOverlayTexture.getTextureId());
         bindTextureUnit(GBUFFER_OVERLAY_UNIT, this.noOverlayTexture.getTextureId());
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        GlTextureUnits.resetToUnit0();
     }
 
     private void bindNoiseTexture() {
@@ -3772,7 +3842,7 @@ public class IrisRenderingPipeline {
         int texture = customNoise != -1 ? customNoise : this.noiseTexture.getTextureId();
         bindTextureUnit(NOISE_TEX_UNIT, texture);
         bindTextureUnit(GBUFFER_NOISE_TEX_UNIT, texture);
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        GlTextureUnits.resetToUnit0();
     }
 
     private void bindShadowSamplers() {
@@ -3815,7 +3885,7 @@ public class IrisRenderingPipeline {
         bindTextureUnit(SHADOW_COLOR_1_UNIT, color1);
         bindTextureUnit(GBUFFER_SHADOW_COLOR_0_UNIT, color0);
         bindTextureUnit(GBUFFER_SHADOW_COLOR_1_UNIT, color1);
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        GlTextureUnits.resetToUnit0();
     }
 
     private void bindShadowDepthUnit(int unit, int texture, int sampler) {
@@ -3823,14 +3893,19 @@ public class IrisRenderingPipeline {
         bindTextureUnit(unit, texture);
     }
 
+    /**
+     * Binds one sampler unit, leaving the selector <em>on that unit</em> — callers batch several of these and reset
+     * once via {@link GlTextureUnits#resetToUnit0()} rather than paying a reset per bind. Every caller does; that is
+     * load-bearing for units at or above {@link GlTextureUnits#CACHED_UNITS}, which take the raw branch.
+     */
     private static void bindTextureUnit(int unit, int texture) {
-        if (unit < 8) {
+        if (unit < GlTextureUnits.CACHED_UNITS) {
             // Low OptiFine 1.12 sampler units overlap Minecraft's cached texture slots. Keep that cache coherent
             // or later GlStateManager binds can be skipped while the actual GL unit still holds depth/shadow data.
             GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + unit);
             GlStateManager.bindTexture(texture);
         } else {
-            LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + unit);
+            GlTextureUnits.selectScratch(unit);
             LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture);
         }
     }
@@ -3876,15 +3951,16 @@ public class IrisRenderingPipeline {
             if (unit < 0) {
                 continue;
             }
-            if (unit < 8) {
+            if (unit < GlTextureUnits.CACHED_UNITS) {
                 GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + unit);
                 GlStateManager.bindTexture(texture);
             } else {
-                LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + unit);
+                GlTextureUnits.selectScratch(unit);
                 LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture);
             }
         }
-        GlStateManager.setActiveTexture(GL13.GL_TEXTURE0);
+        // See bindColorSamplers: a bare setActiveTexture here can be swallowed after the raw branch.
+        GlTextureUnits.resetToUnit0();
     }
 
     private BitSet prepareGbufferFeedbackSamplers(int[] drawBuffers) {
@@ -3944,10 +4020,28 @@ public class IrisRenderingPipeline {
         // unit 8+ throws ArrayIndexOutOfBounds); units 0..7 go through GlStateManager to keep its cache coherent.
         for (int i = IrisRenderTargets.MAX_COLOR_BUFFERS - 1; i >= 8; i--) {
             LWJGL.glBindSampler(i, 0);
-            LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + i);
+            GlTextureUnits.selectScratch(i);
             LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
         }
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        // Force GlStateManager's activeTextureUnit cache to agree with real GL before touching units 0..7.
+        //
+        // A bare LWJGL.glActiveTexture(GL_TEXTURE0) here is NOT enough: it moves real GL without telling
+        // GlStateManager, and GlStateManager.setActiveTexture is itself cached, so the loop below can no-op its
+        // first iteration and then drive real GL and the cache out of step for every remaining unit. Stepping
+        // through a different unit first guarantees the second call actually issues, so both end at unit 0 no
+        // matter what the cache held on entry.
+        //
+        // This is not hypothetical bookkeeping — it is what turned the screen white until a shader reload.
+        // Vanilla's screenshot path (ScreenShotHelper.createScreenshot) calls the CACHED
+        // GlStateManager.bindTexture(framebuffer.framebufferTexture) and then glGetTexImage. With the cache
+        // desynced, that bind lands on the real (wrong) unit while the cache records framebufferTexture against
+        // a unit that does not have it — so glGetTexImage reads the wrong texture (white PNG), and from then on
+        // Framebuffer.bindFramebufferTexture()'s identical cached bind no-ops forever, leaving the fullscreen
+        // blit sampling whatever is genuinely on that unit (shadowcolor0 clears to white). Hence: white screen,
+        // every frame, until a reload rebinds and resyncs. See also MIPMAP_SCRATCH_UNIT and the standing rule
+        // that raw texture binds must stay off units 0..7.
+        GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + 1);
+        GlStateManager.setActiveTexture(GL13.GL_TEXTURE0);
         for (int i = 7; i >= 0; i--) {
             LWJGL.glBindSampler(i, 0);
             GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + i);

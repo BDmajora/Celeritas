@@ -56,8 +56,21 @@ public final class IrisTerrainProgramOverride {
         if (pack == null) {
             return null;
         }
-        // The translucent chunk pass (the reverse-ordered one) uses gbuffers_water; everything else gbuffers_terrain.
-        ProgramId programId = options.pass().isReverseOrder() ? ProgramId.Water : ProgramId.Terrain;
+        // One program per chunk pass, the way OptiFine (programs 12/9/8) and Iris (TERRAIN_TRANSLUCENT/TERRAIN_CUTOUT/
+        // TERRAIN_SOLID) both split them. The translucent (reverse-ordered) pass is gbuffers_water; the solid pass is
+        // the one that needs no fragment discard, which is precisely the distinction gbuffers_terrain_solid exists to
+        // let a pack compile away. All three fall back to gbuffers_terrain for packs that ship only that, and
+        // TerrainCutoutMip additionally falls back to TerrainCutout, so both pack conventions resolve. (Impetus draws
+        // cutout and cutout-mipped as one pass by default; with pass consolidation off the separate cutout pass also
+        // lands on TerrainCutoutMip, which only differs for a pack shipping both cutout programs with distinct code.)
+        ProgramId programId;
+        if (options.pass().isReverseOrder()) {
+            programId = ProgramId.Water;
+        } else if (options.pass().supportsFragmentDiscard()) {
+            programId = ProgramId.TerrainCutoutMip;
+        } else {
+            programId = ProgramId.TerrainSolid;
+        }
         return build(pack, options, programId);
     }
 

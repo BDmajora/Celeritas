@@ -19,6 +19,10 @@ import java.io.File;
  * <p>
  * The screenshot runs after the frame is complete, so this only flags the request; the next shadow pass performs the
  * readback, while it still owns the shadow framebuffer.
+ * <p>
+ * {@link ShadowMapDump#request()} is a no-op unless {@code -Dimpetus.iris.shadowDump=true}. It shares a key with
+ * vanilla screenshots, so left on it makes every F2 allocate hundreds of megabytes and disturb the shadow pass's GL
+ * state; see that method for the full cost breakdown.
  */
 @Mixin(ScreenShotHelper.class)
 public class ScreenshotShadowDumpMixin {

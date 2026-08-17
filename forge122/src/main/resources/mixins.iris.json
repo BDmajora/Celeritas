@@ -6,7 +6,8 @@
   "client": [
     "compat.GlStateManagerBlendGuardMixin",
     "compat.IrisRenderingPipelineBlendGuardMixin",
-    "compat.ProgramBlendStateBlendGuardMixin"
+    "compat.ProgramBlendStateBlendGuardMixin",
+    "debug.ScreenshotProbeMixin"
   ],
   "injectors": {
     "defaultRequire": 1

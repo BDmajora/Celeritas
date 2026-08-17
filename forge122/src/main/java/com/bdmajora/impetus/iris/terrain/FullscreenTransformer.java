@@ -166,8 +166,15 @@ public final class FullscreenTransformer {
         return source.replaceAll("\\bvoid\\s+main\\s*\\(\\s*(void)?\\s*\\)", "void irisMain()");
     }
 
+    /**
+     * {@code varying} → {@code out}/{@code in}, keeping any qualifier in front of it ({@code flat}, {@code centroid},
+     * {@code invariant}, ...). Anchoring at {@code ^\s*varying} would skip {@code flat varying}, which is then a hard
+     * error at 330 core (C7560/C7561) — see {@code ImpetusTerrainTransformer.convertVaryings} for the full story.
+     */
     private static String convertVaryings(String source, String direction) {
-        return source.replaceAll("(?m)^(\\s*)varying\\b", "$1" + direction);
+        return source.replaceAll(
+                "(?m)^(\\s*)((?:(?:invariant|flat|smooth|noperspective|centroid)\\s+)*)varying\\b",
+                "$1$2" + direction);
     }
 
     private static String dropAttribute(String source) {

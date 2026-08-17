@@ -208,7 +208,10 @@ public class EntityRendererMixin {
             @At(value = "INVOKE_STRING", target = PROFILER_END_START, args = "ldc=litParticles"),
             @At(value = "INVOKE_STRING", target = PROFILER_END_START, args = "ldc=particles")})
     private void impetus$phaseParticles(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
-        impetus$setPhase(ProgramId.TexturedLit, 19); // MC_RENDER_STAGE_PARTICLES
+        // Iris resolves particles as gbuffers_particles -> gbuffers_textured_lit, so packs that ship the modern
+        // program get it and everything else lands where it always did. (OptiFine differs: it uses plain
+        // gbuffers_textured for the unlit particle pass and only gbuffers_textured_lit for "litParticles".)
+        impetus$setPhase(ProgramId.Particles);
     }
 
     /**
@@ -291,7 +294,7 @@ public class EntityRendererMixin {
             if ("before".equals(pipeline.getParticleOrdering())) {
                 net.minecraft.entity.Entity viewEntity = this.mc.getRenderViewEntity();
                 if (viewEntity != null) {
-                    impetus$setPhase(ProgramId.TexturedLit, 19); // MC_RENDER_STAGE_PARTICLES
+                    impetus$setPhase(ProgramId.Particles);
                     this.mc.effectRenderer.renderParticles(viewEntity, partialTicks);
                     this.impetus$particlesDrawnEarly = true;
                 }

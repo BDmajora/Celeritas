@@ -1,5 +1,6 @@
 package com.bdmajora.impetus.iris.pipeline;
 
+import com.bdmajora.impetus.iris.gl.GlTextureUnits;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher;
@@ -96,6 +97,12 @@ public class IrisShadowRenderer {
     private final boolean separateHardwareSamplers;
     /** Both shadowcolor attachments, for the frame-start clear. */
     private static final int[] CLEAR_MASK = {0, 1};
+    /**
+     * Texture unit for one-off raw work (creating/configuring the shadow textures, mipmap generation, depth copies).
+     * Chosen above {@link GlTextureUnits#CACHED_UNITS} and clear of every unit the pipeline assigns, so this work can
+     * never rewrite a slot GlStateManager is tracking. Always pair with {@link GlTextureUnits#releaseScratch()}.
+     */
+    private static final int TEXTURE_SETUP_UNIT = 31;
     /** The pack's shadow DRAWBUFFERS mask (only shadowcolor0/1 exist), applied for the geometry draws. */
     private final int[] shadowDrawBuffers;
     private final Runnable shaderPackResourceRestorer;
@@ -195,17 +202,27 @@ public class IrisShadowRenderer {
                                                          boolean separateHardwareSamplers) {
         DepthTexture texture = new DepthTexture(resolution, resolution,
                 GL14.GL_DEPTH_COMPONENT24, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT);
-        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture.getTextureId());
-        if (hardwareFiltering && !separateHardwareSamplers) {
-            LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL14.GL_TEXTURE_COMPARE_MODE, GL30.GL_COMPARE_REF_TO_TEXTURE);
+        // Configure on a scratch unit. Binding raw on the selected unit (unit 0 at startup, holding whatever vanilla
+        // last bound) would change the real binding without updating GlStateManager's record for that slot; the
+        // trailing unbind then leaves the cache asserting a texture that is no longer there, and every later cached
+        // bind of it no-ops. See GlTextureUnits.
+        GlTextureUnits.selectScratch(TEXTURE_SETUP_UNIT);
+        try {
+            LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture.getTextureId());
+            if (hardwareFiltering && !separateHardwareSamplers) {
+                LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL14.GL_TEXTURE_COMPARE_MODE, GL30.GL_COMPARE_REF_TO_TEXTURE);
+            }
+            LWJGL.glTexParameteriv(GL11.GL_TEXTURE_2D, GL33.GL_TEXTURE_SWIZZLE_RGBA,
+                    new int[]{GL11.GL_RED, GL11.GL_RED, GL11.GL_RED, GL11.GL_ONE});
+            LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
+            LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
+            LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, shadowMinFilter(mipmap, nearest));
+            LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER,
+                    nearest ? GL11.GL_NEAREST : GL11.GL_LINEAR);
+            LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+        } finally {
+            GlTextureUnits.releaseScratch();
         }
-        LWJGL.glTexParameteriv(GL11.GL_TEXTURE_2D, GL33.GL_TEXTURE_SWIZZLE_RGBA,
-                new int[]{GL11.GL_RED, GL11.GL_RED, GL11.GL_RED, GL11.GL_ONE});
-        LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
-        LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
-        LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, shadowMinFilter(mipmap, nearest));
-        LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, nearest ? GL11.GL_NEAREST : GL11.GL_LINEAR);
-        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
         return texture;
     }
 
@@ -221,12 +238,18 @@ public class IrisShadowRenderer {
 
     private static int createShadowColorTexture(int resolution) {
         int texture = LWJGL.glGenTextures();
-        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture);
-        LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
-        LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
-        LWJGL.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, resolution, resolution, 0,
-                GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, (ByteBuffer) null);
-        LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+        // Scratch unit, for the same reason as createShadowDepthTexture.
+        GlTextureUnits.selectScratch(TEXTURE_SETUP_UNIT);
+        try {
+            LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+            LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
+            LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+            LWJGL.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, resolution, resolution, 0,
+                    GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, (ByteBuffer) null);
+            LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+        } finally {
+            GlTextureUnits.releaseScratch();
+        }
         return texture;
     }
 
@@ -294,6 +317,19 @@ public class IrisShadowRenderer {
             GlStateManager.clearColor(1.0f, 1.0f, 1.0f, 1.0f);
             LWJGL.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
             this.framebuffer.drawBuffers(this.shadowDrawBuffers);
+            // Put the clear colour back immediately — leaking white out of this method is what caused the white
+            // screen flash. The clear colour is GLOBAL and GlStateManager caches it, and vanilla only ever sets it
+            // once per frame, at EntityRenderer.renderWorldPass "clear" (updateFogColor + clear(16640), line ~1326).
+            // That runs BEFORE the "frustum" section this shadow pass hooks, so nothing restores it afterwards and
+            // white survives to the top of the NEXT frame — where Minecraft.runGameLoop does
+            // `GlStateManager.clear(16640)` against the DEFAULT framebuffer (the real screen) before binding
+            // framebufferMc. So every frame cleared the window to white; it is normally hidden because
+            // framebufferRender blits the world over it, and becomes visible as a flash whenever that blit is
+            // delayed or skipped — e.g. while a screenshot stalls the game loop encoding the PNG.
+            // The mixin sets this fog colour immediately before calling us, so it is exactly the value vanilla
+            // had in the clear-colour slot a moment ago; alpha 0 matches vanilla's own clearColor(r, g, b, 0.0F).
+            org.joml.Vector3f fog = CapturedRenderingState.INSTANCE.getFogColor();
+            GlStateManager.clearColor(fog.x, fog.y, fog.z, 0.0f);
 
             GlStateManager.disableBlend();
             // The shadow program alpha-tests foliage against the block atlas; make sure it is what unit 0 holds
@@ -399,7 +435,7 @@ public class IrisShadowRenderer {
     private void generateMipmaps() {
         generateDepthMipmap(this.depthTexture, this.mipmapDepth[0], this.nearestDepth[0]);
         generateDepthMipmap(this.depthTextureNoTranslucents, this.mipmapDepth[1], this.nearestDepth[1]);
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        GlTextureUnits.resetToUnit0();
         this.shaderPackResourceRestorer.run();
     }
 
@@ -407,7 +443,7 @@ public class IrisShadowRenderer {
         if (!mipmap) {
             return;
         }
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + 31);
+        GlTextureUnits.selectScratch(TEXTURE_SETUP_UNIT);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture.getTextureId());
         LWJGL.glGenerateMipmap(GL11.GL_TEXTURE_2D);
         LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, shadowMinFilter(true, nearest));
@@ -803,11 +839,11 @@ public class IrisShadowRenderer {
     /** Copies the shadow framebuffer's depth into {@code destination} (bound as this pass's FBO at call time). */
 
     private void copyDepthTo(DepthTexture destination) {
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0 + 31);
+        GlTextureUnits.selectScratch(TEXTURE_SETUP_UNIT);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, destination.getTextureId());
         LWJGL.glCopyTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 0, 0, this.resolution, this.resolution);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
-        LWJGL.glActiveTexture(GL13.GL_TEXTURE0);
+        GlTextureUnits.resetToUnit0();
         // Unit 31 can belong to a custom texture or custom-image sampler on 32-unit drivers. Iris rebinds these
         // resources per program use; restore them before translucent shadow terrain/voxelization continues.
         this.shaderPackResourceRestorer.run();

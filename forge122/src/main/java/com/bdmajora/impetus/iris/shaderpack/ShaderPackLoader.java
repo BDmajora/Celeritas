@@ -34,22 +34,31 @@ import java.util.zip.ZipInputStream;
  */
 public final class ShaderPackLoader {
     /**
-     * File extensions read as GLSL/text. Includes may use any of these.
-     * <p>
-     * Built with {@code Arrays.asList} rather than {@code Set.of}: forge122 compiles with {@code --release 8}, so
-     * Java 9+ library APIs like {@code Set.of} are unavailable even though Jabel allows modern syntax.
-     */
-    private static final Set<String> TEXT_EXTENSIONS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-            "vsh", "fsh", "gsh", "tcs", "tes", "csh", "glsl", "inc", "settings", "properties", "txt", "lang")));
-
-    /**
      * File extensions read as raw bytes for the custom-texture directives ({@code texture.<stage>.<sampler>},
      * {@code texture.noise}, {@code customTexture.<name>}) and their {@code .mcmeta} filtering sidecars.
      * Photon and several newer packs ship 3D lookup textures as {@code .dat}; treating only PNGs as binary makes
      * those directives fail even though the assets are present in the pack.
+     * <p>
+     * Built with {@code Arrays.asList} rather than {@code Set.of}: forge122 compiles with {@code --release 8}, so
+     * Java 9+ library APIs like {@code Set.of} are unavailable even though Jabel allows modern syntax.
      */
     private static final Set<String> BINARY_EXTENSIONS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "png", "mcmeta", "dat", "bin", "raw")));
+
+    /**
+     * Text files that are pack metadata for <em>other</em> mods rather than GLSL, and so must stay out of the source
+     * map entirely.
+     * <p>
+     * This exists only because the source map does double duty here. {@link
+     * com.bdmajora.impetus.iris.shaderpack.option.ShaderPackOptions} scans <em>every</em> entry for
+     * {@code #define}/{@code const} options, whereas Iris only ever scans files reachable through its
+     * {@code IncludeGraph}. Voxy's per-dimension {@code voxy.json} (shipped by "I Like Vanilla" and Mellow) opens with
+     * lines like {@code #define OVERWORLD} / {@code #define DIMENSION_NETHER}; those names are {@code #ifdef}-tested
+     * throughout the pack, so scanning the JSON would register the pack's dimension macros as user-toggleable boolean
+     * options. Nothing {@code #include}s these files, so dropping them costs nothing.
+     */
+    private static final Set<String> NON_GLSL_TEXT_EXTENSIONS =
+            Collections.unmodifiableSet(new HashSet<>(Arrays.asList("json", "md")));
 
     /** Guard against accidentally slurping a huge file as a string. */
     private static final long MAX_TEXT_FILE_BYTES = 8L * 1024 * 1024;
@@ -79,11 +88,12 @@ public final class ShaderPackLoader {
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                 String relative = "/" + shadersDir.relativize(file).toString().replace('\\', '/');
-                if (isTextPath(relative) && attrs.size() <= MAX_TEXT_FILE_BYTES) {
+                // Binary first: isTextPath is now "not binary", so testing it first would starve this branch.
+                if (isBinaryPath(relative) && attrs.size() <= MAX_BINARY_FILE_BYTES) {
+                    binaries.put(AbsolutePackPath.fromAbsolutePath(relative), Files.readAllBytes(file));
+                } else if (isTextPath(relative) && attrs.size() <= MAX_TEXT_FILE_BYTES) {
                     sources.put(AbsolutePackPath.fromAbsolutePath(relative),
                             new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
-                } else if (isBinaryPath(relative) && attrs.size() <= MAX_BINARY_FILE_BYTES) {
-                    binaries.put(AbsolutePackPath.fromAbsolutePath(relative), Files.readAllBytes(file));
                 }
                 return FileVisitResult.CONTINUE;
             }
@@ -118,15 +128,16 @@ public final class ShaderPackLoader {
                 if (relative.equals("/")) {
                     continue;
                 }
-                if (isTextPath(relative)) {
-                    String contents = readEntry(zip);
-                    if (contents != null) {
-                        sources.put(AbsolutePackPath.fromAbsolutePath(relative), contents);
-                    }
-                } else if (isBinaryPath(relative)) {
+                // Binary first: isTextPath is now "not binary", so testing it first would starve this branch.
+                if (isBinaryPath(relative)) {
                     byte[] contents = readBinaryEntry(zip);
                     if (contents != null) {
                         binaries.put(AbsolutePackPath.fromAbsolutePath(relative), contents);
+                    }
+                } else if (isTextPath(relative)) {
+                    String contents = readEntry(zip);
+                    if (contents != null) {
+                        sources.put(AbsolutePackPath.fromAbsolutePath(relative), contents);
                     }
                 }
                 zip.closeEntry();
@@ -139,12 +150,26 @@ public final class ShaderPackLoader {
         return new ShaderPack(sources, changedConfigs, binaries);
     }
 
+    /**
+     * Everything that is not a recognized binary asset is read as text.
+     * <p>
+     * This must NOT be a whitelist of known GLSL extensions. Iris never pre-scans the pack at all: its
+     * {@code IncludeGraph} walks out from the program stages and reads whatever path an {@code #include} names
+     * straight off disk, so the extension is irrelevant. OptiFine's {@code ShaderPackParser.resolveIncludes} does the
+     * same and hard-errors when the file is missing. Because this port pre-scans into a source map instead (options
+     * are applied per-file before includes are flattened), a whitelist here silently drops include files and the
+     * {@code #include} then resolves to nothing — every constant it defined becomes an "undefined variable" compile
+     * error and the whole pack falls back to vanilla rendering. That is exactly what happened to miniature-shader's
+     * {@code /shader.h} and RedHat's 22 {@code lib/defines/*.h} files.
+     *
+     * @see #NON_GLSL_TEXT_EXTENSIONS for the one narrow carve-out.
+     */
     private static boolean isTextPath(String relative) {
         int dot = relative.lastIndexOf('.');
-        if (dot < 0) {
+        if (dot >= 0 && NON_GLSL_TEXT_EXTENSIONS.contains(relative.substring(dot + 1).toLowerCase(Locale.ROOT))) {
             return false;
         }
-        return TEXT_EXTENSIONS.contains(relative.substring(dot + 1).toLowerCase(Locale.ROOT));
+        return !isBinaryPath(relative);
     }
 
     private static boolean isBinaryPath(String relative) {
