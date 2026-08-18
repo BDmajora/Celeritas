@@ -209,10 +209,11 @@ public final class GlslPreprocessor {
             boolean[] frame = "elif".equals(conditional.group(2)) ? stack.poll() : null;
             boolean alreadyTaken = frame != null && frame[1];
             Boolean value = PropertiesPreprocessor.tryEvaluateBooleanExpression(expression, defines).orElse(null);
-            boolean taken = !alreadyTaken && allActive(stack) && (value == null || value);
+            boolean malformed = value == null && !isContinued(expression) && isSyntacticallyInvalid(expression);
+            boolean taken = !alreadyTaken && allActive(stack) && !malformed && (value == null || value);
             stack.push(new boolean[]{taken, alreadyTaken || taken});
-            if (value != null && expandsToFloat(expression, defines, 0)) {
-                return conditional.group(1) + conditional.group(2) + " " + (value ? "1" : "0");
+            if (malformed || (value != null && expandsToFloat(expression, defines, 0))) {
+                return conditional.group(1) + conditional.group(2) + " " + (!malformed && value ? "1" : "0");
             }
             return line;
         }
@@ -250,6 +251,51 @@ public final class GlslPreprocessor {
             defines.remove(directive.substring("undef ".length()).trim());
         }
         return line;
+    }
+
+    /**
+     * Whether {@code expression} is something no preprocessor could accept, so folding it to {@code 0} is strictly
+     * better than forwarding it to the driver.
+     * <p>
+     * This is deliberately narrow. "Our evaluator could not parse it" is <em>not</em> grounds to drop a branch — the
+     * driver's preprocessor is the more capable one, and killing a live branch on a parser shortfall would be a far
+     * worse failure than the one being fixed. Unbalanced parentheses are the one signal that needs no judgement: no
+     * valid {@code #if} expression has them, so the driver is guaranteed to reject the directive as well, and
+     * rejecting it costs the entire program rather than one branch.
+     * <p>
+     * Real case: Pastel v1.200 ships {@code #if (in(biome, BIOME_SOUL_SAND_VALLEY)} in
+     * {@code lib/atmospherics/fog.glsl} — shaders.properties custom-uniform syntax pasted into GLSL, missing a
+     * paren, and sitting in the {@code #else} of an {@code #ifdef NETHER}, so the overworld build reaches it. NVIDIA
+     * answers {@code C0105: Syntax error in #if} and Pastel's whole {@code deferred1} pass — its lighting and fog —
+     * is dropped. The branch cannot have been intended to compile, so taking it as false is what the pack means.
+     */
+    /**
+     * Whether this directive is only the first line of a backslash-continued one, so the rest of its expression — and
+     * very likely the parentheses that balance it — is on the following lines.
+     * <p>
+     * This guard is what keeps {@link #isSyntacticallyInvalid} honest, and it is not theoretical: Photon has three of
+     * these ({@code gbuffers_all_solid.fsh:308}, {@code gbuffers_all_translucent.vsh:109},
+     * {@code include/vertex/utility.glsl:21}, e.g. {@code #elif ( \}). Judged one line at a time every one of them
+     * looks unbalanced, and folding them to {@code 0} would silently delete live branches from Photon's main gbuffer
+     * programs. A sweep of all 22 installed packs finds exactly these three continuations and one genuinely broken
+     * directive (Pastel's), which is the split this pair of checks has to reproduce.
+     */
+    private static boolean isContinued(String expression) {
+        String trimmed = expression.trim();
+        return trimmed.endsWith("\\");
+    }
+
+    private static boolean isSyntacticallyInvalid(String expression) {
+        int depth = 0;
+        for (int i = 0; i < expression.length(); i++) {
+            char c = expression.charAt(i);
+            if (c == '(') {
+                depth++;
+            } else if (c == ')' && --depth < 0) {
+                return true;
+            }
+        }
+        return depth != 0;
     }
 
     private static boolean allActive(java.util.Deque<boolean[]> stack) {

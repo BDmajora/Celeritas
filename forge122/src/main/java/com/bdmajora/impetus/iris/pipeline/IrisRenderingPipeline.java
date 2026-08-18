@@ -1900,8 +1900,26 @@ public class IrisRenderingPipeline {
                                 com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(fshRaw, macros))),
                         drawBuffers);
             } else {
-                vsh = FullscreenTransformer.transformVertexShader(vshRaw);
-                fsh = FullscreenTransformer.transformFragmentShader(fshRaw, drawBuffers);
+                // The macro environment has to be injected here too, not just on the modern branch. Without it a
+                // legacy pack's whole post chain compiles with MC_VERSION, IRIS_VERSION, MC_RENDER_QUALITY,
+                // MC_RENDER_STAGE_*, MC_OLD_LIGHTING and the IRIS_FEATURE_* flags all absent — while its gbuffer
+                // programs, which go through ShaderProgramCompiler, get every one of them. The two halves of the
+                // same pack then disagree about what version of Minecraft they are running on.
+                //
+                // It fails both ways round. Silently: an undefined name is 0 in a preprocessor expression, so
+                // `#if MC_VERSION < 10800` is TRUE and every legacy pack took its pre-1.8 path through composite.
+                // Loudly: a macro used as a value rather than a gate is a hard compile error, which is what killed
+                // Pastel's final pass — `float mult = MC_RENDER_QUALITY * 0.0625;` in program/final.glsl, reported
+                // as `final.fsh: 0(453): error C1503: undefined variable "MC_RENDER_QUALITY"`, dropping the pass to
+                // a bare colortex0 blit.
+                //
+                // Injecting before the transform (as the modern branch does) is what makes this land correctly:
+                // FullscreenTransformer.strip() drops the pack's own `#version` line, so the defines come out at the
+                // top of the body and end up immediately after the generated `#version 330 core`.
+                vsh = FullscreenTransformer.transformVertexShader(foldUncompilableConditionals(source.getName(),
+                        com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(vshRaw, macros)));
+                fsh = FullscreenTransformer.transformFragmentShader(foldUncompilableConditionals(source.getName(),
+                        com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(fshRaw, macros)), drawBuffers);
             }
             IrisDebugDump.dumpText("src_" + source.getName() + ".vsh", vsh);
             IrisDebugDump.dumpText("src_" + source.getName() + ".fsh", fsh);
@@ -2353,10 +2371,49 @@ public class IrisRenderingPipeline {
         setPhase(this.phaseBeforeEyes, this.phaseBeforeEyesStage);
     }
 
+    /**
+     * Routes the enchantment glint through {@code gbuffers_armor_glint}, matching OptiFine's
+     * {@code ShadersRender.renderEnchantedGlintBegin} ({@code Shaders.useProgram(17)}).
+     * <p>
+     * Without this the glint inherits whichever program is current — {@code gbuffers_entities} for armour, the hand
+     * program for a held item — so a pack that ships {@code gbuffers_armor_glint} to give the glint its own additive
+     * treatment never gets it, and the glint is shaded as if it were the entity's own surface.
+     * <p>
+     * Two gates, both of which fall out of the existing state rather than needing the OptiFine-only
+     * {@code renderItemGui} flag: {@code worldRenderingActive} is false while the GUI draws inventory items, and the
+     * shadow pass maps every entity draw to the shadow program (OptiFine likewise skips the glint entirely there).
+     */
+    public void beginArmorGlint() {
+        if (!this.worldRenderingActive || IrisShadowRenderer.isShadowPass()) {
+            return;
+        }
+        this.phaseBeforeArmorGlint = this.currentPhase;
+        this.phaseBeforeArmorGlintStage = CapturedRenderingState.INSTANCE.getRenderStage();
+        this.armorGlintActive = true;
+        setPhase(ProgramId.ArmorGlint);
+    }
+
+    /**
+     * Restores whatever was bound before the glint, the same way {@link #endEyes()} does: the glint runs inside both
+     * the entity batch and the first-person hand batch, so assuming {@code gbuffers_entities} would strand the hand.
+     * OptiFine's {@code renderEnchantedGlintEnd} makes the same distinction explicitly.
+     */
+    public void endArmorGlint() {
+        if (!this.armorGlintActive) {
+            return;
+        }
+        this.armorGlintActive = false;
+        setPhase(this.phaseBeforeArmorGlint, this.phaseBeforeArmorGlintStage);
+    }
+
     /** The phase {@link #setPhase(ProgramId, int)} last selected, so {@link #endEyes()} can put it back. */
     private ProgramId currentPhase;
     private ProgramId phaseBeforeEyes;
     private int phaseBeforeEyesStage;
+    private ProgramId phaseBeforeArmorGlint;
+    private int phaseBeforeArmorGlintStage;
+    /** Guards {@link #endArmorGlint()} so a begin that bailed out (GUI, shadow pass) cannot restore a stale phase. */
+    private boolean armorGlintActive;
 
     /**
      * Port of OptiFine's {@code Shaders.drawHorizon} ({@code preSkyList}): draws an octagonal ring at the
@@ -3264,14 +3321,25 @@ public class IrisRenderingPipeline {
         return result;
     }
 
-    public static String stabilizeShaderSource(String name, String source) {
-        // The macro environment is already inlined as #define lines by every caller, so the fold is self-contained.
+    /**
+     * Resolves the {@code #if} directives the driver's preprocessor cannot legally accept — float comparisons, and
+     * expressions that are outright malformed — leaving everything else for the driver.
+     * <p>
+     * Split out of {@link #stabilizeShaderSource} because the legacy fullscreen path needs exactly this and none of
+     * the rest: it hands {@code FullscreenTransformer} a {@code #version 120} source, where
+     * {@code normalizeArbTextureLookups} is a no-op by construction. Both callers must inline the macro environment
+     * as {@code #define} lines first, which is what makes the fold self-contained.
+     */
+    private static String foldUncompilableConditionals(String name, String source) {
         String folded = GlslPreprocessor.foldFloatConditionals(source, java.util.Collections.emptyMap());
         if (!folded.equals(source)) {
-            LOGGER.info("[Iris] Program '{}': folded floating-point #if conditional(s) the GLSL preprocessor cannot parse",
-                    name);
-            source = folded;
+            LOGGER.info("[Iris] Program '{}': folded #if conditional(s) the GLSL preprocessor cannot parse", name);
         }
+        return folded;
+    }
+
+    public static String stabilizeShaderSource(String name, String source) {
+        source = foldUncompilableConditionals(name, source);
         source = normalizeArbTextureLookups(name, source);
         source = com.bdmajora.impetus.iris.terrain.GlslIntegerOverloadPolyfill.widenIntegerBuiltinCalls(name, source);
         Matcher declaration = UNINITIALIZED_LIGHT_VOLUME.matcher(source);

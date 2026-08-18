@@ -76,7 +76,33 @@ public final class VanillaNameTransformer {
      */
     private static final Pattern TYPED_PLACEHOLDER = Pattern.compile("@\\(");
 
+    /** The GLSL type keywords a variable declaration can start with. Used by {@link #declaresLocally}. */
+    private static final String GLSL_TYPE =
+            "(?:bool|int|uint|float|double|[bidu]?vec[234]|d?mat[234](?:x[234])?"
+                    + "|[iu]?sampler[123]D(?:Array|Rect)?(?:Shadow)?|[iu]?samplerCube(?:Shadow)?)";
+
     private VanillaNameTransformer() {
+    }
+
+    /**
+     * {@return whether {@code source} declares {@code name} as its own function parameter or local}
+     * <p>
+     * The uniform/attribute declarations are stripped before this is consulted, so a modern name still declared with a
+     * type is the pack's own variable. Rewriting it is wrong twice over: it renames something the pack owns, and —
+     * because every replacement in {@link #REPLACEMENTS} is a {@code gl_} built-in — it puts a user declaration in the
+     * reserved {@code gl_} namespace, which the spec forbids and drivers reject (C7528). That is the same hazard the
+     * declarator handling in {@link #DECLARATION} exists to avoid, reached by a different route: Body Camera's
+     * {@code composite.fsh} writes {@code vec3 projectAndDivide(mat4 projectionMatrix, vec3 position)}, which this
+     * pass turned into a {@code mat4 gl_ProjectionMatrix} parameter. NVIDIA happens to tolerate it, so the pass
+     * survived undetected; a stricter driver drops the whole composite.
+     * <p>
+     * The lookahead is what distinguishes a declaration from a use: a declarator is always followed by {@code ,} or
+     * {@code )} (parameter), or {@code =}, {@code ;} or {@code [} (local).
+     */
+    private static boolean declaresLocally(String source, String name) {
+        return Pattern.compile("(?<![A-Za-z0-9_])" + GLSL_TYPE + "\\s+" + Pattern.quote(name) + "\\s*(?=[,)=;\\[])")
+                .matcher(source)
+                .find();
     }
 
     /** @return true if the source mentions any modern name at all (cheap gate before the rewrite). */
@@ -129,6 +155,14 @@ public final class VanillaNameTransformer {
         String result = stripped.toString();
 
         for (Map.Entry<String, String> entry : REPLACEMENTS.entrySet()) {
+            // A name the pack declares as its own parameter or local is left entirely alone (see declaresLocally).
+            // Names that arrived as a uniform/attribute are exempt from that check: their declaration was just
+            // stripped, so their references have to be rewritten or they dangle. A pack that does both — declares the
+            // modern uniform *and* reuses the name for a local — would still get the local rewritten; no pack in the
+            // set does, and resolving it properly needs scope tracking rather than a regex.
+            if (!declaredTypes.containsKey(entry.getKey()) && declaresLocally(result, entry.getKey())) {
+                continue;
+            }
             // \b alone would also rewrite a longer identifier that merely ends with the name (e.g. a pack's own
             // `myProjectionMatrix`), so require a non-identifier character (or start/end of input) on both sides.
             String replacement = entry.getValue();

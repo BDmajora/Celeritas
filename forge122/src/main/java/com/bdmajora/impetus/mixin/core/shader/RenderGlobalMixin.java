@@ -151,19 +151,43 @@ public class RenderGlobalMixin {
      * Binds {@code gbuffers_line} (falling back to {@code gbuffers_basic}) for the block selection box, matching
      * Iris, which routes vanilla's line render type through that program.
      * <p>
-     * Vanilla draws the outline in the {@code "outline"} profiler section, which sits between {@code destroyProgress}
-     * and {@code particles} — so without this the phase set by {@code impetus$phaseBlockDamage} is still active and
-     * the outline is drawn through {@code gbuffers_damagedblock}. That is not merely the wrong shading: on the
-     * OptiFine code path a pack points damagedblock at the block-damage overlay buffer (Photon:
-     * {@code RENDERTARGETS: 3}), and its deferred pass then folds that buffer into the scene *additively* —
-     * {@code albedo = overlay_id == 0u ? albedo + overlays.rgb : albedo}. The outline therefore stopped being a line
-     * and became a red stain added onto whatever it crossed, which is why it read as "red borders on plants".
+     * Vanilla draws the outline in the {@code "outline"} profiler section, which runs straight after
+     * {@code "entities"} and <em>before</em> {@code "destroyProgress"} ({@code EntityRenderer.renderWorldPass}: the
+     * outline block, then the debug renderer, then the {@code damagedBlocks} block). So without this anchor the
+     * outline inherits whatever {@code impetus$phaseEntities} left bound and is drawn through
+     * {@code gbuffers_entities} — a program that shades it as if it were an entity surface and writes it into the
+     * entity program's DRAWBUFFERS, normals and material targets included.
+     * <p>
+     * OptiFine reaches the same place from the other side: its hook inside {@code drawSelectionBox} is
+     * {@code Shaders.disableTexture2D()}, which is {@code useProgram(ProgramBasic)} whenever a textured program is
+     * current.
      */
     @Inject(method = "drawSelectionBox", at = @At("HEAD"), require = 0)
     private void impetus$beginBlockOutline(net.minecraft.entity.player.EntityPlayer player,
                                            net.minecraft.util.math.RayTraceResult target, int execute,
                                            float partialTicks, CallbackInfo ci) {
         impetus$setPhase(ProgramId.Line);
+        // Publish vanilla's outline colour as the *current* fixed-function colour as well as per vertex.
+        //
+        // Why this is needed at all: the outline is submitted as POSITION_COLOR, so gl_Color is supposed to arrive
+        // from the conventional colour array. A pack's gbuffers_basic is then a pure function of it — Pastel's whole
+        // fragment stage is `albedo = color` followed by multiplicative lighting (`albedo *= sceneLighting + ...`),
+        // with no additive term a zero albedo can escape. Black in must be black out. The outline nevertheless comes
+        // out lit and orange, so gl_Color is not the (0, 0, 0, 0.4) vanilla wrote.
+        //
+        // The mechanism is the conventional/generic attribute aliasing this port already has scars from (see
+        // IrisRenderingPipeline.resetVanillaVertexArrayState and the first-person arm): gl_Color aliases generic
+        // attribute 3, and when the array behind it does not reach the program the attribute falls back to its
+        // CURRENT value — whatever the last GlStateManager.color() left there, typically opaque white. Pastel then
+        // shades a white surface with the sunset lighting, which is exactly the colour observed.
+        //
+        // Setting the current colour costs nothing when the array does work (the array wins), and pins the fallback
+        // to the right value when it does not. It is not a substitute for the per-vertex data — vanilla hides the
+        // line strip's doubling-back connectors by giving three of its sixteen vertices alpha 0, and a constant
+        // colour cannot reproduce that — so if those three connector edges become visible after this, the array is
+        // confirmed dead and the aliasing is the thing to fix. Vanilla's own postDraw calls resetColor(), so there
+        // is nothing to restore here.
+        net.minecraft.client.renderer.GlStateManager.color(0.0F, 0.0F, 0.0F, 0.4F);
     }
 
     @Inject(method = "drawSelectionBox", at = @At("RETURN"), require = 0)
@@ -173,26 +197,25 @@ public class RenderGlobalMixin {
         impetus$setPhase(null);
     }
 
-    /**
-     * Keeps GL blending off for the outline once a pack program is consuming it — the same rule as
-     * {@code RenderPlayerArmBlendMixin}. Vanilla asks for {@code SRC_ALPHA, ONE_MINUS_SRC_ALPHA} to draw the box at
-     * 40% black, but {@code gbuffers_basic} does not emit a colour on the OptiFine path: it emits packed gbuffer data
-     * whose alpha is {@code pack_unorm_2x8(adjusted_light_levels)}. Blending against that mixes the outline's packed
-     * data with the terrain's by a factor that means nothing, and packed pairs do not survive a linear mix. The line
-     * comes out fully opaque instead of 40%, which is the same trade Iris makes by drawing lines through a program at
-     * all. Left alone when the pack has no {@code gbuffers_line}/{@code gbuffers_basic}, since the fixed-function path
-     * still wants vanilla's blending.
+    /*
+     * There is deliberately no blend override here. Vanilla's own `enableBlend()` +
+     * `tryBlendFuncSeparate(SRC_ALPHA, ONE_MINUS_SRC_ALPHA, ONE, ZERO)` must survive the phase switch, because
+     * `RenderGlobal.drawBoundingBox` encodes the box as a single GL_LINE_STRIP and uses *alpha* to hide the strip's
+     * connector segments: three of its sixteen vertices carry `alpha = 0.0F` where the strip has to double back, so
+     * the retraced segments fade out instead of being drawn. Suppressing the blend turns those into full-strength
+     * lines and, worse, makes the whole outline opaque — which means it stops being a 40% darkening of colortex0 and
+     * starts *replacing* the gbuffer. A pack whose `gbuffers_basic` writes DRAWBUFFERS 0/3/6/7 (Pastel's does, under
+     * ADVANCED_MATERIALS) then stamps `vec3(0.0)` into the normal target along every edge, and the deferred pass
+     * normalizes a zero normal, so the outline came back out of the lighting pass as a bright red/white/orange cage
+     * instead of a dark line.
+     *
+     * Both references keep the blend. OptiFine 1.12 (`RenderGlobal.drawSelectionBox`) leaves vanilla's
+     * `enableBlend()` untouched and only swaps the program — its shader hook is `Shaders.disableTexture2D()`, i.e.
+     * `useProgram(ProgramBasic)`, nothing more. Iris maps the outline through `ShaderKey.LINES`, whose
+     * `RenderPipelines.LINES` carries translucent transparency, and `ProgramId.Line`/`ProgramId.Basic` are declared
+     * with no `BlendModeOverride` at all, so only an explicit `blend.gbuffers_line`/`blend.gbuffers_basic` directive
+     * can turn it off. `setPhase` already applies that directive when a pack declares one.
      */
-    @Redirect(method = "drawSelectionBox",
-            at = @At(value = "INVOKE",
-                    target = "Lnet/minecraft/client/renderer/GlStateManager;enableBlend()V"),
-            require = 0)
-    private void impetus$keepOutlineUnblended() {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
-        if (pipeline == null || !pipeline.hasGbufferProgram(ProgramId.Line)) {
-            net.minecraft.client.renderer.GlStateManager.enableBlend();
-        }
-    }
 
     /**
      * {@code sky = false}: draw no vanilla sky geometry at all. The pack paints the sky in its composite chain

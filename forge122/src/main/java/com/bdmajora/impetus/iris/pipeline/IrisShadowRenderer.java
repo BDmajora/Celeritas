@@ -638,38 +638,72 @@ public class IrisShadowRenderer {
      * substitutes {@code localDensity = vec3(1.0)}, i.e. fully lit with no occlusion at all.
      */
     private void logShadowLookupProbe(float[] depth0) {
-        float bias = 1.0f - 25.6f / this.halfPlaneLength;
         for (float h : new float[]{0.0f, 2.0f, 5.0f, 10.0f, 20.0f, 40.0f, 80.0f}) {
-            org.joml.Vector4f p = new org.joml.Vector4f(0.0f, h, 0.0f, 1.0f);
-            this.shadowModelView.transform(p);
-            this.shadowProjection.transform(p);
-            float len = (float) Math.sqrt(p.x * p.x + p.y * p.y);
-            float distort = len * bias + (1.0f - bias);
-            float sx = (p.x / distort) * 0.5f + 0.5f;
-            float sy = (p.y / distort) * 0.5f + 0.5f;
-            float sz = (p.z * 0.2f) * 0.5f + 0.5f;
-
-            double ndc = Math.hypot(sx * 2.0 - 1.0, sy * 2.0 - 1.0);
-            int tx = (int) (sx * this.resolution);
-            int ty = (int) (sy * this.resolution);
-            String verdict;
-            String storedText = "-";
-            if (ndc >= 1.0) {
-                verdict = "OUTSIDE DISC -> pack forces localDensity=1.0 (FULLY LIT, no shadow test)";
-            } else if (tx < 0 || ty < 0 || tx >= this.resolution || ty >= this.resolution) {
-                verdict = "texel out of range " + tx + "," + ty;
-            } else {
-                float stored = depth0[ty * this.resolution + tx];
-                storedText = Float.toString(stored);
-                float sample = Math.max(0.0f, Math.min(1.0f, (stored - sz) * 65536.0f));
-                verdict = sample > 0.5f ? "LIT" : "shadowed";
-                if (stored >= 0.99999f) {
-                    verdict += " (nothing rendered in this column)";
-                }
+            for (String model : SHADOW_DISTORTION_MODELS) {
+                logShadowLookupRow(depth0, h, model);
             }
-            LOGGER.info("[Iris] SHADOW LOOKUP h=+{}: uv=({}, {}) z={} ndc={} texel=({},{}) stored={} -> {}",
-                    h, sx, sy, sz, ndc, tx, ty, storedText, verdict);
         }
+    }
+
+    /**
+     * The distortion functions the installed packs use. A pack applies its distortion twice — per vertex in
+     * {@code shadow.vsh} when rasterising, and per pixel in the composite lookup — so they cancel, and a probe that
+     * assumes the wrong one manufactures a mismatch that exists only inside the probe.
+     * <p>
+     * That is not hypothetical. This probe previously hardcoded {@code COMPLEMENTARY} with no indication that it had,
+     * and its output was read as evidence of a ~19-block shadow offset in {@code miniature} and Body Camera, both of
+     * which use {@code LOLIP_P}. The "offset" was the probe disagreeing with itself. Print every model and let the
+     * reader take the row matching the loaded pack.
+     */
+    private static final String[] SHADOW_DISTORTION_MODELS = {"COMPLEMENTARY", "LOLIP_P"};
+
+    /**
+     * One probe sample under one distortion model.
+     *
+     * @param model {@code COMPLEMENTARY} — {@code xy /= len * bias + (1 - bias)} where
+     *              {@code bias = 1 - 25.6 / halfPlaneLength}, and {@code z *= 0.2}; used by Complementary and Photon.
+     *              {@code LOLIP_P} — {@code xy /= len + 0.1} and {@code z *= 0.5}; used by Body Camera and miniature.
+     */
+    private void logShadowLookupRow(float[] depth0, float h, String model) {
+        org.joml.Vector4f p = new org.joml.Vector4f(0.0f, h, 0.0f, 1.0f);
+        this.shadowModelView.transform(p);
+        this.shadowProjection.transform(p);
+        float len = (float) Math.sqrt(p.x * p.x + p.y * p.y);
+
+        float distort;
+        float zScale;
+        if ("LOLIP_P".equals(model)) {
+            distort = len + 0.1f;
+            zScale = 0.5f;
+        } else {
+            float bias = 1.0f - 25.6f / this.halfPlaneLength;
+            distort = len * bias + (1.0f - bias);
+            zScale = 0.2f;
+        }
+        float sx = (p.x / distort) * 0.5f + 0.5f;
+        float sy = (p.y / distort) * 0.5f + 0.5f;
+        float sz = (p.z * zScale) * 0.5f + 0.5f;
+
+        double ndc = Math.hypot(sx * 2.0 - 1.0, sy * 2.0 - 1.0);
+        int tx = (int) (sx * this.resolution);
+        int ty = (int) (sy * this.resolution);
+        String verdict;
+        String storedText = "-";
+        if (ndc >= 1.0) {
+            verdict = "OUTSIDE DISC -> a pack that clamps here skips the shadow test (FULLY LIT)";
+        } else if (tx < 0 || ty < 0 || tx >= this.resolution || ty >= this.resolution) {
+            verdict = "texel out of range " + tx + "," + ty;
+        } else {
+            float stored = depth0[ty * this.resolution + tx];
+            storedText = Float.toString(stored);
+            float sample = Math.max(0.0f, Math.min(1.0f, (stored - sz) * 65536.0f));
+            verdict = sample > 0.5f ? "LIT" : "shadowed";
+            if (stored >= 0.99999f) {
+                verdict += " (nothing rendered in this column)";
+            }
+        }
+        LOGGER.info("[Iris] SHADOW LOOKUP [{}] h=+{}: uv=({}, {}) z={} ndc={} texel=({},{}) stored={} -> {}",
+                model, h, sx, sy, sz, ndc, tx, ty, storedText, verdict);
     }
 
     private static float fractionUntouched(float[] depth) {

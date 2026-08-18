@@ -44,7 +44,7 @@ public class GbufferPrograms {
             ProgramId.SkyBasic, ProgramId.SkyTextured, ProgramId.Entities, ProgramId.EntitiesTrans,
             ProgramId.SpiderEyes, ProgramId.DamagedBlock,
             ProgramId.Particles, ProgramId.Weather, ProgramId.Clouds, ProgramId.Hand,
-            ProgramId.HandWater, ProgramId.Line
+            ProgramId.HandWater, ProgramId.Line, ProgramId.ArmorGlint
     };
 
     /** One compiled gbuffer program plus its uniform driver and (sanitized) DRAWBUFFERS mask. */
