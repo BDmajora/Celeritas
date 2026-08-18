@@ -166,28 +166,18 @@ public class RenderGlobalMixin {
     private void impetus$beginBlockOutline(net.minecraft.entity.player.EntityPlayer player,
                                            net.minecraft.util.math.RayTraceResult target, int execute,
                                            float partialTicks, CallbackInfo ci) {
+        // Nothing but the phase switch belongs here — that is the whole of OptiFine's hook too.
+        //
+        // An earlier revision also pinned the fixed-function current colour to vanilla's (0, 0, 0, 0.4), on the
+        // theory that gl_Color was not reaching the program. That theory was wrong and the line is gone: OptiFine's
+        // `useProgram(ProgramBasic)` sets draw buffers and sampler uniforms and nothing else, so under OptiFine the
+        // very same pack writes the very same zeroed normal into gbuffers_basic's DRAWBUFFERS 0/3/6/7 at vanilla's
+        // 40% blend — the state this port reaches once the blend is left alone (see the note below). The bright cage
+        // was the unblended, full-strength version of that write being relit by the deferred pass, not a lost
+        // vertex attribute. Pinning a constant colour would in fact deviate from vanilla, because
+        // `drawBoundingBox` hides the line strip's doubling-back connectors by giving three of its sixteen
+        // vertices alpha 0, and a constant colour cannot reproduce that.
         impetus$setPhase(ProgramId.Line);
-        // Publish vanilla's outline colour as the *current* fixed-function colour as well as per vertex.
-        //
-        // Why this is needed at all: the outline is submitted as POSITION_COLOR, so gl_Color is supposed to arrive
-        // from the conventional colour array. A pack's gbuffers_basic is then a pure function of it — Pastel's whole
-        // fragment stage is `albedo = color` followed by multiplicative lighting (`albedo *= sceneLighting + ...`),
-        // with no additive term a zero albedo can escape. Black in must be black out. The outline nevertheless comes
-        // out lit and orange, so gl_Color is not the (0, 0, 0, 0.4) vanilla wrote.
-        //
-        // The mechanism is the conventional/generic attribute aliasing this port already has scars from (see
-        // IrisRenderingPipeline.resetVanillaVertexArrayState and the first-person arm): gl_Color aliases generic
-        // attribute 3, and when the array behind it does not reach the program the attribute falls back to its
-        // CURRENT value — whatever the last GlStateManager.color() left there, typically opaque white. Pastel then
-        // shades a white surface with the sunset lighting, which is exactly the colour observed.
-        //
-        // Setting the current colour costs nothing when the array does work (the array wins), and pins the fallback
-        // to the right value when it does not. It is not a substitute for the per-vertex data — vanilla hides the
-        // line strip's doubling-back connectors by giving three of its sixteen vertices alpha 0, and a constant
-        // colour cannot reproduce that — so if those three connector edges become visible after this, the array is
-        // confirmed dead and the aliasing is the thing to fix. Vanilla's own postDraw calls resetColor(), so there
-        // is nothing to restore here.
-        net.minecraft.client.renderer.GlStateManager.color(0.0F, 0.0F, 0.0F, 0.4F);
     }
 
     @Inject(method = "drawSelectionBox", at = @At("RETURN"), require = 0)

@@ -3325,12 +3325,18 @@ public class IrisRenderingPipeline {
      * Resolves the {@code #if} directives the driver's preprocessor cannot legally accept — float comparisons, and
      * expressions that are outright malformed — leaving everything else for the driver.
      * <p>
-     * Split out of {@link #stabilizeShaderSource} because the legacy fullscreen path needs exactly this and none of
-     * the rest: it hands {@code FullscreenTransformer} a {@code #version 120} source, where
-     * {@code normalizeArbTextureLookups} is a no-op by construction. Both callers must inline the macro environment
-     * as {@code #define} lines first, which is what makes the fold self-contained.
+     * Split out of {@link #stabilizeShaderSource} because the two legacy paths need exactly this and none of the rest:
+     * both hand a {@code #version 120} source to a 330 rewrite, where {@code normalizeArbTextureLookups} is a no-op by
+     * construction. Every caller must inline the macro environment as {@code #define} lines first, which is what makes
+     * the fold self-contained.
+     * <p>
+     * Callers, all three of which reach the driver by a different route and each of which had to be fixed separately:
+     * {@link #stabilizeShaderSource} (gbuffer programs, via {@code ShaderProgramCompiler}), the legacy fullscreen
+     * composite/deferred/final path in this class, and
+     * {@link com.bdmajora.impetus.iris.terrain.IrisTerrainProgramOverride} (terrain and, critically, the translucent
+     * water pass).
      */
-    private static String foldUncompilableConditionals(String name, String source) {
+    public static String foldUncompilableConditionals(String name, String source) {
         String folded = GlslPreprocessor.foldFloatConditionals(source, java.util.Collections.emptyMap());
         if (!folded.equals(source)) {
             LOGGER.info("[Iris] Program '{}': folded #if conditional(s) the GLSL preprocessor cannot parse", name);

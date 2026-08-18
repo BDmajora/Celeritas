@@ -146,25 +146,48 @@ public final class IrisTerrainProgramOverride {
             // the macro env (so it lays out DRAWBUFFERS:41), leaving the gl_FragData[2] write pointed at
             // an unbound slot and corrupting colortex1 on water pixels. Injecting the macros after the
             // 330 rewrite makes the shader and the framebuffer layout agree and turns water reflections on.
+            //
+            // The legacy branch folds at the very END, after injectDefines, because that is the only point where it
+            // sees what the driver will see: this branch deliberately injects the macros *after* the 330 rewrite (see
+            // above), so folding any earlier would evaluate the pack's conditionals against an empty macro
+            // environment. The modern branch reaches the same state through stabilizeShaderSource.
+            //
+            // Skipping the fold here is what left water unshaded. Pastel is a GLSL-120 pack, so it takes the legacy
+            // branch, and its lib/atmospherics/fog.glsl carries `#if (in(biome, BIOME_SOUL_SAND_VALLEY)` — a
+            // shaders.properties expression pasted into GLSL with a paren missing. The driver answered
+            // `iris_gbuffers_terrain.fsh: 0(1209): error C0105: Syntax error in #if`, plus
+            // `0(1210): C1038: declaration of "fogColor" conflicts with previous declaration at 0(1175)` — the second
+            // error is the tell that "treat it as false" is the only reading under which this pack compiles at all,
+            // since the overworld build already declared fogColor and the malformed branch declares it again. The
+            // translucent pass then logged "Failed to build terrain override; using Impetus default", i.e. water was
+            // drawn by Impetus's own shader with none of the pack's reflection or sun-glint work.
             String vsh = modern
                     ? ImpetusTerrainTransformer.transformVertexShaderModern(
                             IrisRenderingPipeline.stabilizeShaderSource(programId.getSourceName(),
                                     com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(vshSource, macros)))
-                    : com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(
-                            ImpetusTerrainTransformer.transformVertexShader(vshSource), macros);
+                    : IrisRenderingPipeline.foldUncompilableConditionals(programId.getSourceName(),
+                            com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(
+                                    ImpetusTerrainTransformer.transformVertexShader(vshSource), macros));
             String fsh = modern
                     ? ImpetusTerrainTransformer.transformFragmentShaderModern(
                             IrisRenderingPipeline.stabilizeShaderSource(programId.getSourceName(),
                                     com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(fshSource, macros)),
                             drawBuffers)
-                    : com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(
-                            ImpetusTerrainTransformer.transformFragmentShader(fshSource, drawBuffers), macros);
+                    : IrisRenderingPipeline.foldUncompilableConditionals(programId.getSourceName(),
+                            com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(
+                                    ImpetusTerrainTransformer.transformFragmentShader(fshSource, drawBuffers), macros));
             com.bdmajora.impetus.iris.pipeline.IrisDebugDump.dumpText(
                     "src_" + programId.getSourceName() + ".vsh", vsh);
             com.bdmajora.impetus.iris.pipeline.IrisDebugDump.dumpText(
                     "src_" + programId.getSourceName() + ".fsh", fsh);
-            vertexShader = new GlShader(ShaderType.VERTEX, "iris_gbuffers_terrain.vsh", vsh);
-            fragmentShader = new GlShader(ShaderType.FRAGMENT, "iris_gbuffers_terrain.fsh", fsh);
+            // Name the shader after the program it actually is. This method builds every terrain-family pass — solid,
+            // cutout_mipped, translucent (i.e. gbuffers_water) and shadow — and the old hardcoded
+            // "iris_gbuffers_terrain" meant a compile failure in the water pass was reported as a gbuffers_terrain
+            // error, next to log lines saying gbuffers_terrain had just built successfully. The dump filenames beside
+            // this already use getSourceName(); the driver-facing name should agree with them.
+            String shaderName = "iris_" + programId.getSourceName();
+            vertexShader = new GlShader(ShaderType.VERTEX, shaderName + ".vsh", vsh);
+            fragmentShader = new GlShader(ShaderType.FRAGMENT, shaderName + ".fsh", fsh);
 
             var builder = GlProgram.builder("impetus:iris_terrain");
             builder.attachShader(vertexShader);
