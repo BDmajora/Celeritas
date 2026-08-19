@@ -2,7 +2,9 @@ package com.bdmajora.coartatio.state;
 
 import com.bdmajora.coartatio.CoartatioConfig;
 import com.bdmajora.coartatio.dedup.DeduplicationCache;
+import com.bdmajora.coartatio.state.predicate.AllMatchAnyObject;
 import com.bdmajora.coartatio.state.predicate.AllMatchOne;
+import com.bdmajora.coartatio.state.predicate.AllMatchOneBoolean;
 import com.bdmajora.coartatio.state.predicate.CompositePredicate;
 import com.bdmajora.coartatio.state.predicate.NegatedPredicate;
 import com.bdmajora.coartatio.state.predicate.SingleMatchAny;
@@ -57,6 +59,11 @@ public final class ConditionCanonicalizer {
         POOL.close();
     }
 
+    /** Predicates this pool prevented allocating a second copy of. */
+    public static long sharedCount() {
+        return POOL.shared();
+    }
+
     public static String statistics() {
         return POOL.toString();
     }
@@ -105,13 +112,29 @@ public final class ConditionCanonicalizer {
         return negate ? intern(new NegatedPredicate(predicate)) : predicate;
     }
 
-    /** Replacement for {@code ConditionAnd.getPredicate}. */
+    /**
+     * Replacement for {@code ConditionAnd.getPredicate}.
+     *
+     * <p>Specialisations are tried most-specific first, following Hydrogen's
+     * {@code StatePropertyPredicateHelper}: an all-boolean {@code AND} is the overwhelmingly common
+     * multipart shape and gets a primitive array, an all-single-value {@code AND} gets one object
+     * array, an {@code AND} of multi-valued tests gets a jagged array, and anything else falls back
+     * to a composite over the (already interned) children.
+     */
     public static Predicate<IBlockState> all(List<Predicate<IBlockState>> predicates) {
         if (predicates.size() == 1) {
             return predicates.get(0);
         }
 
-        Predicate<IBlockState> flattened = AllMatchOne.tryFlatten(predicates);
+        Predicate<IBlockState> flattened = AllMatchOneBoolean.tryFlatten(predicates);
+
+        if (flattened == null) {
+            flattened = AllMatchOne.tryFlatten(predicates);
+        }
+
+        if (flattened == null) {
+            flattened = AllMatchAnyObject.tryFlatten(predicates);
+        }
 
         if (flattened == null) {
             flattened = CompositePredicate.all(predicates);

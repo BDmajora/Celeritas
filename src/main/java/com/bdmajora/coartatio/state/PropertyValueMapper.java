@@ -90,6 +90,9 @@ public final class PropertyValueMapper {
     private final Object2IntOpenHashMap<String> indexByName;
     private final IBlockState[] states;
 
+    /** Donated by the first state of this block; see {@link #sharedKeys}. */
+    private Object[] sharedKeys;
+
     private PropertyValueMapper(Entry[] entries, int[] offsets, Object2IntOpenHashMap<String> indexByName,
                                 IBlockState[] states) {
         this.entries = entries;
@@ -210,12 +213,31 @@ public final class PropertyValueMapper {
         }
 
         this.states[value] = state;
+        com.bdmajora.coartatio.MemoryReport.recordPackedStates(1);
         return value;
     }
 
     /** The state at a packed index, or {@code null} if that combination was never registered. */
     public IBlockState byValue(int value) {
         return this.states[value];
+    }
+
+    /**
+     * The property key array shared by every state of this block.
+     *
+     * <p>Captured from the first state's own property map rather than derived from {@link #entries},
+     * because the compact map indexes against that map's iteration order and {@code entries} has
+     * been reordered for bit-packing fitness.
+     *
+     * <p>Returns {@code null} if this map's shape does not match the donated array, which leaves the
+     * caller on Guava's map for that state.
+     */
+    public synchronized Object[] sharedKeys(Map<IProperty<?>, Comparable<?>> properties) {
+        if (this.sharedKeys == null) {
+            this.sharedKeys = properties.keySet().toArray();
+        }
+
+        return this.sharedKeys.length == properties.size() ? this.sharedKeys : null;
     }
 
     /**

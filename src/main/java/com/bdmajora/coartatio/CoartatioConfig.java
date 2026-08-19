@@ -35,39 +35,70 @@ public final class CoartatioConfig {
 
     private static CoartatioConfig instance;
 
+    /** Where {@link #save()} writes. Null only if the config directory could not be resolved. */
+    private Path file;
+
     /** Interns the domain and path strings of every {@code ResourceLocation}. */
-    public final boolean deduplicateResourceLocations;
+    public boolean deduplicateResourceLocations;
     /** Interns the {@code variant} string of every {@code ModelResourceLocation}. */
-    public final boolean deduplicateModelVariants;
+    public boolean deduplicateModelVariants;
     /** Replaces {@code NBTTagCompound}'s {@code HashMap} with a compact array/hash hybrid. */
-    public final boolean compactNbtBackingMap;
+    public boolean compactNbtBackingMap;
     /** Interns NBT keys through a shared string pool. Requires {@link #compactNbtBackingMap}. */
-    public final boolean internNbtKeys;
+    public boolean internNbtKeys;
     /** Entry count at which an NBT compound switches from array storage to hash storage. */
-    public final int nbtArrayMapThreshold;
+    public int nbtArrayMapThreshold;
     /** Pools {@code BakedQuad.vertexData} arrays so identical geometry shares one array. */
-    public final boolean poolQuadVertexData;
+    public boolean poolQuadVertexData;
     /** Replaces the model classes' growable collections with exact-sized immutable ones. */
-    public final boolean compactBakedModels;
+    public boolean compactBakedModels;
     /** Flattens and interns the predicates produced by multipart blockstate conditions. */
-    public final boolean canonicalizeMultipartConditions;
+    public boolean canonicalizeMultipartConditions;
     /**
      * Replaces every block state's property-value table with a packed {@code int} index into one
      * shared array per block.
      *
-     * <p>Off by default. This is the largest saving Coartatio can make and also the only feature that
-     * changes the identity of objects the entire game holds references to, so it wants a deliberate
-     * opt-in and a session of testing before it becomes the default.
+     * <p>The largest single saving Coartatio makes. Falls back to vanilla states per block whenever
+     * the mapper declines one — blacklisted, too many states, or an {@code IProperty} it cannot
+     * index — so a problem block costs a missed optimisation rather than a crash.
      */
-    public final boolean optimizeBlockStates;
+    public boolean optimizeBlockStates;
     /** Block implementation class prefixes that keep vanilla states regardless of the above. */
-    public final String[] blockStateBlacklist;
+    public String[] blockStateBlacklist;
+    /**
+     * Replaces each block state's property {@code ImmutableMap} with a compact one that shares its
+     * key array across the block.
+     *
+     * <p>Requires {@link #optimizeBlockStates}, and a JVM that lets us define a class into Guava's
+     * package. Degrades silently to Guava's own map when either is missing.
+     */
+    public boolean compactStateProperties;
+    /** Swaps the model graph's unordered hash maps for fastutil equivalents. */
+    public boolean compactModelGraph;
+    /** Strips a loaded chunk's NBT down to the tags entity loading still reads. */
+    public boolean stripChunkNbt;
+    /** Drops chunk sections holding no blocks and no light that could not be recomputed. */
+    public boolean dropEmptyChunkSections;
+    /** Swaps {@code LaunchClassLoader}'s resource cache for one the GC can reclaim. */
+    public boolean weakenClassLoaderCache;
+    /** Releases the pixel data of static sprites once the atlas is on the GPU. */
+    public boolean releaseSpriteData;
+    /** Shares the camera transforms and override lists that every baked model carries. */
+    public boolean deduplicateModelTransforms;
+    /** Frees the model loader's unbaked models and load errors after baking. */
+    public boolean releaseBakeState;
+    /** Frees the play-scoped string pools when the player leaves a world or server. */
+    public boolean clearPoolsOnWorldLeave;
+    /** Defers building the creative search index until something actually searches. */
+    public boolean lazySearchTrees;
+    /** Compacts registry, entity data and chunk entity-lookup collections. */
+    public boolean compactRuntimeCollections;
     /** Upper bound on any single deduplication pool, after which it stops accepting new entries. */
-    public final int poolSizeLimit;
+    public int poolSizeLimit;
     /** Prints pool statistics to the log after every resource reload. */
-    public final boolean logStatistics;
+    public boolean logStatistics;
     /** Adds a Coartatio line to the F3 debug overlay. */
-    public final boolean showDebugOverlay;
+    public boolean showDebugOverlay;
 
     private CoartatioConfig(Properties props) {
         this.deduplicateResourceLocations = bool(props, "deduplicateResourceLocations", true);
@@ -78,8 +109,19 @@ public final class CoartatioConfig {
         this.poolQuadVertexData = bool(props, "poolQuadVertexData", true);
         this.compactBakedModels = bool(props, "compactBakedModels", true);
         this.canonicalizeMultipartConditions = bool(props, "canonicalizeMultipartConditions", true);
-        this.optimizeBlockStates = bool(props, "optimizeBlockStates", false);
+        this.optimizeBlockStates = bool(props, "optimizeBlockStates", true);
         this.blockStateBlacklist = list(props, "blockStateBlacklist", DEFAULT_BLOCK_STATE_BLACKLIST);
+        this.compactStateProperties = bool(props, "compactStateProperties", true);
+        this.compactModelGraph = bool(props, "compactModelGraph", true);
+        this.stripChunkNbt = bool(props, "stripChunkNbt", true);
+        this.dropEmptyChunkSections = bool(props, "dropEmptyChunkSections", true);
+        this.weakenClassLoaderCache = bool(props, "weakenClassLoaderCache", true);
+        this.releaseSpriteData = bool(props, "releaseSpriteData", true);
+        this.deduplicateModelTransforms = bool(props, "deduplicateModelTransforms", true);
+        this.releaseBakeState = bool(props, "releaseBakeState", true);
+        this.compactRuntimeCollections = bool(props, "compactRuntimeCollections", true);
+        this.clearPoolsOnWorldLeave = bool(props, "clearPoolsOnWorldLeave", true);
+        this.lazySearchTrees = bool(props, "lazySearchTrees", true);
         this.poolSizeLimit = integer(props, "poolSizeLimit", 262144, 1024, Integer.MAX_VALUE);
         this.logStatistics = bool(props, "logStatistics", true);
         this.showDebugOverlay = bool(props, "showDebugOverlay", true);
@@ -105,8 +147,24 @@ public final class CoartatioConfig {
         }
 
         CoartatioConfig config = new CoartatioConfig(props);
-        config.writeBack(file);
+        config.file = file;
+        config.save();
         return config;
+    }
+
+    /**
+     * Persists the current values.
+     *
+     * <p>Most switches are read once, when {@code CoartatioMixinPlugin} decides which mixins to
+     * apply, so changing them here takes effect on the next launch rather than immediately. The
+     * options screen marks those with a restart flag; the handful that are read live
+     * ({@link #logStatistics}, {@link #showDebugOverlay}, and the NBT map settings, which apply to
+     * compounds created from now on) take effect straight away.
+     */
+    public void save() {
+        if (this.file != null) {
+            writeBack(this.file);
+        }
     }
 
     private static Path configDirectory() {
@@ -138,6 +196,17 @@ public final class CoartatioConfig {
         values.put("canonicalizeMultipartConditions", Boolean.toString(this.canonicalizeMultipartConditions));
         values.put("optimizeBlockStates", Boolean.toString(this.optimizeBlockStates));
         values.put("blockStateBlacklist", String.join(",", this.blockStateBlacklist));
+        values.put("compactStateProperties", Boolean.toString(this.compactStateProperties));
+        values.put("compactModelGraph", Boolean.toString(this.compactModelGraph));
+        values.put("stripChunkNbt", Boolean.toString(this.stripChunkNbt));
+        values.put("dropEmptyChunkSections", Boolean.toString(this.dropEmptyChunkSections));
+        values.put("weakenClassLoaderCache", Boolean.toString(this.weakenClassLoaderCache));
+        values.put("releaseSpriteData", Boolean.toString(this.releaseSpriteData));
+        values.put("deduplicateModelTransforms", Boolean.toString(this.deduplicateModelTransforms));
+        values.put("releaseBakeState", Boolean.toString(this.releaseBakeState));
+        values.put("compactRuntimeCollections", Boolean.toString(this.compactRuntimeCollections));
+        values.put("clearPoolsOnWorldLeave", Boolean.toString(this.clearPoolsOnWorldLeave));
+        values.put("lazySearchTrees", Boolean.toString(this.lazySearchTrees));
         values.put("poolSizeLimit", Integer.toString(this.poolSizeLimit));
         values.put("logStatistics", Boolean.toString(this.logStatistics));
         values.put("showDebugOverlay", Boolean.toString(this.showDebugOverlay));

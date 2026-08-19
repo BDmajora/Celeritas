@@ -16,6 +16,7 @@ import net.minecraftforge.fml.common.event.FMLConstructionEvent;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
+import net.minecraftforge.fml.common.network.FMLNetworkEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.bdmajora.impetus.engine.impl.common.util.MathUtil;
@@ -27,6 +28,8 @@ import com.bdmajora.impetus.engine.impl.gui.ImpetusGameOptions;
 import com.bdmajora.impetus.engine.impl.render.chunk.region.RenderRegionManager;
 import com.bdmajora.coartatio.Coartatio;
 import com.bdmajora.coartatio.CoartatioConfig;
+import com.bdmajora.coartatio.gui.CoartatioStatsCommand;
+import com.bdmajora.coartatio.launch.ClassLoaderCleaner;
 import com.bdmajora.impetus.impl.command.TogglePassCommand;
 import com.bdmajora.impetus.impl.compat.ResourcePackScanner;
 import com.bdmajora.impetus.impl.gui.overlay.ImpetusToastRenderer;
@@ -62,10 +65,17 @@ public class ImpetusVintage {
             ClientCommandHandler.instance.registerCommand(new TogglePassCommand());
         }
 
+        ClientCommandHandler.instance.registerCommand(new CoartatioStatsCommand());
+
         // Phase 1: load (parse only) the selected shader pack. No rendering changes happen here — if no pack is
         // selected or loading fails, Impetus renders exactly as before.
         Iris.initialize(PlatformUtil.getGameDir().toPath());
         ResourcePackScanner.scanIfChanged(Minecraft.getMinecraft());
+
+        // Runs here rather than earlier: every class a coremod will ask LaunchWrapper for has been
+        // transformed by now, so weakening its byte cache costs nothing and reclaims the largest
+        // single block of startup memory in a modded instance.
+        ClassLoaderCleaner.run();
     }
 
     @SubscribeEvent
@@ -75,6 +85,15 @@ public class ImpetusVintage {
         if (event.phase == TickEvent.Phase.START) {
             ResourcePackScanner.tick(Minecraft.getMinecraft());
             Iris.updatePipeline();
+        }
+    }
+
+    @SubscribeEvent
+    public void onDisconnect(FMLNetworkEvent.ClientDisconnectionFromServerEvent event) {
+        // Fires once on leaving a world or server, single-player included, which makes it the one
+        // unambiguous "the world is gone" signal on 1.12.2 — WorldEvent.Unload fires per dimension.
+        if (CoartatioConfig.get().clearPoolsOnWorldLeave) {
+            Coartatio.onWorldLeave();
         }
     }
 

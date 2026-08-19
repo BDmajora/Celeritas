@@ -113,6 +113,11 @@ public class DeduplicationCache<T> {
         }
     }
 
+    /** Number of lookups that found an existing entry, i.e. objects this pool prevented. */
+    public synchronized long shared() {
+        return this.hits;
+    }
+
     /** Entries pooled — the live count while open, the count at close afterwards. */
     public synchronized int size() {
         return this.pool == null ? this.retainedSize : this.pool.size();

@@ -7,6 +7,7 @@ import com.bdmajora.impetus.api.options.structure.OptionPage;
 import com.bdmajora.impetus.engine.impl.gui.ImpetusVideoOptionsController;
 import com.bdmajora.impetus.engine.impl.gui.options.CommonOptionPages;
 import com.bdmajora.impetus.engine.impl.render.ShaderModBridge;
+import com.bdmajora.coartatio.gui.CoartatioOptionPages;
 import com.bdmajora.impetus.iris.gui.modern.IrisOptionPages;
 import org.lwjgl.input.Mouse;
 import com.bdmajora.impetus.ImpetusVintage;
@@ -57,6 +58,7 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
         pages.add(ImpetusGameOptionPages.general());
         pages.add(ImpetusGameOptionPages.quality());
         pages.add(CommonOptionPages.performance(ImpetusVintage.options()));
+        pages.add(CoartatioOptionPages.memory());
 
         if (ShaderModBridge.isShaderModPresent()) {
             pages.add(IrisOptionPages.shaderPacks(parent));

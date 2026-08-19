@@ -6,6 +6,7 @@ import com.bdmajora.impetus.iris.shaderpack.include.AbsolutePackPath;
 import com.bdmajora.impetus.iris.shaderpack.preprocessor.PropertiesPreprocessor;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -181,10 +182,11 @@ public final class IdMap {
 
         forEachProperty(preprocessed, "block.", (intId, value) -> {
             List<BlockEntry> entries = new ArrayList<>();
-            for (String part : value.split("\\s+")) {
-                if (part.isEmpty()) {
+            for (String rawPart : value.split("\\s+")) {
+                if (rawPart.isEmpty()) {
                     continue;
                 }
+                for (String part : separateRunTogetherIds(rawPart, intId)) {
                 try {
                     Entry entry = BlockEntry.parse(part);
                     if (entry instanceof BlockEntry) {
@@ -197,11 +199,94 @@ public final class IdMap {
                     LOGGER.warn("[Iris] Unexpected error while parsing a block.properties entry for block.{}: {}",
                             intId, e.getMessage());
                 }
+                }
             }
             entriesById.put(intId, Collections.unmodifiableList(entries));
         });
 
         return entriesById;
+    }
+
+    /**
+     * Recovers two block IDs that a pack ran together by omitting the space between them.
+     *
+     * <p>Shader packs are hand-maintained text, and a dropped space produces a token like
+     * {@code minecraft:gold_oreminecraft:redstone_ore}. BSL 10.1.3 ships exactly that on two lines of
+     * its {@code block.properties}, which silently costs gold ore and redstone ore their material ID
+     * — the ores stop being shaded as ores, with nothing in-game to explain why. OptiFine and Iris
+     * upstream both drop the entry as unparseable.
+     *
+     * <p>The malformed shape is unambiguous, which is what makes fixing it safe rather than guesswork.
+     * A colon-separated token is legal in exactly these forms:
+     *
+     * <ul>
+     *   <li>{@code path}
+     *   <li>{@code namespace:path}
+     *   <li>{@code namespace:path:key=value...} — every segment past the second is a state filter and
+     *       <em>must</em> contain {@code =}
+     *   <li>{@code path:key=value}
+     * </ul>
+     *
+     * <p>So three-or-more segments where two consecutive non-leading segments both lack {@code =}
+     * cannot be a valid entry, and can only be two IDs with the separator missing. The split point is
+     * the trailing namespace embedded in the joined segment.
+     *
+     * @return the token split into its constituent IDs, or the token unchanged if it is well-formed
+     */
+    private static List<String> separateRunTogetherIds(String token, int intId) {
+        String[] parts = token.split(":");
+
+        if (parts.length < 3) {
+            return Collections.singletonList(token);
+        }
+
+        for (int i = 1; i <= parts.length - 2; i++) {
+            if (parts[i].contains("=") || parts[i + 1].contains("=")) {
+                continue;
+            }
+
+            // parts[i] is "<path><namespace>". The namespace of the token we are already inside is by
+            // far the likeliest, because this is a typo in a list of same-namespace entries.
+            String namespace = findTrailingNamespace(parts[i], parts[0]);
+
+            if (namespace == null) {
+                continue;
+            }
+
+            String path = parts[i].substring(0, parts[i].length() - namespace.length());
+            String head = String.join(":", Arrays.copyOfRange(parts, 0, i)) + ":" + path;
+            String tail = namespace + ":" + String.join(":", Arrays.copyOfRange(parts, i + 1, parts.length));
+
+            List<String> recovered = new ArrayList<>();
+            recovered.add(head);
+            // Recurse: three or more IDs can be run together by the same mistake.
+            recovered.addAll(separateRunTogetherIds(tail, intId));
+
+            LOGGER.warn("[Iris] block.{} entry \"{}\" is missing a space between IDs; reading it as {}",
+                    intId, token, recovered);
+
+            return recovered;
+        }
+
+        return Collections.singletonList(token);
+    }
+
+    /**
+     * @return the namespace {@code segment} ends with, leaving a non-empty path in front of it, or
+     *         {@code null} if it does not end with one we recognise.
+     */
+    private static String findTrailingNamespace(String segment, String enclosingNamespace) {
+        for (String candidate : new String[] {enclosingNamespace, "minecraft"}) {
+            if (candidate == null || candidate.isEmpty() || candidate.length() >= segment.length()) {
+                continue;
+            }
+
+            if (segment.endsWith(candidate)) {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 
     /** Parses a plain {@code <prefix><id> = name name ...} map (item.properties / entity.properties, Iris parity). */

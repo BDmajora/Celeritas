@@ -63,6 +63,26 @@ public class CoartatioMixinPlugin implements IMixinConfigPlugin {
             case "state.BlockStateContainerMixin":
             case "state.ExtendedBlockStateMixin":
                 return this.config.optimizeBlockStates;
+            case "client.model.ModelBakeryMixin":
+            case "client.model.ModelLoaderMixin":
+                return this.config.compactModelGraph;
+            case "world.AnvilChunkLoaderMixin":
+                return this.config.stripChunkNbt;
+            case "world.ChunkMixin":
+                return this.config.dropEmptyChunkSections;
+            case "client.texture.TextureMapMixin":
+                return this.config.releaseSpriteData;
+            case "client.model.ModelLoaderCleanupMixin":
+                return this.config.releaseBakeState;
+            case "client.SearchTreeMixin":
+                return this.config.lazySearchTrees;
+            case "core.LockCodeMixin":
+            case "client.SoundRegistryMixin":
+            case "core.ObjectHolderRegistryMixin":
+            case "core.RegistrySimpleMixin":
+            case "core.EntityDataManagerMixin":
+            case "core.ClassInheritanceMultiMapMixin":
+                return this.config.compactRuntimeCollections;
             case "client.ModelManagerMixin":
                 // Drives the pool lifecycle and the statistics dump; pointless with nothing pooling.
                 return this.config.poolQuadVertexData || this.config.canonicalizeMultipartConditions;

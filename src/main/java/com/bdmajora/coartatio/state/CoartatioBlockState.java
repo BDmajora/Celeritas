@@ -29,7 +29,10 @@ public class CoartatioBlockState extends BlockStateContainer.StateImplementation
 
     public CoartatioBlockState(PropertyValueMapper mapper, Block block,
                                ImmutableMap<IProperty<?>, Comparable<?>> properties) {
-        super(block, properties);
+        // Compacted before the super call, because the field is final in StateImplementation and
+        // cannot be swapped afterwards. CompactPropertyMaps hands back the original untouched
+        // whenever the class injection is unavailable or the map's shape is not what it expects.
+        super(block, CompactPropertyMaps.compact(mapper.sharedKeys(properties), properties));
         this.mapper = mapper;
     }
 

@@ -3,6 +3,8 @@ package com.bdmajora.coartatio;
 import com.bdmajora.coartatio.dedup.ModelCaches;
 import com.bdmajora.coartatio.dedup.ResourceLocationCaches;
 import com.bdmajora.coartatio.dedup.StringPool;
+import com.bdmajora.coartatio.dedup.TransformCaches;
+import com.bdmajora.coartatio.state.CompactPropertyMaps;
 import com.bdmajora.coartatio.state.ConditionCanonicalizer;
 import com.bdmajora.coartatio.state.PropertyValueMapper;
 import org.apache.logging.log4j.LogManager;
@@ -38,6 +40,7 @@ public final class Coartatio {
      */
     public static void onResourceReloadStart() {
         ModelCaches.open();
+        TransformCaches.open();
         ConditionCanonicalizer.open();
     }
 
@@ -51,13 +54,39 @@ public final class Coartatio {
      */
     public static void onResourceReloadFinish() {
         ModelCaches.close();
+        TransformCaches.close();
         ConditionCanonicalizer.close();
 
         if (CoartatioConfig.get().logStatistics) {
             for (String line : statistics()) {
                 LOGGER.info(line);
             }
+            for (String line : MemoryReport.lines()) {
+                LOGGER.info(line);
+            }
         }
+    }
+
+    /**
+     * Called when the player leaves a world or server.
+     *
+     * <p>FoamFix's {@code clClearCachesOnUnload}. Two pools grow with play rather than with loading:
+     * NBT keys pick up every key seen in world data, and resource paths pick up dynamically
+     * constructed locations such as downloaded skins. Neither shrinks on its own, so a long session
+     * followed by a return to the main menu leaves both holding a world's worth of strings that the
+     * next world will not reuse.
+     *
+     * <p>Resetting them frees the pools; strings already handed out stay valid and stay shared, they
+     * just stop being tracked. Model and block-state pools are deliberately untouched — those are
+     * keyed to resources and block registries, which survive a world change.
+     */
+    public static void onWorldLeave() {
+        int freed = StringPool.NBT_KEYS.size() + ResourceLocationCaches.PATHS.size();
+
+        StringPool.NBT_KEYS.clear();
+        ResourceLocationCaches.PATHS.open();
+
+        LOGGER.info("Released {} pooled strings on leaving the world", freed);
     }
 
     /** Human-readable pool statistics, one entry per line. Shared by the log and the F3 overlay. */
@@ -70,10 +99,12 @@ public final class Coartatio {
         lines.add("  Quad vertex data: " + ModelCaches.QUADS);
         lines.add("  Quads not pooled: " + ModelCaches.skippedSummary());
         lines.add("  NBT keys:         " + StringPool.NBT_KEYS);
+        lines.add("  Camera transforms:" + TransformCaches.TRANSFORMS);
         lines.add("  Multipart preds:  " + ConditionCanonicalizer.statistics());
 
         if (CoartatioConfig.get().optimizeBlockStates) {
             lines.add("  Block states:     " + PropertyValueMapper.statistics());
+            lines.add("  Property maps:    " + CompactPropertyMaps.statistics());
         }
 
         return lines;
@@ -87,9 +118,6 @@ public final class Coartatio {
      * the pool being closed after the bake — before that was fixed this always displayed zero.
      */
     public static String debugOverlayLine() {
-        return String.format("Coartatio: %d strings, %d quad arrays pooled",
-                ResourceLocationCaches.DOMAINS.size() + ResourceLocationCaches.PATHS.size()
-                        + ModelCaches.VARIANTS.size() + StringPool.NBT_KEYS.size(),
-                ModelCaches.QUADS.size());
+        return String.format("Coartatio: ~%s saved (/coartatio for detail)", MemoryReport.summary());
     }
 }

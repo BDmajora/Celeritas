@@ -74,6 +74,24 @@ public final class ShardedStringCache {
         }
     }
 
+    /** Empties every shard. Strings already issued stay valid; they simply stop being shared. */
+    public void clear() {
+        for (ObjectOpenHashSet<String> shard : this.shards) {
+            synchronized (shard) {
+                shard.clear();
+                shard.trim();
+            }
+        }
+
+        this.requests = 0;
+        this.hits = 0;
+    }
+
+    /** Number of lookups that found an existing entry, i.e. strings this pool prevented. */
+    public long shared() {
+        return this.hits;
+    }
+
     public int size() {
         int total = 0;
 

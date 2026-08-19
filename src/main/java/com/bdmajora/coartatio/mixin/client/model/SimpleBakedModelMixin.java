@@ -1,7 +1,10 @@
 package com.bdmajora.coartatio.mixin.client.model;
 
 import com.bdmajora.coartatio.collections.CollectionHelper;
+import com.bdmajora.coartatio.dedup.TransformCaches;
 import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.client.renderer.block.model.ItemCameraTransforms;
+import net.minecraft.client.renderer.block.model.ItemOverrideList;
 import net.minecraft.client.renderer.block.model.SimpleBakedModel;
 import net.minecraft.util.EnumFacing;
 import org.spongepowered.asm.mixin.Final;
@@ -50,8 +53,22 @@ public class SimpleBakedModelMixin {
     @Final
     protected Map<EnumFacing, List<BakedQuad>> faceQuads;
 
+    @Mutable
+    @Shadow
+    @Final
+    protected ItemCameraTransforms cameraTransforms;
+
+    @Mutable
+    @Shadow
+    @Final
+    protected ItemOverrideList itemOverrideList;
+
     @Inject(method = "<init>", at = @At("RETURN"))
     private void coartatio$compactQuadLists(CallbackInfo ci) {
+        // Every model carries these two and almost none of them differ — see TransformCaches.
+        this.cameraTransforms = TransformCaches.TRANSFORMS.deduplicate(this.cameraTransforms);
+        this.itemOverrideList = TransformCaches.deduplicate(this.itemOverrideList);
+
         this.generalQuads = CollectionHelper.fixed(this.generalQuads);
 
         Map<EnumFacing, List<BakedQuad>> compacted = new EnumMap<>(EnumFacing.class);
