@@ -473,12 +473,28 @@ public abstract class RenderSectionManager {
         }
 
         // Promotion of the interim rebuild list is not required if a graph update is requested, as the graph
-        // generates a new rebuild list anyway
-        if (!this.renderListManager.isNeedsUpdate() && !sectionsRequestingUpdate.isEmpty()) {
-            this.promoteInterimRebuildList();
-        }
+        // generates a new rebuild list anyway.
+        //
+        // Main pass only. `sectionsRequestingUpdate` is main-pass state: it is filled under
+        // `!getCurrentRenderListManager().isNeedsUpdate()` and drained here, and the "clearing is safe because the
+        // graph will regenerate the list" argument only holds for the manager that is about to run a graph update.
+        // With a shader pack loaded this method runs TWICE per frame — the Iris shadow pass calls setupTerrain()
+        // before the camera pass — and the shadow call would reach the unconditional clear below while testing the
+        // *main* manager's flag. When the main graph was already pending (i.e. the camera just moved), promotion was
+        // skipped and the pending rebuild requests were dropped on the floor: those sections are then never
+        // rebuilt, so terrain progressively stops appearing as chunks stream in, while entities — which do not come
+        // from these lists — keep drawing. Silent, and only with shaders, because without them there is no second
+        // call to lose the set.
+        //
+        // This is the same main-pass guard `tickSchedulingBudget()` and `setDispatchBudgetLimited()` in this method
+        // already carry for exactly the same reason; the block was simply missed.
+        if (mainPass) {
+            if (!this.renderListManager.isNeedsUpdate() && !sectionsRequestingUpdate.isEmpty()) {
+                this.promoteInterimRebuildList();
+            }
 
-        this.sectionsRequestingUpdate.clear();
+            this.sectionsRequestingUpdate.clear();
+        }
 
         if (!rebuildListHasUpdates()) {
             // Nothing was dispatched, so the workers cannot have been starved for lack of budget.

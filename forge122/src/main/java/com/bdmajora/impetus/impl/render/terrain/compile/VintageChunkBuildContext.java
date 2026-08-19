@@ -245,11 +245,11 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
             if (com.bdmajora.impetus.iris.terrain.IrisTerrainProgramOverride.areShadersActive()) {
                 // OptiFine extended attributes for the vanilla-sourced path (fluids etc.). mc_Entity comes from the
                 // per-block attribution runs recorded during meshing; mid-tex and tangent are derivable here.
-                float midU = 0.0f, midV = 0.0f;
-                if (sprite != null) {
-                    midU = (sprite.getMinU() + sprite.getMaxU()) * 0.5f;
-                    midV = (sprite.getMinV() + sprite.getMaxV()) * 0.5f;
-                }
+                // Centre of the texture region mapped to this quad, not the sprite centre -- see the long note in
+                // VintageBlockRenderer.populateIrisVertexData. The centroid is already to hand: it is what the
+                // sprite lookup above searches by.
+                float midU = uSum * 0.25f;
+                float midV = vSum * 0.25f;
                 int tangent = com.bdmajora.impetus.iris.vertices.NormalHelper.computeTangent(
                         com.bdmajora.impetus.iris.vertices.NormI8.unpackX(trueNormal),
                         com.bdmajora.impetus.iris.vertices.NormI8.unpackY(trueNormal),

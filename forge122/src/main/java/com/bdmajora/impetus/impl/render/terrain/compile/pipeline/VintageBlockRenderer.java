@@ -247,12 +247,34 @@ public class VintageBlockRenderer {
      * {@code IrisChunkVertexType} encodes while a shader pack is active. All four vertices of a quad share the values.
      */
     private void populateIrisVertexData(ChunkVertexEncoder.Vertex[] vertices, BakedQuadView quad, int trueNormal, BlockPos pos) {
+        // mc_midTexCoord is the centre of the texture region mapped to THIS QUAD, not the centre of the sprite.
+        // The two coincide for the full-sprite quads that make up most terrain, which is why using the sprite
+        // hid this for so long -- but they diverge on any face that maps a sub-rect, and the torch's cap faces are
+        // the worst case in vanilla: torch.json gives `up` uv [7,6,9,8] and `down` uv [7,13,9,15], 2x2-texel rects,
+        // while its sides use the full [0,0,16,16].
+        //
+        // Chocapic-derived packs (RedHat, BSL, Sildur's, ...) rebuild the sprite basis from this attribute:
+        //     texcoordminusmid = texcoord - midcoord;
+        //     vtexcoordam.pq   = abs(texcoordminusmid) * 2;   // extent
+        //     vtexcoordam.st   = min(texcoord, midcoord - texcoordminusmid);
+        //     vtexcoord.xy     = sign(texcoordminusmid) * 0.5 + 0.5;
+        // That only closes if midcoord is the quad's UV centre, so every vertex is offset by +/- half the extent.
+        // Feeding the sprite centre broke it two ways on torches: the `up` face has a vertex sitting exactly on the
+        // sprite centre (v 8/16), where sign() yields 0 -- so vtexcoord lands on 0.5 instead of 0/1 and the extent
+        // collapses to 0 -- and the `down` face (v 13/16..15/16) reports an extent 5-7x too large. Both feed
+        // dcdx/dcdy = dFdx(vtexcoord.st * vtexcoordam.pq), so the pack samples the atlas at a wildly wrong LOD and
+        // the cap comes back as a ~1px band of averaged torch orange. Zooming shrinks the derivatives back under the
+        // mip threshold, which is why a zoom mod made it disappear.
+        //
+        // Iris does exactly this (XHFPTerrainVertex.write: "the center point of the texture region which is mapped
+        // to the quad", summing the four vertex UVs * 0.25).
         float midU = 0.0f, midV = 0.0f;
-        TextureAtlasSprite sprite = (TextureAtlasSprite) quad.impetus$getSprite();
-        if (sprite != null) {
-            midU = (sprite.getMinU() + sprite.getMaxU()) * 0.5f;
-            midV = (sprite.getMinV() + sprite.getMaxV()) * 0.5f;
+        for (int i = 0; i < 4; i++) {
+            midU += quad.getTexU(i);
+            midV += quad.getTexV(i);
         }
+        midU *= 0.25f;
+        midV *= 0.25f;
 
         // Read positions/UVs straight off the source quad, never off `vertices`: those have already been rewritten in
         // ModelQuadOrientation order (the AO diagonal flip), and a rotated vertex triple yields a tangent turned 90°

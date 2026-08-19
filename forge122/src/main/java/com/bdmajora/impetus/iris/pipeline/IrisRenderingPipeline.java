@@ -680,12 +680,6 @@ public class IrisRenderingPipeline {
                     pack.getProperties().getOldHandLight().orElse(Boolean.TRUE));
             com.bdmajora.impetus.iris.material.WorldRenderingSettings.setVoxelizeLightBlocks(
                     pack.getProperties().getVoxelizeLightBlocks().orElse(Boolean.FALSE));
-            boolean breaksAnisotropy = pack.getProperties().getBreaksAnisotropy().orElse(Boolean.FALSE);
-            com.bdmajora.impetus.iris.material.WorldRenderingSettings.setBreaksAnisotropy(breaksAnisotropy);
-            com.bdmajora.impetus.engine.impl.ImpetusRuntimeOptions.anisotropyForcedOff = breaksAnisotropy;
-            if (breaksAnisotropy) {
-                LOGGER.info("[Iris] Pack declares breaksAnisotropy; anisotropic filtering forced off");
-            }
             this.allowConcurrentCompute = pack.getProperties().getAllowConcurrentCompute().orElse(Boolean.FALSE);
             this.rainDepth = pack.getProperties().getRainDepth().orElse(Boolean.FALSE);
             this.beaconBeamDepth = pack.getProperties().getBeaconBeamDepth().orElse(Boolean.FALSE);
@@ -2234,6 +2228,14 @@ public class IrisRenderingPipeline {
      */
     public boolean hasGbufferProgram(ProgramId phase) {
         return this.worldRenderingActive && this.gbufferPrograms != null && this.gbufferPrograms.get(phase) != null;
+    }
+
+    /**
+     * {@return whether the pack ships this phase's program itself}, as opposed to the phase merely resolving through
+     * OptiFine's fallback chain onto some other program that was never written with this geometry in mind.
+     */
+    public boolean hasDirectGbufferProgram(ProgramId phase) {
+        return this.worldRenderingActive && this.gbufferPrograms != null && this.gbufferPrograms.hasDirect(phase);
     }
 
     public boolean isRenderingPostDeferredTranslucents() {
@@ -4182,8 +4184,6 @@ public class IrisRenderingPipeline {
         com.bdmajora.impetus.iris.material.WorldRenderingSettings.setOldLighting(false);
         com.bdmajora.impetus.iris.material.WorldRenderingSettings.setOldHandLight(true);
         com.bdmajora.impetus.iris.material.WorldRenderingSettings.setVoxelizeLightBlocks(false);
-        com.bdmajora.impetus.iris.material.WorldRenderingSettings.setBreaksAnisotropy(false);
-        com.bdmajora.impetus.engine.impl.ImpetusRuntimeOptions.anisotropyForcedOff = false;
         // Every compute program is owned by the family pass it is attached to.
         destroyFamilyComputes(this.setupPasses);
         destroyFamilyComputes(this.beginPasses);

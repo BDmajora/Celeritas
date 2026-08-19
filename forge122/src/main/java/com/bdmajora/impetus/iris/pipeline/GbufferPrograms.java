@@ -96,6 +96,8 @@ public class GbufferPrograms {
 
     private final Map<ProgramId, Entry> byPhase = new EnumMap<>(ProgramId.class);
     private final List<Entry> ownedEntries = new ArrayList<>();
+    /** Phases the pack ships a file for, as opposed to ones that only resolved through the fallback chain. */
+    private final java.util.Set<ProgramId> directPhases = java.util.EnumSet.noneOf(ProgramId.class);
 
     /**
      * @param samplerOverrides the pack's gbuffers-stage custom-texture units (sampler name → dedicated unit), applied
@@ -148,7 +150,11 @@ public class GbufferPrograms {
             }
             if (entry != null) {
                 this.byPhase.put(phase, entry);
-                LOGGER.info("[Iris] Gbuffer phase {} -> '{}'", phase, sourceName);
+                if (direct.isPresent()) {
+                    this.directPhases.add(phase);
+                }
+                LOGGER.info("[Iris] Gbuffer phase {} -> '{}'{}", phase, sourceName,
+                        direct.isPresent() ? "" : " (fallback)");
             }
         }
     }
@@ -190,6 +196,14 @@ public class GbufferPrograms {
     /** @return the compiled program for a phase, or {@code null} when the pack has none (render fixed-function). */
     public Entry get(ProgramId phase) {
         return this.byPhase.get(phase);
+    }
+
+    /**
+     * {@return whether the pack ships a file for this phase itself, rather than the phase only resolving through
+     * OptiFine's fallback chain to some other program}
+     */
+    public boolean hasDirect(ProgramId phase) {
+        return this.directPhases.contains(phase);
     }
 
     /** Every distinct compiled entry (for draw-buffer union / teardown). */

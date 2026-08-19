@@ -28,9 +28,14 @@ public interface ChunkVertexEncoder {
         // are inert (and cost nothing) unless a shader pack is active. Populated by the meshing pipeline only when
         // Iris is in use. See com.bdmajora.impetus.iris.vertices.
 
-        /** {@code mc_midTexCoord.x} — U of the sprite center ({@code (minU+maxU)/2}); NOT an average of quad UVs. */
+        /**
+         * {@code mc_midTexCoord.x} — U of the centre of the texture region mapped to this QUAD (the mean of the
+         * four vertex Us), matching Iris. NOT the sprite centre: the two agree only for full-sprite quads, and
+         * using the sprite wrecks the atlas basis Chocapic-derived packs rebuild from this attribute on any face
+         * that maps a sub-rect (vanilla torch cap faces being the worst case).
+         */
         public float midTexU;
-        /** {@code mc_midTexCoord.y} — V of the sprite center ({@code (minV+maxV)/2}). */
+        /** {@code mc_midTexCoord.y} — V of the quad's texture centre (the mean of the four vertex Vs). */
         public float midTexV;
         /** {@code mc_Entity.x} - shader-facing block id: block.properties id when mapped, raw block id otherwise. */
         public int blockId;

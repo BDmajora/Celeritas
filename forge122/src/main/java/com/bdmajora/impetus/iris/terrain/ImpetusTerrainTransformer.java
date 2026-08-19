@@ -36,7 +36,7 @@ public final class ImpetusTerrainTransformer {
             "in uint a_LightCoord;",
             "in vec4 iris_Normal;",      // true face normal, NormI8 (normalized signed bytes)
             "in vec4 iris_Tangent;",     // at_tangent, w = handedness
-            "in vec2 iris_MidTexCoord;", // sprite center in atlas UV
+            "in vec2 iris_MidTexCoord;", // centre of the quad's texture region in atlas UV (not the sprite centre)
             "in vec4 iris_BlockInfo;",   // mc_Entity: (block id, render type, metadata, 1)
             "in vec4 iris_MidBlock;",    // at_midBlock: xyz offset-to-block-center * 64, w block emission
             "uniform mat4 u_ModelViewMatrix;",

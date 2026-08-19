@@ -11,7 +11,8 @@ import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
  * The terrain vertex format used while a shader pack is active: byte-identical to
  * {@code VanillaLikeChunkVertex} (float position, byte color, float UV, packed light/draw-params — the layout
  * {@code ImpetusTerrainTransformer}'s prologue decodes) with the OptiFine per-vertex attributes appended:
- * the true face normal ({@code gl_Normal}), {@code at_tangent}, {@code mc_midTexCoord} (sprite center in atlas UV),
+ * the true face normal ({@code gl_Normal}), {@code at_tangent}, {@code mc_midTexCoord} (centre of the quad's
+ * texture region in atlas UV — the mean of its four vertex UVs, NOT the sprite centre),
  * and {@code mc_Entity}. The entity attribute follows the shader-facing OptiFine/Iris shape:
  * {@code (block id, render type, metadata, 1)}. With a pack {@code block.properties}, the block id is the pack's
  * mapped id; without one it is the raw 1.12.2 block id. The extra data comes straight off
@@ -27,7 +28,7 @@ public class IrisChunkVertexType implements ChunkVertexType {
     // Offsets after the 28-byte vanilla-like base.
     private static final int OFFSET_NORMAL = 28;   // NormI8-packed face normal (4 normalized signed bytes)
     private static final int OFFSET_TANGENT = 32;  // NormI8-packed tangent, w = handedness
-    private static final int OFFSET_MID_TEX = 36;  // 2 x float, sprite center in atlas UV space
+    private static final int OFFSET_MID_TEX = 36;  // 2 x float, quad texture centre in atlas UV space
     private static final int OFFSET_ENTITY = 44;   // 4 x short, mc_Entity.xyzw (see class doc)
     private static final int OFFSET_MID_BLOCK = 52; // at_midBlock: 3 signed bytes (offset * 64) + emission byte
 

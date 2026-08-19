@@ -199,7 +199,8 @@ public final class ShaderProgramCompiler {
      * scalar/vector shapes Iris's transformer accepts instead of leaving Photon's generic attribute unfed.
      *
      * Only the {@code ShaderProgramCompiler} path (vanilla geometry) is affected; terrain/water get real tangents and
-     * sprite centers from the chunk vertex format via {@code ImpetusTerrainTransformer} and are compiled elsewhere.
+     * real quad texture centres from the chunk vertex format via {@code ImpetusTerrainTransformer} and are compiled
+     * elsewhere.
      */
     private static String neutralizeUnfedVanillaAttributes(String source) {
         source = source.replaceAll("(?m)^\\s*(?:attribute|in)\\s+vec4\\s+at_tangent\\s*;",

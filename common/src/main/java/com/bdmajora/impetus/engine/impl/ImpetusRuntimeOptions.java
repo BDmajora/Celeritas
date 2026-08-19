@@ -25,11 +25,9 @@ public final class ImpetusRuntimeOptions {
     public static ImpetusGameOptions.DeferChunkUpdatesMode deferMode = ImpetusGameOptions.DeferChunkUpdatesMode.ONE_FRAME;
     public static ImpetusGameOptions.InactivityFpsLimit inactivityFpsLimit = ImpetusGameOptions.InactivityFpsLimit.AFK;
 
-    // Texture sampling (block atlas)
-    public static ImpetusGameOptions.TextureFilteringMode textureFiltering = ImpetusGameOptions.TextureFilteringMode.DEFAULT;
+    // Texture sampling (block atlas). Only magnification is configurable; minification is pinned to vanilla's
+    // filter because the atlas has no border between sprites. See BlockAtlasFiltering.
     public static ImpetusGameOptions.PixelFilteringMode pixelFiltering = ImpetusGameOptions.PixelFilteringMode.NEAREST;
-    /** Power-of-two exponent; 0 means anisotropy disabled. */
-    public static int anisotropicFilteringBit = 0;
 
     public static void apply(ImpetusGameOptions options) {
         var quality = options.quality;
@@ -37,9 +35,7 @@ public final class ImpetusRuntimeOptions {
         hiddenFluidCulling = quality.hiddenFluidCulling;
         improvedFluidShaping = quality.improvedFluidShaping;
         closestPointEntitySort = quality.closestPointEntitySort;
-        textureFiltering = quality.textureFiltering;
         pixelFiltering = quality.pixelFiltering;
-        anisotropicFilteringBit = quality.anisotropicFilteringBit;
 
         var performance = options.performance;
         quadSplittingEnabled = performance.quadSplittingMode.isEnabled();
@@ -48,20 +44,5 @@ public final class ImpetusRuntimeOptions {
 
         // Keep the legacy boolean the engine already reads in sync with the new tri-state defer mode.
         performance.alwaysDeferChunkUpdates = performance.deferChunkUpdatesMode.defersVisible();
-    }
-
-    /**
-     * Set by the Iris pipeline for a pack that declares {@code breaksAnisotropy}: its parallax/POM sampling relies on
-     * exact texel derivatives that anisotropic filtering perturbs, so the pack asks for it off regardless of the
-     * user's video setting.
-     */
-    public static boolean anisotropyForcedOff = false;
-
-    /** {@return the maximum anisotropy factor to request, or 1.0 when disabled} */
-    public static float anisotropyLevel() {
-        if (anisotropyForcedOff || anisotropicFilteringBit <= 0) {
-            return 1.0f;
-        }
-        return (float) (1 << anisotropicFilteringBit);
     }
 }

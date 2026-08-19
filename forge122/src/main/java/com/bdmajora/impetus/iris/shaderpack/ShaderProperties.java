@@ -646,7 +646,10 @@ public final class ShaderProperties {
         return getBoolean("supportsColorCorrection");
     }
 
-    /** {@code breaksAnisotropy} — the pack is incompatible with anisotropic filtering on the block atlas. */
+    /**
+     * {@code breaksAnisotropy} — the pack is incompatible with anisotropic filtering on the block atlas. Parsed for
+     * parity only, and unused: this renderer never anisotropically filters the atlas (see BlockAtlasFiltering).
+     */
     public Optional<Boolean> getBreaksAnisotropy() {
         return getBoolean("breaksAnisotropy");
     }

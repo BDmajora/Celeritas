@@ -1,8 +1,6 @@
 package com.bdmajora.impetus.iris.uniforms;
 
 import com.bdmajora.impetus.ImpetusVintage;
-import com.bdmajora.impetus.engine.impl.ImpetusRuntimeOptions;
-import com.bdmajora.impetus.engine.impl.gui.ImpetusGameOptions;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
 import net.minecraft.client.Minecraft;
@@ -196,10 +194,10 @@ public final class CommonUniforms {
                         () -> ColorSpaceConverter.getColorSpace().ordinal())
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "chunkFadeTimeInv",
                         CommonUniforms::getChunkFadeTimeInv)
-                .uniform1i(UniformUpdateFrequency.PER_FRAME, "textureFilteringMode",
-                        CommonUniforms::getTextureFilteringMode)
-                .uniform1i(UniformUpdateFrequency.PER_FRAME, "anisotropicFiltering",
-                        CommonUniforms::getAnisotropicFiltering)
+                // Both are constants here: the block atlas is always sampled with vanilla minification and no
+                // anisotropy, because it has no border between sprites (see BlockAtlasFiltering).
+                .uniform1i(UniformUpdateFrequency.ONCE, "textureFilteringMode", () -> 0)
+                .uniform1i(UniformUpdateFrequency.ONCE, "anisotropicFiltering", () -> 0)
                 .uniform1f(UniformUpdateFrequency.ONCE, "pi", () -> (float) Math.PI)
                 .uniform1f(UniformUpdateFrequency.PER_TICK, "playerMood", CommonUniforms::getPlayerMood)
                 .uniform1f(UniformUpdateFrequency.PER_TICK, "constantMood", CommonUniforms::getConstantMood)
@@ -791,22 +789,6 @@ public final class CommonUniforms {
                 && !mc.playerController.isSpectator();
     }
 
-    private static int getTextureFilteringMode() {
-        ImpetusGameOptions.TextureFilteringMode mode = ImpetusRuntimeOptions.textureFiltering;
-        if (mode == ImpetusGameOptions.TextureFilteringMode.BILINEAR) {
-            return 1;
-        }
-        if (mode == ImpetusGameOptions.TextureFilteringMode.TRILINEAR) {
-            return 2;
-        }
-        return 0;
-    }
-
-    private static int getAnisotropicFiltering() {
-        float level = ImpetusRuntimeOptions.anisotropyLevel();
-        return level <= 1.0f ? 0 : Math.max(1, Math.round(level));
-    }
-
     private static float getChunkFadeTimeInv() {
         int durationMs = ImpetusVintage.options().quality.chunkFadeInDuration;
         return durationMs > 0 ? 1.0f / durationMs : 0.0f;
@@ -930,9 +912,11 @@ public final class CommonUniforms {
     }
 
     private static Vector4f getLightningBoltPosition() {
+        // NB: w must be 0 when no bolt is present -- packs use it as the "lightning is flashing" flag. Spell all four
+        // components out: JOML's no-arg Vector4f() is (0, 0, 0, 1), which would leave lightning permanently active.
         World world = world();
         if (world == null) {
-            return new Vector4f();
+            return new Vector4f(0.0f, 0.0f, 0.0f, 0.0f);
         }
         float tickDelta = CapturedRenderingState.INSTANCE.getTickDelta();
         Vector3d camera = CameraUniforms.getCurrentCameraPositionUnshifted();
@@ -944,7 +928,7 @@ public final class CommonUniforms {
                 return new Vector4f((float) (x - camera.x), (float) (y - camera.y), (float) (z - camera.z), 1.0f);
             }
         }
-        return new Vector4f();
+        return new Vector4f(0.0f, 0.0f, 0.0f, 0.0f);
     }
 
     private static float getCloudTime() {

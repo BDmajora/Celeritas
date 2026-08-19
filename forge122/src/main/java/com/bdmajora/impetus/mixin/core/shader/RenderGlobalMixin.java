@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.Slice;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.bdmajora.impetus.iris.Iris;
+import com.bdmajora.impetus.iris.pipeline.DeferredBlockOutline;
 import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
 import com.bdmajora.impetus.iris.pipeline.VanillaFeatureToggles;
 import com.bdmajora.impetus.iris.shaderpack.loading.ProgramId;
@@ -162,22 +163,45 @@ public class RenderGlobalMixin {
      * {@code Shaders.disableTexture2D()}, which is {@code useProgram(ProgramBasic)} whenever a textured program is
      * current.
      */
-    @Inject(method = "drawSelectionBox", at = @At("HEAD"), require = 0)
+    @Inject(method = "drawSelectionBox", at = @At("HEAD"), cancellable = true, require = 0)
     private void impetus$beginBlockOutline(net.minecraft.entity.player.EntityPlayer player,
                                            net.minecraft.util.math.RayTraceResult target, int execute,
                                            float partialTicks, CallbackInfo ci) {
-        // Nothing but the phase switch belongs here — that is the whole of OptiFine's hook too.
+        // Only route the outline through the pack when the pack actually ships `gbuffers_line`.
         //
-        // An earlier revision also pinned the fixed-function current colour to vanilla's (0, 0, 0, 0.4), on the
-        // theory that gl_Color was not reaching the program. That theory was wrong and the line is gone: OptiFine's
-        // `useProgram(ProgramBasic)` sets draw buffers and sampler uniforms and nothing else, so under OptiFine the
-        // very same pack writes the very same zeroed normal into gbuffers_basic's DRAWBUFFERS 0/3/6/7 at vanilla's
-        // 40% blend — the state this port reaches once the blend is left alone (see the note below). The bright cage
-        // was the unblended, full-strength version of that write being relit by the deferred pass, not a lost
-        // vertex attribute. Pinning a constant colour would in fact deviate from vanilla, because
-        // `drawBoundingBox` hides the line strip's doubling-back connectors by giving three of its sixteen
-        // vertices alpha 0, and a constant colour cannot reproduce that.
-        impetus$setPhase(ProgramId.Line);
+        // Iris parity for packs that wrote one: those packs know the selection box arrives here and handle it
+        // deliberately (Complementary/Spooklementary have a whole `SELECT_OUTLINE` option group keyed on recognising
+        // vanilla's (0,0,0,0.4) vertex colour). Nothing changes for them.
+        //
+        // For a pack with no `gbuffers_line`, OptiFine's fallback chain lands the outline in `gbuffers_basic` — a
+        // program written for sky/cloud/debug geometry that has no idea what it is being handed. RedHat's is the
+        // worst case and is why this exists; its entire fragment stage is
+        //     gl_FragData[0] = vec4(0.0, 0.0, 0.0, 1.0);   // colortex0, alpha 1.0
+        //     gl_FragData[1] = vec4(0.0, 1.0, 0.0, 1.0);   // colortex4 = (skylight, mat, blocklight, 1)
+        // with `varying vec4 color` declared and never read. So it discards vanilla's 0.4 alpha *and* the five
+        // alpha-0 vertices `drawBoundingBox` uses to hide the line strip's doubling-back connectors, then stamps
+        // "land material, zero skylight, zero blocklight" into the material buffer. It writes neither the normal
+        // (colortex2) nor the specular (colortex6) target, and vanilla draws the box with `depthMask(false)`, so the
+        // deferred pass relights those pixels using the *torch's* normal and specular against a black albedo. The
+        // multiplicative term goes to black; the additive specular term does not — which is the one-pixel red line
+        // across the torch, and why it only appears at certain view angles (specular is view-dependent).
+        //
+        // Falling back to fixed-function is what vanilla does and what the pack was written to coexist with: the box
+        // draws with vanilla's own blend, its per-vertex colour and alpha intact (so the connectors stay hidden), and
+        // into the fixed-function draw-buffer mask only, so it cannot corrupt material data it has no values for.
+        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        if (pipeline == null || DeferredBlockOutline.isReplaying()) {
+            // No pack, or this *is* the post-composite replay: let vanilla draw exactly as it always does.
+            return;
+        }
+        if (pipeline.hasDirectGbufferProgram(ProgramId.Line)) {
+            impetus$setPhase(ProgramId.Line);
+            return;
+        }
+        // No gbuffers_line: defer the whole draw past the composite chain (see DeferredBlockOutline) and skip it
+        // here. Drawing it now would only tint albedo, which the composite then relights.
+        DeferredBlockOutline.capture(player, target, partialTicks);
+        ci.cancel();
     }
 
     @Inject(method = "drawSelectionBox", at = @At("RETURN"), require = 0)

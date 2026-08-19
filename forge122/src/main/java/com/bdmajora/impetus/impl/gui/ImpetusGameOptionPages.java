@@ -319,28 +319,11 @@ public class ImpetusGameOptionPages {
                         .build())
                 .build());
 
-        // Group 4: texture filtering
+        // Group 4: texture filtering. Minification is deliberately not offered: the block atlas has no border
+        // between sprites, so anisotropic and GL_LINEAR_MIPMAP_* minification both sample neighbouring sprites
+        // at grazing angles and paint the block grid on distant terrain. See BlockAtlasFiltering.
         groups.add(OptionGroup.createBuilder()
                 .setId(StandardOptions.Group.FILTERING)
-                .add(OptionImpl.createBuilder(ImpetusGameOptions.TextureFilteringMode.class, sodiumOpts)
-                        .setId(StandardOptions.Option.TEXTURE_FILTERING.cast())
-                        .setName(TextComponent.translatable("options.textureFiltering"))
-                        .setTooltip(TextComponent.translatable("impetus.options.texture_filtering.tooltip"))
-                        .setControl(option -> new CyclingControl<>(option, ImpetusGameOptions.TextureFilteringMode.class))
-                        .setBinding((opts, value) -> opts.quality.textureFiltering = value, opts -> opts.quality.textureFiltering)
-                        .setImpact(OptionImpact.MEDIUM)
-                        .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
-                        .build())
-                .add(OptionImpl.createBuilder(int.class, sodiumOpts)
-                        .setId(StandardOptions.Option.ANISOTROPIC_FILTERING.cast())
-                        .setName(TextComponent.translatable("options.maxAnisotropy"))
-                        .setTooltip(TextComponent.translatable("impetus.options.anisotropic_filtering.tooltip"))
-                        .setControl(option -> new SliderControl(option, 0, 3, 1, value ->
-                                value == 0 ? TextComponent.translatable("options.off") : TextComponent.literal((1 << value) + "x")))
-                        .setBinding((opts, value) -> opts.quality.anisotropicFilteringBit = value, opts -> opts.quality.anisotropicFilteringBit)
-                        .setImpact(OptionImpact.MEDIUM)
-                        .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
-                        .build())
                 .add(OptionImpl.createBuilder(ImpetusGameOptions.PixelFilteringMode.class, sodiumOpts)
                         .setId(StandardOptions.Option.TEXEL_INTERPOLATION.cast())
                         .setName(TextComponent.translatable("impetus.options.pixel_filtering.name"))

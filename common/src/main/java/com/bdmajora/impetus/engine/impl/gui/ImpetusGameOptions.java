@@ -117,9 +117,6 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
 
         // Matches modern Sodium's Quality page.
         public boolean improvedTransparency = false;
-        public TextureFilteringMode textureFiltering = TextureFilteringMode.DEFAULT;
-        /** Anisotropic filtering level as a power-of-two exponent: 0 = off (1x), 1 = 2x, 2 = 4x, 3 = 8x. */
-        public int anisotropicFilteringBit = 0;
         public PixelFilteringMode pixelFiltering = PixelFilteringMode.NEAREST;
         public boolean hiddenFluidCulling = true;
         public boolean improvedFluidShaping = false;
@@ -225,24 +222,6 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
 
         public boolean isEnabled() {
             return this == ENABLED;
-        }
-    }
-
-    /** Texture minification/mipmap filtering applied to the block atlas. */
-    public enum TextureFilteringMode implements TextProvider {
-        DEFAULT("impetus.options.texture_filtering.default"),
-        BILINEAR("impetus.options.texture_filtering.bilinear"),
-        TRILINEAR("impetus.options.texture_filtering.trilinear");
-
-        private final TextComponent name;
-
-        TextureFilteringMode(String key) {
-            this.name = TextComponent.translatable(key);
-        }
-
-        @Override
-        public TextComponent getLocalizedName() {
-            return this.name;
         }
     }
 

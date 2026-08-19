@@ -80,8 +80,6 @@ public final class WorldRenderingSettings {
     private static boolean oldHandLight = true;
     /** {@code voxelizeLightBlocks} — emit geometry for light-emitting blocks so the shadow pass can voxelize them. */
     private static boolean voxelizeLightBlocks;
-    /** {@code breaksAnisotropy} — the pack is incompatible with anisotropic filtering on the block atlas. */
-    private static boolean breaksAnisotropy;
 
     public static boolean isOldHandLight() {
         return oldHandLight;
@@ -117,10 +115,6 @@ public final class WorldRenderingSettings {
 
     public static void setVoxelizeLightBlocks(boolean value) {
         voxelizeLightBlocks = value;
-    }
-
-    public static void setBreaksAnisotropy(boolean value) {
-        breaksAnisotropy = value;
     }
 
     public static boolean isDynamicHandLight() {

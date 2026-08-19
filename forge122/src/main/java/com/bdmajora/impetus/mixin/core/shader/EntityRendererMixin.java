@@ -321,6 +321,10 @@ public class EntityRendererMixin {
                 this.mc.getTextureManager().bindTexture(TextureMap.LOCATION_BLOCKS_TEXTURE);
             }
             pipeline.finishWorldRendering();
+            // The block selection box for packs with no gbuffers_line was skipped during the world pass and lands
+            // here instead, so it darkens the finished image rather than the albedo the composite chain relights.
+            // See DeferredBlockOutline for why this deviates from Iris/OptiFine on 1.12.
+            com.bdmajora.impetus.iris.pipeline.DeferredBlockOutline.drawIfPending();
         }
     }
 
@@ -425,5 +429,9 @@ public class EntityRendererMixin {
         if (pipeline != null) {
             pipeline.finishWorldRendering();
         }
+        // Safety net: this is the frame's last word. If the composite anchor above never ran, a captured outline is
+        // still pending — drop it rather than let a stale capture replay into some later frame with the wrong
+        // matrices. Costs at most one frame's outline on a path that already skipped the composite chain.
+        com.bdmajora.impetus.iris.pipeline.DeferredBlockOutline.discard();
     }
 }

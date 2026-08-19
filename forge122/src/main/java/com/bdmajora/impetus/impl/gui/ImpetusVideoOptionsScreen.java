@@ -41,7 +41,7 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
                 if (flags.contains(OptionFlag.REQUIRES_ASSET_RELOAD)) {
                     client.getTextureMapBlocks().setMipmapLevels(mc.gameSettings.mipmapLevels);
                     client.refreshResources();
-                    // Re-apply texture/pixel filtering + anisotropy in case the atlas was not fully restitched.
+                    // Re-apply the atlas sampler state in case the atlas was not fully restitched.
                     com.bdmajora.impetus.impl.render.texture.BlockAtlasFiltering.reapplyToBlockAtlas();
                 }
 
