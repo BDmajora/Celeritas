@@ -42,6 +42,11 @@ public class ImpetusLoadingPlugin implements IFMLLoadingPlugin, IEarlyMixinLoade
         // rendering-integration phases can add client mixins without further coremod changes.
         // AUSM's runtime pipeline is deactivated (LWJGL3-oriented; incompatible with Impetus' LWJGL2 abstraction).
         // The shader pipeline is Iris-native. mixins.iris.json carries the terrain-override mixin.
-        return Arrays.asList("mixins.impetus.json", "mixins.iris.json");
+        //
+        // Coartatio (the memory subsystem) has to load early: it replaces the backing collections of
+        // NBTTagCompound and ResourceLocation, both of which are constructed before mod loading
+        // begins, and anything built before the mixin applies keeps the vanilla layout for its
+        // lifetime.
+        return Arrays.asList("mixins.impetus.json", "mixins.iris.json", "mixins.coartatio.json");
     }
 }

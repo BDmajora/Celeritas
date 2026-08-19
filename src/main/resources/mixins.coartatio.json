@@ -1,0 +1,27 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "plugin": "com.bdmajora.coartatio.mixin.CoartatioMixinPlugin",
+  "package": "com.bdmajora.coartatio.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [
+    "nbt.NBTTagCompoundMixin",
+    "state.BlockStateContainerMixin",
+    "state.ExtendedBlockStateMixin",
+    "util.ResourceLocationMixin"
+  ],
+  "client": [
+    "client.ModelManagerMixin",
+    "client.model.CoartatioBakedQuadMixin",
+    "client.model.MultipartBakedModelMixin",
+    "client.model.SimpleBakedModelMixin",
+    "client.model.WeightedBakedModelMixin",
+    "client.model.multipart.ConditionAndMixin",
+    "client.model.multipart.ConditionOrMixin",
+    "client.model.multipart.ConditionPropertyValueMixin",
+    "util.ModelResourceLocationMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -25,6 +25,8 @@ import com.bdmajora.impetus.engine.impl.compat.environment.GlContextInfo;
 import com.bdmajora.impetus.engine.impl.gl.device.GLRenderDevice;
 import com.bdmajora.impetus.engine.impl.gui.ImpetusGameOptions;
 import com.bdmajora.impetus.engine.impl.render.chunk.region.RenderRegionManager;
+import com.bdmajora.coartatio.Coartatio;
+import com.bdmajora.coartatio.CoartatioConfig;
 import com.bdmajora.impetus.impl.command.TogglePassCommand;
 import com.bdmajora.impetus.impl.compat.ResourcePackScanner;
 import com.bdmajora.impetus.impl.gui.overlay.ImpetusToastRenderer;
@@ -112,6 +114,10 @@ public class ImpetusVintage {
 
                 break;
             }
+        }
+
+        if (CoartatioConfig.get().showDebugOverlay) {
+            strings.add(Coartatio.debugOverlayLine());
         }
     }
 

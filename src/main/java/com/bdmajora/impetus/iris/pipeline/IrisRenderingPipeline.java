@@ -2332,6 +2332,26 @@ public class IrisRenderingPipeline {
     }
 
     /**
+     * Re-uploads the current phase's {@code DYNAMIC} uniforms without repeating the rest of {@link #setPhase}'s state
+     * work. A phase is selected once and then covers a whole batch of draws — {@code entities} is set once for every
+     * entity in the frame — so anything that varies per draw inside a batch would otherwise never reach the GPU after
+     * the phase began. {@code entityColor} is the case that needs it: the hurt flash belongs to one entity, not to the
+     * batch.
+     * <p>
+     * No-op in the shadow pass, which binds its own entity program that this phase tracking does not describe.
+     */
+    public void refreshDynamicUniforms() {
+        if (!this.worldRenderingActive || IrisShadowRenderer.isShadowPass() || this.currentPhase == null
+                || this.gbufferPrograms == null) {
+            return;
+        }
+        GbufferPrograms.Entry entry = this.gbufferPrograms.get(this.currentPhase);
+        if (entry != null) {
+            entry.getUniforms().update();
+        }
+    }
+
+    /**
      * The "eyes" overlay layers — spider, enderman and ender dragon — which is what {@code gbuffers_spidereyes} is
      * for. OptiFine brackets the same three draws with {@code Shaders.beginSpiderEyes()}/{@code endSpiderEyes()};
      * Iris routes them through {@code ShaderKey.ENTITIES_EYES}.

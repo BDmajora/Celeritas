@@ -164,7 +164,8 @@ public final class CommonUniforms {
                         CommonUniforms::getModelScaleVector)
                 .uniform3f(UniformUpdateFrequency.PER_FRAME, "iris_CameraTranslation",
                         CommonUniforms::getIrisCameraTranslation)
-                .uniform4f(UniformUpdateFrequency.ONCE, "entityColor", CommonUniforms::getEntityColor)
+                .uniform4f(UniformUpdateFrequency.DYNAMIC, "entityColor",
+                        CapturedRenderingState.INSTANCE::getEntityColor)
                 .uniform1i(UniformUpdateFrequency.DYNAMIC, "gtextureId", CommonUniforms::getGtextureId)
                 .uniform1i(UniformUpdateFrequency.DYNAMIC, "textureReloadCount",
                         CapturedRenderingState.INSTANCE::getTextureReloadCount)
@@ -611,10 +612,6 @@ public final class CommonUniforms {
 
     private static int bool(boolean value) {
         return value ? 1 : 0;
-    }
-
-    private static Vector4f getEntityColor() {
-        return new Vector4f(0.0f, 0.0f, 0.0f, 0.0f);
     }
 
     private static float getIrisGlintAlpha() {

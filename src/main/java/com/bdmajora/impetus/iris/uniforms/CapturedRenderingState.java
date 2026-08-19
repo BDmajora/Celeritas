@@ -22,6 +22,7 @@ public final class CapturedRenderingState {
     private final Matrix4f shadowProjection = new Matrix4f();
     private final Vector2i atlasSize = new Vector2i();
     private final Vector4f colorModulator = new Vector4f(1.0f, 1.0f, 1.0f, 1.0f);
+    private final Vector4f entityColor = new Vector4f(0.0f, 0.0f, 0.0f, 0.0f);
 
     private float tickDelta;
     /** Iris {@code renderStage} uniform value: the current WorldRenderingPhase ordinal (MC_RENDER_STAGE_*). */
@@ -97,6 +98,24 @@ public final class CapturedRenderingState {
 
     public void setColorModulator(float red, float green, float blue, float alpha) {
         this.colorModulator.set(red, green, blue, alpha);
+    }
+
+    /**
+     * OptiFine's {@code entityColor}: {@code rgb} is the tint and {@code a} the blend factor, so shaders finish the
+     * overlay with {@code mix(color.rgb, entityColor.rgb, entityColor.a)}. Vanilla paints the hurt flash and the
+     * creeper charge-up with fixed-function texture combiners, which a bound program ignores entirely, so the tint
+     * has to travel as a uniform instead.
+     */
+    public Vector4f getEntityColor() {
+        return this.entityColor;
+    }
+
+    public void setEntityColor(float red, float green, float blue, float alpha) {
+        this.entityColor.set(red, green, blue, alpha);
+    }
+
+    public void resetEntityColor() {
+        this.entityColor.set(0.0f, 0.0f, 0.0f, 0.0f);
     }
 
     public int getRenderStage() {
