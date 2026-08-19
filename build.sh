@@ -3,20 +3,19 @@
 set -e
 
 # Gradle 9+ requires Java 17 or 21 to run the build environment.
-# The Stonecutter toolchain will automatically provision and use Java 8 for the 1.12.2 compilation.
+# The build still compiles the Forge 1.12.2 mod for Java 8.
 if ! java -version 2>&1 | grep -E -q 'version "(17|21)'; then
     echo "Warning: Gradle requires Java 17 or 21 to run."
     echo "Please ensure JDK 21 is set as your default Java environment."
 fi
 
-# Ensure the Gradle wrapper has execute permissions
+# Ensure the Gradle wrapper can run.
 if [ ! -x "./gradlew" ]; then
     chmod +x gradlew
 fi
 
 echo "Building Impetus for 1.12.2..."
 
-# FIX: Changed -Ptarget_versions to -Pimpetus_target_versions
-./gradlew -Pimpetus_target_versions="1.12.2" packageJar
+./gradlew packageJar
 
-echo "Done. The compiled jar should be located in build/libs/1.12.2/"
+echo "Done. The compiled jar is in build/libs/1.0.0-dev/"

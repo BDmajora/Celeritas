@@ -1,86 +1,183 @@
-import dev.kikugie.stonecutter.controller.StonecutterControllerExtension
-import org.taumc.gradle.publishing.api.PublishChannel
-import org.taumc.gradle.minecraft.ModEnvironment
-import org.taumc.gradle.minecraft.ModLoader
+import com.bdmajora.impetus.engine.gradle.build.conventions.ShadowHelper
+import com.bdmajora.impetus.engine.gradle.mdg.remapper.ReobfuscateCodeAndMixinsTask
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import com.gtnewhorizons.retrofuturagradle.mcp.ApplySourceAccessTransformersTask
+import com.gtnewhorizons.retrofuturagradle.modutils.ModUtils
 
 plugins {
     id("org.taumc.gradle.versioning")
-    id("org.taumc.gradle.publishing")
+    id("com.gtnewhorizons.retrofuturagradle") version "1.4.8"
+    id("com.gradleup.shadow")
+    id("impetus-mdg-remapper")
+    id("maven-publish")
 }
 
-project.version = tau.versioning.version(rootProject.properties["project_base_version"].toString(), rootProject.properties["release_channel"])
-println("Impetus: ${tau.versioning.version}")
+group = "com.bdmajora"
+version = tau.versioning.version(rootProject.properties["project_base_version"].toString(), rootProject.properties["release_channel"])
 
-//project(":forge1710")
-
-evaluationDependsOnChildren()
-
-val modernStonecutter = if (findProject(":modern") != null) {
-    project(":modern").extensions.getByType(StonecutterControllerExtension::class.java)
-} else {
-    null
-}
-
-val publishTask = tau.publishing.publish {
-    useTauGradleVersioning()
-    changelog = "Further improvements to overall system stability and other minor adjustments have been made to enhance the user experience."
-
-    discord {
-        supportAllChannelsExcluding(PublishChannel.RELEASE)
-
-        webhookURL = providers.environmentVariable("DISCORD_WEBHOOK")
-        username = "Impetus Test Builds"
-        avatarURL = "https://git.taumc.org/embeddedt/impetus/raw/branch/stonecutter/modern/src/main/resources/icon.png"
-
-        testBuildPreset("Impetus", "https://git.taumc.org/embeddedt/impetus")
+java {
+    withSourcesJar()
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(8))
     }
+}
 
-    if (System.getenv("GITEA_TOKEN") != null) {
-        github("Gitea") {
-            supportAllChannels()
-            uploadArtifacts = false
+base.archivesName = "impetus-forge-mc12.2"
 
-            apiEndpoint = "https://git.taumc.org/api/v1/"
+val modCompileOnly by configurations.creating
+configurations.compileOnly.get().extendsFrom(modCompileOnly)
+val modRuntimeOnly by configurations.creating
+configurations.runtimeOnly.get().extendsFrom(modRuntimeOnly)
 
-            accessToken = System.getenv("GITEA_TOKEN")
-            repository = "embeddedt/impetus"
-            tagName = tau.versioning.releaseTag
+minecraft {
+    mcVersion.set("1.12.2")
+}
+
+repositories {
+    exclusiveContent {
+        forRepository { maven("https://maven.cleanroommc.com") }
+        filter {
+            includeGroup("zone.rong")
         }
     }
-
-    if (modernStonecutter != null) {
-        modernStonecutter.tree.values.flatMap { it.values }.forEach {
-            val name = it.metadata.project
-            val ourLoader = bs.ModLoader.fromName(name) ?: throw IllegalArgumentException("No modloader for ${name}")
-
-            if (ourLoader == bs.ModLoader.FABRIC || modernStonecutter.eval(it.metadata.version, "<1.20.1")) {
-                // Skip Fabric for now as the payload to Discord is too large otherwise.
-                return@forEach
+    exclusiveContent {
+        forRepository {
+            maven {
+                url = uri("https://cursemaven.com")
             }
-
-            evaluationDependsOn(it.project.buildTreePath)
-
-            val packageJarTask: Copy? = it.project.tasks.findByName("packageJar") as Copy?
-
-            if (packageJarTask == null) {
-                return@forEach
+        }
+        filter {
+            includeGroup("curse.maven")
+        }
+    }
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "Modrinth"
+                url = uri("https://api.modrinth.com/maven")
             }
+        }
+        filter {
+            includeGroup("maven.modrinth")
+        }
+    }
+    exclusiveContent {
+        forRepository { maven("https://nexus.gtnewhorizons.com/repository/public/") }
+        filter {
+            includeGroupAndSubgroups("com.gtnewhorizons")
+            includeGroup("com.github.GTNewHorizons")
+        }
+    }
+    exclusiveContent {
+        forRepository { maven("https://maven.taumc.org/releases") }
+        filter {
+            includeGroupAndSubgroups("org.taumc")
+        }
+    }
+    mavenCentral()
+}
 
-            dependsOn(packageJarTask)
+configurations {
+    named("shadow") {
+        attributes {
+            attribute(ModUtils.DEOBFUSCATOR_TRANSFORMED, true)
+        }
+    }
+}
 
-            modArtifact {
-                files(it.project.provider { packageJarTask.inputs.files.singleFile })
+dependencies {
+    val lombokVersion = rootProject.properties["lombok_version"].toString()
+    compileOnly("org.projectlombok:lombok:${lombokVersion}")
+    annotationProcessor("org.projectlombok:lombok:${lombokVersion}")
 
-                minecraftVersionRange = bs.ModLoader.getMinecraftVersion(name)
-                javaVersions.add(JavaVersion.VERSION_21)
+    val jabelVersion = rootProject.properties["jabel_version"].toString()
+    annotationProcessor("com.github.GTNewHorizons:jabel-javac-plugin:${jabelVersion}")
+    compileOnly("com.github.GTNewHorizons:jabel-javac-plugin:${jabelVersion}")
 
-                environment.set(ModEnvironment.CLIENT_ONLY)
+    implementation(project(":common", configuration = "downgraded")) {
+        isTransitive = false
+    }
+    shadow(project(":common", configuration = "downgraded")) {
+        isTransitive = false
+    }
 
-                modLoaders.add(when(ourLoader) {
-                    bs.ModLoader.FABRIC -> ModLoader.FABRIC
-                    bs.ModLoader.FORGE -> ModLoader.LEXFORGE
-                    bs.ModLoader.NEOFORGE -> ModLoader.NEOFORGE
-                })
+    "shadow"("org.joml:joml:1.10.5")
+    implementation("org.joml:joml:1.10.5")
+    implementation("zone.rong:mixinbooter:10.5")
+    compileOnly("com.gtnewhorizons.retrofuturabootstrap:RetroFuturaBootstrap:1.0.11") {
+        exclude(group = "org.apache.logging.log4j")
+    }
+    "modRuntimeOnly"("curse.maven:ae2-223794:2747063")
+    modCompileOnly("maven.modrinth:fluidlogged-api:3.0.6")
+}
+
+tasks.named<JavaCompile>("compileJava") {
+    sourceCompatibility = "21"
+    options.release = 8
+    javaCompiler = javaToolchains.compilerFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+tasks.named("reobfJar").configure {
+    enabled = false
+}
+
+tasks.register<ReobfuscateCodeAndMixinsTask>("impetusRemapJar") {
+    tsrgMappings = mcpTasks.srgFile("mcp-srg.srg")
+    deobfMinecraftJar = mcpTasks.taskPackagePatchedMc.flatMap { it.archiveFile }
+    classpath = sourceSets.main.get().compileClasspath
+    archiveBaseName.set(base.archivesName)
+    archiveClassifier.set("reobf")
+    input = tasks.named<Jar>("jar").flatMap { it.archiveFile }
+    dependsOn(mcpTasks.taskGenerateForgeSrgMappings)
+}
+
+ShadowHelper.createShadowRemapJar(project, "impetusRemapJar")
+
+tasks.named<ShadowJar>("shadowRemapJar") {
+    // Forge 1.12.2 cannot scan Java 9 module descriptors.
+    exclude("module-info.class")
+    exclude("**/module-info.class")
+    exclude("META-INF/versions/**/module-info.class")
+
+    // Keep the release jar name stable.
+    archiveFileName.set("impetus-${rootProject.properties["project_base_version"]}.0.jar")
+}
+
+tasks.named<ApplySourceAccessTransformersTask>("applySourceAccessTransformers") {
+    accessTransformerFiles.from("src/main/resources/META-INF/impetus_at.cfg")
+}
+
+tasks.named<Jar>("jar") {
+    manifest {
+        attributes["FMLAT"] = "impetus_at.cfg"
+        attributes["FMLCorePlugin"] = "com.bdmajora.impetus.core.ImpetusLoadingPlugin"
+        attributes["FMLCorePluginContainsFMLMod"] = "true"
+        attributes["ForceLoadAsMod"] = "true"
+    }
+}
+
+tasks.register("packageJar", Copy::class) {
+    from(tasks.named<ShadowJar>("shadowRemapJar").get().archiveFile)
+    into("${rootProject.layout.buildDirectory.get()}/libs/${project.version}")
+    dependsOn(tasks.named("shadowRemapJar"))
+}
+
+tasks.processResources.configure {
+    inputs.property("version", version)
+    filesMatching("mcmod.info") {
+        expand(mapOf("version" to inputs.properties["version"]))
+    }
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("default") {
+            artifactId = base.archivesName.get()
+            artifact(tasks.named<ShadowJar>("shadowRemapJar").map { it.archiveFile })
+            artifact(tasks.named("sourcesJar")) {
+                classifier = "sources"
             }
         }
     }

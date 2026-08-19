@@ -1,4 +1,4 @@
-<img src="forge122/src/main/resources/assets/impetus/textures/gui/icon.png" width="128">
+<img src="src/main/resources/assets/impetus/textures/gui/icon.png" width="128">
 
 # Impetus
 
@@ -6,8 +6,8 @@ Impetus is a free and open-source performance & shaders mod for Minecraft client
 Celeritas by embeddedt (itself a fork of Embeddium and Oculus 1.7, which in turn descend from the last
 FOSS-licensed version of Sodium and from Iris 1.7).
 
-Impetus takes the project in a new direction: closing the feature gap with the modern Sodium renderer —
-dynamic translucency sorting, tree-based occlusion culling, GPU driver workarounds, and more — through
+Impetus takes the project in a new direction: closing the feature gap with the modern Sodium renderer,
+dynamic translucency sorting, tree-based occlusion culling, GPU driver workarounds, and more, through
 independent, original implementations, while keeping first-class support for legacy Minecraft versions and
 the bundled shader pipeline. See [SODIUM_PARITY_ROADMAP.md](SODIUM_PARITY_ROADMAP.md) for the roadmap.
 
@@ -17,37 +17,16 @@ your own risk. Expect minimal support and many possible bugs due to limited test
 
 ## Project layout
 
-Impetus uses the [Stonecutter](https://codeberg.org/stonecutter/stonecutter) toolchain to reduce the effort required
-to support individual Minecraft versions. Additionally, as much core rendering code as possible is fully abstracted
-from Minecraft within a `:common` project (`com.bdmajora.impetus.engine`), with version-specific mod layers
-(e.g. `forge122`, under `com.bdmajora.impetus`).
+This repository now targets Forge 1.12.2 directly from the root `src` folder. Shared renderer code lives in
+the `:common` project, while Minecraft-specific glue lives under `src/main/java/com/bdmajora/impetus`.
 
 ## How to build
 
-**`impetus_target_versions` must be set when building locally, as no projects are configured by default.**
-You may want to set it in your user properties file (e.g. `~/.gradle/gradle.properties`) to avoid specifying
-it in every command-line Gradle invocation or modifying the checked-in `gradle.properties`.
-
-The fastest way to build for exactly one version target is to run `./gradlew -Pimpetus_target_versions=<version> packageJar`.
-The resulting jar file will be available
-in `build/libs/<impetus version>`.
-
-Note: the `impetus_target_versions` property accepts a standard Stonecutter predicate, so you can also use syntax like
-`./gradlew -Pimpetus_target_versions="<1.8.9"`.
-
-Alternatively, `impetus_target_versions_pattern` accepts a Java regex, e.g.
-`./gradlew -Pimpetus_target_versions_pattern=.* packageJar` to build every Minecraft version at once.
+Run `./gradlew packageJar`. The resulting jar is written to `build/libs/<impetus version>`.
 
 ## How to use
 
-Impetus generally requires a "modernized" environment on older Minecraft versions, and will not run out-of-the-box
-with a default modded Minecraft instance. Newer Minecraft versions ship with the necessary dependencies and will not
-require any custom setup.
-
-* Forge 1.12.2 is supported out of the box on Java 8 + LWJGL 2.
-* Older versions of Minecraft require lwjgl3ify (or an equivalent) & Java 21. (This requirement will begin being relaxed in the near future.)
-* For modern (1.13+) versions, the final mod jar should run as-is in a standard instance for that version (e.g. Java 17
-or 21 are not required, unless the underlying Minecraft version itself requires them).
+Forge 1.12.2 is supported out of the box on Java 8 + LWJGL 2.
 
 ## Shader pack compatibility
 
