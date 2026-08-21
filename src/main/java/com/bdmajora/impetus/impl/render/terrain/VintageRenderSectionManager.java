@@ -6,6 +6,7 @@ import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.chunk.Chunk;
+import com.bdmajora.fulgor.FulgorRenderBridge;
 import com.bdmajora.impetus.engine.impl.gl.device.CommandList;
 import com.bdmajora.impetus.engine.impl.gl.device.RenderDevice;
 import com.bdmajora.impetus.engine.impl.render.chunk.*;
@@ -112,7 +113,10 @@ public class VintageRenderSectionManager extends RenderSectionManager {
         if (y < 0 || y >= array.length) {
             return true;
         }
-        return array[y] == Chunk.NULL_BLOCK_STORAGE || array[y].isEmpty();
+        // Deliberately not isEmpty(): Fulgor widens that to mean "has nothing worth sending to the
+        // client", which is true of a blockless section only when its light is trivial too. The
+        // visibility graph wants the narrower question of whether there is any geometry.
+        return array[y] == Chunk.NULL_BLOCK_STORAGE || FulgorRenderBridge.isEmptyOfBlocks(array[y]);
     }
 
     @Override

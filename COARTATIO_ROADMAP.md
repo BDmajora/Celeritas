@@ -477,3 +477,41 @@ ASM transformer — LoliASM's `shouldSkipField` config exists for exactly that. 
 *using* a field but cannot delete it, so a mixin-only port saves nothing while still breaking any mod
 that reflects on `ItemStack`. Worth revisiting only if Coartatio ever gains a transformer for other
 reasons.
+
+
+## 9. Cancelling at HEAD skips side effects
+
+`@Inject(at = @At("HEAD"), cancellable = true)` is the tidy way to replace a method's return value,
+and it is silently wrong whenever the original body does anything besides compute that value.
+
+`SoundRegistry.createUnderlyingMap` keeps a second reference to the map it builds:
+
+```java
+protected Map<...> createUnderlyingMap() {
+    this.soundRegistry = Maps.newHashMap();   // the side effect
+    return this.soundRegistry;
+}
+public void clearMap() { this.soundRegistry.clear(); }
+```
+
+Cancelling at HEAD returned a compact map to the caller and never ran the assignment, so
+`soundRegistry` stayed null and `clearMap` — called on the first resource reload — threw
+`NullPointerException` before the main menu. Injecting at `RETURN` and rewriting both the field and
+the return value fixes it, at the cost of one short-lived `HashMap` per registry.
+
+`RegistrySimple`'s version of the same method is a bare `return Maps.newHashMap()`, which is why the
+identical treatment there is fine — and why this was easy to miss when extending one to the other.
+
+**Every HEAD-cancel in Coartatio has been audited against its target's body:**
+
+| Injection | Target body | Verdict |
+|---|---|---|
+| `RegistrySimpleMixin.createUnderlyingMap` | `return Maps.newHashMap()` | pure |
+| `LockCodeMixin.fromNBT` | reads NBT, returns | pure |
+| `ConditionAnd/Or/PropertyValueMixin.getPredicate` | builds and returns a predicate | pure |
+| `BlockStateContainerMixin` / `ExtendedBlockStateMixin.createState` | `return new StateImplementation(...)` | pure |
+| `SoundRegistryMixin.createUnderlyingMap` | **assigns a field** | fixed — moved to RETURN |
+| `SearchTreeMixin.recalculate` | rebuilds both suffix arrays | deferred deliberately, re-run on first search |
+
+The rule going forward: before cancelling at HEAD, read the body. If it writes anything, inject at
+RETURN and amend the result instead.

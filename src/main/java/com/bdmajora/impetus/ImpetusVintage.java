@@ -30,6 +30,11 @@ import com.bdmajora.coartatio.Coartatio;
 import com.bdmajora.coartatio.CoartatioConfig;
 import com.bdmajora.coartatio.gui.CoartatioStatsCommand;
 import com.bdmajora.coartatio.launch.ClassLoaderCleaner;
+import com.bdmajora.equilibrium.Equilibrium;
+import com.bdmajora.equilibrium.gui.EquilibriumStatsCommand;
+import com.bdmajora.fulgor.Fulgor;
+import com.bdmajora.fulgor.FulgorConfig;
+import com.bdmajora.fulgor.gui.FulgorStatsCommand;
 import com.bdmajora.impetus.impl.command.TogglePassCommand;
 import com.bdmajora.impetus.impl.compat.ResourcePackScanner;
 import com.bdmajora.impetus.impl.gui.overlay.ImpetusToastRenderer;
@@ -50,6 +55,10 @@ public class ImpetusVintage {
         VERSION = Loader.instance().getIndexedModList().get(MODID).getVersion();
         MinecraftForge.EVENT_BUS.register(this);
 
+        // The lighting engine branches on these on its hot path, and every world it builds an engine
+        // for is constructed after this point. Earlier than this the mod list is not yet answerable.
+        Fulgor.detectCompatibility();
+
         // Seed the engine's hot-path option snapshot from the loaded config.
         com.bdmajora.impetus.engine.impl.ImpetusRuntimeOptions.apply(CONFIG);
 
@@ -66,6 +75,15 @@ public class ImpetusVintage {
         }
 
         ClientCommandHandler.instance.registerCommand(new CoartatioStatsCommand());
+        ClientCommandHandler.instance.registerCommand(new FulgorStatsCommand());
+        ClientCommandHandler.instance.registerCommand(new EquilibriumStatsCommand());
+
+        // Equilibrium's options were resolved during coremod setup, long before this. Logging the
+        // summary here rather than there puts it after the mod list in the log, which is where
+        // someone reading a crash report will already be looking to find out what else is installed.
+        for (String line : Equilibrium.statistics()) {
+            Equilibrium.LOGGER.info(line);
+        }
 
         // Phase 1: load (parse only) the selected shader pack. No rendering changes happen here — if no pack is
         // selected or loading fails, Impetus renders exactly as before.
@@ -94,6 +112,14 @@ public class ImpetusVintage {
         // unambiguous "the world is gone" signal on 1.12.2 — WorldEvent.Unload fires per dimension.
         if (CoartatioConfig.get().clearPoolsOnWorldLeave) {
             Coartatio.onWorldLeave();
+        }
+
+        // Leaving the world is the natural boundary for the lighting counters: they are cumulative
+        // over a session, and the interesting comparison is between one world and the next.
+        if (FulgorConfig.get().logStatistics) {
+            for (String line : Fulgor.statistics()) {
+                Fulgor.LOGGER.info(line);
+            }
         }
     }
 
@@ -137,6 +163,10 @@ public class ImpetusVintage {
 
         if (CoartatioConfig.get().showDebugOverlay) {
             strings.add(Coartatio.debugOverlayLine());
+        }
+
+        if (FulgorConfig.get().showDebugOverlay) {
+            strings.add(Fulgor.debugOverlayLine());
         }
     }
 

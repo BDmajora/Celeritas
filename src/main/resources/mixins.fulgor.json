@@ -1,0 +1,24 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "plugin": "com.bdmajora.fulgor.mixin.FulgorMixinPlugin",
+  "package": "com.bdmajora.fulgor.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [
+    "block.BlockMixin",
+    "network.SPacketChunkDataMixin",
+    "world.AnvilChunkLoaderMixin",
+    "world.ChunkMixin",
+    "world.ChunkProviderServerMixin",
+    "world.ChunkSkylightMixin",
+    "world.ExtendedBlockStorageMixin",
+    "world.WorldMixin"
+  ],
+  "client": [
+    "client.MinecraftMixin",
+    "client.RenderGlobalMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

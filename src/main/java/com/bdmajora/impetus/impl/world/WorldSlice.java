@@ -26,6 +26,7 @@ import com.bdmajora.impetus.engine.impl.util.PositionUtil;
 import com.bdmajora.impetus.engine.impl.util.position.SectionPos;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3i;
+import com.bdmajora.fulgor.FulgorRenderBridge;
 import com.bdmajora.impetus.ImpetusVintage;
 import com.bdmajora.impetus.impl.compat.fluidlogged.FluidloggedCompat;
 import com.bdmajora.impetus.impl.render.terrain.ImpetusWorldRenderer;
@@ -118,13 +119,18 @@ public class WorldSlice implements ImpetusBlockAccess {
     private final Long2ReferenceMap<ClonedChunkSection> extraClonedSections = new Long2ReferenceOpenHashMap<>();
 
     public static ChunkRenderContext prepare(World world, SectionPos origin, ClonedChunkSectionCache sectionCache) {
+        // Fulgor defers light propagation until something reads light, and the copies below read the
+        // section's light arrays directly rather than through Chunk#getLightFor. Resolve what is
+        // pending before anything is captured, or the mesh bakes in light from an earlier tick.
+        FulgorRenderBridge.flushPendingLightUpdates(world);
+
         Chunk chunk = world.getChunk(origin.x(), origin.z());
         ExtendedBlockStorage section = chunk.getBlockStorageArray()[origin.y()];
 
         // If the chunk section is absent or empty, simply terminate now. There will never be anything in this chunk
         // section to render, so we need to signal that a chunk render task shouldn't created. This saves a considerable
         // amount of time in queueing instant build tasks and greatly accelerates how quickly the world can be loaded.
-        if (section == null || section.isEmpty()) {
+        if (section == null || FulgorRenderBridge.isEmptyOfBlocks(section)) {
             return null;
         }
 

@@ -1,0 +1,43 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "refmap": "mixins.equilibrium.refmap.json",
+  "plugin": "com.bdmajora.equilibrium.mixin.EquilibriumMixinPlugin",
+  "package": "com.bdmajora.equilibrium.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [
+    "ai.goal_selector.EntityAITasksMixin",
+    "alloc.deep_passengers.EntityMixin",
+    "alloc.entity_tracker.EntityTrackerEntryMixin",
+    "alloc.enum_values.piston_block.BlockPistonBaseMixin",
+    "alloc.enum_values.piston_handler.BlockPistonStructureHelperMixin",
+    "alloc.enum_values.redstone_wire.BlockRedstoneWireMixin",
+    "block.hopper.TileEntityHopperMixin",
+    "block.redstone_wire.BlockRedstoneWireMixin",
+    "chunk.no_validation.ChunkMixin",
+    "collections.mob_spawning.WorldEntitySpawnerMixin",
+    "entity.collisions.movement.WorldMixin",
+    "entity.fast_elytra_check.EntityLivingBaseMixin",
+    "entity.fast_hand_swing.EntityLivingBaseMixin",
+    "entity.fast_retrieval.WorldMixin",
+    "math.fast_blockpos.BlockPosMixin",
+    "math.fast_blockpos.EnumFacingMixin",
+    "math.fast_util.EnumFacingMixin",
+    "math.sine_lut.MathHelperMixin",
+    "util.block_entity_retrieval.WorldMixin",
+    "util.chunk_access.WorldMixin",
+    "util.data_storage.EntityMixin",
+    "util.data_storage.WorldMixin",
+    "world.block_entity_ticking.sleeping.brewing_stand.TileEntityBrewingStandMixin",
+    "world.block_entity_ticking.sleeping.furnace.TileEntityFurnaceMixin",
+    "world.explosions.block_raycast.ExplosionMixin",
+    "world.explosions.entity_raycast.WorldMixin",
+    "world.inline_block_access.WorldMixin",
+    "world.inline_height.WorldMixin",
+    "world.raycast.WorldMixin",
+    "world.tick_scheduler.WorldServerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
