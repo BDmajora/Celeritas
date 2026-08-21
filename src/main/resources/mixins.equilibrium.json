@@ -1,7 +1,6 @@
 {
   "required": true,
   "minVersion": "0.8",
-  "refmap": "mixins.equilibrium.refmap.json",
   "plugin": "com.bdmajora.equilibrium.mixin.EquilibriumMixinPlugin",
   "package": "com.bdmajora.equilibrium.mixin",
   "compatibilityLevel": "JAVA_8",
@@ -17,7 +16,6 @@
     "chunk.no_validation.ChunkMixin",
     "collections.mob_spawning.WorldEntitySpawnerMixin",
     "entity.collisions.movement.WorldMixin",
-    "entity.fast_elytra_check.EntityLivingBaseMixin",
     "entity.fast_hand_swing.EntityLivingBaseMixin",
     "entity.fast_retrieval.WorldMixin",
     "math.fast_blockpos.BlockPosMixin",

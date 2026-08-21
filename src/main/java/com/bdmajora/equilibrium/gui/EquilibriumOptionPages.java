@@ -63,8 +63,9 @@ public final class EquilibriumOptionPages {
         List<OptionGroup> groups = new ArrayList<>();
 
         for (String category : EquilibriumOptions.categories()) {
+            // FIX: Prefix the category string with "group." so it doesn't collide with boolean toggles
             OptionGroup.Builder group = OptionGroup.createBuilder()
-                    .setId(OptionIdentifier.create(MOD_ID, category));
+                    .setId(OptionIdentifier.create(MOD_ID, "group." + category));
 
             for (EquilibriumOptions.Entry entry : EquilibriumOptions.inCategory(category)) {
                 group.add(toggle(entry));
@@ -77,7 +78,7 @@ public final class EquilibriumOptionPages {
                 OptionIdentifier.create(MOD_ID, "optimizations"),
                 TextComponent.translatable("impetus.options.pages.optimizations"),
                 ImmutableList.copyOf(groups));
-    }
+        }
 
     private static OptionImpl<EquilibriumConfig, Boolean> toggle(EquilibriumOptions.Entry entry) {
         String key = langKey(entry);
