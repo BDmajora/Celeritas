@@ -3,10 +3,16 @@ package com.bdmajora.impetus.core;
 import com.gtnewhorizons.retrofuturabootstrap.SharedConfig;
 
 public class ImpetusLwjgl3ifyCompat {
+    
     public static void apply() {
-        // Hack for now
-        var handle = SharedConfig.getRfbTransformers().stream().filter(transformer -> transformer.id().equals("lwjgl3ify:redirect")).findFirst().get();
-        handle.exclusions().add("com.bdmajora.impetus.engine");
-        handle.exclusions().add("com.bdmajora.impetus");
+        // TODO: Move these exclusions to retrofuturabootstrap's config file or manifest to avoid race conditions and state mutation.
+        // Exclude Impetus packages from lwjgl3ify's redirect transformer to prevent bytecode conflicts.
+        SharedConfig.getRfbTransformers().stream()
+                .filter(transformer -> "lwjgl3ify:redirect".equals(transformer.id()))
+                .findFirst()
+                .ifPresent(handle -> {
+                    handle.exclusions().add("com.bdmajora.impetus.engine");
+                    handle.exclusions().add("com.bdmajora.impetus");
+                });
     }
 }
