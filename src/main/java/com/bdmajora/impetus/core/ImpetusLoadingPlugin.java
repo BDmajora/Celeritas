@@ -18,92 +18,86 @@ import java.util.Set;
 @IFMLLoadingPlugin.Name("Impetus")
 @IFMLLoadingPlugin.MCVersion("1.12.2")
 public class ImpetusLoadingPlugin implements IFMLLoadingPlugin, IEarlyMixinLoader, IMixinConfigHijacker {
-    /**
-     * Other mods in the Phosphor lineage, and the mixin config each one registers.
-     *
-     * <p>Fulgor replaces all of them. Running two of these together is not a degraded experience, it is
-     * two engines redefining {@code Chunk.getLightFor} and {@code World.checkLightFor} with different
-     * ideas about when propagation happens — so the second one to load either fails to apply or
-     * corrupts light. Suppressing the other config is the only outcome that leaves a working game.
-     */
+    
+    // Maps legacy Phosphor lineage mods to their configs
+    // Fulgor replaces the functions below, running both simultaneously would corrupt the lighting
     private static final Map<String, String> SUPERSEDED_LIGHTING_MODS = supersededLightingMods();
 
+    // Builds the immutable map of conflicting lighting mods to suppress
     private static Map<String, String> supersededLightingMods() {
         Map<String, String> mods = new LinkedHashMap<>();
+        
+        // Base Phosphor implementation
         mods.put("phosphor-lighting", "mixins.phosphor.json");
+        
+        // Alfheim lighting engine fork
         mods.put("alfheim", "mixins.alfheim.json");
+        
         return Collections.unmodifiableMap(mods);
     }
 
+    // Required by IFMLLoadingPlugin; left blank as Impetus has no ASM transformers
     @Override
-    public @Nullable String[] getASMTransformerClass() {
+    public String[] getASMTransformerClass() {
         return new String[0];
     }
 
+    // Required by IFMLLoadingPlugin; left blank as Impetus does not use a mod container
     @Override
-    public @Nullable String getModContainerClass() {
+    public String getModContainerClass() {
         return null;
     }
 
+    // Required by IFMLLoadingPlugin; left blank as Impetus does not use a setup class
     @Override
-    public @Nullable String getSetupClass() {
+    public String getSetupClass() {
         return null;
     }
 
+    // Required by IFMLLoadingPlugin; left blank as Impetus does not inject custom data
     @Override
     public void injectData(Map<String, Object> map) {
 
     }
 
+    // Required by IFMLLoadingPlugin; left blank as Impetus does not use access transformers
     @Override
-    public @Nullable String getAccessTransformerClass() {
+    public String getAccessTransformerClass() {
         return null;
     }
 
     @Override
     public List<String> getMixinConfigs() {
-        // The Iris config is currently inert (no mixins yet); registering it here reserves the early-load slot so the
-        // rendering-integration phases can add client mixins without further coremod changes.
-        // AUSM's runtime pipeline is deactivated (LWJGL3-oriented; incompatible with Impetus' LWJGL2 abstraction).
-        // The shader pipeline is Iris-native. mixins.iris.json carries the terrain-override mixin.
-        //
-        // Coartatio (the memory subsystem) has to load early: it replaces the backing collections of
-        // NBTTagCompound and ResourceLocation, both of which are constructed before mod loading
-        // begins, and anything built before the mixin applies keeps the vanilla layout for its
-        // lifetime.
-        //
-        // Fulgor (the lighting subsystem) has to load early for a different reason: it adds fields to
-        // World and Chunk, and a world constructed before the mixin applies would have no lighting
-        // engine at all.
-        //
-        // Equilibrium (the general performance subsystem) is last of the four, which matters for one
-        // class: it overwrites World.getChunk to route through its own cache, and Fulgor's World
-        // mixin reads chunks. Loading Equilibrium after Fulgor means Fulgor's reads go through the
-        // cache rather than the other way round, which is the order that leaves both correct.
+        // 1. Impetus/Iris: Reserve early-load slots
+        // 2. Coartatio: Must apply before vanilla NBT/ResourceLocation instantiation
+        // 3. Fulgor: Injects required lighting fields into World/Chunk
+        // 4. Equilibrium: Loads last so Fulgor's reads utilize Equilibrium's chunk cache
         return Arrays.asList("mixins.impetus.json", "mixins.iris.json", "mixins.coartatio.json",
                 "mixins.fulgor.json", "mixins.equilibrium.json");
     }
 
+    // Extracts just the config JSON names to pass to the hijacker
     @Override
     public Set<String> getHijackedMixinConfigs() {
         return new HashSet<>(SUPERSEDED_LIGHTING_MODS.values());
     }
 
-    /**
-     * Suppresses a superseded lighting mod's config, but only when that mod is actually present.
-     *
-     * <p>The context's mod list is built from coremod jars at this stage, which is exactly the set this
-     * matters for — every mod in this lineage ships as a coremod, because none of them can work
-     * otherwise.
-     */
+    // Checks the environment to execute the config suppression
     @Override
     public Set<String> getHijackedMixinConfigs(Context context) {
         Set<String> hijacked = new HashSet<>();
 
+        // Scan early coremod jars for conflicting lighting engines
         for (Map.Entry<String, String> mod : SUPERSEDED_LIGHTING_MODS.entrySet()) {
+            
+            // Check if the conflicting mod ID is currently installed
             if (context.isModPresent(mod.getKey())) {
+                
+                // Warn the user to physically remove the conflicting jar
                 Fulgor.LOGGER.warn("{} was detected. Impetus' own lighting engine (Fulgor) replaces it "
                         + "entirely and its patches will be suppressed; you should remove it.", mod.getKey());
+                
+                // Add the alternative mod's config to the active suppression list
                 hijacked.add(mod.getValue());
             }
         }
