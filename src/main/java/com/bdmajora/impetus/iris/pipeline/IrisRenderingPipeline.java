@@ -2438,8 +2438,30 @@ public class IrisRenderingPipeline {
      * Re-uploads the current phase's {@code DYNAMIC} uniforms without repeating the rest of {@link #setPhase}'s state
      * work. A phase is selected once and then covers a whole batch of draws — {@code entities} is set once for every
      * entity in the frame — so anything that varies per draw inside a batch would otherwise never reach the GPU after
-     * the phase began. {@code entityColor} is the case that needs it: the hurt flash belongs to one entity, not to the
+     * the phase began. {@code entityColor} is one case that needs it: the hurt flash belongs to one entity, not to the
      * batch.
+     * <p>
+     * {@code entityId}, {@code blockEntityId} and {@code currentRenderedItemId} are the others, and they are the
+     * reason this is called from the three id mixins rather than only from the hurt-flash one. Iris never faces this:
+     * {@code EntityPatcher#patchEntityId} <em>deletes</em> the {@code uniform int entityId/blockEntityId/
+     * currentRenderedItemId} declarations, rewrites every reference to {@code iris_entityInfo.x/.y/.z}, and feeds that
+     * from the per-vertex attribute {@code in ivec3 iris_Entity}. Per-vertex data cannot latch — each vertex carries
+     * its own ids. (The {@code ONCE}/-1 uniforms Iris keeps in {@code CommonUniforms} are warning-suppression dummies
+     * for programs where the attribute is not wired up, not the real values.) 1.12's fixed-function vertex formats
+     * have nowhere to put an extra integer attribute, so Impetus keeps them as genuine uniforms; uploading them per
+     * object is what restores the per-draw semantics the attribute gives Iris for free.
+     * <p>
+     * Left un-refreshed, one id latches for a whole batch: whichever object happened to be current when the phase was
+     * entered decides the material for every draw after it. Packs dispatch on exactly these values — Complementary's
+     * {@code gbuffers_entities} opens {@code int mat = currentRenderedItemId;} — so a latched emissive id makes the
+     * entire batch emissive, and since draw order tracks the camera, which id wins changes with the heading.
+     * <p>
+     * Cheap enough to call per object: {@link com.bdmajora.impetus.iris.gl.uniform.IntUniform#update()} and its
+     * siblings compare against a cached value and only issue a {@code glUniform*} when it actually changed, so the
+     * common case is a walk of the dynamic list with no GL traffic at all.
+     * <p>
+     * Unlike {@link #setPhase}, this touches nothing but uniforms — no vertex arrays, draw buffers, blend or alpha
+     * test — which is what makes it safe on a per-object hook that {@code setPhase} was not.
      * <p>
      * No-op in the shadow pass, which binds its own entity program that this phase tracking does not describe.
      */
@@ -2449,9 +2471,19 @@ public class IrisRenderingPipeline {
             return;
         }
         GbufferPrograms.Entry entry = this.gbufferPrograms.get(this.currentPhase);
-        if (entry != null) {
-            entry.getUniforms().update();
+        if (entry == null) {
+            return;
         }
+        // glUniform* writes into whatever program is bound RIGHT NOW, and uniform locations are per-program. The
+        // phase field only records the last setPhase, while the per-object id hooks fire from vanilla renderers that
+        // have no idea which program that was — a held item reaches RenderItem#renderItem underneath the hand pass,
+        // not the entity phase. Pushing the recorded phase's Uniform objects while a different program is bound would
+        // write at locations belonging to the other program and silently corrupt whatever those slots mean there.
+        // Ask GL what is actually bound rather than trusting the bookkeeping to have been kept in step.
+        if (LWJGL.glGetInteger(GL_CURRENT_PROGRAM) != entry.getProgram().getProgram().getGlId()) {
+            return;
+        }
+        entry.getUniforms().update();
     }
 
     /**
@@ -2849,6 +2881,11 @@ public class IrisRenderingPipeline {
         resetVanillaVertexArrayState();
 
         GbufferPrograms.Entry entry = this.gbufferPrograms != null ? this.gbufferPrograms.get(programId) : null;
+        // Keep the phase honest. This method binds a gbuffer program without going through setPhase, and the held
+        // item draws through RenderItem underneath it, so refreshDynamicUniforms has to be able to find the hand
+        // program to give that item its currentRenderedItemId — otherwise its GL_CURRENT_PROGRAM guard sees a
+        // mismatch against the stale phase and skips the update, leaving the hand on whatever id the world left.
+        this.currentPhase = programId;
         int packedLight = getHandPackedLight();
         setupHandLightmap(packedLight);
         bindGbufferPbrSamplers();
@@ -3021,11 +3058,22 @@ public class IrisRenderingPipeline {
                 ? LWJGL.glGetInteger(GL11.GL_BLEND_SRC) + "/" + LWJGL.glGetInteger(GL11.GL_BLEND_DST)
                 : "off";
 
+        // The inputs that actually decide whether Complementary makes something GLOW, which is the question the
+        // earlier fields never answered. In gbuffers_entities: `int mat = currentRenderedItemId;` drives the item
+        // material table (IDs >= 45000 from item.properties), `entityId` does the same for entities, and
+        // GetCustomEmission reads emission out of the SPECULAR atlas alpha. Everything logged above can be identical
+        // between a glowing and a non-glowing draw while these differ — they are set per draw from a push/pop stack,
+        // so a stack that desyncs leaks one object's material onto the next, and draw order changes with heading.
+        CapturedRenderingState ids = CapturedRenderingState.INSTANCE;
+        String materialIds = "itemId=" + ids.getCurrentRenderedItem()
+                + " entityId=" + ids.getCurrentRenderedEntity()
+                + " blockEntityId=" + ids.getCurrentRenderedBlockEntity();
+
         // Repeats of an identical state say nothing; a scene draws the same carpet dozens of times. Deduplicating on
         // the full state means the budget buys distinct states rather than an arbitrary prefix of the draw order.
         String signature = label + '|' + phaseName + '|' + program + '|' + enabled + '|' + vao + '|' + arrayBuffer
                 + '|' + coords.get(0) + ',' + coords.get(1) + '|' + lightmapTexture + '|' + detail
-                + '|' + currentColour + '|' + alphaTest + '|' + blend;
+                + '|' + currentColour + '|' + alphaTest + '|' + blend + '|' + materialIds;
         if (!ShaderStateProbe.isNewDrawSignature(signature)) {
             return;
         }
@@ -3035,9 +3083,9 @@ public class IrisRenderingPipeline {
         // paths samples both. A shadow-pass draw legitimately reports whatever phase the camera pass last left
         // behind — reading that as "the gbuffer phase is wrong" is a mistake this field exists to prevent.
         LOGGER.info("[Iris] DRAW probe ({}): shadow={} phase={} program={} enabledAttribs=[{}] vao={} arrayBuffer={} "
-                        + "lightCoord=({}, {}) of 240 lightmapUnitTexture={} color={} alphaTest={} blend={}{}",
+                        + "lightCoord=({}, {}) of 240 lightmapUnitTexture={} color={} alphaTest={} blend={} {}{}",
                 label, IrisShadowRenderer.isShadowPass(), phaseName, program, enabled, vao, arrayBuffer,
-                coords.get(0), coords.get(1), lightmapTexture, currentColour, alphaTest, blend,
+                coords.get(0), coords.get(1), lightmapTexture, currentColour, alphaTest, blend, materialIds,
                 detail == null ? "" : " " + detail);
         LOGGER.info("[Iris]   via {}", describeDrawCallSite());
     }
@@ -3894,8 +3942,35 @@ public class IrisRenderingPipeline {
         }
     }
 
+    /**
+     * Diagnostic: {@code -Dimpetus.skip.passes=composite3,composite4} skips those fullscreen passes entirely.
+     * <p>
+     * The shadow-culling override established that the view-dependent brightness on MCParks scenery is not the
+     * shadow pass, and the draw probe established it is not the gbuffer draws — every input to all 3836 of them was
+     * byte-identical across two headings. That leaves the deferred/composite chain, which is too long to reason
+     * about: this turns "which pass introduces the view dependence" into a binary search the pack itself answers.
+     * <p>
+     * Skipping a pass leaves its targets holding whatever the previous pass wrote, so the image will be wrong in
+     * other ways — the only thing to read off it is whether the brightness still tracks the camera heading.
+     */
+    private boolean shouldSkipPass(String name) {
+        String skip = System.getProperty("impetus.skip.passes");
+        if (skip == null || skip.isEmpty()) {
+            return false;
+        }
+        for (String entry : skip.split(",")) {
+            if (entry.trim().equalsIgnoreCase(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Runs one full-screen pass into its framebuffer (or Minecraft's framebuffer for the final pass). */
     private void runPass(FullscreenPass pass, Minecraft mc) {
+        if (shouldSkipPass(pass.name)) {
+            return;
+        }
         // Iris CompositeRenderer.renderAll: the pass's computes dispatch first, under this pass's flip state, then a
         // barrier publishes their writes to the draw that follows (deferred4 texelFetches the SH that deferred4_a
         // just imageStored into colortex4). Both the colortex samplers they read and the colorimg images they write

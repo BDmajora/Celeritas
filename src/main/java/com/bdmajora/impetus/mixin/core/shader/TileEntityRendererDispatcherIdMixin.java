@@ -27,6 +27,7 @@ public class TileEntityRendererDispatcherIdMixin {
         CapturedRenderingState state = CapturedRenderingState.INSTANCE;
         this.impetus$blockEntityIdStack.push(state.getCurrentRenderedBlockEntity());
         state.setCurrentRenderedBlockEntity(WorldRenderingSettings.getBlockEntityId(tileEntity));
+        impetus$pushIdToGpu();
 
         // Same hazard as RenderItem, and worse here. Block entity renderers draw through ModelBase/ModelRenderer,
         // whose vertex data carries no lightmap element either, so a generic array left enabled on slot 9
@@ -71,5 +72,22 @@ public class TileEntityRendererDispatcherIdMixin {
     private void impetus$endBlockEntity(TileEntity tileEntity, float partialTicks, int destroyStage, CallbackInfo ci) {
         CapturedRenderingState.INSTANCE.setCurrentRenderedBlockEntity(
                 this.impetus$blockEntityIdStack.isEmpty() ? -1 : this.impetus$blockEntityIdStack.pop());
+        // The restore matters as much as the set: without it the last block entity's id stays live over everything
+        // drawn after the batch.
+        impetus$pushIdToGpu();
+    }
+
+    /**
+     * Sends the id change to the bound program. Setting it only on {@link CapturedRenderingState} leaves it in Java —
+     * the uniform is uploaded when a phase is bound, and one phase covers every block entity in the frame, so the
+     * batch would render with whichever one's id happened to be current at phase entry. See
+     * {@link IrisRenderingPipeline#refreshDynamicUniforms()}.
+     */
+    @Unique
+    private static void impetus$pushIdToGpu() {
+        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        if (pipeline != null) {
+            pipeline.refreshDynamicUniforms();
+        }
     }
 }

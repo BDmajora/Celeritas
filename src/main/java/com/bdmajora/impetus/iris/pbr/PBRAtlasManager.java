@@ -28,6 +28,16 @@ import java.util.Map;
 public final class PBRAtlasManager {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Iris");
 
+    // Spelled out rather than pulled from an LWJGL binding so this file stays independent of the GL wrapper split.
+    private static final int GL_TEXTURE_2D = 0x0DE1;
+    private static final int GL_TEXTURE_MAG_FILTER = 0x2800;
+    private static final int GL_TEXTURE_MIN_FILTER = 0x2801;
+    private static final int GL_TEXTURE_WRAP_S = 0x2802;
+    private static final int GL_TEXTURE_WRAP_T = 0x2803;
+    private static final int GL_NEAREST = 0x2600;
+    private static final int GL_NEAREST_MIPMAP_NEAREST = 0x2700;
+    private static final int GL_CLAMP_TO_EDGE = 0x812F;
+
     private static int normalsAtlas = -1;
     private static int specularAtlas = -1;
     private static int normalsCount;
@@ -67,6 +77,14 @@ public final class PBRAtlasManager {
                 }
             }
 
+            // AFTER every upload, not inside allocateAtlas: TextureUtil.uploadTextureMipmap re-applies the filter and
+            // wrap modes from its own blur/clamp arguments on each call, so anything set at allocation time is
+            // overwritten by the first companion sprite. This has to be the last word on both textures.
+            GlStateManager.bindTexture(normalsAtlas);
+            applyPbrSampling(mipmapLevels);
+            GlStateManager.bindTexture(specularAtlas);
+            applyPbrSampling(mipmapLevels);
+
             GlStateManager.bindTexture(0);
 
             if (normalsCount > 0 || specularCount > 0) {
@@ -101,6 +119,37 @@ public final class PBRAtlasManager {
         TextureUtil.uploadTextureMipmap(neutralMipLevels(width, height, mipmapLevels, fillArgb),
                 width, height, 0, 0, false, false);
         return texture;
+    }
+
+    /**
+     * Iris pins the PBR atlas sampler to nearest + clamp-to-edge
+     * ({@code PBRAtlasTexture#upload}: {@code getSamplerCache().getClampToEdge(FilterMode.NEAREST)}). Reproduce that.
+     * <p>
+     * What the uploads leave behind instead: {@code TextureUtil.uploadTextureMipmap(..., blur, clamp)} applies its
+     * own sampling on every call, and this class passes {@code false, false}. Through
+     * {@code setTextureBlurMipmap(false, true)} that resolves to magnification {@code NEAREST} — already right — but
+     * minification {@code NEAREST_MIPMAP_LINEAR}, and {@code setTextureClamped(false)} leaves wrapping at
+     * {@code REPEAT}. The magnification filter was never the problem; the other two are.
+     * <p>
+     * {@code NEAREST_MIPMAP_LINEAR} <em>interpolates between mip levels</em>. These atlases hold labPBR channels, not
+     * colour, and in labPBR the specular alpha channel <em>is emissiveness</em>. Coarser mips average neighbouring
+     * sprites together, so a sprite with no {@code _s} companion — which should read the neutral fill and never
+     * glow — starts blending in its atlas neighbours' emission the moment the sampler drops to a coarser level. Mip
+     * level is chosen from screen-space UV derivatives, so it changes with viewing angle: the glow appears when the
+     * camera turns and disappears when it turns back, while the draw call itself is byte-for-byte identical. That is
+     * the failure servers hit when their scenery is built from custom item models.
+     * <p>
+     * {@code CLAMP_TO_EDGE} matches Iris for the neighbouring reason: a UV a hair past a sprite's edge must clamp
+     * inside that sprite rather than wrap to the far side of the atlas.
+     */
+    private static void applyPbrSampling(int mipmapLevels) {
+        // Nearest in both directions. With mipmaps present minification must be NEAREST_MIPMAP_NEAREST, not plain
+        // NEAREST_MIPMAP_LINEAR — the "_LINEAR" half is the level blend, and that is the whole bug.
+        GlStateManager.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        GlStateManager.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                mipmapLevels > 0 ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST);
+        GlStateManager.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        GlStateManager.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     }
 
     private static int[][] neutralMipLevels(int width, int height, int mipmapLevels, int fillArgb) {

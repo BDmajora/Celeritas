@@ -28,6 +28,7 @@ public class RenderItemItemIdMixin {
         CapturedRenderingState state = CapturedRenderingState.INSTANCE;
         this.impetus$itemIdStack.push(state.getCurrentRenderedItem());
         state.setCurrentRenderedItem(WorldRenderingSettings.getItemId(stack));
+        impetus$pushIdToGpu();
 
         // Item models are submitted through client arrays, which on the compatibility profile alias generic
         // attribute slots 8..15 (gl_MultiTexCoord0..7). A generic array left enabled on one of those slots BEATS the
@@ -45,8 +46,13 @@ public class RenderItemItemIdMixin {
         // No phase is bound here. OptiFine does not set one at the item level either: an item model is always drawn
         // inside some enclosing renderer (an item frame, a held item on an armor stand, a dropped item entity, a block
         // entity), and Shaders.nextEntity/nextBlockEntity have already selected that renderer's program by the time
-        // RenderItem runs. Impetus now does the same in RenderManagerEntityIdMixin and
-        // TileEntityRendererDispatcherIdMixin, so binding anything here would override the enclosing choice.
+        // RenderItem runs, so binding anything here would override the enclosing choice.
+        //
+        // Impetus does NOT yet make that enclosing choice per object: EntityRendererMixin sets ProgramId.Entities once
+        // for the whole pass and ProgramId.BlockEntities (gbuffers_block) is never selected in the camera pass at all,
+        // so block entities are drawn by gbuffers_entities. Iris routes them separately. Restoring that means a
+        // per-object setPhase, which is the change that previously shredded water and terrain by firing inside the
+        // shadow pass — setPhase now carries an isShadowPass() guard, so it is safe to retry, but as its own change.
 
         // Sample the GL state this draw actually lights from. Gated on world rendering: GUI item draws run after the
         // world with no phase bound, and being first in line after the screenshot they claimed every sample of an
@@ -65,5 +71,23 @@ public class RenderItemItemIdMixin {
     private void impetus$endItem(ItemStack stack, IBakedModel model, CallbackInfo ci) {
         CapturedRenderingState.INSTANCE.setCurrentRenderedItem(
                 this.impetus$itemIdStack.isEmpty() ? -1 : this.impetus$itemIdStack.pop());
+        // The restore matters as much as the set. This is the case the ride scenery hits: an item model nested inside
+        // an item frame or armor stand leaves its id live over the rest of the batch if it is not popped to the GPU,
+        // so one emissive custom item makes every entity drawn after it emissive too.
+        impetus$pushIdToGpu();
+    }
+
+    /**
+     * Sends the id change to the bound program. Setting it only on {@link CapturedRenderingState} leaves it in Java —
+     * the uniform is uploaded when a phase is bound, and one phase covers every item in the frame, so the batch would
+     * render with whichever item's id happened to be current at phase entry. See
+     * {@link IrisRenderingPipeline#refreshDynamicUniforms()}.
+     */
+    @Unique
+    private static void impetus$pushIdToGpu() {
+        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        if (pipeline != null) {
+            pipeline.refreshDynamicUniforms();
+        }
     }
 }
