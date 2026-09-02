@@ -193,15 +193,27 @@ public abstract class RenderSectionManager {
     }
 
     public void update(Viewport positionedViewport, int frame, boolean spectator) {
+        if (isInShadowPass()) {
+            // Iris parity. `ShadowRenderer` wraps the whole shadow pass in `CullingDataCache#saveState`/
+            // `restoreState`, which swaps out the visible-section list AND the camera memo so the shadow frustum
+            // never becomes the renderer's idea of where the camera is. The list is already separated here (see
+            // `getCurrentRenderListManager`), but `cameraPosition` and `lastCameraPosition` are single fields
+            // shared by both passes, and the shadow pass runs first every frame while the camera pass calls this
+            // method only when its graph is dirty. Writing them here therefore left the manager holding the
+            // SHADOW viewport's position for the rest of any frame the camera pass skipped — which is what
+            // `shouldPrioritizeRebuild` and `createSortTask` then measured distances against.
+            //
+            // `createTerrainRenderList` takes the viewport as a parameter and reads neither field, so the shadow
+            // pass simply does not write them.
+            this.createTerrainRenderList(positionedViewport, frame, spectator);
+            return;
+        }
+
         this.lastCameraPosition = positionedViewport.getBlockCoord();
         var transform = positionedViewport.getTransform();
         this.cameraPosition = new Vector3d(transform.x, transform.y, transform.z);
 
         this.createTerrainRenderList(positionedViewport, frame, spectator);
-
-        if (isInShadowPass()) {
-            return;
-        }
 
         this.checkTranslucencyChange();
 
@@ -478,16 +490,14 @@ public abstract class RenderSectionManager {
         // Main pass only. `sectionsRequestingUpdate` is main-pass state: it is filled under
         // `!getCurrentRenderListManager().isNeedsUpdate()` and drained here, and the "clearing is safe because the
         // graph will regenerate the list" argument only holds for the manager that is about to run a graph update.
-        // With a shader pack loaded this method runs TWICE per frame — the Iris shadow pass calls setupTerrain()
-        // before the camera pass — and the shadow call would reach the unconditional clear below while testing the
-        // *main* manager's flag. When the main graph was already pending (i.e. the camera just moved), promotion was
-        // skipped and the pending rebuild requests were dropped on the floor: those sections are then never
-        // rebuilt, so terrain progressively stops appearing as chunks stream in, while entities — which do not come
-        // from these lists — keep drawing. Silent, and only with shaders, because without them there is no second
-        // call to lose the set.
         //
-        // This is the same main-pass guard `tickSchedulingBudget()` and `setDispatchBudgetLimited()` in this method
-        // already carry for exactly the same reason; the block was simply missed.
+        // SimpleWorldRenderer#setupTerrain no longer calls this method during the Iris shadow pass at all (that
+        // pass is culling-only, matching Iris's ShadowRenderer, which never runs vanilla's chunk build dispatch),
+        // so `mainPass` is true for every caller today. The guards here and on `tickSchedulingBudget()` /
+        // `setDispatchBudgetLimited()` are kept as a backstop: everything in this method is scoped to whichever
+        // manager is current, so reaching it from the shadow pass drains the shadow list's rebuild queue and spends
+        // the shared ChunkBuilder budget that the camera pass needs. That starves terrain on a streaming world —
+        // geometry drains away while entities, which do not come from these lists, keep drawing.
         if (mainPass) {
             if (!this.renderListManager.isNeedsUpdate() && !sectionsRequestingUpdate.isEmpty()) {
                 this.promoteInterimRebuildList();

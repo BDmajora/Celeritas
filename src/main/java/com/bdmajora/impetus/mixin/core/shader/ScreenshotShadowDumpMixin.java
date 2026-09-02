@@ -1,5 +1,6 @@
 package com.bdmajora.impetus.mixin.core.shader;
 
+import com.bdmajora.impetus.iris.devtool.ShaderStateProbe;
 import com.bdmajora.impetus.iris.devtool.ShadowMapDump;
 import net.minecraft.client.shader.Framebuffer;
 import net.minecraft.util.ScreenShotHelper;
@@ -30,6 +31,10 @@ public class ScreenshotShadowDumpMixin {
             + "Lnet/minecraft/util/text/ITextComponent;", at = @At("HEAD"), require = 0)
     private static void impetus$requestShadowMapDump(File gameDirectory, String screenshotName, int width, int height,
                                                      Framebuffer buffer, CallbackInfoReturnable<ITextComponent> cir) {
+        // Unlike the shadow dump this needs no flag: it reads already-computed CPU state, so it costs a few hundred
+        // microseconds and a log line. Take one screenshot where the scene looks wrong and one where it looks right,
+        // then diff the two blocks — the ROTATION-INVARIANT section is the part that should be identical.
+        ShaderStateProbe.dump("screenshot " + screenshotName);
         ShadowMapDump.request();
     }
 }

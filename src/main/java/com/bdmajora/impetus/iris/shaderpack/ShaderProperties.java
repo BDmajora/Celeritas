@@ -76,6 +76,14 @@ public final class ShaderProperties {
             new ArrayList<>();
     /** {@code flip.<program>.<target> = true|false}, including {@code deferred_pre}/{@code composite_pre}. */
     private final Map<String, Map<Integer, Boolean>> explicitFlips = new LinkedHashMap<>();
+    /**
+     * {@code scale.<program> = <factor> [offsetX offsetY]} — Iris's {@code viewportScaleOverrides}. A fullscreen pass
+     * so marked rasterises into a sub-rectangle of its targets instead of the whole buffer, which packs use to run
+     * expensive passes (SSAO, volumetrics) at reduced resolution without declaring a smaller buffer. Distinct from
+     * {@code size.buffer.colortexN}: that resizes the target itself, this only shrinks the viewport written into it.
+     * Values are {@code {scale, offsetX, offsetY}}.
+     */
+    private final Map<String, float[]> viewportScaleOverrides = new LinkedHashMap<>();
 
     /** {@code uniform.<type>.<name>} / {@code variable.<type>.<name>} custom uniform expressions. */
     private final com.bdmajora.impetus.iris.uniforms.custom.CustomUniforms.Builder customUniforms =
@@ -222,6 +230,8 @@ public final class ShaderProperties {
                 this.noiseTexturePath = value;
             } else if (key.startsWith("flip.")) {
                 parseExplicitFlip(key, value);
+            } else if (key.startsWith("scale.")) {
+                parseViewportScale(key, value);
             } else if (key.startsWith("texture.")) {
                 String rest = key.substring("texture.".length());
                 int dot = rest.indexOf('.');
@@ -385,6 +395,39 @@ public final class ShaderProperties {
         this.explicitFlips
                 .computeIfAbsent(rest.substring(0, dot), ignored -> new LinkedHashMap<>())
                 .put(target, shouldFlip.get());
+    }
+
+    /**
+     * {@code scale.<program> = <factor> [offsetX offsetY]}. Iris parses the offsets as a pair, so a directive with
+     * exactly two tokens is malformed rather than "scale plus one offset" — reject it instead of guessing, matching
+     * Iris's {@code ArrayIndexOutOfBoundsException} branch, which logs and drops the whole directive.
+     */
+    private void parseViewportScale(String key, String value) {
+        String program = key.substring("scale.".length());
+        if (program.isEmpty()) {
+            LOGGER.warn("[Iris] Malformed scale directive, ignoring: {}", key);
+            return;
+        }
+        String[] parts = value.trim().split("\\s+");
+        if (parts.length != 1 && parts.length != 3) {
+            LOGGER.warn("[Iris] Unable to parse scale directive for {}: {}", program, value);
+            return;
+        }
+        try {
+            float scale = Float.parseFloat(parts[0]);
+            float offsetX = parts.length == 3 ? Float.parseFloat(parts[1]) : 0.0f;
+            float offsetY = parts.length == 3 ? Float.parseFloat(parts[2]) : 0.0f;
+            this.viewportScaleOverrides.put(program, new float[]{scale, offsetX, offsetY});
+        } catch (NumberFormatException e) {
+            LOGGER.warn("[Iris] Unable to parse scale directive for {}: {}", program, value);
+        }
+    }
+
+    /**
+     * {@return the {@code {scale, offsetX, offsetY}} override for a fullscreen pass, or {@code null} for none}
+     */
+    public float[] getViewportScale(String programName) {
+        return this.viewportScaleOverrides.get(programName);
     }
 
     private static Integer colorTargetIndex(String name) {

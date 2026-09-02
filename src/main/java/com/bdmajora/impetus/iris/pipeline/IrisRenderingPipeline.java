@@ -14,6 +14,7 @@ import org.apache.logging.log4j.Logger;
 import org.joml.Matrix4f;
 import com.bdmajora.impetus.iris.gl.framebuffer.IrisFramebuffer;
 import com.bdmajora.impetus.iris.gl.program.DrawBuffers;
+import com.bdmajora.impetus.iris.devtool.ShaderStateProbe;
 import com.bdmajora.impetus.iris.gl.blending.ProgramBlendState;
 import com.bdmajora.impetus.iris.gl.program.GlProgram;
 import com.bdmajora.impetus.iris.gl.program.IrisProgram;
@@ -285,6 +286,14 @@ public class IrisRenderingPipeline {
          */
         int viewportWidth;
         int viewportHeight;
+        /**
+         * {@code scale.<program>} — Iris's {@code ViewportData}. Unlike {@link #viewportWidth}, which reflects a
+         * target the pack resized, this shrinks the rasterised rectangle inside whatever size the pass already has.
+         * Defaults to the full viewport: scale 1, no offset.
+         */
+        float viewportScale = 1.0f;
+        float viewportOffsetX;
+        float viewportOffsetY;
 
         FullscreenPass(String name, IrisProgram program, ProgramUniforms uniforms, IrisFramebuffer framebuffer,
                        int[] colorSamplers, int[] drawBuffers, ProgramBlendState blendState,
@@ -1213,7 +1222,12 @@ public class IrisRenderingPipeline {
                     || !pack.getProperties().getIrisCustomImages().isEmpty();
             return new IrisShadowRenderer(resolution, distance, nearPlane, farPlane, intervalSize, shadowMapFov,
                     sunPathRotation,
-                    shadowSource.get(), shadowSamplerUnits, this.shaderDefines,
+                    shadowSource.get(),
+                    // Both resolve through the ProgramSet fallback chain, so a pack shipping only `shadow` hands the
+                    // renderer the very same ProgramSource for all three and it compiles once.
+                    pack.getProgramSet().get(ProgramId.ShadowEntities).orElse(shadowSource.get()),
+                    pack.getProgramSet().get(ProgramId.ShadowBlock).orElse(shadowSource.get()),
+                    shadowSamplerUnits, this.shaderDefines,
                     this.shadowHardwareFiltering, this.shadowMipmap, this.shadowNearest,
                     this.separateHardwareSamplers, this::bindShaderPackResources, content,
                     voxelDistance, cullDistance, packVoxelizes);
@@ -1573,6 +1587,23 @@ public class IrisRenderingPipeline {
         }
     }
 
+    /**
+     * Applies {@code scale.<program>} to a fullscreen pass. Separate from {@link #applyPassViewport} because the two
+     * are independent: that one reads the size of the buffers being written, this one is the pack asking for a
+     * smaller rasterised rectangle within whatever that size turned out to be. A pass can have both.
+     */
+    private void applyPassViewportScale(FullscreenPass pass, ShaderPack pack) {
+        float[] scale = pack.getProperties().getViewportScale(pass.name);
+        if (scale == null) {
+            return;
+        }
+        pass.viewportScale = scale[0];
+        pass.viewportOffsetX = scale[1];
+        pass.viewportOffsetY = scale[2];
+        LOGGER.info("[Iris] Pass '{}' scaled to {} of its viewport (offset {}, {})",
+                pass.name, scale[0], scale[1], scale[2]);
+    }
+
     private void applyExplicitPreFlips(Map<Integer, Boolean> explicitFlips, BufferFlipper flipper, String name) {
         for (Map.Entry<Integer, Boolean> entry : explicitFlips.entrySet()) {
             if (entry.getValue()) {
@@ -1770,6 +1801,7 @@ public class IrisRenderingPipeline {
                     colorSamplers, drawBuffers, ProgramBlendState.from(pack.getProperties(), name),
                     flipsBefore, flipsAfter, mipmappedBuffers, computes);
             applyPassViewport(pass, drawBuffers);
+            applyPassViewportScale(pass, pack);
             return pass;
         } catch (Exception e) {
             LOGGER.error("[Iris] Failed to build pass '{}'; it will be skipped: {}", name, e.getMessage());
@@ -2253,6 +2285,24 @@ public class IrisRenderingPipeline {
         return hasGbufferProgram(ProgramId.EntitiesTrans) ? ProgramId.EntitiesTrans : ProgramId.Entities;
     }
 
+    /** {@return the gbuffer phase currently bound, or {@code null} when none is} */
+    public ProgramId getCurrentPhase() {
+        return this.currentPhase;
+    }
+
+    /**
+     * {@return whether the camera pass is drawing right now}
+     * <p>
+     * Narrower than {@link #isWorldRenderingActive()} and the correct test for anything that wants to observe or
+     * affect the gbuffer: the shadow pass renders entities and block entities through the SAME vanilla renderers as
+     * the camera pass, so {@code worldRenderingActive} alone is true for both. It also runs first in the frame, so a
+     * budgeted hook gated only on {@code worldRenderingActive} is spent entirely on shadow draws and never observes
+     * the camera pass at all — measured: 48 of 48 probe samples came back {@code shadow=true}.
+     */
+    public boolean isCameraPassActive() {
+        return this.worldRenderingActive && !IrisShadowRenderer.isShadowPass();
+    }
+
     public void setPhase(ProgramId phase) {
         setPhase(phase, defaultRenderStage(phase));
     }
@@ -2285,9 +2335,62 @@ public class IrisRenderingPipeline {
         }
     }
 
+    /**
+     * Mirrors OptiFine's {@code Shaders.enableLightmap()}/{@code disableLightmap()} (Shaders.java), which swap
+     * program 2 ({@code gbuffers_textured}) and program 3 ({@code gbuffers_textured_lit}) whenever vanilla toggles
+     * the lightmap texture unit:
+     * <pre>
+     *   enableLightmap()  { lightmapEnabled = true;  if (activeProgram == 2) useProgram(3); }
+     *   disableLightmap() { lightmapEnabled = false; if (activeProgram == 3) useProgram(2); }
+     * </pre>
+     * Without this, geometry drawn while unit 1 is disabled still runs {@code gbuffers_textured_lit}, whose
+     * {@code texture2D(lightmap, lmcoord)} then samples a disabled unit and reads white — every such surface renders
+     * fullbright. It bites items hardest because {@code DefaultVertexFormats.ITEM} carries no lightmap element at
+     * all, so item quads inherit whatever {@code gl_MultiTexCoord1} and unit-1 state the last caller left behind
+     * ({@code RenderItemFrame#renderItem} goes straight to {@code RenderItem} under
+     * {@code RenderHelper.enableStandardItemLighting()}, which does not touch the lightmap unit). Servers that build
+     * scenery out of custom item models in item frames therefore light up while ordinary terrain stays correct.
+     * <p>
+     * Only the {@code Textured}/{@code TexturedLit} pair moves, exactly as in OptiFine — a phase like
+     * {@code Entities} or {@code Terrain} is left alone, because those programs are selected by the geometry being
+     * drawn rather than by the lightmap toggle.
+     */
+    public void setLightmapEnabled(boolean enabled) {
+        if (!this.worldRenderingActive) {
+            return;
+        }
+        ProgramId target;
+        if (enabled) {
+            target = this.currentPhase == ProgramId.Textured ? ProgramId.TexturedLit : null;
+        } else {
+            target = this.currentPhase == ProgramId.TexturedLit ? ProgramId.Textured : null;
+        }
+        if (target == null) {
+            return;
+        }
+        // Carry the current render stage across rather than letting setPhase(ProgramId) recompute the default.
+        // OptiFine's useProgram() only swaps the program and leaves its stage tracking alone, and this pair maps to
+        // MC_RENDER_STAGE_NONE by default — so recomputing would silently discard a stage a caller set explicitly
+        // (see setPhase(ProgramId, int): gbuffers_textured_lit carries both particles and translucent entities, whose
+        // stage can only come from the call site).
+        setPhase(target, CapturedRenderingState.INSTANCE.getRenderStage());
+    }
+
     /** Overload for callers that know a finer phase than {@link ProgramId} can express (sky basic covers sky/stars/void). */
     public void setPhase(ProgramId phase, int renderStage) {
-        if (!this.worldRenderingActive) {
+        // The shadow pass owns the GL state for its own framebuffer: IrisShadowRenderer binds the `shadow` program,
+        // its own draw buffers and its own blend state, and never calls this method. Letting a gbuffer phase be
+        // selected while it runs binds a gbuffer program over the shadow program and re-points the draw buffers at
+        // the gbuffer attachments, corrupting the shadow map for the rest of the frame — and the shadow map feeds
+        // every lit surface, so the damage is world-wide rather than local to whatever was being drawn.
+        //
+        // This is reachable because the shadow pass renders entities and block entities through the SAME vanilla
+        // renderers as the camera pass (IrisShadowRenderer#renderEntityShadows -> RenderManager#renderEntityStatic),
+        // so any per-object hook on those paths fires in both. Measured: a per-entity setPhase on that path shredded
+        // water and terrain shading. Guarding here rather than at each call site means one missed caller cannot do
+        // it again — which is exactly why the neighbouring beginEyes/endEyes/armor-glint methods all carry the same
+        // isShadowPass() test.
+        if (!this.worldRenderingActive || IrisShadowRenderer.isShadowPass()) {
             return;
         }
         this.currentPhase = phase;
@@ -2841,6 +2944,143 @@ public class IrisRenderingPipeline {
     private static boolean handVertexStateProbeLogged;
 
     /**
+     * The same measurement as {@link #logHandVertexStateProbe()}, taken on an actual custom item-model draw, plus the
+     * two other things that decide whether such a draw comes out fullbright.
+     * <p>
+     * Items carry no lightmap in their vertex format, so their lighting comes entirely from GL state rather than from
+     * vertex data. Exactly three things can make that state wrong, and this prints all three so the answer stops
+     * being a guess:
+     * <ul>
+     * <li>{@code enabledAttribs} containing slot 9 — {@code gl_MultiTexCoord1} aliases it, and an enabled generic
+     *     array there beats the conventional array and flattens the lightmap coordinate to one constant;</li>
+     * <li>{@code lightCoord} — the actual {@code gl_MultiTexCoord1} the draw will use. Both components are 0..240;
+     *     240,240 is vanilla's fullbright sentinel, so seeing it here in a dim room is the bug outright;</li>
+     * <li>{@code program} / {@code lightmapUnitTexture} — which shader is bound and whether unit 1 still holds the
+     *     lightmap texture at all. A zero texture there samples white, which is also fullbright.</li>
+     * </ul>
+     * Fires once per request (the screenshot hook), on the first item drawn after it.
+     */
+    /** Raw GL enums; the generated constant classes do not carry these four. */
+    private static final int GL_CURRENT_TEXTURE_COORDS = 0x0B03;
+    private static final int GL_TEXTURE_BINDING_2D = 0x8069;
+    private static final int GL_ACTIVE_TEXTURE_QUERY = 0x84E0;
+    private static final int GL_CURRENT_PROGRAM = 0x8B8D;
+
+    public void logDrawStateProbe(String label, String detail) {
+        try {
+            logDrawStateProbe0(label, detail);
+        } catch (Throwable t) {
+            // This runs in the middle of a draw call. It measures the frame; it must never be able to abort it.
+            LOGGER.warn("[Iris] DRAW probe failed", t);
+        }
+    }
+
+    private void logDrawStateProbe0(String label, String detail) {
+        StringBuilder enabled = new StringBuilder();
+        for (int slot = 0; slot < VANILLA_ALIASED_ATTRIBUTE_SLOTS; slot++) {
+            if (LWJGL.glGetVertexAttribi(slot, GL20.GL_VERTEX_ATTRIB_ARRAY_ENABLED) != 0) {
+                enabled.append(enabled.length() == 0 ? "" : ",").append(slot);
+            }
+        }
+
+        int previousActive = LWJGL.glGetInteger(GL_ACTIVE_TEXTURE_QUERY);
+        // LWJGL2's BufferChecks demands room for the largest value any glGetFloat pname can return (16 floats, a
+        // matrix) regardless of how many this particular pname actually writes. A 4-float buffer throws
+        // IllegalArgumentException, which propagated out of the probe and aborted the entity render it was measuring.
+        java.nio.FloatBuffer coords = java.nio.ByteBuffer.allocateDirect(16 * Float.BYTES)
+                .order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer();
+        int lightmapTexture;
+        try {
+            GlStateManager.setActiveTexture(OpenGlHelper.lightmapTexUnit);
+            coords.clear();
+            GlStateManager.getFloat(GL_CURRENT_TEXTURE_COORDS, coords);
+            lightmapTexture = LWJGL.glGetInteger(GL_TEXTURE_BINDING_2D);
+        } finally {
+            GlStateManager.setActiveTexture(previousActive);
+        }
+
+        String phaseName = this.currentPhase == null ? "none" : this.currentPhase.name();
+        int program = LWJGL.glGetInteger(GL_CURRENT_PROGRAM);
+        int vao = LWJGL.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
+        int arrayBuffer = LWJGL.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING);
+
+        // The per-draw state that actually varies with draw ORDER, which is what changes when the camera turns: the
+        // visible section list is sorted from the camera, so a different heading hands the renderers a different
+        // sequence. Everything sampled above came back identical across 3728 draws in two headings, which rules out
+        // program and attribute state but says nothing about these — a colour or blend mode left behind by one
+        // renderer is inherited by whatever draws next, and only these fields would show it.
+        java.nio.FloatBuffer colour = java.nio.ByteBuffer.allocateDirect(16 * Float.BYTES)
+                .order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer();
+        GlStateManager.getFloat(GL11.GL_CURRENT_COLOR, colour);
+        String currentColour = String.format(java.util.Locale.ROOT, "%.3f/%.3f/%.3f/%.3f",
+                colour.get(0), colour.get(1), colour.get(2), colour.get(3));
+        String alphaTest = LWJGL.glGetInteger(GL11.GL_ALPHA_TEST) != 0
+                ? LWJGL.glGetInteger(GL11.GL_ALPHA_TEST_FUNC) + ">" + LWJGL.glGetInteger(GL11.GL_ALPHA_TEST_REF)
+                : "off";
+        String blend = LWJGL.glGetInteger(GL11.GL_BLEND) != 0
+                ? LWJGL.glGetInteger(GL11.GL_BLEND_SRC) + "/" + LWJGL.glGetInteger(GL11.GL_BLEND_DST)
+                : "off";
+
+        // Repeats of an identical state say nothing; a scene draws the same carpet dozens of times. Deduplicating on
+        // the full state means the budget buys distinct states rather than an arbitrary prefix of the draw order.
+        String signature = label + '|' + phaseName + '|' + program + '|' + enabled + '|' + vao + '|' + arrayBuffer
+                + '|' + coords.get(0) + ',' + coords.get(1) + '|' + lightmapTexture + '|' + detail
+                + '|' + currentColour + '|' + alphaTest + '|' + blend;
+        if (!ShaderStateProbe.isNewDrawSignature(signature)) {
+            return;
+        }
+
+        // `shadow` first, because it decides whether any of the rest means what it looks like: the shadow pass draws
+        // entities and block entities through the same vanilla renderers as the camera pass, so a probe on those
+        // paths samples both. A shadow-pass draw legitimately reports whatever phase the camera pass last left
+        // behind — reading that as "the gbuffer phase is wrong" is a mistake this field exists to prevent.
+        LOGGER.info("[Iris] DRAW probe ({}): shadow={} phase={} program={} enabledAttribs=[{}] vao={} arrayBuffer={} "
+                        + "lightCoord=({}, {}) of 240 lightmapUnitTexture={} color={} alphaTest={} blend={}{}",
+                label, IrisShadowRenderer.isShadowPass(), phaseName, program, enabled, vao, arrayBuffer,
+                coords.get(0), coords.get(1), lightmapTexture, currentColour, alphaTest, blend,
+                detail == null ? "" : " " + detail);
+        LOGGER.info("[Iris]   via {}", describeDrawCallSite());
+    }
+
+    /**
+     * {@return the renderer call path that reached this draw, newest first}
+     * <p>
+     * The probe established that these draws run with no gbuffer phase bound, which means the phase-setting injects
+     * in {@code EntityRendererMixin} do not cover whatever is issuing them. Naming the actual callers is the only way
+     * to find the right injection point instead of guessing at 1.12's {@code renderWorldPass} ordering: an item frame,
+     * a held item on an armor stand and a dropped item entity all land in {@code RenderItem} by different routes and
+     * each needs its phase set somewhere different.
+     * <p>
+     * Mixin/probe frames are dropped so the first entry printed is the renderer that actually made the call.
+     */
+    private static String describeDrawCallSite() {
+        StackTraceElement[] frames = Thread.currentThread().getStackTrace();
+        StringBuilder path = new StringBuilder();
+        int printed = 0;
+        for (StackTraceElement frame : frames) {
+            String className = frame.getClassName();
+            if (className.startsWith("java.lang.Thread")
+                    || className.startsWith("com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline")
+                    || className.startsWith("com.bdmajora.impetus.iris.devtool")
+                    || className.contains("Mixin")) {
+                continue;
+            }
+            if (printed > 0) {
+                path.append(" <- ");
+            }
+            path.append(className.substring(className.lastIndexOf('.') + 1))
+                    .append('.').append(frame.getMethodName()).append(':').append(frame.getLineNumber());
+            // 16, not 10: the held-item path (RenderItem -> ItemRenderer -> LayerHeldItem -> RenderLivingBase ->
+            // RenderLiving -> RenderManager -> RenderGlobal/IrisShadowRenderer) is exactly 10 frames deep, so a
+            // 10-frame cap truncated the entry that identifies which pass issued the draw.
+            if (++printed == 16) {
+                break;
+            }
+        }
+        return path.length() == 0 ? "(no frames)" : path.toString();
+    }
+
+    /**
      * One-shot identification of the texture the first-person arm actually sampled. Called straight after vanilla's
      * arm draw, while unit 0 still holds whatever that draw used, because the shader-side probe showed the sampled
      * alpha is 1.0 where the player skin's jacket layer is fully transparent — so the arm's overlay box can never be
@@ -2939,6 +3179,9 @@ public class IrisRenderingPipeline {
             return;
         }
         this.worldRenderingActive = false;
+        // The camera pass is over, so every draw a screenshot could have sampled has now happened. Report here so an
+        // empty capture is stated outright instead of leaving the log silent and ambiguous.
+        ShaderStateProbe.finishCapture();
         if (this.glErrorProbeFrames > 0) {
             this.glErrorProbeFrames--;
         }
@@ -3669,9 +3912,15 @@ public class IrisRenderingPipeline {
         if (pass.framebuffer != null) {
             pass.framebuffer.bind();
             // A pass writing an explicitly-sized buffer draws at that buffer's resolution, not the screen's.
-            LWJGL.glViewport(0, 0,
-                    pass.viewportWidth > 0 ? pass.viewportWidth : this.renderTargets.getWidth(),
-                    pass.viewportHeight > 0 ? pass.viewportHeight : this.renderTargets.getHeight());
+            int passWidth = pass.viewportWidth > 0 ? pass.viewportWidth : this.renderTargets.getWidth();
+            int passHeight = pass.viewportHeight > 0 ? pass.viewportHeight : this.renderTargets.getHeight();
+            // `scale.<program>` on top of that, arithmetic per Iris CompositeRenderer:317-321 — the offsets are
+            // fractions of the pass size, not texels, and the scaled extent is truncated rather than rounded.
+            LWJGL.glViewport(
+                    (int) (passWidth * pass.viewportOffsetX),
+                    (int) (passHeight * pass.viewportOffsetY),
+                    (int) (passWidth * pass.viewportScale),
+                    (int) (passHeight * pass.viewportScale));
         } else {
             bindMainRenderTarget(mc);
             restoreMainDrawReadBuffers(mc);

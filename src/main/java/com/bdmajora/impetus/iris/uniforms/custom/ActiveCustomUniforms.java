@@ -35,4 +35,10 @@ public final class ActiveCustomUniforms {
             current.assignTo(collector);
         }
     }
+
+    /** {@return this frame's value for every pack-declared uniform/variable, or empty when no pack is loaded} */
+    public static java.util.Map<String, String> snapshot() {
+        CustomUniforms current = active;
+        return current == null ? java.util.Collections.emptyMap() : current.snapshot();
+    }
 }

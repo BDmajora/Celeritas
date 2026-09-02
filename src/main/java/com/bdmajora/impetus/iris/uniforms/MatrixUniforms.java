@@ -3,6 +3,7 @@ package com.bdmajora.impetus.iris.uniforms;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.OpenGlHelper;
 import org.joml.Matrix3f;
+import org.joml.Matrix3fc;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
 import org.joml.Vector3d;
@@ -30,6 +31,7 @@ public final class MatrixUniforms {
     private static final int GL_MATRIX_MODE = 0x0BA0;
     private static final int GL_TEXTURE_MODE = 0x1702;
     private static final int GL_TEXTURE_MATRIX = 0x0BA8;
+    private static final int GL_MODELVIEW_MATRIX = 0x0BA6;
     private static final Matrix4fc LIGHTMAP_TEXTURE_MATRIX = new Matrix4f(
             0.00390625f, 0.0f, 0.0f, 0.0f,
             0.0f, 0.00390625f, 0.0f, 0.0f,
@@ -52,10 +54,16 @@ public final class MatrixUniforms {
                 // m03/m13/m23 variant zeroed the always-zero bottom row — JOML's mCR is column-row — i.e. a no-op.)
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "gbufferModelViewInverse",
                         () -> new Matrix4f(state.getGbufferModelView()).invert())
-                .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "iris_ModelViewMatrixInverse",
-                        () -> new Matrix4f(state.getGbufferModelView()).invert())
-                .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "iris_ModelViewMatInverse",
-                        () -> new Matrix4f(state.getGbufferModelView()).invert())
+                // Stand-ins for `gl_ModelViewMatrixInverse`, and a different family from `gbufferModelViewInverse`
+                // above: Iris registers those pack-facing names PER_FRAME in its own MatrixUniforms, but declares
+                // these through ExternallyManagedUniforms and uploads them PER DRAW in
+                // ExtendedShader#iris$setupState (`RenderSystem.getModelViewMatrix().invert()`), which carries the
+                // pose stack. Deriving them from gbufferModelView keeps only the camera half, so every entity and
+                // block entity loses its own model transform — same defect as the normal matrix below, same fix.
+                .uniformMatrix(UniformUpdateFrequency.DYNAMIC, "iris_ModelViewMatrixInverse",
+                        MatrixUniforms::getLiveModelViewInverse)
+                .uniformMatrix(UniformUpdateFrequency.DYNAMIC, "iris_ModelViewMatInverse",
+                        MatrixUniforms::getLiveModelViewInverse)
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "gbufferProjection", state::getGbufferProjection)
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "iris_ProjectionMatrix", state::getGbufferProjection)
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "iris_ProjMat", state::getGbufferProjection)
@@ -66,18 +74,37 @@ public final class MatrixUniforms {
                         () -> new Matrix4f(state.getGbufferProjection()).invert())
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "dhPreviousProjection",
                         new Previous(state::getGbufferProjection))
+                // Iris swaps the shadow projection in here while the shadow pass runs
+                // (ExtendedShader#iris$setupState: `areShadowsCurrentlyBeingRendered() ? ShadowRenderer.PROJECTION
+                // : getGbufferProjection()`). These two are the stand-ins for `gl_ProjectionMatrixInverse`, so in a
+                // shadow program they must invert the shadow ortho — handing back the camera perspective inverse
+                // there is simply the wrong matrix, and any pack that unprojects depth inside shadow.vsh/fsh gets
+                // garbage positions from it. The pack-facing `gbufferProjectionInverse` above deliberately does NOT
+                // switch: that name means the camera projection by definition, and Iris keeps it camera-only too.
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "iris_ProjectionMatrixInverse",
-                        () -> new Matrix4f(state.getGbufferProjection()).invert())
+                        MatrixUniforms::getActiveProjectionInverse)
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "iris_ProjMatInverse",
-                        () -> new Matrix4f(state.getGbufferProjection()).invert())
+                        MatrixUniforms::getActiveProjectionInverse)
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "u_ModelViewProjectionMatrix",
                         () -> new Matrix4f(state.getGbufferProjection()).mul(state.getGbufferModelView()))
-                .uniformMatrix3(UniformUpdateFrequency.PER_FRAME, "iris_DefaultNormalMat",
-                        () -> new Matrix4f(state.getGbufferModelView()).invert().transpose3x3(new Matrix3f()))
-                .uniformMatrix3(UniformUpdateFrequency.PER_FRAME, "iris_NormalMatrix",
-                        () -> new Matrix4f(state.getGbufferModelView()).invert().transpose3x3(new Matrix3f()))
-                .uniformMatrix3(UniformUpdateFrequency.PER_FRAME, "iris_NormalMat",
-                        () -> new Matrix4f(state.getGbufferModelView()).invert().transpose3x3(new Matrix3f()))
+                // Iris computes the normal matrix PER DRAW from that draw's own modelview
+                // (ExtendedShader#setupUniforms: `RenderSystem.getModelViewMatrix().invert().transpose3x3()`), which
+                // on 1.16+ already carries the pose stack — i.e. camera AND model transform. Deriving it from
+                // gbufferModelView instead keeps only the camera half, so every entity loses its own rotation and
+                // scale and the matrix ends up varying with camera yaw and nothing else. PER_FRAME compounds that:
+                // one value is shared by every object in the frame, which cannot be right the moment two objects
+                // have different model transforms.
+                //
+                // DYNAMIC + reading the live fixed-function modelview is the 1.12 equivalent of Iris's per-draw
+                // upload: on the compatibility profile that matrix IS camera x model at the moment of the draw,
+                // which is exactly what `RenderSystem.getModelViewMatrix()` returns upstream. iris_TextureMat in
+                // this same builder already uses that pattern.
+                .uniformMatrix3(UniformUpdateFrequency.DYNAMIC, "iris_DefaultNormalMat",
+                        MatrixUniforms::getLiveNormalMatrix)
+                .uniformMatrix3(UniformUpdateFrequency.DYNAMIC, "iris_NormalMatrix",
+                        MatrixUniforms::getLiveNormalMatrix)
+                .uniformMatrix3(UniformUpdateFrequency.DYNAMIC, "iris_NormalMat",
+                        MatrixUniforms::getLiveNormalMatrix)
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "iris_DefaultModelViewMatrixInverse",
                         () -> new Matrix4f(state.getGbufferModelView()).invert())
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "iris_DefaultProjectionMatrixInverse",
@@ -122,6 +149,41 @@ public final class MatrixUniforms {
 
     private static Vector3f toVector3f(Vector3d position) {
         return new Vector3f((float) position.x, (float) position.y, (float) position.z);
+    }
+
+    /**
+     * {@return the inverse-transpose of the modelview that is live <em>right now</em>, i.e. this draw's normal matrix}
+     * <p>
+     * Iris's per-draw equivalent reads {@code RenderSystem.getModelViewMatrix()}, which on 1.16+ is the pose stack
+     * (camera x model). On the compatibility profile the fixed-function {@code GL_MODELVIEW_MATRIX} holds the same
+     * thing at draw time, so reading it back here reproduces Iris's value rather than approximating it with the
+     * camera matrix.
+     */
+    /** {@return the inverse of the modelview live <em>right now</em> — this draw's, not the frame's camera matrix} */
+    private static Matrix4fc getLiveModelViewInverse() {
+        return new Matrix4f(getLiveModelView()).invert();
+    }
+
+    /** {@return the fixed-function modelview as it stands at this instant, i.e. camera x model for the current draw} */
+    private static Matrix4fc getLiveModelView() {
+        FloatBuffer buffer = ByteBuffer.allocateDirect(16 * Float.BYTES)
+                .order(ByteOrder.nativeOrder())
+                .asFloatBuffer();
+        GlStateManager.getFloat(GL_MODELVIEW_MATRIX, buffer);
+        buffer.rewind();
+        return new Matrix4f().set(buffer);
+    }
+
+    /** {@return the inverse of whichever projection the pass currently running actually rasterises with} */
+    private static Matrix4fc getActiveProjectionInverse() {
+        CapturedRenderingState state = CapturedRenderingState.INSTANCE;
+        Matrix4fc projection = com.bdmajora.impetus.iris.pipeline.IrisShadowRenderer.isShadowPass()
+                ? state.getShadowProjection() : state.getGbufferProjection();
+        return new Matrix4f(projection).invert();
+    }
+
+    private static Matrix3fc getLiveNormalMatrix() {
+        return new Matrix4f(getLiveModelView()).invert().transpose3x3(new Matrix3f());
     }
 
     private static Matrix4fc getDefaultTextureMatrix() {

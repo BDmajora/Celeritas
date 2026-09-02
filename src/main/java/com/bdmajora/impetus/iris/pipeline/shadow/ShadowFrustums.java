@@ -21,7 +21,11 @@ import org.joml.Vector3f;
 public final class ShadowFrustums {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Iris");
 
-    /** Accepts every section; used when culling is off or the shadow distance exceeds the render distance. */
+    /**
+     * Accepts every section. Iris returns its {@code NonCullingFrustum} in exactly two cases: the pack turned
+     * culling off, and a distance-only pass whose distance already covers the render distance. Every other branch
+     * returns a real frustum, dropping at most its box culler.
+     */
     public static final Frustum NON_CULLING = (minX, minY, minZ, maxX, maxY, maxZ) -> true;
 
     /**
@@ -52,17 +56,35 @@ public final class ShadowFrustums {
      */
     public static Frustum create(ShadowContentSettings.Culling culling, float shadowDistance, float voxelDistance,
                                  boolean packVoxelizes, int renderDistance, float sunPathRotation) {
-        // Culling explicitly off, or a shadow distance that covers everything anyway: draw it all.
-        if (culling == ShadowContentSettings.Culling.OFF || shadowDistance <= 0.0f
-                || shadowDistance > renderDistance) {
-            logDecision("disabled (" + (culling == ShadowContentSettings.Culling.OFF
-                    ? "set by shader pack" : "shadow distance covers the render distance") + ")");
+        // Diagnostic override: -Dimpetus.shadow.culling=off forces every section into the shadow map.
+        //
+        // Shadow culling is the last view-dependent input to the shadow map — the advanced frustum is built from
+        // this frame's camera matrices, so which casters reach the shadow map genuinely changes as the camera turns.
+        // That is faithful to Iris (ShadowRenderer#createShadowFrustum takes the same branch for a non-voxelizing
+        // pack with no `shadow.culling` directive), which makes it impossible to tell by reading whether a
+        // brightness-changes-with-heading symptom comes from culling being wrong or from something downstream.
+        // Forcing it off answers that in one launch: if the symptom survives, the shadow pass is exonerated and the
+        // cause is in the deferred/composite chain.
+        if ("off".equalsIgnoreCase(System.getProperty("impetus.shadow.culling"))) {
+            logDecision("disabled (forced by -Dimpetus.shadow.culling=off)");
+            return NON_CULLING;
+        }
+
+        // Culling explicitly off: draw it all.
+        if (culling == ShadowContentSettings.Culling.OFF) {
+            logDecision("disabled (set by shader pack)");
             return NON_CULLING;
         }
 
         // Iris parity: a voxelizing pack that did not ask for a specific mode gets distance-only culling, because
-        // the advanced frustum's view dependence would destabilize its voxel field.
+        // the advanced frustum's view dependence would destabilize its voxel field. This is the ONLY branch in
+        // which Iris degrades to no culling at all when the distance already covers the render distance — its
+        // `distance <= 0 || distance > renderDistance` test guards the NonCullingFrustum return and nothing else.
         if (culling == ShadowContentSettings.Culling.ON && packVoxelizes) {
+            if (shadowDistance <= 0.0f || shadowDistance > renderDistance) {
+                logDecision("disabled (voxelization detected, shadow distance covers the render distance)");
+                return NON_CULLING;
+            }
             logDecision("distance only, " + shadowDistance + " blocks (voxelization detected)");
             return new ShadowBoxCuller(shadowDistance);
         }
@@ -76,10 +98,25 @@ public final class ShadowFrustums {
             // is the hard outer bound. Iris uses voxelDistance verbatim — a pack that declares none gets a
             // degenerate (zero-size) safe zone, i.e. plain advanced culling, so that is reproduced rather than
             // substituting the shadow distance.
+            //
+            // Iris exempts this mode from the "distance covers the render distance" bailout outright — that test
+            // is `distance >= renderDistance && !hasSafeZone` — and measures it against voxelDistance rather than
+            // shadowDistance, so both box cullers are always built. Applying the bailout here instead collapsed
+            // the whole frustum to NON_CULLING for any pack whose shadowDistance exceeds the render distance
+            // (Complementary's 256 over anything under 16 chunks), handing the shadow pass every loaded section
+            // in place of a voxelDistance-sized safe zone.
             logDecision("safe-zone frustum, " + voxelDistance + " block safe zone inside "
                     + shadowDistance + " blocks");
             return new SafeZoneCullingFrustum(projView, lightVector,
                     new ShadowBoxCuller(voxelDistance), new ShadowBoxCuller(shadowDistance));
+        }
+
+        // Iris drops only the *box* culler when the shadow distance covers the render distance; the
+        // direction-dependent planes still apply, which is what keeps off-screen casters casting. Both frustums
+        // treat a null culler as "no distance bound".
+        if (shadowDistance <= 0.0f || shadowDistance >= renderDistance) {
+            logDecision("advanced frustum, no distance bound (render distance " + renderDistance + " blocks)");
+            return new AdvancedShadowCullingFrustum(projView, lightVector, null);
         }
 
         logDecision("advanced frustum, " + shadowDistance + " blocks");

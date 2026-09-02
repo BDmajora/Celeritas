@@ -113,6 +113,17 @@ public class IrisShadowRenderer {
      */
     private final GbufferPrograms.Entry entityShadowProgram;
 
+    /**
+     * {@code shadow_block}'s flavor, for the block-entity loop. Iris gives block entities their own shadow program
+     * ({@code ProgramId.ShadowBlock}) rather than reusing the entity one. When the pack ships neither, both ids
+     * resolve through the fallback chain to the same {@code shadow} source and this holds the very same compiled
+     * {@link GbufferPrograms.Entry} — see {@link #blockEntityProgramShared}, which stops teardown freeing it twice.
+     */
+    private final GbufferPrograms.Entry blockEntityShadowProgram;
+
+    /** Whether {@link #blockEntityShadowProgram} is the same object as {@link #entityShadowProgram}. */
+    private final boolean blockEntityProgramShared;
+
     private final FloatBuffer matrixBuffer =
             ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
 
@@ -142,7 +153,9 @@ public class IrisShadowRenderer {
      */
     public IrisShadowRenderer(int resolution, float shadowDistance, float nearPlane, float farPlane,
                               float intervalSize, Float shadowMapFov, float sunPathRotation,
-                              ProgramSource shadowSource, Map<String, Integer> samplerUnits,
+                              ProgramSource shadowSource,
+                              ProgramSource shadowEntitiesSource, ProgramSource shadowBlockSource,
+                              Map<String, Integer> samplerUnits,
                               Map<String, String> shaderDefines, boolean[] hardwareFiltering,
                               boolean[] mipmapDepth, boolean[] nearestDepth, boolean separateHardwareSamplers,
                               Runnable shaderPackResourceRestorer, ShadowContentSettings content,
@@ -186,9 +199,22 @@ public class IrisShadowRenderer {
                 .map(buffers -> DrawBuffers.sanitize(buffers, 2))
                 .orElse(new int[]{0});
 
-        this.entityShadowProgram = GbufferPrograms.compile(shadowSource, shaderDefines, samplerUnits);
+        // shadow_entities / shadow_block, both falling back to plain `shadow`. The callers resolve them through the
+        // ProgramSet fallback chain, so for a pack shipping only `shadow` these are the identical ProgramSource
+        // object and the second compile is skipped outright — same program, same rendering as before this split.
+        ProgramSource entitiesSource = shadowEntitiesSource != null ? shadowEntitiesSource : shadowSource;
+        ProgramSource blockSource = shadowBlockSource != null ? shadowBlockSource : shadowSource;
+
+        this.entityShadowProgram = GbufferPrograms.compile(entitiesSource, shaderDefines, samplerUnits);
         if (this.entityShadowProgram == null) {
             LOGGER.warn("[Iris] Fixed-function shadow program failed to compile; entity shadows disabled");
+        }
+        this.blockEntityProgramShared = blockSource == entitiesSource;
+        this.blockEntityShadowProgram = this.blockEntityProgramShared
+                ? this.entityShadowProgram
+                : GbufferPrograms.compile(blockSource, shaderDefines, samplerUnits);
+        if (!this.blockEntityProgramShared) {
+            LOGGER.info("[Iris] Pack ships a separate shadow block-entity program; compiled alongside shadow_entities");
         }
 
         LOGGER.info("[Iris] Shadow map ready: {}x{}, distance {}, near {}, far {}, interval {}, fov {}, hardware filtering [{}, {}], mipmaps [{}, {}], nearest [{}, {}], separate hardware samplers {}",
@@ -405,6 +431,7 @@ public class IrisShadowRenderer {
                 GlStateManager.disableBlend();
             }
             generateMipmaps();
+            sampleShadowCoverageIfRequested();
             probeShadowDepth();
             dumpShadowMapIfRequested();
         } catch (Throwable t) {
@@ -456,6 +483,25 @@ public class IrisShadowRenderer {
      * the camera (matching the grid-snapped shadow model-view). Culling is a simple horizontal box of the shadow
      * frustum's half-extent — the OptiFine default (it has no per-entity shadow frustum either).
      */
+    /**
+     * Binds one of the fixed-function shadow programs and refreshes its uniforms. The resource restorer runs on both
+     * sides of the bind because binding a program is what re-points the shader-pack sampler units, and the entity
+     * renderers in between will have rebound textures of their own.
+     * <p>
+     * A {@code null} entry means that program failed to compile; fall back to the entity one rather than leaving
+     * whatever was bound before, which would draw block entities under an unrelated program.
+     */
+    private void bindShadowGeometryProgram(GbufferPrograms.Entry program) {
+        GbufferPrograms.Entry target = program != null ? program : this.entityShadowProgram;
+        if (target == null) {
+            return;
+        }
+        this.shaderPackResourceRestorer.run();
+        target.getProgram().getProgram().bind();
+        this.shaderPackResourceRestorer.run();
+        target.getUniforms().update();
+    }
+
     private void renderEntityShadows(Minecraft mc, Vector3d camera) {
         if (this.entityShadowProgram == null) {
             return;
@@ -489,10 +535,7 @@ public class IrisShadowRenderer {
             TileEntityRendererDispatcher.instance.prepare(world, mc.getTextureManager(), mc.fontRenderer,
                     viewEntity, mc.objectMouseOver, partialTicks);
 
-            this.shaderPackResourceRestorer.run();
-            this.entityShadowProgram.getProgram().getProgram().bind();
-            this.shaderPackResourceRestorer.run();
-            this.entityShadowProgram.getUniforms().update();
+            bindShadowGeometryProgram(this.entityShadowProgram);
 
             // Entities and TESRs draw fixed-function, straight after Embeddium rendered shadow terrain from its own
             // VAO. Hand the vertex pipeline back clean, or a leftover generic attribute array wins over the aliased
@@ -502,6 +545,7 @@ public class IrisShadowRenderer {
             IrisRenderingPipeline.resetVanillaVertexArrayState();
 
             if (this.content.shouldRenderEntities() || this.content.shouldRenderPlayer()) {
+                bindShadowGeometryProgram(this.entityShadowProgram);
                 for (Entity entity : world.loadedEntityList) {
                     if (entity.isDead
                             || Math.abs(entity.posX - camera.x) > cullRange
@@ -518,6 +562,9 @@ public class IrisShadowRenderer {
             }
 
             if (this.content.shouldRenderAnyBlockEntities()) {
+                // Iris draws block entities in the shadow pass under shadow_block, not the entity program. When the
+                // pack ships neither this is the same object already bound above and the rebind is a no-op.
+                bindShadowGeometryProgram(this.blockEntityShadowProgram);
                 boolean lightOnly = this.content.shouldRenderLightBlockEntitiesOnly();
                 for (TileEntity tileEntity : world.loadedTileEntityList) {
                     if (TileEntityRendererDispatcher.instance.getRenderer(tileEntity) == null) {
@@ -791,6 +838,56 @@ public class IrisShadowRenderer {
                 optifineWay & 0xFFFF, optifineWay >> 16, handRolled & 0xFFFF, handRolled >> 16);
     }
 
+    /**
+     * Answers the one question a light leak turns on: does the sun actually see the geometry above the player?
+     * <p>
+     * A texel still holding the 1.0 depth clear means nothing was ever drawn there, so every shadow lookup into it
+     * reports "lit". Standing indoors, the roof must appear in the shadow map; if coverage is near zero while the
+     * player is under cover, the interior is being flooded with unoccluded sunlight and that is the whole bug.
+     * <p>
+     * Deliberately samples a 64x64 corner rather than the full map: {@code readDepth} pulls the entire 2048² buffer
+     * (16 MB and a hard pipeline stall), which is why {@link ShadowMapDump} is behind a flag. 16 KB on the frames the
+     * player actually asked for is affordable.
+     */
+    private void sampleShadowCoverageIfRequested() {
+        if (!com.bdmajora.impetus.iris.devtool.ShaderStateProbe.consumeShadowCoverageRequest()) {
+            return;
+        }
+        final int size = 64;
+        try {
+            ByteBuffer pixels = ByteBuffer.allocateDirect(size * size * 4).order(ByteOrder.nativeOrder());
+            this.framebuffer.bindAsReadBuffer();
+            pixels.clear();
+            // Centre the window on the shadow map, which is where the player's immediate surroundings land.
+            int origin = Math.max(0, (this.resolution - size) / 2);
+            LWJGL.glReadPixels(origin, origin, size, size, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, pixels);
+            FloatBuffer depths = pixels.asFloatBuffer();
+
+            int cleared = 0;
+            float min = Float.MAX_VALUE;
+            float max = -Float.MAX_VALUE;
+            double sum = 0.0;
+            int count = size * size;
+            for (int i = 0; i < count; i++) {
+                float depth = depths.get(i);
+                min = Math.min(min, depth);
+                max = Math.max(max, depth);
+                sum += depth;
+                if (depth >= 0.99999f) {
+                    cleared++;
+                }
+            }
+            LOGGER.info("[Iris] SHADOW COVERAGE (centre {}x{} of {}): min={} max={} mean={} cleared={}% "
+                            + "-- cleared texels read as fully lit; high while indoors means the roof is missing "
+                            + "from the shadow map",
+                    size, size, this.resolution, min, max, sum / count, pct(cleared, count));
+        } catch (Throwable t) {
+            LOGGER.warn("[Iris] Shadow coverage sample failed", t);
+        } finally {
+            this.shaderPackResourceRestorer.run();
+        }
+    }
+
     private float[] readDepth() {
         int texels = this.resolution * this.resolution;
         ByteBuffer pixels = ByteBuffer.allocateDirect(texels * 4).order(ByteOrder.nativeOrder());
@@ -952,6 +1049,11 @@ public class IrisShadowRenderer {
         this.depthTextureNoTranslucents.destroy();
         LWJGL.glDeleteTextures(this.colorTexture0);
         LWJGL.glDeleteTextures(this.colorTexture1);
+        // Only when it is genuinely a second program: with no shadow_block in the pack this is the same object as
+        // entityShadowProgram, and destroying it here would leave the line below freeing an already-deleted program.
+        if (!this.blockEntityProgramShared && this.blockEntityShadowProgram != null) {
+            this.blockEntityShadowProgram.getProgram().destroy();
+        }
         if (this.entityShadowProgram != null) {
             this.entityShadowProgram.getProgram().destroy();
         }

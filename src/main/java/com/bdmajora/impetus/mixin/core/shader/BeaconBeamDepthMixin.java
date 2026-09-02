@@ -2,6 +2,7 @@ package com.bdmajora.impetus.mixin.core.shader;
 
 import com.bdmajora.impetus.iris.Iris;
 import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
+import com.bdmajora.impetus.iris.pipeline.IrisShadowRenderer;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.tileentity.TileEntityBeaconRenderer;
 import net.minecraft.tileentity.TileEntityBeacon;
@@ -27,6 +28,24 @@ public class BeaconBeamDepthMixin {
     private boolean impetus$savedDepthMask;
     @Unique
     private boolean impetus$depthMaskOverridden;
+
+    /**
+     * Iris parity: {@code mixin/shadows/MixinBeaconRenderer#iris$noLightBeamInShadowPass} cancels the beam outright
+     * while the shadow pass is running. The beam is a tall unlit quad column with no meaningful occlusion — drawing
+     * it into the shadow map casts a full-height shadow pillar from every beacon in range, which is why Iris drops
+     * it rather than letting it participate.
+     * <p>
+     * Cancelling at HEAD also keeps the depth-mask override below from running in a pass that has no depthtex for a
+     * pack to reconstruct from.
+     */
+    @Inject(method = "render(Lnet/minecraft/tileentity/TileEntityBeacon;DDDFIF)V",
+            at = @At("HEAD"), cancellable = true, require = 0)
+    private void impetus$noBeamInShadowPass(TileEntityBeacon beacon, double x, double y, double z,
+                                            float partialTicks, int destroyStage, float alpha, CallbackInfo ci) {
+        if (Iris.getRenderingPipeline() != null && IrisShadowRenderer.isShadowPass()) {
+            ci.cancel();
+        }
+    }
 
     @Inject(method = "render(Lnet/minecraft/tileentity/TileEntityBeacon;DDDFIF)V",
             at = @At("HEAD"), require = 0)

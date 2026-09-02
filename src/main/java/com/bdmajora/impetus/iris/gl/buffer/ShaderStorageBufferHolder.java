@@ -21,9 +21,26 @@ public final class ShaderStorageBufferHolder {
 
     /** GL43 constants (the generated constant classes track LWJGL's; avoid a hard dependency for two values). */
     private static final int GL_SHADER_STORAGE_BUFFER = 0x90D2;
+    private static final int GL_MAX_SHADER_STORAGE_BLOCK_SIZE = 0x90DE;
+    private static final int GL_NO_ERROR = 0;
 
-    /** Refuse absurd allocations rather than letting a typo'd pack directive OOM the GPU. */
-    private static final long MAX_BUFFER_BYTES = 512L * 1024 * 1024;
+    /**
+     * Ceiling used only when the driver will not report {@link #GL_MAX_SHADER_STORAGE_BLOCK_SIZE}. This was previously
+     * a hard cap on every allocation, which silently rejected buffers packs genuinely need: Complementary Reimagined
+     * at {@code COLORED_LIGHTING = 512} with world-space reflections on declares
+     * {@code bufferObject.0 = 810549248} (773 MiB) for its reflection face data. Skipping it left binding 0 empty
+     * while the pack's shaders kept reading {@code blockDataSSBO.data[...]} for the colour, lightmap and texture
+     * bounds of whatever a reflection ray hit — undefined reads that shade reflective surfaces arbitrarily bright,
+     * deterministically per view direction. The symptom is every block and entity "glowing" depending on which way
+     * the camera faces, and only with a pack that voxelizes for reflections.
+     */
+    private static final long FALLBACK_MAX_BUFFER_BYTES = 512L * 1024 * 1024;
+
+    /** Zero-fill granularity. Staging the whole buffer host-side would spike direct memory by its full size. */
+    private static final int ZERO_FILL_CHUNK_BYTES = 4 * 1024 * 1024;
+
+    /** Driver's per-buffer ceiling, queried once against a live context; 0 until then. */
+    private static long cachedMaxBufferBytes;
 
     public static final class Definition {
         final int index;
@@ -84,8 +101,12 @@ public final class ShaderStorageBufferHolder {
 
     /** Rebinds every buffer to its declared index (cheap; run once per frame for robustness). */
     public void bindAll() {
-        this.buffers.forEach((index, buffer) ->
-                LWJGL.glBindBufferBase(GL_SHADER_STORAGE_BUFFER, index, buffer));
+        this.definitions.keySet().forEach(index -> {
+            Integer buffer = this.buffers.get(index);
+            // A declared index whose allocation failed is bound to 0 rather than left alone, so its reads are at
+            // least consistent instead of picking up whatever another pass left in that slot.
+            LWJGL.glBindBufferBase(GL_SHADER_STORAGE_BUFFER, index, buffer != null ? buffer : 0);
+        });
     }
 
     public void destroy() {
@@ -103,9 +124,12 @@ public final class ShaderStorageBufferHolder {
             }
 
             long bytes = definition.byteSize(newWidth, newHeight);
-            if (bytes <= 0 || bytes > MAX_BUFFER_BYTES) {
-                LOGGER.warn("[Iris] bufferObject.{} requests {} bytes; skipping (limit {})",
-                        definition.index, bytes, MAX_BUFFER_BYTES);
+            long limit = maxBufferBytes();
+            if (bytes <= 0 || bytes > limit) {
+                // Not recoverable: the pack's shaders still declare the block and will read it regardless.
+                LOGGER.error("[Iris] bufferObject.{} requests {} bytes, above this driver's per-buffer limit of {}; "
+                                + "shaders reading that block will see undefined data",
+                        definition.index, bytes, limit);
                 continue;
             }
 
@@ -116,13 +140,21 @@ public final class ShaderStorageBufferHolder {
 
             int buffer = LWJGL.glGenBuffers();
             LWJGL.glBindBuffer(GL_SHADER_STORAGE_BUFFER, buffer);
-            // Zero-fill deterministically; glBufferData(size) alone leaves contents undefined.
-            if (bytes <= Integer.MAX_VALUE) {
-                ByteBuffer zeros = ByteBuffer.allocateDirect((int) bytes);
-                LWJGL.glBufferData(GL_SHADER_STORAGE_BUFFER, zeros, GL15.GL_DYNAMIC_DRAW);
-            } else {
-                LWJGL.glBufferData(GL_SHADER_STORAGE_BUFFER, bytes, GL15.GL_DYNAMIC_DRAW);
+            LWJGL.glGetError(); // discard anything already pending so the check below is about this allocation
+            LWJGL.glBufferData(GL_SHADER_STORAGE_BUFFER, bytes, GL15.GL_DYNAMIC_DRAW);
+            int error = LWJGL.glGetError();
+            if (error != GL_NO_ERROR) {
+                LWJGL.glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+                LWJGL.glDeleteBuffers(buffer);
+                LOGGER.error("[Iris] bufferObject.{} ({} bytes) failed to allocate (GL error 0x{}); the pack's "
+                                + "shaders will read undefined data from that block. Lowering the pack's colored "
+                                + "lighting resolution or disabling world-space reflections reduces the request.",
+                        definition.index, bytes, Integer.toHexString(error));
+                continue;
             }
+            // glBufferData(size) leaves contents undefined; the pack only writes the entries it visits, so anything
+            // it never touches has to read as zero rather than as whatever the driver handed us.
+            zeroFill(bytes);
             LWJGL.glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
             this.buffers.put(definition.index, buffer);
@@ -133,6 +165,39 @@ public final class ShaderStorageBufferHolder {
         this.width = newWidth;
         this.height = newHeight;
         bindAll();
+    }
+
+    /**
+     * The driver's own ceiling for a single shader storage block, which is the only limit that actually applies.
+     * Queried once against a live context and cached; {@code glGetInteger} saturates at {@link Integer#MAX_VALUE} for
+     * the drivers that report a larger 64-bit value, which is well past any real pack request.
+     */
+    private static long maxBufferBytes() {
+        if (cachedMaxBufferBytes > 0) {
+            return cachedMaxBufferBytes;
+        }
+        LWJGL.glGetError(); // a pending error would make the query result ambiguous
+        int reported = LWJGL.glGetInteger(GL_MAX_SHADER_STORAGE_BLOCK_SIZE);
+        if (LWJGL.glGetError() != GL_NO_ERROR || reported == 0) {
+            cachedMaxBufferBytes = FALLBACK_MAX_BUFFER_BYTES;
+            LOGGER.warn("[Iris] Driver did not report GL_MAX_SHADER_STORAGE_BLOCK_SIZE; capping buffers at {} bytes",
+                    cachedMaxBufferBytes);
+        } else {
+            // Negative means the 64-bit limit overflowed the int query, i.e. it is at least Integer.MAX_VALUE.
+            cachedMaxBufferBytes = reported < 0 ? Integer.MAX_VALUE : reported;
+        }
+        return cachedMaxBufferBytes;
+    }
+
+    /** Zeroes the currently bound shader storage buffer in fixed-size chunks. */
+    private static void zeroFill(long bytes) {
+        int chunk = (int) Math.min(bytes, ZERO_FILL_CHUNK_BYTES);
+        ByteBuffer zeros = ByteBuffer.allocateDirect(chunk); // allocateDirect is already zeroed
+        for (long offset = 0; offset < bytes; offset += chunk) {
+            zeros.clear();
+            zeros.limit((int) Math.min(chunk, bytes - offset));
+            LWJGL.glBufferSubData(GL_SHADER_STORAGE_BUFFER, offset, zeros);
+        }
     }
 
     /** Parses every {@code bufferObject.<index> = ...} directive. */

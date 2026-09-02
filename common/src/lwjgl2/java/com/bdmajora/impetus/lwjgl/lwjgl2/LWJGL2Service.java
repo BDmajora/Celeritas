@@ -276,6 +276,11 @@ public record LWJGL2Service(
     }
 
     @Override
+    public void glBufferSubData(int target, long offset, ByteBuffer data) {
+        GL15.glBufferSubData(target, offset, data);
+    }
+
+    @Override
     public void glBufferStorage(int target, long size, int flags) {
         ARBBufferStorage.glBufferStorage(target, size, flags);
     }

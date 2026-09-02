@@ -34,6 +34,8 @@ public enum ProgramId {
     TerrainCutoutMip("gbuffers_terrain_cutout_mip", TerrainCutout),
     DamagedBlock("gbuffers_damagedblock", Terrain),
     Block("gbuffers_block", Terrain),
+    /** Iris {@code ProgramId.BlockTrans}: the translucent half of the block-entity program. */
+    BlockTrans("gbuffers_block_translucent", Block),
     BeaconBeam("gbuffers_beaconbeam", Textured),
     Item("gbuffers_item", TexturedLit),
 
@@ -41,6 +43,8 @@ public enum ProgramId {
     Entities("gbuffers_entities", TexturedLit),
     EntitiesTrans("gbuffers_entities_translucent", Entities),
     EntitiesGlowing("gbuffers_entities_glowing", Entities),
+    /** Iris {@code ProgramId.Lightning}: lightning bolts, split out of the entity program. */
+    Lightning("gbuffers_lightning", Entities),
     Particles("gbuffers_particles", TexturedLit),
     ParticlesTrans("gbuffers_particles_translucent", Particles),
     ArmorGlint("gbuffers_armor_glint", Textured),
@@ -58,8 +62,20 @@ public enum ProgramId {
     Water("gbuffers_water", Terrain),
     HandWater("gbuffers_hand_water", Hand),
 
-    // --- Single shadow program (1.12.2 OptiFine convention is one ortho shadow map) ---
+    // --- Shadow family ---
+    // Iris exposes a whole ProgramGroup.Shadow, and OptiFine ships shadow_solid/shadow_cutout too (program table
+    // indices 31/32). Every one of these falls back to plain `shadow`, so a pack that declares none behaves exactly
+    // as before: `ProgramSet#get` walks the chain and lands on the same source it would have used anyway. Packs that
+    // DO ship them — to skip alpha-testing on solid shadow geometry, or to treat entities differently in the shadow
+    // map — previously had those files silently ignored.
     Shadow("shadow"),
+    ShadowSolid("shadow_solid", Shadow),
+    ShadowCutout("shadow_cutout", Shadow),
+    ShadowWater("shadow_water", Shadow),
+    ShadowEntities("shadow_entities", Shadow),
+    /** Iris chains this to {@code shadow_entities}, not to {@code shadow}, so a pack overriding entities gets both. */
+    ShadowLightning("shadow_lightning", ShadowEntities),
+    ShadowBlock("shadow_block", Shadow),
 
     // --- Single composite/deferred/final entries (numbered variants come from ProgramArrayId) ---
     Final("final");

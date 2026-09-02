@@ -25,6 +25,7 @@ public interface LWJGLService {
     void glBufferData(int target, long size, int usage);
     void glBufferData(int target, ByteBuffer data, int usage);
     void glBufferData(int target, long size, long data, int usage);
+    void glBufferSubData(int target, long offset, ByteBuffer data);
     void glBufferStorage(int target, long size, int flags);
     ByteBuffer glMapBufferRange(int target, long offset, long length, int flags);
     long nglMapBuffer(int target, int access);

@@ -112,16 +112,43 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
             this.renderSectionManager.finishAllGraphUpdates();
         }
 
-        boolean isShadowPass = this.renderSectionManager.isInShadowPass();
+        if (this.renderSectionManager.isInShadowPass()) {
+            // Iris parity. The shadow pass is a pure culling pass: it builds its own render list from the shadow
+            // frustum and touches nothing the camera pass owns. Iris enforces this structurally by swapping
+            // `visibleSections` and the `prevCamRotX/prevCamRotY` camera memo out for the duration of the pass
+            // (ShadowRenderer#renderShadows -> CullingDataCache#saveState/restoreState) and by never running
+            // vanilla's chunk build/upload dispatch from it — it calls only `invokeCullTerrain`.
+            //
+            // Every piece of shared state below caused a real bug when the shadow pass reached it:
+            //
+            //  - `lastCameraState`. Both passes are handed the SAME CameraState, and the shadow pass runs first
+            //    (the EntityRenderer "frustum" hook fires before RenderGlobal.setupTerrain), so the shadow pass
+            //    always won the dirty check and the camera pass always saw "camera unchanged". The camera pass
+            //    therefore never marked its own graph dirty and depended entirely on the shadow pass having done
+            //    it — the exact coupling Iris's memo swap exists to prevent.
+            //  - `updateChunks`. The rebuild lists it drains belong to whichever manager is current, so the shadow
+            //    pass dispatched builds off the SHADOW list while spending the shared ChunkBuilder scheduling
+            //    budget. The camera pass then ran with what was left, so on a streaming world terrain fell further
+            //    behind every frame and never caught up: geometry drains away while entities and block entities,
+            //    which do not come from these lists, keep drawing.
+            //  - `tickVisibleRenders`. Ticks the current render list, so running it in both passes double-ticked
+            //    animated sprites.
+            //
+            // `currentViewport` is deliberately still assigned: drawChunkLayer reads it for the occlusion camera,
+            // and the camera pass reassigns it before its own draws. Block face culling is off in this pass
+            // (VintageRenderSectionManager#useBlockFaceCulling), so it only supplies the camera transform, which
+            // is identical in both viewports.
+            this.currentViewport = viewport;
+            this.renderSectionManager.update(viewport, frame, spectator);
+            return;
+        }
 
-        if (!isShadowPass) {
-            this.processChunkEvents();
+        this.processChunkEvents();
 
-            this.renderSectionManager.runAsyncTasks();
+        this.renderSectionManager.runAsyncTasks();
 
-            if (getEffectiveRenderDistance() != this.renderDistance) {
-                this.reload();
-            }
+        if (getEffectiveRenderDistance() != this.renderDistance) {
+            this.reload();
         }
 
         boolean dirty = this.lastCameraState == null || !this.lastCameraState.equals(cameraState);
@@ -137,12 +164,9 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
 
         this.renderSectionManager.updateChunks(updateChunksImmediately);
 
-        // We don't need to upload chunks during shadow, they will be uploaded on the next real frame.
-        if (!isShadowPass) {
-            this.renderSectionManager.uploadChunks();
-        }
+        this.renderSectionManager.uploadChunks();
 
-        if (this.renderSectionManager.needsUpdate() || isShadowPass) {
+        if (this.renderSectionManager.needsUpdate()) {
             this.renderSectionManager.update(viewport, frame, spectator);
         }
 

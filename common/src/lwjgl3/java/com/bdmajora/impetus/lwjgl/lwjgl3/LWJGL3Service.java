@@ -125,6 +125,11 @@ public record LWJGL3Service(
     }
 
     @Override
+    public void glBufferSubData(int target, long offset, ByteBuffer data) {
+        GL15C.glBufferSubData(target, offset, data);
+    }
+
+    @Override
     public void glBufferStorage(int target, long size, int flags) {
         GL44C.glBufferStorage(target, size, flags);
     }

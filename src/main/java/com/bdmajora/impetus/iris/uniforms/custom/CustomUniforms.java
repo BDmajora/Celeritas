@@ -99,6 +99,29 @@ public final class CustomUniforms {
         return this.variables.size();
     }
 
+    /**
+     * {@return every variable's value as evaluated for the current frame, in declaration order}
+     * <p>
+     * Diagnostics only. These are the values the pack's own {@code uniform.}/{@code variable.} expressions produced,
+     * which is what actually reaches the shader — built-ins of the same name are replaced by these at program build
+     * time. Comparing them against the equivalent built-in is how a divergence between the two shows up.
+     */
+    public Map<String, String> snapshot() {
+        Map<String, String> out = new LinkedHashMap<>();
+        for (Variable variable : this.variables) {
+            CustomUniformValue value = variable.current;
+            StringBuilder text = new StringBuilder();
+            for (int i = 0; i < value.width; i++) {
+                if (i > 0) {
+                    text.append(", ");
+                }
+                text.append(value.components[i]);
+            }
+            out.put((variable.isUniform ? "uniform." : "variable.") + variable.name, text.toString());
+        }
+        return out;
+    }
+
     private static float component(Variable variable, int index) {
         CustomUniformValue value = variable.current;
         return index < value.width ? value.components[index] : 0.0f;

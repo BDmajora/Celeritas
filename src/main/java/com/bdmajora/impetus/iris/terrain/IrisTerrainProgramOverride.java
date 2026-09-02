@@ -74,7 +74,18 @@ public final class IrisTerrainProgramOverride {
         return build(pack, options, programId);
     }
 
-    /** The pack's {@code shadow} program for the shadow-map pass, or {@code null} (nothing drawn) if it won't build. */
+    /**
+     * The pack's shadow terrain program for the shadow-map pass, or {@code null} (nothing drawn) if it won't build.
+     * <p>
+     * Split by chunk pass exactly as {@link #getProgramOverride} splits the camera pass, because Iris and OptiFine
+     * both split the shadow pass the same way: Iris has {@code ShadowWater}/{@code ShadowCutout}/{@code ShadowSolid}
+     * in its shadow ProgramGroup, and OptiFine ships {@code shadow_solid}/{@code shadow_cutout} at program indices
+     * 31/32. A pack declaring {@code shadow_solid} is telling the compiler it can drop the alpha test for the solid
+     * pass; previously that file was loaded and then never asked for.
+     * <p>
+     * Every one of these falls back to plain {@code shadow}, so a pack shipping only {@code shadow} resolves to the
+     * identical source it did before and nothing about its shadow map changes.
+     */
     public static GlProgram<ChunkShaderInterface> getShadowProgramOverride(ChunkShaderOptions options) {
         ShaderPack pack = Iris.getCurrentPack();
         if (pack == null) {
@@ -83,7 +94,15 @@ public final class IrisTerrainProgramOverride {
         if (SHADOW_PROGRAMS.containsKey(options)) {
             return SHADOW_PROGRAMS.get(options);
         }
-        GlProgram<ChunkShaderInterface> program = build(pack, options, ProgramId.Shadow);
+        ProgramId programId;
+        if (options.pass().isReverseOrder()) {
+            programId = ProgramId.ShadowWater;
+        } else if (options.pass().supportsFragmentDiscard()) {
+            programId = ProgramId.ShadowCutout;
+        } else {
+            programId = ProgramId.ShadowSolid;
+        }
+        GlProgram<ChunkShaderInterface> program = build(pack, options, programId);
         SHADOW_PROGRAMS.put(options, program);
         return program;
     }

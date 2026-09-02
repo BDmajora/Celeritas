@@ -5,6 +5,7 @@ import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ActiveRenderInfo;
+import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.effect.EntityLightningBolt;
@@ -442,7 +443,13 @@ public final class CommonUniforms {
         float skyBrightness = getEyeSkyBrightness();
         int precipitation = getBiomePrecipitation();
 
-        cachedEyeInCave = eyeInCave.update(getRawEyeInCave(skyBrightness), 6.0f, 12.0f, deltaSeconds);
+        // Complementary declares this as
+        //   isEyeInCave = if(isEyeInWater == 0, 1.0 - smooth(202, if(eyeAltitude < 5.0, eyeBrightness.y / 240.0, 1.0), 6, 12), 0.0)
+        // so the inversion happens AFTER the smoothing and the above-y5 branch feeds 1.0, not 0.0. Inverting first
+        // (and feeding 0.0) reaches the same steady state but runs the smoother from the opposite end, so the value
+        // is wrong for the whole 6s/12s transient every time the branch flips — long enough to cover an entire walk
+        // through a doorway.
+        cachedEyeInCave = 1.0f - eyeInCave.update(getRawEyeInCave(skyBrightness), 6.0f, 12.0f, deltaSeconds);
         cachedInDry = inDry.update(precipitation == 0 ? 1.0f : 0.0f, 20.0f, 10.0f, deltaSeconds);
         cachedInRainy = inRainy.update(precipitation == 1 ? 1.0f : 0.0f, 20.0f, 10.0f, deltaSeconds);
         cachedInSnowy = inSnowy.update(precipitation == 2 ? 1.0f : 0.0f, 20.0f, 10.0f, deltaSeconds);
@@ -475,8 +482,9 @@ public final class CommonUniforms {
         cachedEndFlashIntensity = getRawEndFlashIntensity();
     }
 
+    /** The pre-smoothing inner term of the pack's {@code isEyeInCave}; the {@code 1.0 -} is applied to the result. */
     private static float getRawEyeInCave(float skyBrightness) {
-        return getEyeAltitude() < 5.0f ? 1.0f - skyBrightness : 0.0f;
+        return getEyeAltitude() < 5.0f ? skyBrightness : 1.0f;
     }
 
     private static float getEyeSkyBrightness() {
@@ -943,9 +951,20 @@ public final class CommonUniforms {
         return cachedPreviousEndFlashIntensity;
     }
 
+    /**
+     * Iris feeds this from {@code level.endFlashState().getIntensity(tickDelta)} — the strength of the End's
+     * transient flash event, which is 0 whenever no flash is happening and only briefly rises during one.
+     * <p>
+     * That event is a 1.21 vanilla feature; 1.12.2 has no {@code endFlashState} and never flashes. So the faithful
+     * value here is a constant 0, not "1.0 while in the End": the latter tells a pack the End is permanently at
+     * full flash intensity, and Complementary drives {@code endFlashIntensityM} straight off this, so its entire End
+     * sky and lighting sat at the flash extreme for as long as the player was in the dimension.
+     * <p>
+     * Kept as a method rather than folded into a constant so the day 1.12 gains an equivalent event, or a pack-side
+     * emulation appears, there is one place to feed it from.
+     */
     private static float getRawEndFlashIntensity() {
-        World world = world();
-        return world != null && world.provider.getDimension() == 1 ? 1.0f : 0.0f;
+        return 0.0f;
     }
 
     private static Vector2f getScreenSize() {
@@ -1272,21 +1291,42 @@ public final class CommonUniforms {
         return world.provider.isSurfaceWorld() ? 0.0f : 0.1f;
     }
 
+    /**
+     * Iris reports the MAIN RENDER TARGET's size for these, not the window's
+     * ({@code ViewportUniforms}: {@code Minecraft.getInstance().getMainRenderTarget().width/height}). The two are
+     * usually equal, but they diverge whenever the framebuffer is sized independently of the display. Packs derive
+     * their screen-space texel step from {@code viewWidth}/{@code viewHeight}, so a mismatch rescales every blur,
+     * bloom and neighbour tap by the ratio between them. The render target is what the composite chain actually
+     * rasterises into, so it is the correct denominator; the display size is only a fallback for when Minecraft is
+     * not using a framebuffer at all.
+     */
+    private static int getRenderTargetWidth() {
+        Minecraft mc = Minecraft.getMinecraft();
+        return OpenGlHelper.isFramebufferEnabled() && mc.getFramebuffer() != null
+                ? mc.getFramebuffer().framebufferWidth : mc.displayWidth;
+    }
+
+    private static int getRenderTargetHeight() {
+        Minecraft mc = Minecraft.getMinecraft();
+        return OpenGlHelper.isFramebufferEnabled() && mc.getFramebuffer() != null
+                ? mc.getFramebuffer().framebufferHeight : mc.displayHeight;
+    }
+
     private static float getViewWidth() {
-        return Minecraft.getMinecraft().displayWidth;
+        return getRenderTargetWidth();
     }
 
     private static float getViewHeight() {
-        return Minecraft.getMinecraft().displayHeight;
+        return getRenderTargetHeight();
     }
 
     private static float getPixelSizeX() {
-        int width = Minecraft.getMinecraft().displayWidth;
+        int width = getRenderTargetWidth();
         return width > 0 ? 1.0f / width : 0.0f;
     }
 
     private static float getPixelSizeY() {
-        int height = Minecraft.getMinecraft().displayHeight;
+        int height = getRenderTargetHeight();
         return height > 0 ? 1.0f / height : 0.0f;
     }
 

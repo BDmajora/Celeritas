@@ -96,6 +96,30 @@ public class EntityRendererMixin {
     public void disableLightmap() {
     }
 
+    /**
+     * OptiFine parity: its {@code EntityRenderer.enableLightmap()}/{@code disableLightmap()} both end with
+     * {@code if (Config.isShaders()) Shaders.enableLightmap()/disableLightmap()}, which swap
+     * {@code gbuffers_textured} and {@code gbuffers_textured_lit}. Vanilla only flips texture unit 1; without
+     * telling the pipeline, geometry drawn while that unit is disabled keeps running the lit program, samples white
+     * from the dead unit and renders fullbright. See {@code IrisRenderingPipeline#setLightmapEnabled} for why items
+     * in particular are affected.
+     */
+    @Inject(method = "enableLightmap", at = @At("RETURN"))
+    private void impetus$onEnableLightmap(CallbackInfo ci) {
+        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        if (pipeline != null) {
+            pipeline.setLightmapEnabled(true);
+        }
+    }
+
+    @Inject(method = "disableLightmap", at = @At("RETURN"))
+    private void impetus$onDisableLightmap(CallbackInfo ci) {
+        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        if (pipeline != null) {
+            pipeline.setLightmapEnabled(false);
+        }
+    }
+
     private static void impetus$setPhase(ProgramId phase) {
         IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
         if (pipeline != null) {
