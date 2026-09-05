@@ -90,8 +90,30 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         return this.renderer;
     }
 
+    /**
+     * Set for the duration of {@code setWorldAndLoadRenderers}, which calls {@code loadRenderers} internally.
+     * <p>
+     * Without this, one world change tore the terrain renderer down twice: {@code loadRenderers} fired
+     * {@link #onReload} first — rebuilding the section manager for the world we are in the middle of leaving — and
+     * the trailing {@link #onWorldChanged} then destroyed that brand-new manager and built another for the incoming
+     * world. Every chunk mesh was discarded and every terrain program recompiled twice per transition. On a server
+     * that moves you between worlds routinely (MCParks park-hopping) that reads as terrain endlessly unloading.
+     * <p>
+     * The tell in the logs is that a plain config change, which calls {@code loadRenderers} on its own, logged a
+     * single {@code ChunkBuilder: Stopping worker threads}, while every world change logged them in pairs.
+     */
+    @Unique
+    private boolean impetus$changingWorld;
+
+    @Inject(method = "setWorldAndLoadRenderers", at = @At("HEAD"))
+    private void impetus$beginWorldChange(WorldClient world, CallbackInfo ci) {
+        this.impetus$changingWorld = true;
+    }
+
     @Inject(method = "setWorldAndLoadRenderers", at = @At("RETURN"))
     private void onWorldChanged(WorldClient world, CallbackInfo ci) {
+        this.impetus$changingWorld = false;
+
         RenderDevice.enterManagedCode();
 
         try {
@@ -289,6 +311,12 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
 
     @Inject(method = "loadRenderers", at = @At("RETURN"))
     private void onReload(CallbackInfo ci) {
+        // Mid-world-change this reload is for the world being left, and onWorldChanged is about to rebuild the
+        // renderer for the incoming one anyway. Doing it here as well only discards every chunk mesh an extra time.
+        if (this.impetus$changingWorld) {
+            return;
+        }
+
         RenderDevice.enterManagedCode();
 
         try {

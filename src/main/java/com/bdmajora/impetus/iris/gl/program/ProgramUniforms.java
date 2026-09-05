@@ -42,19 +42,49 @@ import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
  * sampled.
  */
 public class ProgramUniforms {
+    /**
+     * Uniforms that change per rendered object rather than per phase, and so are re-uploaded by
+     * {@code IrisRenderingPipeline#refreshDynamicUniforms} from the per-object hooks. Deliberately tiny: see
+     * {@link #updatePerObject()} for why this cannot just be the whole {@code DYNAMIC} set.
+     */
+    private static final java.util.Set<String> PER_OBJECT_UNIFORMS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "entityId", "blockEntityId", "currentRenderedItemId", "entityColor"));
+
     private final List<Uniform> dynamic;
     private final List<Uniform> once;
     private final List<Uniform> perTick;
     private final List<Uniform> perFrame;
+    private final List<Uniform> perObject;
     private long lastTick = -1L;
     private int lastFrame = -1;
     private boolean firstUpdate = true;
 
-    private ProgramUniforms(List<Uniform> dynamic, List<Uniform> once, List<Uniform> perTick, List<Uniform> perFrame) {
+    private ProgramUniforms(List<Uniform> dynamic, List<Uniform> once, List<Uniform> perTick, List<Uniform> perFrame,
+                            List<Uniform> perObject) {
         this.dynamic = dynamic;
         this.once = once;
         this.perTick = perTick;
         this.perFrame = perFrame;
+        this.perObject = perObject;
+    }
+
+    /**
+     * Re-uploads only the handful of uniforms that vary per rendered object.
+     * <p>
+     * The per-object hooks originally called {@link #update()}, which walks the whole {@code DYNAMIC} list. That is
+     * ruinous here, and not for the reason it looks: {@link IntUniform} caches its last value and skips the upload
+     * when nothing changed, but {@link MatrixUniform} and {@link Matrix3Uniform} have <em>no</em> such check — they
+     * invoke the supplier and call {@code glUniformMatrix*fv} unconditionally. Six matrix uniforms are registered
+     * {@code DYNAMIC}, and five of their suppliers read the live fixed-function modelview, which means a direct
+     * {@code ByteBuffer} allocation plus a {@code glGetFloat(GL_MODELVIEW_MATRIX)} pipeline query <em>each</em>. At
+     * two calls per object across items, entities and block entities, a scene with a few thousand of them turns into
+     * tens of thousands of stalling GL queries and native allocations per frame.
+     * <p>
+     * Those matrices genuinely are per-draw state and still need to be right, but the phase-level {@link #update()}
+     * already covers them for the batch; only the ids and the hurt-flash colour actually differ object to object.
+     */
+    public void updatePerObject() {
+        updateStage(this.perObject);
     }
 
     private static long currentTick() {
@@ -330,6 +360,7 @@ public class ProgramUniforms {
             List<Uniform> once = new ArrayList<>();
             List<Uniform> perTick = new ArrayList<>();
             List<Uniform> perFrame = new ArrayList<>();
+            List<Uniform> perObject = new ArrayList<>();
             for (PendingUniform entry : this.pending.values()) {
                 Uniform uniform = entry.uniform;
                 ProvidedType declaredType = declared.get(entry.uniformName);
@@ -362,8 +393,13 @@ public class ProgramUniforms {
                 } else {
                     perFrame.add(uniform);
                 }
+                // Also indexed separately, staying in its frequency list above: the per-object hooks re-upload just
+                // these between draws, while the phase-level update still covers them with everything else.
+                if (PER_OBJECT_UNIFORMS.contains(entry.uniformName)) {
+                    perObject.add(uniform);
+                }
             }
-            return new ProgramUniforms(dynamic, once, perTick, perFrame);
+            return new ProgramUniforms(dynamic, once, perTick, perFrame, perObject);
         }
     }
 }

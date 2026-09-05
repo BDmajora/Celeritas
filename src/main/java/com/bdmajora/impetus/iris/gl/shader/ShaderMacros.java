@@ -234,40 +234,64 @@ public final class ShaderMacros {
         return "MC_OS_OTHER";
     }
 
+    /**
+     * Matches Iris {@code StandardMacros.getVendor()} exactly, which in turn matches OptiFine's documented behaviour.
+     * <p>
+     * These are prefix tests, not substring tests, and the distinction is load-bearing — see
+     * {@link #rendererMacro(String)}.
+     */
     private static String vendorMacro(String vendor) {
         if (vendor == null) {
             return "MC_GL_VENDOR_OTHER";
         }
         String v = vendor.toLowerCase(Locale.ROOT);
-        if (v.startsWith("ati") || v.contains("amd")) {
+        if (v.startsWith("ati")) {
             return "MC_GL_VENDOR_ATI";
         } else if (v.startsWith("intel")) {
             return "MC_GL_VENDOR_INTEL";
         } else if (v.startsWith("nvidia")) {
             return "MC_GL_VENDOR_NVIDIA";
+        } else if (v.startsWith("amd")) {
+            // Iris reports AMD separately from ATI. Folding it into ATI still satisfied Complementary's
+            // `#if defined MC_GL_VENDOR_AMD || defined MC_GL_VENDOR_ATI`, but only by luck — a pack testing
+            // MC_GL_VENDOR_AMD alone would have silently taken the wrong branch.
+            return "MC_GL_VENDOR_AMD";
         } else if (v.startsWith("x.org")) {
             return "MC_GL_VENDOR_XORG";
         }
         return "MC_GL_VENDOR_OTHER";
     }
 
+    /**
+     * Matches Iris {@code StandardMacros.getRenderer()} exactly, including the order of the tests.
+     * <p>
+     * <b>Prefix, not substring.</b> This previously used {@code contains}, which misidentified every Mesa GPU whose
+     * renderer string happens to name its vendor. A Mesa Intel Arc reports
+     * {@code "Mesa Intel(R) Arc(tm) B580 Graphics (BMG G21)"}: {@code contains("intel")} matched first and produced
+     * {@code MC_GL_RENDERER_INTEL}, so the {@code mesa} branch was unreachable and the card was advertised to packs
+     * as a plain Intel iGPU. Iris tests {@code startsWith}, so the same string correctly yields
+     * {@code MC_GL_RENDERER_MESA}. Packs gate real workarounds on this ({@code MC_GL_RENDERER_INTEL} means "ancient
+     * Intel HD, disable things"), so the misidentification silently pushed modern Arc hardware down a degraded path.
+     */
     private static String rendererMacro(String renderer) {
         if (renderer == null) {
             return "MC_GL_RENDERER_OTHER";
         }
         String r = renderer.toLowerCase(Locale.ROOT);
-        if (r.contains("radeon") || r.contains("amd")) {
+        if (r.startsWith("amd") || r.startsWith("ati") || r.startsWith("radeon")) {
             return "MC_GL_RENDERER_RADEON";
-        } else if (r.contains("geforce")) {
-            return "MC_GL_RENDERER_GEFORCE";
-        } else if (r.contains("quadro")) {
-            return "MC_GL_RENDERER_QUADRO";
-        } else if (r.contains("intel")) {
-            return "MC_GL_RENDERER_INTEL";
-        } else if (r.contains("gallium")) {
+        } else if (r.startsWith("gallium")) {
             return "MC_GL_RENDERER_GALLIUM";
-        } else if (r.contains("mesa")) {
+        } else if (r.startsWith("intel")) {
+            return "MC_GL_RENDERER_INTEL";
+        } else if (r.startsWith("geforce") || r.startsWith("nvidia")) {
+            return "MC_GL_RENDERER_GEFORCE";
+        } else if (r.startsWith("quadro") || r.startsWith("nvs")) {
+            return "MC_GL_RENDERER_QUADRO";
+        } else if (r.startsWith("mesa")) {
             return "MC_GL_RENDERER_MESA";
+        } else if (r.startsWith("apple")) {
+            return "MC_GL_RENDERER_APPLE";
         }
         return "MC_GL_RENDERER_OTHER";
     }

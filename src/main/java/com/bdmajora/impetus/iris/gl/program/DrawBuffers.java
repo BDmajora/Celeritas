@@ -2,6 +2,8 @@ package com.bdmajora.impetus.iris.gl.program;
 
 import com.bdmajora.impetus.iris.targets.IrisRenderTargets;
 
+import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -34,7 +36,36 @@ public final class DrawBuffers {
     /** The default when a fragment shader declares no directive: write to colortex0 only. */
     public static final int[] DEFAULT = new int[]{0};
 
+    private static final int GL_MAX_DRAW_BUFFERS = 0x8824;
+    private static int fragmentOutputArraySize = -1;
+
     private DrawBuffers() {
+    }
+
+    /**
+     * {@return the length to declare {@code out vec4 iris_FragData[N]} with}
+     * <p>
+     * An array fragment output occupies {@code N} <em>contiguous</em> output locations, so {@code N} may not exceed
+     * {@code GL_MAX_DRAW_BUFFERS} (8 on essentially all hardware). This was hardcoded to 16 — which NVIDIA silently
+     * tolerates because it only allocates the locations actually written, but Mesa enforces, failing the link with
+     * {@code insufficient contiguous locations available for fragment shader output 'iris_FragData'} and taking the
+     * whole terrain override down with it on Intel Arc.
+     * <p>
+     * Nothing is lost by clamping: {@code DRAWBUFFERS}/{@code RENDERTARGETS} indices are <em>dense output slots</em>
+     * (see {@link #rewriteFragmentOutputs}), so the highest slot a program can reference is one less than the number
+     * of attachments it declares, and no framebuffer can carry more than {@code GL_MAX_DRAW_BUFFERS} of those.
+     * <p>
+     * Iris avoids the question entirely: it emits a separate {@code layout(location = i) out vec4 iris_FragDatai} for
+     * each index the shader actually uses, never an array. That needs per-index reference analysis, which this port's
+     * {@code #define gl_FragData iris_FragData} approach deliberately trades away — so it clamps instead.
+     */
+    public static int fragmentOutputArraySize() {
+        if (fragmentOutputArraySize < 0) {
+            int reported = LWJGL.glGetInteger(GL_MAX_DRAW_BUFFERS);
+            // A failed query reports 0; 8 is the GL 3.3 floor and the universal real-world value.
+            fragmentOutputArraySize = Math.min(reported > 0 ? reported : 8, IrisRenderTargets.MAX_COLOR_BUFFERS);
+        }
+        return fragmentOutputArraySize;
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.bdmajora.impetus.iris.gl.shader;
 
 import com.bdmajora.impetus.iris.gl.GlResource;
+import com.bdmajora.impetus.iris.shaderpack.preprocessor.GlslPreprocessor;
 import com.bdmajora.impetus.lwjgl.GL20;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
@@ -17,6 +18,11 @@ public class GlShader extends GlResource {
 
     public GlShader(ShaderType type, String name, String source) {
         this.name = name;
+
+        // Last stop before the driver, and the only point every path (gbuffer, terrain override, fullscreen, compute)
+        // passes through — so the strict-driver #extension placement rule is enforced for all of them here rather
+        // than in each transformer. No-op unless a directive is genuinely misplaced.
+        source = GlslPreprocessor.hoistExtensionDirectives(source);
 
         int handle = LWJGL.glCreateShader(type.id);
         if (handle == 0) {

@@ -1919,8 +1919,12 @@ public class IrisRenderingPipeline {
             if (modern) {
                 // Modern sources rely on the driver preprocessor for their #if trees; the MC_*/IRIS_FEATURE_* macro
                 // environment has to be present for those gates (colored lighting checks IRIS_FEATURE_CUSTOM_IMAGES).
-                vsh = ModernPackTransformer.transform(stabilizeShaderSource(source.getName(),
-                        com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(vshRaw, macros)));
+                // The quad is drawn from generic vertex attributes, so gl_MultiTexCoord0 has to be fed from a real
+                // one rather than relying on NVIDIA's generic-to-conventional aliasing. See
+                // ModernPackTransformer#bindFullscreenTexCoord.
+                vsh = ModernPackTransformer.bindFullscreenTexCoord(
+                        ModernPackTransformer.transform(stabilizeShaderSource(source.getName(),
+                                com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(vshRaw, macros))));
                 fsh = DrawBuffers.rewriteFragmentOutputs(ModernPackTransformer.transform(
                         stabilizeShaderSource(source.getName(),
                                 com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(fshRaw, macros))),
@@ -1956,7 +1960,11 @@ public class IrisRenderingPipeline {
                     .attach(vertex)
                     .attach(fragment)
                     .bindAttributeLocation(FullscreenQuadRenderer.POSITION_SLOT, "a_Position")
-                    .bindAttributeLocation(FullscreenQuadRenderer.TEXCOORD_SLOT, "a_TexCoord");
+                    .bindAttributeLocation(FullscreenQuadRenderer.TEXCOORD_SLOT, "a_TexCoord")
+                    // Modern (compatibility-profile) sources read the quad's texcoord through this instead, since
+                    // gl_MultiTexCoord0 cannot be fed portably via generic attribute 8.
+                    .bindAttributeLocation(FullscreenQuadRenderer.TEXCOORD_SLOT,
+                            ModernPackTransformer.FULLSCREEN_TEXCOORD_ATTRIBUTE);
             if (!modern) {
                 // The generated 330-core path writes to an explicit out array whose indices are the dense
                 // draw-buffer slots, matching Iris's packed framebuffer attachments.
@@ -2213,7 +2221,7 @@ public class IrisRenderingPipeline {
         if (!this.setupDispatched) {
             this.setupDispatched = true;
             if (!this.setupPasses.isEmpty()) {
-                bindShaderPackResources(false);
+                bindShaderPackResources();
                 for (FullscreenPass pass : this.setupPasses) {
                     bindRenderTargetImages(pass);
                     dispatchComputes(pass.computes);
@@ -2456,9 +2464,13 @@ public class IrisRenderingPipeline {
      * {@code gbuffers_entities} opens {@code int mat = currentRenderedItemId;} — so a latched emissive id makes the
      * entire batch emissive, and since draw order tracks the camera, which id wins changes with the heading.
      * <p>
-     * Cheap enough to call per object: {@link com.bdmajora.impetus.iris.gl.uniform.IntUniform#update()} and its
-     * siblings compare against a cached value and only issue a {@code glUniform*} when it actually changed, so the
-     * common case is a walk of the dynamic list with no GL traffic at all.
+     * Cheap enough to call per object only because it goes through
+     * {@link com.bdmajora.impetus.iris.gl.program.ProgramUniforms#updatePerObject()}, which touches just the ids and
+     * {@code entityColor}. It must NOT be widened back to the whole {@code DYNAMIC} set:
+     * {@link com.bdmajora.impetus.iris.gl.uniform.MatrixUniform} and
+     * {@link com.bdmajora.impetus.iris.gl.uniform.Matrix3Uniform} have no dirty-check at all, and five of the six
+     * {@code DYNAMIC} matrix suppliers each issue a {@code glGetFloat(GL_MODELVIEW_MATRIX)} pipeline query plus a
+     * direct buffer allocation — at two calls per object that is tens of thousands of stalling queries a frame.
      * <p>
      * Unlike {@link #setPhase}, this touches nothing but uniforms — no vertex arrays, draw buffers, blend or alpha
      * test — which is what makes it safe on a per-object hook that {@code setPhase} was not.
@@ -2483,7 +2495,7 @@ public class IrisRenderingPipeline {
         if (LWJGL.glGetInteger(GL_CURRENT_PROGRAM) != entry.getProgram().getProgram().getGlId()) {
             return;
         }
-        entry.getUniforms().update();
+        entry.getUniforms().updatePerObject();
     }
 
     /**
@@ -3811,7 +3823,7 @@ public class IrisRenderingPipeline {
         // Impetus shadow-terrain draw that just voxelized runs through managed code that can reset texture/image
         // units, so re-establish the voxel/floodfill bindings here rather than trusting the frame-start bindAll to
         // survive it — otherwise the compute could read/write the wrong (or unbound) volume.
-        bindShaderPackResources(false);
+        bindShaderPackResources();
         LWJGL.glMemoryBarrier(com.bdmajora.impetus.lwjgl.GL42.GL_ALL_BARRIER_BITS);
         boolean drewRaster = false;
         for (FullscreenPass pass : this.shadowCompPasses) {
@@ -3849,7 +3861,7 @@ public class IrisRenderingPipeline {
     private void dispatchComputes(List<ComputePass> computes) {
         for (ComputePass pass : computes) {
             pass.program.bind();
-            bindShaderPackResources(false);
+            bindShaderPackResources();
             pass.uniforms.update();
             if (pass.indirectBuffer != -1) {
                 // Indirect dispatch: group counts read from the pack-declared SSBO at the given offset.
@@ -4471,10 +4483,6 @@ public class IrisRenderingPipeline {
     }
 
     private void bindShaderPackResources() {
-        bindShaderPackResources(true);
-    }
-
-    private void bindShaderPackResources(boolean stableVisibleFloodfill) {
         if (this.destroyed) {
             return;
         }
@@ -4485,7 +4493,7 @@ public class IrisRenderingPipeline {
             this.customTextureManager.bindAll();
         }
         if (this.customImageManager != null) {
-            this.customImageManager.bindAll(stableVisibleFloodfill);
+            this.customImageManager.bindAll();
         }
     }
 

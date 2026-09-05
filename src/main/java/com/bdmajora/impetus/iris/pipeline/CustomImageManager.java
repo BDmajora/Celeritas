@@ -69,7 +69,6 @@ public class CustomImageManager {
     }
 
     private final List<Image> images = new ArrayList<>();
-    private final Map<String, Image> imagesBySampler = new LinkedHashMap<>();
     /** Image uniform name → image unit AND sampler name → texture unit, for program uniform assignment. */
     private final Map<String, Integer> uniformOverrides = new LinkedHashMap<>();
     /** The driver's {@code GL_MAX_IMAGE_UNITS}; the ceiling the render-target images allocate up to. */
@@ -149,7 +148,6 @@ public class CustomImageManager {
             this.uniformOverrides.put(definition.name, imageUnit);
             if (samplerUnit >= 0) {
                 this.uniformOverrides.put(definition.samplerName, samplerUnit);
-                this.imagesBySampler.put(definition.samplerName, this.images.get(this.images.size() - 1));
             }
             LOGGER.info("[Iris] Custom image '{}' ({}x{}x{}{} {}) on image unit {}{}",
                     definition.name, sizeX, sizeY, definition.sizeZ,
@@ -304,12 +302,15 @@ public class CustomImageManager {
 
     /**
      * Binds every image on its image unit (READ_WRITE) and its texture on the paired sampler unit.
-     *
-     * @param stableVisibleFloodfill when true, visible graphics programs sample one floodfill history on both
-     *                               floodfill sampler names. Compute dispatches pass false so the pack's native
-     *                               ping-pong still reads and writes the two physical volumes.
+     * <p>
+     * Each image is bound to exactly the texture the pack declared for it, and nothing here knows any pack-specific
+     * uniform name — Iris has no such concept. This previously aliased {@code floodfill_sampler_copy} onto
+     * {@code floodfill_img} for visible programs. Complementary ping-pongs on {@code framemod2}: the compute writes
+     * {@code floodfill_img_copy} on even frames and {@code floodfill_img} on odd ones, and {@code GetLightVolume}
+     * reads back whichever was just written. Aliasing the two names onto one texture therefore pointed every
+     * even-frame read at the volume that had *not* been updated.
      */
-    public void bindAll(boolean stableVisibleFloodfill) {
+    public void bindAll() {
         for (Image image : this.images) {
             // Iris binds custom images as layered for every texture target.
             LWJGL.glBindImageTexture(image.imageUnit, image.texture, 0, true, 0, GL15.GL_READ_WRITE,
@@ -319,22 +320,7 @@ public class CustomImageManager {
                 LWJGL.glBindTexture(image.target, image.texture);
             }
         }
-        if (stableVisibleFloodfill) {
-            bindStableFloodfillReader();
-        }
         GlTextureUnits.resetToUnit0();
-    }
-
-    private void bindStableFloodfillReader() {
-        Image floodfill = this.imagesBySampler.get("floodfill_sampler");
-        Image copy = this.imagesBySampler.get("floodfill_sampler_copy");
-        if (floodfill == null || copy == null || floodfill.samplerUnit < 0 || copy.samplerUnit < 0) {
-            return;
-        }
-        GlTextureUnits.selectScratch(floodfill.samplerUnit);
-        LWJGL.glBindTexture(floodfill.target, floodfill.texture);
-        GlTextureUnits.selectScratch(copy.samplerUnit);
-        LWJGL.glBindTexture(copy.target, floodfill.texture);
     }
 
     public void unbindAll() {
@@ -352,7 +338,6 @@ public class CustomImageManager {
             LWJGL.glDeleteTextures(image.texture);
         }
         this.images.clear();
-        this.imagesBySampler.clear();
         this.uniformOverrides.clear();
     }
 

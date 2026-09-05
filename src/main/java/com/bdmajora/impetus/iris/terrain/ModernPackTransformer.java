@@ -144,6 +144,43 @@ public final class ModernPackTransformer {
         return trimmed.substring(start + 1, end);
     }
 
+    /** The real attribute that feeds {@code gl_MultiTexCoord0} on the full-screen quad. */
+    public static final String FULLSCREEN_TEXCOORD_ATTRIBUTE = "iris_QuadTexCoord";
+
+    private static final Pattern MULTI_TEX_COORD_0 =
+            Pattern.compile("(?<![A-Za-z0-9_])gl_MultiTexCoord0(?![A-Za-z0-9_])");
+
+    /**
+     * Rewrites {@code gl_MultiTexCoord0} in a full-screen-pass vertex shader to read a real vertex attribute.
+     * <p>
+     * Composite/deferred/final sources are {@code #version <n> compatibility} and address the quad through the
+     * fixed-function built-ins, e.g. Complementary's
+     * {@code texCoord = (gl_TextureMatrix[0] * gl_MultiTexCoord0).xy;}. Feeding that built-in by writing generic
+     * vertex attribute 8 only works on NVIDIA: the generic-to-conventional aliasing table (8 -&gt;
+     * {@code gl_MultiTexCoord0}) comes from {@code NV_vertex_program}. <b>GL guarantees aliasing for attribute 0
+     * ({@code gl_Vertex}) and nothing else</b>, and Mesa implements exactly that. On Mesa the built-in therefore kept
+     * its default {@code (0,0,0,1)}, every vertex of the quad got {@code texCoord = (0,0)}, and every composite pass
+     * sampled a single corner texel across the whole screen — a uniform image whose colour changed as that one texel
+     * did. It compiled, linked and drew without a single GL error, which is why nothing in the logs pointed at it.
+     * <p>
+     * Iris never depends on the aliasing: it binds a real named vertex format and substitutes the built-in
+     * ({@code CompositeTransformer}: {@code gl_MultiTexCoord0} -&gt; {@code vec4(UV0, 0.0, 1.0)} plus an injected
+     * {@code in vec2 UV0;}). This does the same. Substitution rather than {@code #define} is deliberate — GLSL
+     * reserves macro names beginning with {@code gl_}, so defining over the built-in is itself illegal on a strict
+     * compiler.
+     * <p>
+     * Only the full-screen path needs this. Gbuffer programs get {@code gl_MultiTexCoord0} from Minecraft's own
+     * fixed-function texture-coordinate arrays, which are the conventional attribute and work everywhere.
+     */
+    public static String bindFullscreenTexCoord(String vertexSource) {
+        if (vertexSource == null || !vertexSource.contains("gl_MultiTexCoord0")) {
+            return vertexSource;
+        }
+        String rewritten = MULTI_TEX_COORD_0.matcher(vertexSource).replaceAll(
+                Matcher.quoteReplacement("vec4(" + FULLSCREEN_TEXCOORD_ATTRIBUTE + ", 0.0, 1.0)"));
+        return injectAfterPreamble(rewritten, "in vec2 " + FULLSCREEN_TEXCOORD_ATTRIBUTE + ";");
+    }
+
     /**
      * Inserts {@code declarations} immediately before the first line carrying a non-preprocessor token, skipping blank
      * lines, comments and {@code #} directives. GLSL requires every {@code #extension} to precede any real token, so

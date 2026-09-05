@@ -139,15 +139,22 @@ public final class ImpetusTerrainTransformer {
 
     /**
      * The generated {@code gl_FragData} replacement, emitted only when the pack body actually references
-     * {@code gl_FragData}/{@code gl_FragColor}: the location-0 16-array reserves output locations 0-15, which
-     * collides with the named {@code layout(location = N) out} declarations Iris-native packs (photon) use instead.
+     * {@code gl_FragData}/{@code gl_FragColor}: the location-0 array reserves that many output locations starting at
+     * 0, which collides with the named {@code layout(location = N) out} declarations Iris-native packs (photon) use
+     * instead.
+     * <p>
+     * Sized from the driver rather than hardcoded — see {@link DrawBuffers#fragmentOutputArraySize()}. A fixed 16
+     * exceeded {@code GL_MAX_DRAW_BUFFERS} and failed to link on Mesa, which is what broke the terrain override
+     * (and so the whole world render) on Intel Arc.
      */
-    private static final String FRAGMENT_FRAGDATA_BLOCK = String.join("\n",
-            "layout(location = 0) out vec4 iris_FragData[16];",
-            "#define gl_FragColor iris_FragData[0]",
-            "#define gl_FragData iris_FragData",
-            ""
-    );
+    private static String fragDataBlock() {
+        return String.join("\n",
+                "layout(location = 0) out vec4 iris_FragData[" + DrawBuffers.fragmentOutputArraySize() + "];",
+                "#define gl_FragColor iris_FragData[0]",
+                "#define gl_FragData iris_FragData",
+                ""
+        );
+    }
 
     /**
      * DEBUG tint: paints any terrain/water/shadow fragment red when its vertex tripped the NaN/Inf clip guard. Opt-in
@@ -214,7 +221,7 @@ public final class ImpetusTerrainTransformer {
         body = modernizeCommon(body);
         body = DrawBuffers.rewriteFragmentOutputs(body, drawBuffers);
         GlslGlobalInitHoister.Result hoist = GlslGlobalInitHoister.hoist(body);
-        String transformed = FRAGMENT_PROLOGUE + FRAGMENT_FRAGDATA_BLOCK + hoist.body
+        String transformed = FRAGMENT_PROLOGUE + fragDataBlock() + hoist.body
                 + "\nvoid main() {\n" + hoist.hoistedAssignments + "    irisMain();\n"
                 + NAN_TINT_SNIPPET
                 + "    if (iris_FragData[0].a < iris_AlphaCutoff) { discard; }\n}\n";
@@ -259,7 +266,7 @@ public final class ImpetusTerrainTransformer {
         // — the 16-array would collide with their output locations — and handle cutout discard themselves.
         boolean usesFragData = Pattern.compile("\\bgl_Frag(?:Data|Color)\\b").matcher(body).find();
         String transformed = compatFor(FRAGMENT_PROLOGUE, source)
-                + (usesFragData ? FRAGMENT_FRAGDATA_BLOCK : "")
+                + (usesFragData ? fragDataBlock() : "")
                 + body
                 + (usesFragData
                         ? "\nvoid main() {\n    irisMain();\n"

@@ -344,6 +344,110 @@ public final class GlslPreprocessor {
         return lines;
     }
 
+    /** {@code #extension GL_FOO : enable}, in any legal spacing. */
+    private static final Pattern EXTENSION_PATTERN = Pattern.compile("^\\s*#\\s*extension\\s+.*$");
+
+    /**
+     * Moves every {@code #extension} directive up to just below {@code #version}, which is where GLSL requires them.
+     * <p>
+     * The spec forbids an {@code #extension} directive after any non-preprocessor token. NVIDIA ignores that and
+     * honours them anywhere; <b>Mesa enforces it</b>. Packs are overwhelmingly authored against NVIDIA, so they put
+     * the directive at the top of the <em>include</em> that needs it and never notice — Complementary's
+     * {@code lib/materials/materialMethods/worldSpaceRef.glsl} opens with
+     * {@code #extension GL_ARB_shader_image_load_store : enable}, and once {@code #include} flattening has run, that
+     * line sits in the middle of the program far below real declarations.
+     * <p>
+     * Iris solves the same problem in {@code JcppProcessor}, which marks {@code #version}/{@code #extension},
+     * collects them during preprocessing and re-emits them at the top; its comment names the exact motivation —
+     * "for shader packs written on lenient drivers that allow #extension directives to be placed anywhere to work on
+     * strict drivers like Mesa".
+     * <p>
+     * Only rewrites when a directive genuinely appears after real code, so already-well-formed packs reach the driver
+     * byte-identical. Directives are de-duplicated, keep their relative order, and leave a blank line behind so
+     * driver error messages still point at the right line. Hoisting one out of an {@code #if} guard is safe in
+     * practice because the behaviour is virtually always {@code : enable}, which is defined to warn-and-continue when
+     * the extension is unavailable rather than fail.
+     */
+    public static String hoistExtensionDirectives(String source) {
+        if (source == null || !source.contains("#extension")) {
+            return source;
+        }
+
+        String[] lines = source.split("\n", -1);
+        int firstRealToken = indexOfFirstNonPreprocessorLine(lines);
+        if (firstRealToken < 0) {
+            return source;
+        }
+
+        boolean misplaced = false;
+        for (int i = firstRealToken; i < lines.length; i++) {
+            if (EXTENSION_PATTERN.matcher(lines[i]).matches()) {
+                misplaced = true;
+                break;
+            }
+        }
+        if (!misplaced) {
+            return source;
+        }
+
+        List<String> directives = new ArrayList<>();
+        List<String> kept = new ArrayList<>(lines.length);
+        int versionLine = -1;
+        for (String line : lines) {
+            if (EXTENSION_PATTERN.matcher(line).matches()) {
+                String directive = line.trim();
+                if (!directives.contains(directive)) {
+                    directives.add(directive);
+                }
+                kept.add("");
+                continue;
+            }
+            if (versionLine < 0 && VERSION_PATTERN.matcher(line).matches()) {
+                versionLine = kept.size();
+            }
+            kept.add(line);
+        }
+
+        kept.addAll(versionLine < 0 ? 0 : versionLine + 1, directives);
+        return String.join("\n", kept);
+    }
+
+    /**
+     * {@return the index of the first line carrying a real GLSL token, or -1 if the source is all directives}
+     * <p>
+     * Skips blank lines, {@code //} comments, {@code #} directives and block comments — the only things GLSL permits
+     * to precede an {@code #extension}.
+     */
+    private static int indexOfFirstNonPreprocessorLine(String[] lines) {
+        boolean inBlockComment = false;
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i].trim();
+            if (inBlockComment) {
+                int end = line.indexOf("*/");
+                if (end < 0) {
+                    continue;
+                }
+                line = line.substring(end + 2).trim();
+                inBlockComment = false;
+            }
+            while (line.contains("/*")) {
+                int start = line.indexOf("/*");
+                int end = line.indexOf("*/", start + 2);
+                if (end < 0) {
+                    inBlockComment = true;
+                    line = line.substring(0, start).trim();
+                    break;
+                }
+                line = (line.substring(0, start) + line.substring(end + 2)).trim();
+            }
+            if (line.isEmpty() || line.startsWith("//") || line.startsWith("#")) {
+                continue;
+            }
+            return i;
+        }
+        return -1;
+    }
+
     /** Convenience: a stable, insertion-ordered map suitable for {@link #injectDefines}. */
     public static Map<String, String> newDefineMap() {
         return new LinkedHashMap<>();

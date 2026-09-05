@@ -70,9 +70,15 @@ public final class FullscreenTransformer {
                 + "}\n";
     }
 
-    private static final String FRAGMENT_PROLOGUE = String.join("\n",
+    /**
+     * The array length is queried from the driver rather than hardcoded — see
+     * {@link DrawBuffers#fragmentOutputArraySize()}. A fixed 16 demands 16 contiguous fragment-output locations,
+     * which exceeds {@code GL_MAX_DRAW_BUFFERS} and fails to link on Mesa.
+     */
+    private static String fragmentPrologue() {
+        return String.join("\n",
             "#version 330 core",
-            "layout(location = 0) out vec4 iris_FragData[16];",
+            "layout(location = 0) out vec4 iris_FragData[" + DrawBuffers.fragmentOutputArraySize() + "];",
             "#define gl_FragColor iris_FragData[0]",
             "#define gl_FragData iris_FragData",
             "in vec4 iris_TexCoord[4];",
@@ -95,7 +101,8 @@ public final class FullscreenTransformer {
             "vec4 iris_shadow2D(sampler2DShadow s, vec3 p) { return vec4(texture(s, p)); }",
             "vec4 iris_shadow2DLod(sampler2DShadow s, vec3 p, float l) { return vec4(textureLod(s, p, l)); }",
             ""
-    ) + "\n";
+        ) + "\n";
+    }
 
     public static String transformVertexShader(String source) {
         String body = strip(source);
@@ -152,7 +159,7 @@ public final class FullscreenTransformer {
         body = modernize(body);
         body = DrawBuffers.rewriteFragmentOutputs(body, drawBuffers);
         GlslGlobalInitHoister.Result hoist = GlslGlobalInitHoister.hoist(body);
-        String transformed = FRAGMENT_PROLOGUE + hoist.body
+        String transformed = fragmentPrologue() + hoist.body
                 + fragmentEpilogue(drawBuffers).replace("    irisMain();", hoist.hoistedAssignments + "    irisMain();");
         return transformed;
     }
