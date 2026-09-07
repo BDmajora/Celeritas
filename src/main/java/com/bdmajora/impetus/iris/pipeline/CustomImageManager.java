@@ -87,16 +87,21 @@ public class CustomImageManager {
         int nextSamplerUnit = firstSamplerUnit;
         for (CustomImageDefinition definition : definitions) {
             if (this.images.size() >= imageUnitLimit) {
-                LOGGER.error("[Iris] Out of image units for image.{} (max {}); ignoring it",
-                        definition.name, imageUnitLimit);
+                LOGGER.error("[Iris] Out of image units for image.{} (max {}); ignoring it — sampler '{}' stays on "
+                                + "texture unit 0 and will fail every draw in any program declaring it with "
+                                + "GL_INVALID_OPERATION on a strict driver",
+                        definition.name, imageUnitLimit, definition.samplerName);
                 continue;
             }
             int internalFormat = glInternalFormat(definition.internalFormat);
             int format = glFormat(definition.format);
             int pixelType = glPixelType(definition.pixelType);
             if (internalFormat == 0 || format == 0 || pixelType == 0) {
-                LOGGER.warn("[Iris] Unsupported format for image.{} ({} {} {}); ignoring it",
-                        definition.name, definition.format, definition.internalFormat, definition.pixelType);
+                LOGGER.error("[Iris] Unsupported format for image.{} ({} {} {}); ignoring it — sampler '{}' stays on "
+                                + "texture unit 0 and will fail every draw in any program declaring it with "
+                                + "GL_INVALID_OPERATION on a strict driver",
+                        definition.name, definition.format, definition.internalFormat, definition.pixelType,
+                        definition.samplerName);
                 continue;
             }
 
@@ -139,8 +144,9 @@ public class CustomImageManager {
                 if (nextSamplerUnit <= lastSamplerUnit) {
                     samplerUnit = nextSamplerUnit++;
                 } else {
-                    LOGGER.error("[Iris] Out of texture units for image sampler {}; image.{} remains writable on image unit {}",
-                            definition.samplerName, definition.name, imageUnit);
+                    LOGGER.error("[Iris] Out of texture units for image sampler {} (last usable is {}); image.{} "
+                                    + "remains writable on image unit {}",
+                            definition.samplerName, lastSamplerUnit, definition.name, imageUnit);
                 }
             }
             this.images.add(new Image(definition, texture, target, imageUnit, samplerUnit,
@@ -156,6 +162,89 @@ public class CustomImageManager {
                     samplerUnit >= 0 ? ", sampler '" + definition.samplerName + "' on unit " + samplerUnit
                             : ", sampler '" + definition.samplerName + "' unbound");
         }
+        parkUnboundSamplers();
+    }
+
+    /**
+     * Points any sampler that could not get its own unit at a unit already holding an image of the <em>same GLSL
+     * sampler type</em>, instead of leaving it on GLSL's default of unit 0.
+     * <p>
+     * This is damage control for running out of texture units, not a fix for it. An unassigned sampler keeps unit 0,
+     * which holds a {@code sampler2D}; these are {@code usampler2D}/{@code usampler3D}, and the GL spec makes a
+     * program with two different sampler types on one unit invalid, failing <b>every draw that uses it</b> with
+     * {@code GL_INVALID_OPERATION}. Mesa enforces that and NVIDIA does not, so on the Arc test machine
+     * Complementary's whole composite pass died every frame ({@code GL error 0x502 at: composite draw}) because one
+     * sampler out of nine had nowhere to go.
+     * <p>
+     * Parking it on a same-type unit trades a correct-looking effect for a working frame: the shader reads the wrong
+     * volume, so whatever that sampler drives is degraded, but the pass runs and every other effect in it is right.
+     * That is strictly better than losing the pass — and it is logged at ERROR either way, because the pack asked for
+     * something this port could not give it.
+     * <p>
+     * The real fix is per-program sampler allocation ({@code gl/program/ProgramSamplers}), where a unit is consumed
+     * only by a program that actually declares the uniform; no single program comes near the limit. Until that is
+     * wired up, a pack wanting more custom images than there are spare units lands here.
+     */
+    private void parkUnboundSamplers() {
+        for (Image image : this.images) {
+            String samplerName = image.definition.samplerName;
+            if (image.samplerUnit >= 0 || samplerName == null || samplerName.isEmpty()) {
+                continue;
+            }
+            int donor = sameSamplerTypeUnit(image);
+            if (donor < 0) {
+                LOGGER.error("[Iris] Sampler '{}' has no texture unit and no other image shares its sampler type; it "
+                                + "stays on unit 0, which fails every draw in a program declaring it with "
+                                + "GL_INVALID_OPERATION on a strict driver",
+                        samplerName);
+                continue;
+            }
+            this.uniformOverrides.put(samplerName, donor);
+            LOGGER.error("[Iris] Sampler '{}' has no texture unit; parking it on unit {} (image.{}), which has the "
+                            + "same sampler type. Whatever '{}' drives will read the wrong data, but the alternative "
+                            + "is unit 0 and GL_INVALID_OPERATION on every draw in the program",
+                    samplerName, donor, donorName(donor), samplerName);
+        }
+    }
+
+    /** {@return the unit of an already-bound image whose GLSL sampler type matches {@code needy}, or -1} */
+    private int sameSamplerTypeUnit(Image needy) {
+        for (Image other : this.images) {
+            if (other == needy || other.samplerUnit < 0 || other.target != needy.target) {
+                continue;
+            }
+            if (samplerTypeClass(other.definition.internalFormat)
+                    .equals(samplerTypeClass(needy.definition.internalFormat))) {
+                return other.samplerUnit;
+            }
+        }
+        return -1;
+    }
+
+    private String donorName(int samplerUnit) {
+        for (Image image : this.images) {
+            if (image.samplerUnit == samplerUnit) {
+                return image.definition.name;
+            }
+        }
+        return "?";
+    }
+
+    /**
+     * The part of a GLSL sampler type that comes from the format: {@code usampler*}, {@code isampler*} or plain
+     * {@code sampler*}. Two images may share a unit only if this AND the texture target agree — {@code r8ui} and
+     * {@code r16ui} are both {@code usampler3D} in a 3D image and so are interchangeable here, while {@code r16i}
+     * would be {@code isampler3D} and is not.
+     */
+    private static String samplerTypeClass(String internalFormat) {
+        String name = internalFormat == null ? "" : internalFormat.toLowerCase(java.util.Locale.ROOT);
+        if (name.endsWith("ui")) {
+            return "u";
+        }
+        if (name.endsWith("i")) {
+            return "i";
+        }
+        return "f";
     }
 
     /**

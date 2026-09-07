@@ -9,6 +9,8 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Evaluates the C-preprocessor conditionals OptiFine allows in {@code *.properties} files
@@ -29,6 +31,35 @@ public final class PropertiesPreprocessor {
     }
 
     public static String preprocess(String source, Map<String, String> defines) {
+        return preprocess(source, defines, false);
+    }
+
+    /**
+     * {@link #preprocess} plus macro substitution into directive <em>values</em> — the shaders.properties flavour.
+     * <p>
+     * Iris runs this file through JCPP, which expands macros in the text it passes through, not just in the
+     * conditionals. Packs rely on that for the directives whose fields are sizes: Complementary declares
+     * {@code image.wsr_img = wsr_sampler red_integer r16ui unsigned_int true false COLORED_LIGHTING 64
+     * COLORED_LIGHTING}, sizing its world-space-reflection volume by the colored-lighting option. Passing that
+     * through verbatim made {@code CustomImageDefinition.parse} throw on {@code Integer.parseInt("COLORED_LIGHTING")}
+     * and drop the directive, so the image was never created and {@code wsr_sampler} was left bound to nothing for
+     * the whole session — one WARN line and no other symptom.
+     * <p>
+     * <b>Only substitutes macros whose value is numeric</b>, which is a deliberate narrowing of what JCPP does. It
+     * covers every directive that takes a size or a count, while leaving the identifier-valued directives
+     * ({@code blend.*}'s {@code SRC_ALPHA ONE_MINUS_SRC_ALPHA …}) untouchable by a pack that happens to define a
+     * macro of the same name as a GL enum. Where a pack does define such a name numerically, JCPP would substitute
+     * too, so this never disagrees with Iris in the other direction.
+     * <p>
+     * The option-menu directives are not at risk regardless: {@code ShaderProperties} reads {@code sliders},
+     * {@code screen*} and {@code profile.*} from the ORIGINAL file, never from this output, precisely so the menu can
+     * list option names while the pipeline sees resolved values.
+     */
+    public static String preprocessProperties(String source, Map<String, String> defines) {
+        return preprocess(source, defines, true);
+    }
+
+    private static String preprocess(String source, Map<String, String> defines, boolean expandValues) {
         List<String> logicalLines = joinContinuations(source);
         StringBuilder out = new StringBuilder(source.length());
         // Track #define/#undef in ACTIVE regions so cascading defines (GLSL settings files, option macros that
@@ -103,7 +134,7 @@ public final class PropertiesPreprocessor {
             }
 
             if (parentActive(stack) && (stack.isEmpty() || stack.peek()[0])) {
-                out.append(line).append('\n');
+                out.append(expandValues ? expandNumericMacrosInValue(line, defines) : line).append('\n');
             }
         }
 
@@ -111,6 +142,91 @@ public final class PropertiesPreprocessor {
             LOGGER.warn("[Iris] Unterminated #if in properties file ({} level(s) open at EOF)", stack.size());
         }
         return out.toString();
+    }
+
+    /** An identifier not glued to a preceding word character or {@code .} (so {@code image.wsr_img} stays whole). */
+    private static final Pattern PROPERTY_IDENTIFIER =
+            Pattern.compile("(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_])");
+
+    /** How far a {@code #define A B} / {@code #define B 256} chain is followed before giving up. */
+    private static final int MAX_DEFINE_HOPS = 8;
+
+    /**
+     * The option-menu layout directives, whose values are lists of option <em>names</em> and must stay names.
+     * {@code ShaderProperties} already reads all of these from the original file rather than from this output, so
+     * substituting into them changes nothing today — they are skipped so that the preprocessed text does not carry a
+     * {@code sliders = 256 …} line waiting to mislead whoever reads it next.
+     */
+    private static boolean isMenuLayoutKey(String key) {
+        String trimmed = key.trim();
+        return trimmed.equals("sliders") || trimmed.equals("screen")
+                || trimmed.startsWith("screen.") || trimmed.startsWith("profile.");
+    }
+
+    /**
+     * Substitutes numerically-valued macros into the part of {@code line} after the first {@code =}. The key is left
+     * alone: property keys are dotted paths ({@code image.wsr_img}, {@code program.composite1.enabled}) whose
+     * segments would otherwise be candidates for substitution, and no pack expects its keys rewritten.
+     */
+    private static String expandNumericMacrosInValue(String line, Map<String, String> defines) {
+        int separator = line.indexOf('=');
+        if (separator < 0 || defines.isEmpty() || isMenuLayoutKey(line.substring(0, separator))) {
+            return line;
+        }
+        String value = line.substring(separator + 1);
+        Matcher identifier = PROPERTY_IDENTIFIER.matcher(value);
+        StringBuffer expanded = new StringBuffer(value.length());
+        boolean substituted = false;
+        while (identifier.find()) {
+            String resolved = resolveNumericDefine(identifier.group(1), defines);
+            if (resolved == null) {
+                identifier.appendReplacement(expanded, Matcher.quoteReplacement(identifier.group()));
+                continue;
+            }
+            identifier.appendReplacement(expanded, Matcher.quoteReplacement(resolved));
+            substituted = true;
+        }
+        identifier.appendTail(expanded);
+        return substituted ? line.substring(0, separator + 1) + expanded : line;
+    }
+
+    /**
+     * {@return the numeric text {@code name} ultimately expands to, or {@code null} if it is undefined, empty, or
+     * resolves to something that is not a number}
+     */
+    private static String resolveNumericDefine(String name, Map<String, String> defines) {
+        String current = name;
+        for (int hop = 0; hop < MAX_DEFINE_HOPS; hop++) {
+            String value = defines.get(current);
+            if (value == null) {
+                return null;
+            }
+            String trimmed = value.trim();
+            if (trimmed.isEmpty()) {
+                // A bare `#define FOO` is a flag, not a value; JCPP expands it to nothing, which would corrupt a
+                // positional directive far more quietly than leaving the name in place.
+                return null;
+            }
+            if (isNumeric(trimmed)) {
+                return trimmed;
+            }
+            current = trimmed;
+        }
+        return null;
+    }
+
+    private static boolean isNumeric(String text) {
+        try {
+            Long.decode(text);
+            return true;
+        } catch (NumberFormatException notAnInteger) {
+            try {
+                Double.parseDouble(text);
+                return true;
+            } catch (NumberFormatException notANumber) {
+                return false;
+            }
+        }
     }
 
     /**

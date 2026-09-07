@@ -187,24 +187,54 @@ public final class IrisTerrainProgramOverride {
                     : IrisRenderingPipeline.foldUncompilableConditionals(programId.getSourceName(),
                             com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(
                                     ImpetusTerrainTransformer.transformVertexShader(vshSource), macros));
+            // Iris SodiumPrograms:77 exactly:
+            //   getAlphaTestOverride().orElse(TRANSLUCENT ? NON_ZERO_ALPHA
+            //                               : (TERRAIN_CUTOUT || SHADOW_CUTOUT) ? HALF_ALPHA : ALWAYS)
+            // The pack's alphaTest.<program> directive wins; otherwise the per-pass default. ALWAYS emits no
+            // discard at all, which is why an unspecified solid pass carries none.
+            String programName = programId.getSourceName();
+            ProgramAlphaTest packAlphaTest = ProgramAlphaTest.from(pack.getProperties(), source.getName());
+            String alphaTestSnippet;
+            if (packAlphaTest.hasDirectives()) {
+                alphaTestSnippet = packAlphaTest.toGlslDiscard("iris_FragData[0].a", "    ");
+            } else if (programName.endsWith("_solid")) {
+                alphaTestSnippet = "";                                    // AlphaTest.ALWAYS
+            } else if (programName.contains("cutout")) {
+                alphaTestSnippet = ProgramAlphaTest.glslDiscard(          // AlphaTests.HALF_ALPHA
+                        "iris_FragData[0].a", ">", "0.5", "    ");
+            } else {
+                alphaTestSnippet = ProgramAlphaTest.glslDiscard(          // AlphaTests.NON_ZERO_ALPHA
+                        "iris_FragData[0].a", ">", "0.0001", "    ");
+            }
             String fsh = modern
                     ? ImpetusTerrainTransformer.transformFragmentShaderModern(
                             IrisRenderingPipeline.stabilizeShaderSource(programId.getSourceName(),
                                     com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(fshSource, macros)),
-                            drawBuffers)
+                            drawBuffers, alphaTestSnippet)
                     : IrisRenderingPipeline.foldUncompilableConditionals(programId.getSourceName(),
                             com.bdmajora.impetus.iris.gl.shader.ShaderMacros.injectDefines(
-                                    ImpetusTerrainTransformer.transformFragmentShader(fshSource, drawBuffers), macros));
-            com.bdmajora.impetus.iris.pipeline.IrisDebugDump.dumpText(
-                    "src_" + programId.getSourceName() + ".vsh", vsh);
-            com.bdmajora.impetus.iris.pipeline.IrisDebugDump.dumpText(
-                    "src_" + programId.getSourceName() + ".fsh", fsh);
+                                    ImpetusTerrainTransformer.transformFragmentShader(fshSource, drawBuffers,
+                                            alphaTestSnippet), macros));
             // Name the shader after the program it actually is. This method builds every terrain-family pass — solid,
             // cutout_mipped, translucent (i.e. gbuffers_water) and shadow — and the old hardcoded
             // "iris_gbuffers_terrain" meant a compile failure in the water pass was reported as a gbuffers_terrain
             // error, next to log lines saying gbuffers_terrain had just built successfully. The dump filenames beside
             // this already use getSourceName(); the driver-facing name should agree with them.
             String shaderName = "iris_" + programId.getSourceName();
+            // This path builds the ENGINE's GlShader, not iris.gl.shader.GlShader, so it does not inherit the
+            // strict-driver rewrites that constructor applies — it has to ask for them. Skipping this is why Mesa kept
+            // rejecting `#extension` mid-shader and `texture2D(usampler2D, ...)` in exactly the terrain and shadow
+            // programs, long after both fixes were written.
+            vsh = com.bdmajora.impetus.iris.shaderpack.preprocessor.GlslPreprocessor
+                    .finalizeForDriver(shaderName + ".vsh", vsh);
+            fsh = com.bdmajora.impetus.iris.shaderpack.preprocessor.GlslPreprocessor
+                    .finalizeForDriver(shaderName + ".fsh", fsh);
+            // Dump AFTER finalizing: these dumps are the port's primary diagnostic, and the hoist shifts every line
+            // below #version, so a pre-finalize dump disagrees with the line numbers in the driver's error messages.
+            com.bdmajora.impetus.iris.pipeline.IrisDebugDump.dumpText(
+                    "src_" + programId.getSourceName() + ".vsh", vsh);
+            com.bdmajora.impetus.iris.pipeline.IrisDebugDump.dumpText(
+                    "src_" + programId.getSourceName() + ".fsh", fsh);
             vertexShader = new GlShader(ShaderType.VERTEX, shaderName + ".vsh", vsh);
             fragmentShader = new GlShader(ShaderType.FRAGMENT, shaderName + ".fsh", fsh);
 
@@ -218,7 +248,7 @@ public final class IrisTerrainProgramOverride {
             LOGGER.info("[Iris] {} resolved DRAWBUFFERS {}", programId.getSourceName(),
                     Arrays.toString(drawBuffers));
             ProgramBlendState blendState = ProgramBlendState.from(pack.getProperties(), source.getName());
-            ProgramAlphaTest alphaTest = ProgramAlphaTest.from(pack.getProperties(), source.getName());
+            ProgramAlphaTest alphaTest = packAlphaTest;
             IrisRenderingPipeline.drainGlError();
             GlProgram<ChunkShaderInterface> program =
                     builder.link(context -> new IrisTerrainShaderInterface(context, drawBuffers, blendState, alphaTest));

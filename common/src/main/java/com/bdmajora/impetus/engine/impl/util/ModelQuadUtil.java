@@ -107,7 +107,11 @@ public class ModelQuadUtil {
         int pbl = (packedLight) & 0xFF;
         int cbl = (calcLight) & 0xFF;
         int bl = Math.max(Math.max(pbl, cbl), vanillaLightEmission);
-        int sl = Math.max(Math.max(psl, csl), vanillaLightEmission);
+        // Emission raises BLOCK light only. A block that emits light does not emit *sky* light, so folding the
+        // emission into the sky channel too — as this used to — reports a torch or lamp as if it were open to the sky.
+        // Currently latent, because ModelQuadView.getVanillaLightEmission() is a default returning 0 with no override,
+        // but it would misfire the moment anything starts supplying a real emission value.
+        int sl = Math.max(psl, csl);
         return (sl << 16) | bl;
     }
 

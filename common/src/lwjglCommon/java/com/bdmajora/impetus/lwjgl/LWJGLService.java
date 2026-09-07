@@ -27,6 +27,11 @@ public interface LWJGLService {
     void glBufferData(int target, long size, long data, int usage);
     void glBufferSubData(int target, long offset, ByteBuffer data);
     void glBufferStorage(int target, long size, int flags);
+    /**
+     * Server-side buffer fill (GL 4.3). Zeroing a buffer this way costs no client memory and no upload, which is what
+     * makes it usable on a buffer allocated with immutable storage and no client-write flags.
+     */
+    void glClearBufferData(int target, int internalFormat, int format, int type, ByteBuffer data);
     ByteBuffer glMapBufferRange(int target, long offset, long length, int flags);
     long nglMapBuffer(int target, int access);
     ByteBuffer glMapBuffer(int target, int access);

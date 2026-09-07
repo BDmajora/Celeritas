@@ -124,6 +124,36 @@ public final class GlTextureUnits {
     }
 
     /**
+     * Binds one texture as part of a <em>run</em> of binds, leaving the selector where it lands. The caller must
+     * finish the run with {@link #releaseScratch()}, ideally in a {@code finally}.
+     * <p>
+     * {@link #bindTexture2D(int, int)} returns the selector to unit 0 after every single bind, which is right for a
+     * one-off but costs two extra {@code glActiveTexture} calls per texture. A program with thirty samplers rebinds
+     * all of them every time it is used, so that would be sixty redundant selector moves per program bind. Iris has
+     * the same shape and solves it the same way — {@code ProgramSamplers.update()} reads the active unit once, runs
+     * every {@code SamplerBinding}, then restores once at the end.
+     * <p>
+     * Cache correctness is unchanged: the selector still goes through {@code GlStateManager} for the units it can
+     * represent, and a 2D bind below {@link #CACHED_UNITS} still goes through {@code GlStateManager.bindTexture} so
+     * the record is written. Only the restore is hoisted out of the loop.
+     */
+    public static void bindTextureInRun(int unit, int target, int texture) {
+        if (unit < 0) {
+            LOGGER.error("[Iris] Ignoring texture bind for invalid unit {}", unit);
+            return;
+        }
+        selectScratch(unit);
+        if (unit < CACHED_UNITS && target == GL11.GL_TEXTURE_2D) {
+            // GlStateManager.bindTexture records against its cached active unit, which selectScratch just set through
+            // GlStateManager for this range, so the cache and real GL agree.
+            GlStateManager.bindTexture(texture);
+        } else {
+            // At or above the cache there is no record to keep; below it, a non-2D target is not tracked either.
+            LWJGL.glBindTexture(target, texture);
+        }
+    }
+
+    /**
      * Binds a 2D texture to {@code unit} and leaves the selector on unit 0, with the cache correct either way.
      * <p>
      * Use this instead of a raw {@code glActiveTexture} + {@code glBindTexture} pair. For units the cache can hold it

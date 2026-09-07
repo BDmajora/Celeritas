@@ -115,7 +115,7 @@ public final class ShaderPack {
         String propertiesContents = this.sources.get(PROPERTIES_PATH);
         ShaderProperties parsedProperties = propertiesContents != null
                 ? ShaderProperties.parse(propertiesContents,
-                        PropertiesPreprocessor.preprocess(propertiesContents, propertiesDefines),
+                        PropertiesPreprocessor.preprocessProperties(propertiesContents, propertiesDefines),
                         propertiesDefines,
                         Collections.emptySet())
                 : ShaderProperties.empty();

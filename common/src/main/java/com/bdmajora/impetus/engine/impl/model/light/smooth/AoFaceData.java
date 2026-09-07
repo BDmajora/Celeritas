@@ -2,10 +2,40 @@ package com.bdmajora.impetus.engine.impl.model.light.smooth;
 
 import com.bdmajora.impetus.engine.impl.model.light.data.LightDataAccess;
 import com.bdmajora.impetus.engine.impl.model.quad.properties.ModelQuadFacing;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.bdmajora.impetus.engine.impl.model.light.data.LightDataAccess.*;
 
 class AoFaceData {
+    /**
+     * DEBUG: differential check of this class's corner brightness against vanilla's algorithm, run on identical
+     * inputs in the same call. Enable with {@code -Dimpetus.light.diffLog=<max lines>}, e.g. 40.
+     * <p>
+     * The point is to stop inferring the lightmap from screenshots. Shader-side probes cannot separate a genuine
+     * lighting error from the {@code flat} qualifier showing one provoking-vertex value per triangle, or from the
+     * deferred pipeline relighting whatever the gbuffer wrote. This compares the two formulas directly, on the same
+     * neighbour samples, in-process, and prints only where they disagree — so a silent log exonerates the entire
+     * smooth-lighting path rather than leaving it merely unproven.
+     */
+    private static final int DIFF_LOG_LIMIT = readDiffLogLimit();
+    private static final AtomicInteger DIFF_LOG_BUDGET = new AtomicInteger(DIFF_LOG_LIMIT);
+    private static final Logger LOGGER = LogManager.getLogger("Impetus/LightDiff");
+
+    private static int readDiffLogLimit() {
+        String raw = System.getProperty("impetus.light.diffLog");
+        if (raw == null || raw.trim().isEmpty()) {
+            return 0;
+        }
+        try {
+            return Math.max(0, Integer.parseInt(raw.trim()));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
     public final int[] lm = new int[4];
 
     public final float[] ao = new float[4];
@@ -146,7 +176,107 @@ class AoFaceData {
         cb[2] = calculateCornerBrightness(e2lm, e1lm, c2lm, calm, e2em, e1em, c2em, caem);
         cb[3] = calculateCornerBrightness(e3lm, e1lm, c3lm, calm, e3em, e1em, c3em, caem);
 
+        if (DIFF_LOG_LIMIT > 0) {
+            logVanillaDelta(x, y, z, direction, cb,
+                    e3lm, e0lm, c1lm, calm, e3em, e0em, c1em, caem,
+                    e2lm, e0lm, c0lm, e2em, e0em, c0em,
+                    e2lm, e1lm, c2lm, e2em, e1em, c2em,
+                    e3lm, e1lm, c3lm, e3em, e1em, c3em);
+        }
+
         this.flags |= AoCompletionFlags.HAS_LIGHT_DATA;
+    }
+
+    /**
+     * Vanilla's {@code BlockModelRenderer.AmbientOcclusionFace.getAoBrightness}, copied verbatim so the comparison is
+     * against the real reference rather than a paraphrase of it. {@code br4} is the centre sample.
+     */
+    private static int vanillaAoBrightness(int br1, int br2, int br3, int br4) {
+        if (br1 == 0) {
+            br1 = br4;
+        }
+
+        if (br2 == 0) {
+            br2 = br4;
+        }
+
+        if (br3 == 0) {
+            br3 = br4;
+        }
+
+        return br1 + br2 + br3 + br4 >> 2 & 16711935;
+    }
+
+    /** {@return the 0-15 sky level encoded in a packed lightmap} */
+    private static int skyLevel(int lightmap) {
+        return ((lightmap >> 16) & 0xFF) / 16;
+    }
+
+    /**
+     * {@return whether these four corner lightmaps land on both sides of the sky 13/14 boundary}
+     * <p>
+     * That boundary is where Complementary's {@code clamp(lmCoord.y - 0.87, 0.0, 0.1)} flips between zero and non-zero
+     * displacement, so a face that straddles it tears when the pack waves it.
+     */
+    private static boolean straddlesWaveCutoff(int[] corners) {
+        boolean below = false;
+        boolean above = false;
+
+        for (int corner : corners) {
+            if (skyLevel(corner) >= 14) {
+                above = true;
+            } else {
+                below = true;
+            }
+        }
+
+        return below && above;
+    }
+
+    private static void logVanillaDelta(int x, int y, int z, ModelQuadFacing direction, int[] ours,
+                                        int a0, int b0, int c0, int centre, boolean a0em, boolean b0em, boolean c0em, boolean cem,
+                                        int a1, int b1, int c1, boolean a1em, boolean b1em, boolean c1em,
+                                        int a2, int b2, int c2, boolean a2em, boolean b2em, boolean c2em,
+                                        int a3, int b3, int c3, boolean a3em, boolean b3em, boolean c3em) {
+        // Emissive blocks are forced to full bright by this class after averaging, which vanilla does not do at the
+        // same point. That is a known, intended divergence, so skip those corners rather than report false positives.
+        if (cem || a0em || b0em || c0em || a1em || b1em || c1em
+                || a2em || b2em || c2em || a3em || b3em || c3em) {
+            return;
+        }
+
+        int[] vanilla = {
+                vanillaAoBrightness(a0, b0, c0, centre),
+                vanillaAoBrightness(a1, b1, c1, centre),
+                vanillaAoBrightness(a2, b2, c2, centre),
+                vanillaAoBrightness(a3, b3, c3, centre),
+        };
+
+        // Trigger on the condition that actually produces the artifact, not on disagreement with vanilla. Packs gate
+        // vertex effects on a hard lightmap cutoff — Complementary's `clamp(lmCoord.y - 0.87, ...)` sits between sky
+        // 13 and 14 — so a face whose corners land on BOTH sides of that line is a face that will visibly tear when
+        // displaced: some corners move, the rest are pinned at exactly zero.
+        //
+        // Logging "differs from vanilla" instead would be useless here: the two formulas disagree on ~24% of corner
+        // samples purely through the zero-substitution rule, and that difference has already been tested and shown
+        // not to fix this bug. Straddling is the signal; the vanilla figures ride along as the control.
+        boolean straddles = straddlesWaveCutoff(ours);
+
+        // Check the budget before spending it, so an exhausted counter cannot keep decrementing on every hit and
+        // eventually wrap back into positive territory mid-session.
+        if (!straddles || DIFF_LOG_BUDGET.get() <= 0 || DIFF_LOG_BUDGET.getAndDecrement() <= 0) {
+            return;
+        }
+
+        // The decisive comparison: if vanilla straddles too, OptiFine would tear on this face as well and the artifact
+        // is not ours. If vanilla stays on one side while we straddle, this face is the defect, with its inputs.
+        LOGGER.warn("[LightDiff] {},{},{} face={} sky ours=[{},{},{},{}] straddle={} | vanilla=[{},{},{},{}] straddle={} | centre={} inputs=[{},{},{},{}]",
+                x, y, z, direction,
+                skyLevel(ours[0]), skyLevel(ours[1]), skyLevel(ours[2]), skyLevel(ours[3]), straddles,
+                skyLevel(vanilla[0]), skyLevel(vanilla[1]), skyLevel(vanilla[2]), skyLevel(vanilla[3]),
+                straddlesWaveCutoff(vanilla),
+                skyLevel(centre),
+                skyLevel(a0), skyLevel(b0), skyLevel(c0), skyLevel(a1));
     }
 
     public void unpackLightData() {

@@ -1,9 +1,15 @@
 package com.bdmajora.impetus.iris.shaderpack.preprocessor;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -25,7 +31,18 @@ import java.util.regex.Pattern;
  * provided as the documented seam for that work.
  */
 public final class GlslPreprocessor {
-    private static final Pattern VERSION_PATTERN = Pattern.compile("^\\s*#version\\s+(\\d+)(?:\\s+(\\w+))?.*$");
+    private static final Logger LOGGER = LogManager.getLogger("Impetus/Iris");
+
+    /**
+     * The trailing {@code \r?} is load-bearing. Every user of this pattern splits on {@code "\n"} alone and calls
+     * {@code matches()}, which must consume the whole line; {@code .} does not match a line terminator and {@code \r}
+     * is one, so on a pack shipped with Windows line endings <b>every</b> {@code #version} match failed. That silently
+     * broke three separate things at once — {@link #detectVersion} reported "no #version", {@link #injectDefines} lost
+     * the anchor it inserts macros after, and {@link #hoistExtensionDirectives} would have hoisted directives to index
+     * 0, i.e. above {@code #version}, which is illegal in its own right.
+     */
+    private static final Pattern VERSION_PATTERN =
+            Pattern.compile("^\\s*#version\\s+(\\d+)(?:\\s+(\\w+))?.*\\r?$");
 
     /** Default GLSL version assumed for 1.12.2-era packs that omit a {@code #version} directive. */
     public static final int DEFAULT_VERSION = 120;
@@ -344,8 +361,25 @@ public final class GlslPreprocessor {
         return lines;
     }
 
-    /** {@code #extension GL_FOO : enable}, in any legal spacing. */
-    private static final Pattern EXTENSION_PATTERN = Pattern.compile("^\\s*#\\s*extension\\s+.*$");
+    /** {@code #extension GL_FOO : enable}, in any legal spacing. Trailing {@code \r?} for the reason on VERSION_PATTERN. */
+    private static final Pattern EXTENSION_PATTERN = Pattern.compile("^\\s*#\\s*extension\\s+.*\\r?$");
+
+    /**
+     * Every rewrite that must happen to pack GLSL between the transformers and {@code glShaderSource} — the ones that
+     * exist because packs are authored against NVIDIA and this port also has to satisfy Mesa. Both are no-ops unless
+     * the source actually trips the rule.
+     * <p>
+     * <b>Call this from every path that hands pack source to the driver.</b> There are two unrelated {@code GlShader}
+     * classes — {@code iris.gl.shader.GlShader} and the engine's {@code engine.impl.gl.shader.GlShader} — and the
+     * terrain/shadow override uses the engine one while every other Iris path uses the Iris one. Hanging these calls
+     * off the Iris constructor and calling it "the only point every path passes through" was wrong by exactly that one
+     * path, which happens to be the one that compiles {@code gbuffers_terrain}/{@code shadow}: the misplaced-{@code
+     * #extension} fix shipped in {@code 0323d2aaa} therefore never ran on the programs whose logs motivated it, and
+     * the reports kept coming in unchanged. Bundling them here gives the two call sites one name to share.
+     */
+    public static String finalizeForDriver(String name, String source) {
+        return rewriteIntegerSamplerLookups(name, hoistExtensionDirectives(source));
+    }
 
     /**
      * Moves every {@code #extension} directive up to just below {@code #version}, which is where GLSL requires them.
@@ -410,6 +444,155 @@ public final class GlslPreprocessor {
 
         kept.addAll(versionLine < 0 ? 0 : versionLine + 1, directives);
         return String.join("\n", kept);
+    }
+
+    /**
+     * The compatibility-profile texture lookups and the core built-in that replaces each. Every entry is matched with
+     * a mandatory {@code (} immediately after the name, so {@code texture2D} never matches inside {@code texture2DLod}
+     * and the map order carries no meaning.
+     */
+    private static final Map<String, String> LEGACY_TEXTURE_LOOKUPS;
+
+    static {
+        Map<String, String> lookups = new LinkedHashMap<>();
+        lookups.put("texture1D", "texture");
+        lookups.put("texture2D", "texture");
+        lookups.put("texture3D", "texture");
+        lookups.put("textureCube", "texture");
+        lookups.put("texture1DLod", "textureLod");
+        lookups.put("texture2DLod", "textureLod");
+        lookups.put("texture3DLod", "textureLod");
+        lookups.put("textureCubeLod", "textureLod");
+        lookups.put("texture1DProj", "textureProj");
+        lookups.put("texture2DProj", "textureProj");
+        lookups.put("texture3DProj", "textureProj");
+        lookups.put("texture1DProjLod", "textureProjLod");
+        lookups.put("texture2DProjLod", "textureProjLod");
+        lookups.put("texture3DProjLod", "textureProjLod");
+        LEGACY_TEXTURE_LOOKUPS = Collections.unmodifiableMap(lookups);
+    }
+
+    /**
+     * An integer sampler type followed by whatever it declares, up to the {@code ;} or {@code )} that ends it.
+     * <p>
+     * Deliberately not anchored to {@code uniform} at the start of a line. A pack that wraps its image reads in a
+     * helper — {@code uint readVoxel(usampler3D s, vec3 p) { return texture2D(s, p).r; }} — declares the sampler as a
+     * <em>function parameter</em>, and the call needing the rewrite is inside that function. Anchoring would see the
+     * uniform and miss the parameter, i.e. miss the very call site the driver rejects.
+     */
+    private static final Pattern INTEGER_SAMPLER_DECLARATION =
+            Pattern.compile("\\b[ui]sampler[A-Za-z0-9]*[ \\t]+([^;)\\n]+)");
+
+    /**
+     * Points the legacy {@code texture2D}-family lookups at their core equivalents, but only where the sampler being
+     * read is one the source itself declares as an <em>integer</em> sampler ({@code usampler*}/{@code isampler*}).
+     * <p>
+     * The compatibility profile keeps {@code texture2D} alive, which is why the modern-pack paths deliberately leave
+     * pack bodies alone rather than performing Iris's blanket rename — but it keeps it alive <b>only for float
+     * samplers</b>. There is no {@code texture2D(usampler2D, vec2)} overload in any GLSL version. NVIDIA's compiler
+     * resolves the call anyway; <b>Mesa rejects it</b>, exactly as it rejects a misplaced {@code #extension} (see
+     * {@link #hoistExtensionDirectives}). Packs are authored against NVIDIA and never see it.
+     * <p>
+     * Complementary Unbound reads its colored-lighting voxel and puddle images with {@code texture2D}, so on Mesa
+     * {@code gbuffers_terrain_solid}/{@code _cutout_mip} failed to compile the moment colored lighting was switched on
+     * ({@code error: no matching function for call to `texture2D(usampler2D, vec2)'}). Terrain then silently fell back
+     * to Impetus's own chunk shader, which runs none of the pack's vertex stage — so leaves and grass stopped waving
+     * while the rest of the frame still looked shaded, and nothing in the log named waving at all.
+     * <p>
+     * Iris reaches the same end state from the other direction: it compiles every pack at {@code #version 330 core},
+     * where the legacy names do not exist, so {@code CommonTransformer} renames all of them unconditionally and the
+     * generic {@code texture()} overload resolves for integer samplers as a side effect. Restricting the rename to
+     * integer samplers is what makes it safe to apply here, where the legacy names are still live and a pack may still
+     * own an identifier called {@code texture}.
+     * <p>
+     * Deliberately keyed off the declaration rather than the call site, and deliberately whitespace-tolerant only
+     * within a line: the sampler must be the <em>entire</em> first argument, so {@code texture2D(f(voxel_sampler), uv)}
+     * is left alone, and no rewrite can shift a line number out from under a driver error message.
+     */
+    public static String rewriteIntegerSamplerLookups(String name, String source) {
+        if (source == null || !source.contains("sampler")) {
+            return source;
+        }
+        Set<String> samplers = integerSamplerNames(source);
+        if (samplers.isEmpty()) {
+            return source;
+        }
+
+        StringBuilder alternation = new StringBuilder();
+        for (String sampler : samplers) {
+            if (alternation.length() > 0) {
+                alternation.append('|');
+            }
+            alternation.append(Pattern.quote(sampler));
+        }
+
+        String result = source;
+        int rewritten = 0;
+        for (Map.Entry<String, String> lookup : LEGACY_TEXTURE_LOOKUPS.entrySet()) {
+            if (!result.contains(lookup.getKey())) {
+                continue;
+            }
+            // The trailing (?=[,)]) is the correctness guard: the sampler (optionally with one flat subscript, for a
+            // declared array of them) must be the entire first argument, so a sampler passed through a call of the
+            // pack's own — texture2D(pick(voxel_sampler), uv) — is left for the driver to resolve as authored.
+            Matcher call = Pattern.compile("(?<![A-Za-z0-9_])" + Pattern.quote(lookup.getKey())
+                    + "[ \\t]*\\([ \\t]*(" + alternation + ")(\\[[^\\[\\]]*\\])?[ \\t]*(?=[,)])").matcher(result);
+            StringBuffer rewrite = new StringBuffer();
+            while (call.find()) {
+                String subscript = call.group(2) == null ? "" : call.group(2);
+                call.appendReplacement(rewrite,
+                        Matcher.quoteReplacement(lookup.getValue() + "(" + call.group(1) + subscript));
+                rewritten++;
+            }
+            call.appendTail(rewrite);
+            result = rewrite.toString();
+        }
+
+        if (rewritten > 0) {
+            LOGGER.info("[Iris] Program '{}': repointed {} legacy texture lookup(s) on integer sampler(s) {} to the core built-in (no texture2D overload exists for them)",
+                    name, rewritten, samplers);
+        }
+        return result;
+    }
+
+    /** {@return every identifier the source declares as a {@code usampler*}/{@code isampler*}} */
+    private static Set<String> integerSamplerNames(String source) {
+        Set<String> names = new LinkedHashSet<>();
+        Matcher declaration = INTEGER_SAMPLER_DECLARATION.matcher(source);
+        while (declaration.find()) {
+            String[] declarators = declaration.group(1).split(",");
+            for (int i = 0; i < declarators.length; i++) {
+                String declarator = declarators[i].trim();
+                String identifier = identifierPrefix(declarator);
+                if (identifier.isEmpty()) {
+                    break;
+                }
+                // Only the first declarator is certain to belong to the sampler type. A comma continues the same
+                // declaration in `usampler2D a, b;` (bare names) but starts a new parameter in
+                // `usampler3D s, vec3 p` (a name preceded by its own type), so stop at the first non-bare one.
+                if (i > 0 && !isBareDeclarator(declarator, identifier)) {
+                    break;
+                }
+                names.add(identifier);
+            }
+        }
+        return names;
+    }
+
+    /** Whether {@code declarator} is just {@code identifier}, optionally with an array subscript after it. */
+    private static boolean isBareDeclarator(String declarator, String identifier) {
+        String remainder = declarator.substring(identifier.length()).trim();
+        return remainder.isEmpty() || (remainder.startsWith("[") && remainder.endsWith("]"));
+    }
+
+    /** {@code "shadowVoxels[2]"} -> {@code "shadowVoxels"}; anything not starting with an identifier yields "". */
+    private static String identifierPrefix(String declarator) {
+        int end = 0;
+        while (end < declarator.length()
+                && (Character.isLetterOrDigit(declarator.charAt(end)) || declarator.charAt(end) == '_')) {
+            end++;
+        }
+        return declarator.substring(0, end);
     }
 
     /**

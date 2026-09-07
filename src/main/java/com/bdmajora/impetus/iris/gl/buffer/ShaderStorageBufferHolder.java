@@ -1,6 +1,7 @@
 package com.bdmajora.impetus.iris.gl.buffer;
 
 import com.bdmajora.impetus.lwjgl.GL15;
+import com.bdmajora.impetus.lwjgl.GLExtension;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -24,6 +25,11 @@ public final class ShaderStorageBufferHolder {
     private static final int GL_MAX_SHADER_STORAGE_BLOCK_SIZE = 0x90DE;
     private static final int GL_NO_ERROR = 0;
 
+    /** Fill descriptor for the server-side zero: one unsigned byte per byte of buffer. */
+    private static final int GL_R8 = 0x8229;
+    private static final int GL_RED = 0x1903;
+    private static final int GL_UNSIGNED_BYTE = 0x1401;
+
     /**
      * Ceiling used only when the driver will not report {@link #GL_MAX_SHADER_STORAGE_BLOCK_SIZE}. This was previously
      * a hard cap on every allocation, which silently rejected buffers packs genuinely need: Complementary Reimagined
@@ -36,8 +42,12 @@ public final class ShaderStorageBufferHolder {
      */
     private static final long FALLBACK_MAX_BUFFER_BYTES = 512L * 1024 * 1024;
 
-    /** Zero-fill granularity. Staging the whole buffer host-side would spike direct memory by its full size. */
+    /** Host-staged zero-fill granularity, used only where {@code glClearBufferData} is unavailable. */
     private static final int ZERO_FILL_CHUNK_BYTES = 4 * 1024 * 1024;
+
+    /** Capability answers, resolved once against a live context. */
+    private static Boolean immutableStorageAvailable;
+    private static Boolean serverSideClearAvailable;
 
     /** Driver's per-buffer ceiling, queried once against a live context; 0 until then. */
     private static long cachedMaxBufferBytes;
@@ -141,7 +151,7 @@ public final class ShaderStorageBufferHolder {
             int buffer = LWJGL.glGenBuffers();
             LWJGL.glBindBuffer(GL_SHADER_STORAGE_BUFFER, buffer);
             LWJGL.glGetError(); // discard anything already pending so the check below is about this allocation
-            LWJGL.glBufferData(GL_SHADER_STORAGE_BUFFER, bytes, GL15.GL_DYNAMIC_DRAW);
+            allocateStorage(bytes);
             int error = LWJGL.glGetError();
             if (error != GL_NO_ERROR) {
                 LWJGL.glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
@@ -152,8 +162,6 @@ public final class ShaderStorageBufferHolder {
                         definition.index, bytes, Integer.toHexString(error));
                 continue;
             }
-            // glBufferData(size) leaves contents undefined; the pack only writes the entries it visits, so anything
-            // it never touches has to read as zero rather than as whatever the driver handed us.
             zeroFill(bytes);
             LWJGL.glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
@@ -189,8 +197,58 @@ public final class ShaderStorageBufferHolder {
         return cachedMaxBufferBytes;
     }
 
-    /** Zeroes the currently bound shader storage buffer in fixed-size chunks. */
+    /**
+     * Allocates the currently bound shader storage buffer, preferring immutable GPU-only storage.
+     * <p>
+     * This is what Iris does ({@code ShaderStorageBuffer.createStatic} -&gt; {@code bufferStorage(target, size, 0)};
+     * it uses {@code GL_DYNAMIC_STORAGE_BIT} only for the {@code bufferObject.<n> = <size> <file>} form that seeds a
+     * buffer from a resource, which this port does not implement, so {@code 0} is right for every buffer it creates).
+     * The <em>flags</em> matter as much as the immutability: {@code 0} states that the client will never map, read or
+     * write this buffer, so the driver is free to place it entirely in video memory. The previous
+     * {@code glBufferData(..., GL_DYNAMIC_DRAW)} said the opposite — a mutable buffer the client updates repeatedly —
+     * which invites a host-visible allocation or a system-memory mirror. Complementary Reimagined declares
+     * {@code bufferObject.0 = 810549248} (773 MiB) at {@code COLORED_LIGHTING = 512} with world-space reflections on,
+     * so the hint is worth three quarters of a gigabyte of resident host memory that nothing on the CPU ever reads.
+     * <p>
+     * Immutable storage is chosen only when {@link #canClearServerSide()}, because zeroing is then the only way to
+     * initialize the buffer: a {@code flags = 0} allocation rejects {@code glBufferSubData} by construction. Iris can
+     * assume both entry points unconditionally; this port runs on 1.12.2 contexts that may predate either, so the two
+     * capabilities are resolved together rather than independently.
+     */
+    private static void allocateStorage(long bytes) {
+        if (immutableStorageAvailable == null) {
+            immutableStorageAvailable = (LWJGL.isOpenGLVersionSupported(4, 4)
+                    || LWJGL.isExtensionSupported(GLExtension.ARB_buffer_storage))
+                    && canClearServerSide();
+        }
+        if (immutableStorageAvailable) {
+            LWJGL.glBufferStorage(GL_SHADER_STORAGE_BUFFER, bytes, 0);
+        } else {
+            // Still not GL_DYNAMIC_DRAW: this buffer is written and read by the GPU and never by the client.
+            LWJGL.glBufferData(GL_SHADER_STORAGE_BUFFER, bytes, GL15.GL_STATIC_COPY);
+        }
+    }
+
+    /**
+     * Zeroes the currently bound shader storage buffer. Freshly allocated storage is undefined and the pack only
+     * writes the entries it visits, so anything it never touches has to read as zero rather than as whatever the
+     * driver handed us.
+     * <p>
+     * {@code glClearBufferData} does this entirely server-side, which is what Iris uses
+     * ({@code clearBufferSubData}). The chunked {@code glBufferSubData} fallback both costs an upload of the buffer's
+     * full size and requires the buffer to be client-writable — the property that keeps a 773 MiB allocation resident
+     * in host memory — so it runs only where the server-side clear does not exist, and there
+     * {@link #allocateStorage} has already made the buffer mutable to match.
+     */
     private static void zeroFill(long bytes) {
+        if (canClearServerSide()) {
+            // One texel of source data, as GL_R8/GL_RED/GL_UNSIGNED_BYTE describes it. LWJGL 2's binding calls
+            // MemoryUtil.getAddress (not getAddressSafe) and BufferChecks.checkBuffer(data, 1), so unlike Iris on
+            // LWJGL 3 this cannot pass null for "clear to zero" — it needs a real one-byte direct buffer.
+            ByteBuffer zero = ByteBuffer.allocateDirect(1); // allocateDirect is already zeroed
+            LWJGL.glClearBufferData(GL_SHADER_STORAGE_BUFFER, GL_R8, GL_RED, GL_UNSIGNED_BYTE, zero);
+            return;
+        }
         int chunk = (int) Math.min(bytes, ZERO_FILL_CHUNK_BYTES);
         ByteBuffer zeros = ByteBuffer.allocateDirect(chunk); // allocateDirect is already zeroed
         for (long offset = 0; offset < bytes; offset += chunk) {
@@ -198,6 +256,20 @@ public final class ShaderStorageBufferHolder {
             zeros.limit((int) Math.min(chunk, bytes - offset));
             LWJGL.glBufferSubData(GL_SHADER_STORAGE_BUFFER, offset, zeros);
         }
+    }
+
+    /**
+     * {@code glClearBufferData} is GL 4.3 core, the same version that introduced shader storage buffers themselves, so
+     * in practice any driver that can run a pack declaring {@code bufferObject} has it. It is still queried rather
+     * than assumed: LWJGL 2 answers an unavailable entry point by throwing from
+     * {@code BufferChecks.checkFunctionAddress}, which would turn a silently-degraded pipeline into a failed one.
+     */
+    private static boolean canClearServerSide() {
+        if (serverSideClearAvailable == null) {
+            serverSideClearAvailable = LWJGL.isOpenGLVersionSupported(4, 3)
+                    || LWJGL.isExtensionSupported(GLExtension.ARB_clear_buffer_object);
+        }
+        return serverSideClearAvailable;
     }
 
     /** Parses every {@code bufferObject.<index> = ...} directive. */

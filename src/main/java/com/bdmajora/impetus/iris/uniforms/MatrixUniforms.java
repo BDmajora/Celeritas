@@ -2,6 +2,8 @@ package com.bdmajora.impetus.iris.uniforms;
 
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.OpenGlHelper;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.joml.Matrix3f;
 import org.joml.Matrix3fc;
 import org.joml.Matrix4f;
@@ -27,6 +29,10 @@ import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
  * camera positions once per rendered frame.
  */
 public final class MatrixUniforms {
+    private static final Logger LOGGER = LogManager.getLogger("Impetus/Iris");
+    /** One report per uniform name; a singular matrix repeats every frame until whatever caused it goes away. */
+    private static final java.util.Set<String> REPORTED_SINGULAR = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final Matrix4fc IDENTITY = new Matrix4f();
     private static final int GL_ACTIVE_TEXTURE = 0x84E0;
     private static final int GL_MATRIX_MODE = 0x0BA0;
     private static final int GL_TEXTURE_MODE = 0x1702;
@@ -53,7 +59,7 @@ public final class MatrixUniforms {
                 // ViewToPlayer matrix packs expect. (The earlier m30/m31/m32 zeroing deviated from OptiFine; the
                 // m03/m13/m23 variant zeroed the always-zero bottom row — JOML's mCR is column-row — i.e. a no-op.)
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "gbufferModelViewInverse",
-                        () -> new Matrix4f(state.getGbufferModelView()).invert())
+                        () -> invertedOrIdentity("gbufferModelViewInverse", state.getGbufferModelView()))
                 // Stand-ins for `gl_ModelViewMatrixInverse`, and a different family from `gbufferModelViewInverse`
                 // above: Iris registers those pack-facing names PER_FRAME in its own MatrixUniforms, but declares
                 // these through ExternallyManagedUniforms and uploads them PER DRAW in
@@ -68,10 +74,10 @@ public final class MatrixUniforms {
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "iris_ProjectionMatrix", state::getGbufferProjection)
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "iris_ProjMat", state::getGbufferProjection)
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "gbufferProjectionInverse",
-                        () -> new Matrix4f(state.getGbufferProjection()).invert())
+                        () -> invertedOrIdentity("gbufferProjectionInverse", state.getGbufferProjection()))
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "dhProjection", state::getGbufferProjection)
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "dhProjectionInverse",
-                        () -> new Matrix4f(state.getGbufferProjection()).invert())
+                        () -> invertedOrIdentity("dhProjectionInverse", state.getGbufferProjection()))
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "dhPreviousProjection",
                         new Previous(state::getGbufferProjection))
                 // Iris swaps the shadow projection in here while the shadow pass runs
@@ -106,9 +112,9 @@ public final class MatrixUniforms {
                 .uniformMatrix3(UniformUpdateFrequency.DYNAMIC, "iris_NormalMat",
                         MatrixUniforms::getLiveNormalMatrix)
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "iris_DefaultModelViewMatrixInverse",
-                        () -> new Matrix4f(state.getGbufferModelView()).invert())
+                        () -> invertedOrIdentity("iris_DefaultModelViewMatrixInverse", state.getGbufferModelView()))
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "iris_DefaultProjectionMatrixInverse",
-                        () -> new Matrix4f(state.getGbufferProjection()).invert())
+                        () -> invertedOrIdentity("iris_DefaultProjectionMatrixInverse", state.getGbufferProjection()))
                 .uniformMatrix(UniformUpdateFrequency.DYNAMIC, "iris_TextureMat",
                         MatrixUniforms::getDefaultTextureMatrix)
                 .uniformMatrix(UniformUpdateFrequency.ONCE, "iris_LightmapTextureMatrix",
@@ -119,14 +125,14 @@ public final class MatrixUniforms {
                         new Previous(state::getGbufferProjection))
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "shadowModelView", state::getShadowModelView)
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "shadowModelViewInverse",
-                        () -> new Matrix4f(state.getShadowModelView()).invert())
+                        () -> invertedOrIdentity("shadowModelViewInverse", state.getShadowModelView()))
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "shadowProjection", state::getShadowProjection)
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "shadowProjectionInverse",
-                        () -> new Matrix4f(state.getShadowProjection()).invert())
+                        () -> invertedOrIdentity("shadowProjectionInverse", state.getShadowProjection()))
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "iris_ShadowModelViewMatrixInverse",
-                        () -> new Matrix4f(state.getShadowModelView()).invert())
+                        () -> invertedOrIdentity("iris_ShadowModelViewMatrixInverse", state.getShadowModelView()))
                 .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "iris_ShadowProjectionMatrixInverse",
-                        () -> new Matrix4f(state.getShadowProjection()).invert())
+                        () -> invertedOrIdentity("iris_ShadowProjectionMatrixInverse", state.getShadowProjection()))
                 .uniform3f(UniformUpdateFrequency.PER_FRAME, "cameraPosition",
                         () -> toVector3f(CameraUniforms.getCurrentCameraPosition()))
                 .uniform3f(UniformUpdateFrequency.PER_FRAME, "previousCameraPosition",
@@ -152,6 +158,53 @@ public final class MatrixUniforms {
     }
 
     /**
+     * Inverts {@code source}, substituting identity if the result is not finite.
+     * <p>
+     * Iris inverts unguarded ({@code MatrixUniforms.Inverted}: {@code new Matrix4f(parent.get()).invert()}), and it can
+     * afford to — every matrix it inverts comes from a live pose stack that is invertible by construction. This port
+     * feeds the same code from 1.12.2 fixed-function readbacks ({@code ActiveRenderInfo}'s captured modelview,
+     * {@code GL_MODELVIEW_MATRIX}, a shadow ortho built from pack directives), any of which can be singular — an
+     * all-zero buffer captured before vanilla filled it, or a degenerate ortho. JOML's {@code invert()} divides by the
+     * determinant, so a singular input yields {@code Inf}/{@code NaN} in all sixteen elements with no exception and no
+     * GL error.
+     * <p>
+     * That is not a cosmetic failure. Complementary routes <em>every terrain vertex in both passes</em> through one of
+     * these inverses — {@code position = gbufferModelViewInverse * gl_ModelViewMatrix * gl_Vertex} in
+     * {@code gbuffers_terrain}, {@code position = shadowModelViewInverse * shadowProjectionInverse * ftransform()} in
+     * {@code shadow} — while entities use {@code gl_Position = ftransform()} and touch no inverse at all. One
+     * non-finite inverse therefore makes {@code gl_Position} NaN for all terrain, the non-finite guard in
+     * {@link com.bdmajora.impetus.iris.terrain.ImpetusTerrainTransformer} collapses every one of those vertices behind
+     * the far plane, and the world silently disappears while entities, block entities and particles keep drawing.
+     * That is the recurring "world unloads randomly" report, and because the guard clips the vertex before any
+     * fragment runs, its {@code iris_nanFlag} could never be observed.
+     * <p>
+     * Identity is wrong, but it is finite: one frame renders from the wrong basis instead of not rendering at all, and
+     * the log names the uniform.
+     */
+    private static Matrix4fc invertedOrIdentity(String name, Matrix4fc source) {
+        Matrix4f inverse = new Matrix4f(source).invert();
+        if (isFinite(inverse)) {
+            return inverse;
+        }
+        if (REPORTED_SINGULAR.add(name)) {
+            LOGGER.error("[Iris] '{}' inverted to a non-finite matrix; its source is singular, so every vertex "
+                    + "transformed by it would be NaN. Substituting identity. Source was:\n{}", name, source);
+        }
+        return IDENTITY;
+    }
+
+    private static boolean isFinite(Matrix4fc matrix) {
+        for (int column = 0; column < 4; column++) {
+            for (int row = 0; row < 4; row++) {
+                if (!Float.isFinite(matrix.get(column, row))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
      * {@return the inverse-transpose of the modelview that is live <em>right now</em>, i.e. this draw's normal matrix}
      * <p>
      * Iris's per-draw equivalent reads {@code RenderSystem.getModelViewMatrix()}, which on 1.16+ is the pose stack
@@ -161,7 +214,7 @@ public final class MatrixUniforms {
      */
     /** {@return the inverse of the modelview live <em>right now</em> — this draw's, not the frame's camera matrix} */
     private static Matrix4fc getLiveModelViewInverse() {
-        return new Matrix4f(getLiveModelView()).invert();
+        return invertedOrIdentity("iris_ModelViewMatrixInverse", getLiveModelView());
     }
 
     /** {@return the fixed-function modelview as it stands at this instant, i.e. camera x model for the current draw} */
@@ -177,13 +230,19 @@ public final class MatrixUniforms {
     /** {@return the inverse of whichever projection the pass currently running actually rasterises with} */
     private static Matrix4fc getActiveProjectionInverse() {
         CapturedRenderingState state = CapturedRenderingState.INSTANCE;
-        Matrix4fc projection = com.bdmajora.impetus.iris.pipeline.IrisShadowRenderer.isShadowPass()
-                ? state.getShadowProjection() : state.getGbufferProjection();
-        return new Matrix4f(projection).invert();
+        boolean shadow = com.bdmajora.impetus.iris.pipeline.IrisShadowRenderer.isShadowPass();
+        Matrix4fc projection = shadow ? state.getShadowProjection() : state.getGbufferProjection();
+        return invertedOrIdentity(shadow ? "iris_ProjectionMatrixInverse (shadow ortho)"
+                : "iris_ProjectionMatrixInverse (camera projection)", projection);
     }
 
+    /**
+     * The normal matrix cannot delete geometry the way a position matrix can, but a non-finite one poisons every
+     * lit fragment, so it goes through the same guard. Reusing {@link #invertedOrIdentity} keeps one report per name.
+     */
     private static Matrix3fc getLiveNormalMatrix() {
-        return new Matrix4f(getLiveModelView()).invert().transpose3x3(new Matrix3f());
+        return new Matrix4f(invertedOrIdentity("iris_NormalMatrix", getLiveModelView()))
+                .transpose3x3(new Matrix3f());
     }
 
     private static Matrix4fc getDefaultTextureMatrix() {

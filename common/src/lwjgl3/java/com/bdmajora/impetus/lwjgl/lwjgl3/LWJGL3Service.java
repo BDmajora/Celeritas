@@ -62,6 +62,7 @@ public record LWJGL3Service(
         GLCapabilities caps = GL.getCapabilities();
         return switch (extension) {
             case ARB_buffer_storage -> caps.GL_ARB_buffer_storage;
+            case ARB_clear_buffer_object -> caps.GL_ARB_clear_buffer_object;
             case ARB_multi_draw_indirect -> caps.GL_ARB_multi_draw_indirect;
             case ARB_draw_elements_base_vertex -> caps.GL_ARB_draw_elements_base_vertex;
             case ARB_direct_state_access -> caps.GL_ARB_direct_state_access;
@@ -132,6 +133,11 @@ public record LWJGL3Service(
     @Override
     public void glBufferStorage(int target, long size, int flags) {
         GL44C.glBufferStorage(target, size, flags);
+    }
+
+    @Override
+    public void glClearBufferData(int target, int internalFormat, int format, int type, ByteBuffer data) {
+        GL43C.glClearBufferData(target, internalFormat, format, type, data);
     }
 
     @Override

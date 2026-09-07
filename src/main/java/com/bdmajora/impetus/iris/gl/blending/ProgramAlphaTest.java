@@ -122,6 +122,51 @@ public final class ProgramAlphaTest {
         return this.specified;
     }
 
+    /**
+     * {@return this alpha test as a GLSL {@code discard}, or {@code ""} when it passes everything}
+     * <p>
+     * Mirrors Iris's {@code AlphaTest.toExpression}, including its <em>negated</em> form:
+     * {@code if (!(a > ref)) discard;} rather than {@code if (a < ref) discard;}. The two differ on NaN — the
+     * negated form discards a non-finite alpha, the direct comparison keeps it — and Iris's is the stricter,
+     * correct one. {@code ALWAYS} emits nothing at all, which is what makes an unspecified solid pass carry no
+     * discard; {@code NEVER} discards unconditionally.
+     */
+    public String toGlslDiscard(String alphaAccessor, String indent) {
+        if (!this.specified || this.disabled || this.function == GL11.GL_ALWAYS) {
+            return "";
+        }
+        if (this.function == GL11.GL_NEVER) {
+            return indent + "discard;\n";
+        }
+        String op = glslOperatorFor(this.function);
+        if (op == null) {
+            LOGGER.warn("[Iris] Unsupported alphaTest function 0x{}; treating as always-pass",
+                    Integer.toHexString(this.function));
+            return "";
+        }
+        return glslDiscard(alphaAccessor, op, Float.toString(this.reference), indent);
+    }
+
+    /** Builds the same negated-comparison discard Iris emits, for callers supplying their own threshold. */
+    public static String glslDiscard(String alphaAccessor, String operator, String threshold, String indent) {
+        return indent + "if (!(" + alphaAccessor + " " + operator + " " + threshold + ")) {\n"
+                + indent + "    discard;\n"
+                + indent + "}\n";
+    }
+
+    /** GL comparison enum to its GLSL operator (Iris {@code AlphaTestFunction}); null where there is no operator. */
+    private static String glslOperatorFor(int function) {
+        switch (function) {
+            case GL11.GL_LESS: return "<";
+            case GL11.GL_EQUAL: return "==";
+            case GL11.GL_LEQUAL: return "<=";
+            case GL11.GL_GREATER: return ">";
+            case GL11.GL_NOTEQUAL: return "!=";
+            case GL11.GL_GEQUAL: return ">=";
+            default: return null;
+        }
+    }
+
     /** The pack-declared reference value, for the {@code alphaTestRef} uniform. */
     public float getReference() {
         return this.disabled ? 0.0f : this.reference;

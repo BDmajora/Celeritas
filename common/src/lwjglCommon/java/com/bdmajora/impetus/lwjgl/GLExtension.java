@@ -5,6 +5,7 @@ package com.bdmajora.impetus.lwjgl;
  */
 public enum GLExtension {
     ARB_buffer_storage,
+    ARB_clear_buffer_object,
     ARB_multi_draw_indirect,
     ARB_draw_elements_base_vertex,
     ARB_direct_state_access,

@@ -19,10 +19,10 @@ public class GlShader extends GlResource {
     public GlShader(ShaderType type, String name, String source) {
         this.name = name;
 
-        // Last stop before the driver, and the only point every path (gbuffer, terrain override, fullscreen, compute)
-        // passes through — so the strict-driver #extension placement rule is enforced for all of them here rather
-        // than in each transformer. No-op unless a directive is genuinely misplaced.
-        source = GlslPreprocessor.hoistExtensionDirectives(source);
+        // Strict-driver rewrites for the paths that reach the driver through THIS class: gbuffer programs, the
+        // fullscreen composite/deferred/final chain, and compute. The terrain/shadow override does not — it builds
+        // the engine's GlShader instead — so it calls finalizeForDriver itself. See that method's note.
+        source = GlslPreprocessor.finalizeForDriver(name, source);
 
         int handle = LWJGL.glCreateShader(type.id);
         if (handle == 0) {
