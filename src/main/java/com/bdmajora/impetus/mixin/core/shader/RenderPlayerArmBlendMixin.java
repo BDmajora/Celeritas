@@ -1,6 +1,6 @@
 package com.bdmajora.impetus.mixin.core.shader;
 
-import com.bdmajora.impetus.iris.uniforms.CapturedRenderingState;
+import com.bdmajora.impetus.umbra.uniforms.CapturedRenderingState;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.entity.RenderPlayer;
 import org.spongepowered.asm.mixin.Mixin;

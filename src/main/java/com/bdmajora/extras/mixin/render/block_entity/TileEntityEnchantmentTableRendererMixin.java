@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** Hides the enchanting table's animated floating book. */
+// Hides the enchanting table's animated floating book
 @Mixin(TileEntityEnchantmentTableRenderer.class)
 public class TileEntityEnchantmentTableRendererMixin {
     @Inject(

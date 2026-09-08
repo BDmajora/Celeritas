@@ -18,7 +18,7 @@ import java.util.Objects;
 import java.util.function.Predicate;
 
 public class OptionPageFrame extends AbstractFrame {
-    /** Height of the page-title header band rendered above the option rows. */
+    // Height of the page-title header band rendered above the option rows
     private static final int SECTION_HEADER_HEIGHT = 18;
 
     protected final OptionPage page;
@@ -113,10 +113,7 @@ public class OptionPageFrame extends AbstractFrame {
         }
     }
 
-    /**
-     * Draws the page-title band above the options: a teal accent bar followed by the page name, echoing the
-     * section headers of the modern Iris/Sodium settings screen.
-     */
+    // Accent bar + page name, styled after Umbra/Sodium's settings screen section headers
     private void renderSectionHeader(DrawContext drawContext) {
         int x = this.dim.x();
         int y = this.dim.y();

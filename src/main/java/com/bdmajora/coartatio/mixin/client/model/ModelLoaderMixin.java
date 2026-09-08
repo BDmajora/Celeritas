@@ -18,19 +18,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * The Forge half of {@link ModelBakeryMixin}.
- *
- * <p>{@code ModelLoader extends ModelBakery} and adds five more collections of its own, of which
- * {@code stateModels} is the largest single map in the model graph — one entry per blockstate
- * variant, 21k of them on a measured pack, each a {@code HashMap.Node}.
- *
- * <p>All five are plain {@code HashMap}/{@code HashSet} in Forge with no ordering contract, so
- * unlike {@code ModelBakery}'s {@code LinkedHashMap}s they can all be swapped safely.
- *
- * <p>{@code remap = false} on the whole mixin: {@code ModelLoader} is a Forge class and none of its
- * members appear in the obfuscation map.
- */
+// Forge half of ModelBakeryMixin: ModelLoader extends ModelBakery and adds five more collections
+// of its own. Unlike ModelBakery's LinkedHashMaps, these are plain HashMap/HashSet with no
+// ordering contract, so all five can be swapped for fastutil equivalents safely.
+// remap = false throughout: ModelLoader is Forge-added, not in the obfuscation map.
 @Mixin(value = ModelLoader.class, remap = false)
 public abstract class ModelLoaderMixin {
     @Mutable

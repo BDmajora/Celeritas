@@ -20,29 +20,14 @@ import net.minecraft.client.renderer.block.model.multipart.ICondition;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Builds and interns the {@code Predicate<IBlockState>} objects behind multipart blockstate
- * definitions.
- *
- * <p>Two independent savings stack here:
- *
- * <ul>
- *   <li><b>Flattening</b> (from Hydrogen) turns a tree of Guava composites and anonymous classes into
- *       a single object holding arrays.
- *   <li><b>Interning</b> (from FerriteCore, by way of LoliASM's {@code CanonicalConditions}) shares
- *       one instance between every selector that tests the same thing. {@code facing=north} appears
- *       in hundreds of blockstate files; without interning each gets its own closure, each of which
- *       captures the property and the value.
- * </ul>
- *
- * <p>Interning is what makes flattening pay off twice: identical flattened predicates compare equal
- * by construction, whereas the anonymous classes vanilla generates never can.
- *
- * <p>The pool is bake-scoped. Predicates handed out stay shared for the lifetime of the models that
- * hold them; only the index is dropped when the reload ends.
- */
+// Builds and interns the Predicate<IBlockState> objects behind multipart blockstate definitions.
+// Two savings stack: flattening (from Hydrogen) turns a tree of Guava composites/anonymous classes into
+// one object holding arrays, and interning (from FerriteCore/LoliASM's CanonicalConditions) shares one
+// instance between every selector testing the same thing (e.g. facing=north appears in hundreds of files).
+// Flattened predicates compare equal by construction, so interning after flattening actually finds matches.
+// The pool is bake-scoped: predicates stay shared for the models' lifetime, only the index drops on reload.
 public final class ConditionCanonicalizer {
-    /** Matches vanilla {@code ConditionPropertyValue.SPLITTER}; re-declared to avoid shadowing a private static. */
+    // Matches vanilla ConditionPropertyValue.SPLITTER; re-declared to avoid shadowing a private static.
     private static final Splitter VALUE_SPLITTER = Splitter.on('|').omitEmptyStrings();
 
     private static final DeduplicationCache<Predicate<IBlockState>> POOL =
@@ -59,7 +44,7 @@ public final class ConditionCanonicalizer {
         POOL.close();
     }
 
-    /** Predicates this pool prevented allocating a second copy of. */
+    // Predicates this pool prevented allocating a second copy of.
     public static long sharedCount() {
         return POOL.shared();
     }
@@ -68,12 +53,8 @@ public final class ConditionCanonicalizer {
         return POOL.toString();
     }
 
-    /**
-     * Replacement for {@code ConditionPropertyValue.getPredicate}.
-     *
-     * <p>Error messages intentionally mirror vanilla's wording: a malformed blockstate file is a
-     * pack-authoring bug, and the person reading the crash should not have to know Coartatio exists.
-     */
+    // Replacement for ConditionPropertyValue.getPredicate. Error messages intentionally mirror vanilla's
+    // wording: a malformed blockstate file is a pack-authoring bug, not something that should mention Coartatio.
     public static Predicate<IBlockState> propertyValue(BlockStateContainer container, String key, String value) {
         IProperty<?> property = container.getProperty(key);
 
@@ -112,15 +93,9 @@ public final class ConditionCanonicalizer {
         return negate ? intern(new NegatedPredicate(predicate)) : predicate;
     }
 
-    /**
-     * Replacement for {@code ConditionAnd.getPredicate}.
-     *
-     * <p>Specialisations are tried most-specific first, following Hydrogen's
-     * {@code StatePropertyPredicateHelper}: an all-boolean {@code AND} is the overwhelmingly common
-     * multipart shape and gets a primitive array, an all-single-value {@code AND} gets one object
-     * array, an {@code AND} of multi-valued tests gets a jagged array, and anything else falls back
-     * to a composite over the (already interned) children.
-     */
+    // Replacement for ConditionAnd.getPredicate. Tries specialisations most-specific first (Hydrogen's
+    // StatePropertyPredicateHelper order): all-boolean AND -> primitive array, all-single-value AND -> object
+    // array, AND of multi-valued tests -> jagged array, else falls back to a composite of interned children.
     public static Predicate<IBlockState> all(List<Predicate<IBlockState>> predicates) {
         if (predicates.size() == 1) {
             return predicates.get(0);
@@ -143,7 +118,7 @@ public final class ConditionCanonicalizer {
         return intern(flattened);
     }
 
-    /** Replacement for {@code ConditionOr.getPredicate}. */
+    // Replacement for ConditionOr.getPredicate.
     public static Predicate<IBlockState> any(List<Predicate<IBlockState>> predicates) {
         if (predicates.size() == 1) {
             return predicates.get(0);
@@ -152,13 +127,9 @@ public final class ConditionCanonicalizer {
         return intern(CompositePredicate.any(predicates));
     }
 
-    /**
-     * Resolves each child condition to its (already interned) predicate.
-     *
-     * <p>Order is preserved rather than sorted. FerriteCore sorts by hash to widen the intern pool,
-     * but a mod-supplied {@code ICondition} is free to be order-sensitive or to have side effects,
-     * and a wrong render is a worse outcome than a missed share.
-     */
+    // Resolves each child condition to its (already interned) predicate. Order is preserved rather than
+    // sorted (FerriteCore sorts by hash to widen the pool) since a mod ICondition may be order-sensitive
+    // or have side effects, and a wrong render is worse than a missed share.
     public static List<Predicate<IBlockState>> resolve(Iterable<? extends ICondition> conditions,
                                                        BlockStateContainer container) {
         List<Predicate<IBlockState>> resolved = new ArrayList<>();

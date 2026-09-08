@@ -15,11 +15,11 @@ public enum VintageDiffuseProvider implements DiffuseProvider {
      * baked into the vertex colour}
      * <p>
      * A pack that lights from the face normal itself (Body Camera's {@code lightBrightness}) would otherwise get
-     * vanilla's 0.5/0.6/0.8 face multiplier applied on top of its own, i.e. shaded twice. Iris suppresses this by
+     * vanilla's 0.5/0.6/0.8 face multiplier applied on top of its own, i.e. shaded twice. Umbra suppresses this by
      * forcing the shade lookup to {@code Direction.UP}; OptiFine by setting its shade constants to 1.0.
      */
     private static boolean directionalShadingDisabled() {
-        return com.bdmajora.impetus.iris.material.WorldRenderingSettings.shouldDisableDirectionalShading();
+        return com.bdmajora.impetus.umbra.material.WorldRenderingSettings.shouldDisableDirectionalShading();
     }
 
     @Override

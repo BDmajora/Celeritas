@@ -22,6 +22,6 @@ public enum GLExtension {
     ARB_texture_storage,
     ARB_base_instance,
     ARB_compatibility,
-    /** Vendor query for free video memory; Iris gates its shader storage buffer allocations on it. */
+    /** Vendor query for free video memory; Umbra gates its shader storage buffer allocations on it. */
     NVX_gpu_memory_info
 }

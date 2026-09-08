@@ -6,10 +6,7 @@ import com.bdmajora.impetus.api.eventbus.EventHandlerRegistrar;
 
 import java.util.List;
 
-/**
- * Fired during creation of the main options GUI, to allow adding additional pages. You receive the full list
- * of existing pages as context, so you can insert your page where desired.
- */
+// Fired while building the main options GUI; full page list is passed in so listeners can insert their own page anywhere
 public class OptionGUIConstructionEvent extends ImpetusEvent {
     public static final EventHandlerRegistrar<OptionGUIConstructionEvent> BUS = new EventHandlerRegistrar<>();
 
@@ -19,9 +16,7 @@ public class OptionGUIConstructionEvent extends ImpetusEvent {
         this.pages = pages;
     }
 
-    /**
-     * Returns a (mutable) list of the current option pages.
-     */
+    // List is mutable, callers can insert pages directly
     public List<OptionPage> getPages() {
         return this.pages;
     }

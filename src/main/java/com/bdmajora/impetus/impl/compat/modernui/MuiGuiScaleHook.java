@@ -7,11 +7,9 @@ import com.bdmajora.impetus.ImpetusVintage;
 import java.lang.reflect.Method;
 import java.util.stream.Stream;
 
-/**
- * Ugly hack to get around Modern UI overwriting calculateScaleFactor and not conforming to vanilla standards
- * by returning the max size when scale = 0.
- */
+// Hack to work around Modern UI overriding calculateScaleFactor and ignoring vanilla's "0 = auto" convention
 public class MuiGuiScaleHook {
+    // reflectively found across MUI's various package renames/versions; null if MUI isn't loaded or doesn't have it
     private static final Method calcGuiScalesMethod;
 
     static {
@@ -42,6 +40,7 @@ public class MuiGuiScaleHook {
     public static int getMaxGuiScale() {
         if (calcGuiScalesMethod != null) {
             try {
+                // low nibble of MUI's packed result is the actual scale value
                 return (int) calcGuiScalesMethod.invoke(null) & 0xf;
             } catch (Throwable e) {
                 e.printStackTrace();
@@ -53,6 +52,7 @@ public class MuiGuiScaleHook {
 
     public static int calculateScale(int guiScale, boolean forceUnicode) {
         int i;
+        // vanilla's algorithm: grow the scale until the next step would shrink the scaled resolution below 320x240
         for (i = 1; i != guiScale && i < Minecraft.getMinecraft().getFramebuffer().framebufferWidth && i < Minecraft.getMinecraft().getFramebuffer().framebufferHeight && Minecraft.getMinecraft().getFramebuffer().framebufferWidth / (i + 1) >= 320 && Minecraft.getMinecraft().getFramebuffer().framebufferHeight / (i + 1) >= 240; ++i) {
         }
 

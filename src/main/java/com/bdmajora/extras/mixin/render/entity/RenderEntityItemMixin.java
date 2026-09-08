@@ -8,13 +8,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
- * OptiFine's Dropped Items switch, as Fancy versus Fast.
- *
- * <p>Vanilla draws a pile of dropped items as up to five stacked copies of the model, scaled by
- * stack size. On Fast it draws one. The saving is real on a floor covered in drops after a mob farm
- * or a chest spill — a stack of 64 costs five full item models per frame otherwise.
- */
+// OptiFine's Dropped Items switch, Fancy versus Fast; vanilla stacks up to five copies of the model scaled by stack size,
+// Fast draws one — real savings on a floor covered in drops after a mob farm or chest spill
 @Mixin(RenderEntityItem.class)
 public class RenderEntityItemMixin {
     @Inject(method = "getModelCount", at = @At("HEAD"), cancellable = true)

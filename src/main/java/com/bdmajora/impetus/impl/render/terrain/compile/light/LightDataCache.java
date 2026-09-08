@@ -50,8 +50,8 @@ public class LightDataCache extends LightDataAccess {
         float ao;
         if (lu == 0) {
             // `const float ambientOcclusionLevel` lets a pack dial vanilla's baked AO down (usually to 0) so its own
-            // AO is not stacked on top of it. Iris does this by rewriting shade brightness in a mixin.
-            ao = com.bdmajora.impetus.iris.material.WorldRenderingSettings
+            // AO is not stacked on top of it. Umbra does this by rewriting shade brightness in a mixin.
+            ao = com.bdmajora.impetus.umbra.material.WorldRenderingSettings
                     .applyAmbientOcclusionLevel(state.getAmbientOcclusionLightValue());
         } else {
             ao = 1.0f;

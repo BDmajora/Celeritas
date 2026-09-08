@@ -17,6 +17,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import com.bdmajora.impetus.impl.render.terrain.compile.light.VintageDiffuseProvider;
 
+// Implements BakedQuadView directly on BakedQuad so the chunk renderer can read vertex data without extra allocations
 @Mixin(BakedQuad.class)
 public abstract class BakedQuadMixin implements BakedQuadView {
     @Shadow

@@ -7,19 +7,9 @@ import net.minecraft.world.GameType;
 import net.minecraft.world.WorldServer;
 import net.minecraft.world.storage.WorldInfo;
 
-/**
- * OptiFine's Time and Weather locks, which hold the integrated server's clock and weather where the
- * player put them.
- *
- * <p>Both carry OptiFine's restriction, and for its reason: they change world state, not just what
- * is drawn, so they are confined to a single-player creative world. On a dedicated server there is
- * no {@link WorldServer} on this side to act on, and the options simply do nothing — which is also
- * what OptiFine does.
- *
- * <p>Time is nudged rather than pinned. Setting it to a fixed value every tick would freeze the
- * daylight cycle mid-frame and stop anything that reads elapsed time; pushing it past the boundary
- * only when it strays out of the wanted half keeps the clock running.
- */
+// OptiFine's Time and Weather locks, holding the integrated server's clock/weather where the player put them
+// Confined to single-player creative like OptiFine, since these change world state, not just what's drawn
+// Time is nudged past the boundary rather than pinned, so the daylight cycle keeps running
 public final class TimeWeatherOverride {
     private static final long DAY_LENGTH = 24000L;
     private static final long DAY_START = 1000L;
@@ -30,7 +20,7 @@ public final class TimeWeatherOverride {
     private TimeWeatherOverride() {
     }
 
-    /** Applies both locks. Called from the integrated server's world tick. */
+    // Applies both locks; called from the integrated server's world tick
     public static void apply(WorldServer world) {
         ExtrasConfig.ExtraSettings settings = Extras.options().extra;
 

@@ -40,7 +40,7 @@ public abstract class GlObject {
         this.handle = INVALID_HANDLE;
     }
 
-    @Deprecated // kept around to avoid huge diffs in old Iris code
+    @Deprecated // kept around to avoid huge diffs in old Umbra code
     public final void destroy() {
         this.delete();
     }

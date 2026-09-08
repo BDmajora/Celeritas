@@ -45,14 +45,14 @@ public class VintageRenderSectionManager extends RenderSectionManager {
     }
 
     /**
-     * The Iris shadow pass re-drives this render path from the sun's point of view; routing it onto the dedicated
+     * The Umbra shadow pass re-drives this render path from the sun's point of view; routing it onto the dedicated
      * shadow render lists (instead of the main camera's culled lists) is what lets the shadow pass draw every
      * section in range regardless of player-view frustum/occlusion culling — the stability requirement behind
      * Complementary's {@code shadow.culling = reversed} directive.
      */
     @Override
     public boolean isInShadowPass() {
-        return com.bdmajora.impetus.iris.pipeline.IrisShadowRenderer.isShadowPass();
+        return com.bdmajora.impetus.umbra.pipeline.UmbraShadowRenderer.isShadowPass();
     }
 
     public static VintageRenderSectionManager create(ChunkVertexType vertexType, WorldClient world, int renderDistance, CommandList commandList) {
@@ -84,8 +84,8 @@ public class VintageRenderSectionManager extends RenderSectionManager {
         }
         // `occlusion.culling = false`: the pack needs geometry the player cannot see (it is sampling the gbuffer
         // from another angle, e.g. for reflections or its own shadow logic).
-        com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline pipeline =
-                com.bdmajora.impetus.iris.Iris.getRenderingPipeline();
+        com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline pipeline =
+                com.bdmajora.impetus.umbra.Umbra.getRenderingPipeline();
         if (pipeline != null && pipeline.shouldDisableOcclusionCulling()) {
             return false;
         }
@@ -182,8 +182,8 @@ public class VintageRenderSectionManager extends RenderSectionManager {
         }
 
         /**
-         * Never in the shadow pass — Iris disables this the same way
-         * ({@code MixinDefaultChunkRenderer#iris$disableBlockFaceCullingInShadowPass}).
+         * Never in the shadow pass — Umbra disables this the same way
+         * ({@code MixinDefaultChunkRenderer#umbra$disableBlockFaceCullingInShadowPass}).
          * <p>
          * {@code getVisibleFaces} drops each section's quads by facing relative to the OCCLUSION camera, which is
          * always the player's. That is correct for the gbuffer pass and completely wrong for the shadow pass, which
@@ -196,7 +196,7 @@ public class VintageRenderSectionManager extends RenderSectionManager {
          */
         @Override
         public boolean useBlockFaceCulling(){
-            if (com.bdmajora.impetus.iris.pipeline.IrisShadowRenderer.isShadowPass()) {
+            if (com.bdmajora.impetus.umbra.pipeline.UmbraShadowRenderer.isShadowPass()) {
                 return false;
             }
             return ImpetusVintage.options().performance.useBlockFaceCulling;

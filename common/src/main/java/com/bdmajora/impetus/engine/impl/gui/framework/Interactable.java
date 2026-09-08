@@ -19,11 +19,7 @@ public interface Interactable {
         return false;
     }
 
-    /**
-     * Handles a key press. {@code typedChar} is the produced character ({@code '\0'} when none); {@code keyCode}
-     * is the platform key code (LWJGL2 or GLFW depending on the runtime — consumers should prefer matching on
-     * {@code typedChar} and accept both code sets for editing keys).
-     */
+    // typedChar is '\0' when none; keyCode is LWJGL2 or GLFW depending on runtime - match typedChar when possible
     default boolean keyTyped(char typedChar, int keyCode) {
         return false;
     }

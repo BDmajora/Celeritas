@@ -18,49 +18,30 @@ public abstract class AbstractSection {
         int rY = this.getChunkY() & (RenderRegion.REGION_HEIGHT - 1);
         int rZ = this.getChunkZ() & (RenderRegion.REGION_LENGTH - 1);
 
+        // Local index within the region, used to look up region-local render data
         this.sectionIndex = LocalSectionIndex.pack(rX, rY, rZ);
     }
 
-
-    /**
-     * @return The x-coordinate of the origin position of this chunk render
-     */
     public final int getOriginX() {
         return this.chunkX << 4;
     }
 
-    /**
-     * @return The y-coordinate of the origin position of this chunk render
-     */
     public final int getOriginY() {
         return this.chunkY << 4;
     }
 
-    /**
-     * @return The z-coordinate of the origin position of this chunk render
-     */
     public final int getOriginZ() {
         return this.chunkZ << 4;
     }
 
-
-    /**
-     * @return The x-coordinate of the center position of this chunk render
-     */
     public final int getCenterX() {
         return this.getOriginX() + 8;
     }
 
-    /**
-     * @return The y-coordinate of the center position of this chunk render
-     */
     public final int getCenterY() {
         return this.getOriginY() + 8;
     }
 
-    /**
-     * @return The z-coordinate of the center position of this chunk render
-     */
     public final int getCenterZ() {
         return this.getOriginZ() + 8;
     }
@@ -77,9 +58,6 @@ public abstract class AbstractSection {
         return this.chunkZ;
     }
 
-    /**
-     * @return The squared distance from the center of this chunk in the world to the given position
-     */
     public final float getSquaredDistance(float x, float y, float z) {
         float xDist = x - this.getCenterX();
         float yDist = y - this.getCenterY();
@@ -96,10 +74,6 @@ public abstract class AbstractSection {
         return this.sectionIndex;
     }
 
-    /**
-     * @return The squared distance from the center of this chunk in the world to the center of the block position
-     * given by {@param pos}
-     */
     public final float getSquaredDistanceFromBlockCenter(int x, int y, int z) {
         return this.getSquaredDistance(x + 0.5f, y + 0.5f, z + 0.5f);
     }

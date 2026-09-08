@@ -12,16 +12,9 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 
 import java.util.List;
 
-/**
- * Item-frame LOD on the vanilla item render path.
- *
- * <p>Scoped entirely by {@link ItemFrameLodState#active}, so every other item render — inventory,
- * hand, GUI, dropped items — pays only a static boolean read here.
- *
- * <p>With Forge's {@code allowEmissiveItems} on (the default) items go through
- * {@code ForgeHooksClient.renderLitItem} instead; that path is covered by
- * {@link ForgeHooksClientMixin}.
- */
+// Item-frame LOD on the vanilla item render path; scoped entirely by ItemFrameLodState.active so other item renders
+// (inventory, hand, GUI, dropped items) pay only a static boolean read
+// With Forge's allowEmissiveItems on (default), items go through ForgeHooksClient.renderLitItem instead; see ForgeHooksClientMixin
 @Mixin(RenderItem.class)
 public class RenderItemMixin {
     @Redirect(

@@ -14,28 +14,11 @@ import org.spongepowered.asm.mixin.Overwrite;
 import javax.annotation.Nullable;
 import java.util.List;
 
-/**
- * Halves the chunk lookups an entity query performs.
- *
- * <p>Vanilla asks {@code isChunkLoaded} and then, if the answer was yes, asks {@code getChunk} — two
- * traversals of the chunk provider for every chunk column the query box touches. The second one
- * always finds what the first one just found.
- *
- * <p>Asking once for the chunk and treating null as "not loaded" is the same test and the same
- * answer. On the client the two differ in one respect worth stating: vanilla's {@code getChunk} hands
- * back a shared empty chunk when nothing is loaded, and an empty chunk contributes no entities, so
- * skipping it produces the same list.
- *
- * <p>This is on the path of every explosion, every mob's target search, every item pickup and every
- * collision test that involves another entity, so the doubled lookup is paid a great many times per
- * tick.
- */
+// Halves the chunk lookups an entity query performs: vanilla calls isChunkLoaded then getChunk separately, this fetches once and treats null as not-loaded
+// On the path of every explosion, mob target search, item pickup and entity collision test, so the doubled lookup was paid a lot
 @Mixin(World.class)
 public abstract class WorldMixin implements ChunkAccess {
-    /**
-     * @author JellySquid
-     * @reason Resolve each chunk once rather than testing for it and then fetching it
-     */
+    // Resolve each chunk once rather than testing for it and then fetching it
     @Overwrite
     public List<Entity> getEntitiesInAABBexcluding(@Nullable Entity entityIn, AxisAlignedBB boundingBox,
                                                    @Nullable Predicate<? super Entity> predicate) {

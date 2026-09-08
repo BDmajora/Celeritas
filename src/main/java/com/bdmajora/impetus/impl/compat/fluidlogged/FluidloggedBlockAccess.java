@@ -9,5 +9,6 @@ import net.minecraftforge.fml.common.Optional;
         @Optional.Interface(modid = FluidloggedCompat.MODID, iface = "git.jbredwards.fluidlogged_api.api.world.IFluidStateProvider"),
         @Optional.Interface(modid = FluidloggedCompat.MODID, iface = "git.jbredwards.fluidlogged_api.api.world.IWorldProvider")
 })
+// Combines vanilla block access with Fluidlogged API's fluid state accessors; used only when the mod is present
 public interface FluidloggedBlockAccess extends IBlockAccess, IFluidStateProvider, IWorldProvider {
 }

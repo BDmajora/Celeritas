@@ -13,14 +13,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
- * The {@code OR} counterpart to {@link ConditionAndMixin}.
- *
- * <p>{@code OR} branches cannot be flattened into property/value arrays the way {@code AND} branches
- * can — their children are arbitrary sub-trees — so this only replaces the Guava composite with an
- * array-backed one and interns the result. Less dramatic, but it still drops the retained
- * {@code Iterable} and lets identical {@code OR} groups share one instance.
- */
+// OR counterpart to ConditionAndMixin. OR branches can't flatten into property/value arrays
+// like AND can (children are arbitrary sub-trees), so this just swaps the Guava composite for an
+// array-backed, interned one — drops the retained Iterable and lets identical groups share an instance.
 @Mixin(ConditionOr.class)
 public class ConditionOrMixin {
     @Shadow

@@ -5,25 +5,8 @@ import com.bdmajora.impetus.engine.impl.util.position.SectionPos;
 
 import java.util.Arrays;
 
-/**
- * The light data cache is used to make accessing the light data and occlusion properties of blocks cheaper. The data
- * for each block is stored as an integer with packed fields in order to work around the lack of value types in Java.
- *
- * This code is not very pretty, but it does perform significantly faster than the vanilla implementation and has
- * good cache locality.
- *
- * Each integer contains the following fields:
- * - BL: World block light, encoded as a 4-bit unsigned integer
- * - SL: World sky light, encoded as a 4-bit unsigned integer
- * - LU: Block luminance, encoded as a 4-bit unsigned integer
- * - AO: Ambient occlusion, floating point value in the range of 0.0..1.0 encoded as a 16-bit unsigned integer with 12-bit precision
- * - EM: Emissive test, true if block uses emissive lighting
- * - OP: Block opacity test, true if opaque
- * - FO: Full cube opacity test, true if opaque full cube
- * - FC: Full cube test, true if full cube
- *
- * You can use the various static pack/unpack methods to extract these values in a usable format.
- */
+// Caches per-block light/occlusion data as packed ints (no value types in Java, so bit-pack instead of allocating objects)
+// Layout: BL/SL/LU 4 bits each, AO 16 bits @ 12-bit precision, then EM/OP/FO/FC single-bit flags - see pack/unpack methods below
 public abstract class LightDataAccess {
     private static final int NEIGHBOR_BLOCK_RADIUS = 2;
     private static final int BLOCK_LENGTH = 16 + (NEIGHBOR_BLOCK_RADIUS * 2);
@@ -54,10 +37,7 @@ public abstract class LightDataAccess {
 
     protected abstract int compute(int x, int y, int z);
 
-    /**
-     * Returns the light data for the block at the given position. The property fields can then be accessed using
-     * the various unpack methods below.
-     */
+    // Lazily computes and caches the packed light word for a position; 0 is treated as "not yet computed"
     public int get(int x, int y, int z) {
         int l = this.index(x, y, z);
 
@@ -160,26 +140,14 @@ public abstract class LightDataAccess {
         return (packed >> 20) & 0xFFFF;
     }
 
-    /**
-     * Computes the combined lightmap using block light, sky light, and luminance values.
-     *
-     * <p>This method's logic is equivalent to
-     * {@link LevelRenderer#getLightColor(BlockAndTintGetter, BlockPos)}, but without the
-     * emissive check.
-     */
+    // Mirrors LevelRenderer.getLightColor, minus the emissive check
     public static int getLightmap(int word) {
         return pack(Math.max(unpackBL(word), unpackLU(word)), unpackSL(word));
     }
 
     public static final int FULL_BRIGHT = pack(15, 15);
 
-    /**
-     * Like {@link #getLightmap(int)}, but checks {@link #unpackEM(int)} first and returns
-     * the {@link LightTexture#FULL_BRIGHT fullbright lightmap} if emissive.
-     *
-     * <p>This method's logic is equivalent to
-     * {@link LevelRenderer#getLightColor(BlockAndTintGetter, BlockPos)}.
-     */
+    // Same as getLightmap, but short-circuits to full bright for emissive blocks
     public static int getEmissiveLightmap(int word) {
         if (unpackEM(word)) {
             return FULL_BRIGHT;

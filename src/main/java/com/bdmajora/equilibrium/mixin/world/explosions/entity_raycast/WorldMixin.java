@@ -8,30 +8,11 @@ import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
-/**
- * Shares one chunk cursor across all the exposure rays of a single entity.
- *
- * <p>{@code getBlockDensity} samples a grid over the entity's bounding box and traces a ray from each
- * sample to the explosion's centre — for a player, forty-five rays. All of them converge on the same
- * point, so after the first few blocks they are walking the same terrain as each other, and vanilla
- * resolves every block of it from scratch on every ray.
- *
- * <p>Handing all of them the same {@link ChunkSectionCursor} means the chunk and section are resolved
- * once for a run of blocks rather than once per block per ray. The traversal itself is unchanged —
- * it is {@link FastRayCaster}, which is a transcription of vanilla's — so which rays are blocked and
- * therefore how much damage an entity takes is identical.
- *
- * <p>The sample grid, its ordering and the {@code d0/d1/d2} arithmetic that produces it are left
- * exactly as vanilla wrote them, floating-point quirks included. The number of samples that come out
- * of {@code f <= 1.0F} accumulation depends on rounding, and changing it would change explosion
- * damage.
- */
+// Shares one ChunkSectionCursor across all ~45 exposure rays of a single getBlockDensity call instead of resolving chunk/section per block per ray
+// Sample grid arithmetic left exactly as vanilla wrote it, floating-point quirks included - the sample count depends on rounding and changing it would change explosion damage
 @Mixin(World.class)
 public abstract class WorldMixin {
-    /**
-     * @author JellySquid
-     * @reason Share one chunk cursor between every exposure ray of the same call
-     */
+    // Share one chunk cursor between every exposure ray of the same call
     @Overwrite
     public float getBlockDensity(Vec3d vec, AxisAlignedBB bb) {
         double stepX = 1.0D / ((bb.maxX - bb.minX) * 2.0D + 1.0D);

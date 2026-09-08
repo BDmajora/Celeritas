@@ -60,9 +60,9 @@ public class ImpetusWorldRenderer extends SimpleWorldRenderer<WorldClient, Vinta
 
     @Override
     protected ChunkRenderMatrices createChunkRenderMatrices() {
-        if (com.bdmajora.impetus.iris.pipeline.IrisShadowRenderer.isShadowPass()) {
-            // The Iris shadow pass re-drives this render path from the sun's point of view.
-            var state = com.bdmajora.impetus.iris.uniforms.CapturedRenderingState.INSTANCE;
+        if (com.bdmajora.impetus.umbra.pipeline.UmbraShadowRenderer.isShadowPass()) {
+            // The Umbra shadow pass re-drives this render path from the sun's point of view.
+            var state = com.bdmajora.impetus.umbra.uniforms.CapturedRenderingState.INSTANCE;
             return new ChunkRenderMatrices(state.getShadowProjection(), state.getShadowModelView());
         }
         return new ChunkRenderMatrices(ActiveRenderInfoAccessor.getProjectionMatrix(), ActiveRenderInfoAccessor.getModelViewMatrix());
@@ -77,7 +77,7 @@ public class ImpetusWorldRenderer extends SimpleWorldRenderer<WorldClient, Vinta
      * Performs a render pass for the given {@link BlockRenderLayer} and draws all visible chunks for it.
      */
     public void drawChunkLayer(BlockRenderLayer renderLayer, double x, double y, double z) {
-        // Iris renderStage uniform: packs gate voxelization on MC_RENDER_STAGE_TERRAIN_* (ordinals 8/9/10/17).
+        // Umbra renderStage uniform: packs gate voxelization on MC_RENDER_STAGE_TERRAIN_* (ordinals 8/9/10/17).
         int stage;
         switch (renderLayer) {
             case SOLID: stage = 8; break;
@@ -86,11 +86,11 @@ public class ImpetusWorldRenderer extends SimpleWorldRenderer<WorldClient, Vinta
             case TRANSLUCENT: stage = 17; break;
             default: stage = 0; break;
         }
-        com.bdmajora.impetus.iris.uniforms.CapturedRenderingState.INSTANCE.setRenderStage(stage);
+        com.bdmajora.impetus.umbra.uniforms.CapturedRenderingState.INSTANCE.setRenderStage(stage);
         try {
             super.drawChunkLayer(renderLayer, x, y, z);
         } finally {
-            com.bdmajora.impetus.iris.uniforms.CapturedRenderingState.INSTANCE.setRenderStage(0);
+            com.bdmajora.impetus.umbra.uniforms.CapturedRenderingState.INSTANCE.setRenderStage(0);
         }
 
         GlStateManager.resetColor();
@@ -166,9 +166,9 @@ public class ImpetusWorldRenderer extends SimpleWorldRenderer<WorldClient, Vinta
     private ChunkVertexType chooseVertexType() {
         // When a shader pack is active, terrain is drawn by the pack's transformed gbuffers_terrain, which reads
         // the vanilla-like float layout plus the OptiFine extended attributes (true normals, at_tangent,
-        // mc_midTexCoord, mc_Entity) that IrisChunkVertexType appends.
-        if (com.bdmajora.impetus.iris.terrain.IrisTerrainProgramOverride.areShadersActive()) {
-            return com.bdmajora.impetus.iris.vertices.IrisChunkVertexType.INSTANCE;
+        // mc_midTexCoord, mc_Entity) that UmbraChunkVertexType appends.
+        if (com.bdmajora.impetus.umbra.terrain.UmbraTerrainProgramOverride.areShadersActive()) {
+            return com.bdmajora.impetus.umbra.vertices.UmbraChunkVertexType.INSTANCE;
         }
 
         if (!ImpetusVintage.options().performance.useCompactVertexFormat) {

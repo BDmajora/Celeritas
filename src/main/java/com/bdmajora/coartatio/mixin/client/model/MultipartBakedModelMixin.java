@@ -15,22 +15,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Map;
 
-/**
- * Replaces the selector map of a multipart model with two flat arrays.
- *
- * <p>Vanilla builds this as a {@code LinkedHashMap} and thereafter only iterates it in
- * {@code getQuads}. A {@code LinkedHashMap.Entry} costs 40 bytes for a hash, a next pointer and two
- * ordering pointers, none of which are ever used; the replacement costs two array slots.
- *
- * <p>Multipart models are one per multipart blockstate, and the block families that use them —
- * fences, walls, panes, wires, and every pipe or cable mod ever written — are exactly the ones a
- * large pack has thousands of.
- *
- * <p>Hydrogen's equivalent replaces a {@code List<Pair<...>>}, because 1.16 changed the field's type;
- * on 1.12.2 it is still a {@code Map}, so this uses an insertion-ordered array map instead of a pair
- * list. Iteration order is preserved, which matters: selectors are applied in declaration order and
- * the resulting quad list order is visible to the renderer.
- */
+// Replaces MultipartBakedModel's LinkedHashMap selector map with an array-backed map: only ever
+// iterated (never looked up by key), and multipart blockstates (fences, walls, panes, wires...)
+// are numerous enough that the per-entry LinkedHashMap.Entry overhead adds up.
+// Insertion order must be preserved: selectors apply in declaration order, visible in quad output.
 @Mixin(MultipartBakedModel.class)
 public class MultipartBakedModelMixin {
     @Mutable

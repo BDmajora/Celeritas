@@ -113,8 +113,8 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
         }
 
         if (this.renderSectionManager.isInShadowPass()) {
-            // Iris parity. The shadow pass is a pure culling pass: it builds its own render list from the shadow
-            // frustum and touches nothing the camera pass owns. Iris enforces this structurally by swapping
+            // Umbra parity. The shadow pass is a pure culling pass: it builds its own render list from the shadow
+            // frustum and touches nothing the camera pass owns. Umbra enforces this structurally by swapping
             // `visibleSections` and the `prevCamRotX/prevCamRotY` camera memo out for the duration of the pass
             // (ShadowRenderer#renderShadows -> CullingDataCache#saveState/restoreState) and by never running
             // vanilla's chunk build/upload dispatch from it — it calls only `invokeCullTerrain`.
@@ -125,7 +125,7 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
             //    (the EntityRenderer "frustum" hook fires before RenderGlobal.setupTerrain), so the shadow pass
             //    always won the dirty check and the camera pass always saw "camera unchanged". The camera pass
             //    therefore never marked its own graph dirty and depended entirely on the shadow pass having done
-            //    it — the exact coupling Iris's memo swap exists to prevent.
+            //    it — the exact coupling Umbra's memo swap exists to prevent.
             //  - `updateChunks`. The rebuild lists it drains belong to whichever manager is current, so the shadow
             //    pass dispatched builds off the SHADOW list while spending the shared ChunkBuilder scheduling
             //    budget. The camera pass then ran with what was left, so on a streaming world terrain fell further

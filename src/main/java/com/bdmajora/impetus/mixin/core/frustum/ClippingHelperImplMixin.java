@@ -11,6 +11,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.bdmajora.impetus.impl.render.frustum.IClippingHelper;
 
+// Patches ClippingHelperImpl to keep a JOML FrustumIntersection in sync with the vanilla matrices, for faster AABB tests
 @Mixin(ClippingHelperImpl.class)
 public abstract class ClippingHelperImplMixin extends ClippingHelper implements IClippingHelper {
     @Unique

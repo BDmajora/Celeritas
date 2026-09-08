@@ -10,31 +10,9 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Backing map for {@code NBTTagCompound}, replacing the {@code HashMap} vanilla allocates for every
- * single compound in the game.
- *
- * <p>Two things are going on, and they compound:
- *
- * <ol>
- *   <li><b>Array storage for small compounds.</b> A {@code HashMap} pays for a 16-slot table plus a
- *       32-byte {@code Node} per entry. The overwhelming majority of NBT compounds hold fewer than a
- *       dozen entries — an item stack is {@code id}/{@code Count}/{@code Damage}/{@code tag}, a tile
- *       entity is {@code id}/{@code x}/{@code y}/{@code z} plus a handful. For those, a flat
- *       key/value array is several times smaller and, at that size, faster to search. Past
- *       {@code nbtArrayMapThreshold} entries the map promotes itself to a hash map, because a linear
- *       scan does eventually lose.
- *   <li><b>Key interning.</b> Every compound with an {@code id} key holds its own {@code "id"}
- *       string unless it came off the same read path. Routing keys through a pool collapses them to
- *       one instance each.
- * </ol>
- *
- * <p>Derived from LoliASM's {@code LoliTagMap} and FoamFix's {@code FoamNBTTagCompoundMap}. Delegating
- * rather than extending a fastutil map is what makes the promotion possible, and it keeps
- * {@code equals}/{@code hashCode} answering for the delegate so
- * {@code NBTTagCompound.equals} — which compares the two backing maps directly — keeps working
- * against vanilla {@code HashMap}s from any mod that constructs one.
- */
+// Backing map for NBTTagCompound; replaces vanilla's per-compound HashMap.
+// Small compounds use a flat array (cheaper than a hash table below nbtArrayMapThreshold entries), promoting to a hash map once they grow past it.
+// Keys optionally get interned through StringPool to collapse duplicate "id"-style strings. Derived from LoliASM's LoliTagMap / FoamFix's FoamNBTTagCompoundMap.
 public class TagMap implements Map<String, NBTBase> {
     private final int promotionThreshold;
     private final boolean internKeys;

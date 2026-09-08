@@ -9,18 +9,10 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Gates each Coartatio mixin on its config switch.
- *
- * <p>Note the difference from {@code ImpetusVintageMixinPlugin}: that plugin discovers its mixins by
- * scanning the package and returning them from {@code getMixins()}, and Mixin deliberately skips
- * {@code shouldApplyMixin} for plugin-supplied mixins — so those cannot be vetoed. Coartatio
- * declares its mixins in {@code mixins.coartatio.json} instead, which routes them through this
- * method and makes "off" mean "never loaded" rather than "loaded and inert".
- *
- * <p>That distinction matters for a memory mod: a disabled feature should cost nothing, and a
- * feature suspected of causing a crash should be removable without a rebuild.
- */
+// Gates each Coartatio mixin on its config switch. Unlike ImpetusVintageMixinPlugin (which
+// self-discovers mixins via getMixins(), bypassing shouldApplyMixin entirely), these mixins are
+// declared in mixins.coartatio.json so they route through here - "off" means never loaded,
+// not loaded-and-inert, so a feature suspected of causing a crash can be disabled without a rebuild.
 public class CoartatioMixinPlugin implements IMixinConfigPlugin {
     private static final String PACKAGE = "com.bdmajora.coartatio.mixin.";
 

@@ -8,11 +8,11 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import com.bdmajora.impetus.iris.Iris;
-import com.bdmajora.impetus.iris.devtool.ShaderStateProbe;
-import com.bdmajora.impetus.iris.material.WorldRenderingSettings;
-import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
-import com.bdmajora.impetus.iris.uniforms.CapturedRenderingState;
+import com.bdmajora.impetus.umbra.Umbra;
+import com.bdmajora.impetus.umbra.devtool.ShaderStateProbe;
+import com.bdmajora.impetus.umbra.material.WorldRenderingSettings;
+import com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline;
+import com.bdmajora.impetus.umbra.uniforms.CapturedRenderingState;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -37,9 +37,9 @@ public class TileEntityRendererDispatcherIdMixin {
         // at COMPILE time, so a single poisoned compile is baked in for the rest of the session rather than for one
         // frame — which is why player heads and other model-based block entities stay lit once they have gone wrong.
         // Resetting before every dispatch guarantees the first compile of each model happens clean.
-        IrisRenderingPipeline.resetVanillaVertexArrayState();
+        UmbraRenderingPipeline.resetVanillaVertexArrayState();
 
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
 
         // Measured, not assumed. Vanilla's render() sets the lightmap coord from getCombinedLight a few instructions
         // AFTER this injection point, so the two light figures logged here answer different questions and the pair is
@@ -81,11 +81,11 @@ public class TileEntityRendererDispatcherIdMixin {
      * Sends the id change to the bound program. Setting it only on {@link CapturedRenderingState} leaves it in Java —
      * the uniform is uploaded when a phase is bound, and one phase covers every block entity in the frame, so the
      * batch would render with whichever one's id happened to be current at phase entry. See
-     * {@link IrisRenderingPipeline#refreshDynamicUniforms()}.
+     * {@link UmbraRenderingPipeline#refreshDynamicUniforms()}.
      */
     @Unique
     private static void impetus$pushIdToGpu() {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.refreshDynamicUniforms();
         }

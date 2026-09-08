@@ -2,54 +2,28 @@ package com.bdmajora.fulgor.collections;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 
-/**
- * The queue the lighting engine runs on: a FIFO of encoded positions that refuses to hold the same
- * position twice.
- *
- * <p>Merges the two ancestors. Phosphor's {@code PooledLongQueue} contributes the storage — a chain of
- * pooled 1024-long segments, so a queue that swells during world generation and empties afterwards
- * hands its memory back instead of holding a multi-megabyte array for the session. Alfheim contributes
- * the deduplication, which is where the actual saving is: a bulk edit schedules the same position from
- * every neighbour that touches it, and without this each one is evaluated separately.
- *
- * <h2>When the deduplication set is reset</h2>
- *
- * <p>The invariant is simple to state and easy to get backwards: <b>the set must be empty at the moment
- * the next cycle's enqueues begin.</b> Getting it wrong does not corrupt anything — it silently drops a
- * position that was updated in two consecutive cycles, which shows up much later as one stale block.
- *
- * <p>Where {@link #resetDeduplication()} goes therefore depends on when the enqueues happen. The
- * engine fills a light level's queue during the levels above it and then drains it, so it resets
- * before draining. The renderer's queue is only filled after its drain, so it resets after.
- *
- * <p>Not thread-safe, with one deliberate exception: {@link #isEmpty()} reads a volatile flag so the
- * engine can skip acquiring its lock from another thread.
- */
+// FIFO of encoded positions that refuses to hold the same position twice; the engine's core queue.
+// Merges Phosphor's PooledLongQueue (pooled 1024-long segments, so a burst during worldgen gives its
+// memory back afterwards) with Alfheim's deduplication (a bulk edit schedules the same position from
+// every neighbour that touches it; without this each one gets evaluated separately).
+//
+// Invariant: the dedup set must be empty when the next cycle's enqueues begin, or a position updated in
+// two consecutive cycles silently gets dropped (shows up later as one stale block). The engine fills a
+// light level's queue while draining the levels above it, so it resets before draining; the renderer's
+// queue only fills after its drain, so it resets after.
+//
+// Not thread-safe except isEmpty(), which reads a volatile flag so the engine can check it without the lock.
 public final class DeduplicatedLongQueue {
     private static final int SEGMENT_SIZE = 1 << 10;
 
-    /**
-     * Entry count past which the deduplication set is replaced rather than cleared.
-     *
-     * <p>{@code LongOpenHashSet.clear()} keeps the backing array, which is the right trade for the
-     * steady state — but a single world-generation burst can grow one set to millions of entries, and
-     * keeping that array for the rest of the session costs more than the occasional reallocation.
-     *
-     * <p>32768 entries is roughly a 512 KiB table. Set much lower and a world that routinely exceeds it
-     * reallocates every pass; much higher and one burst is remembered for the session.
-     */
+    // Entry count past which the dedup set is replaced rather than cleared, so a worldgen burst that grows
+    // it to millions of entries doesn't keep that array alive for the rest of the session (~512 KiB table).
     private static final int RETAINED_SET_CAPACITY = 1 << 15;
 
     private final Pool pool;
     private final int initialSetCapacity;
 
-    /**
-     * Whether to reject repeats.
-     *
-     * <p>A kill switch rather than a tuning knob — deduplication is strictly a win — but it decides
-     * whether a lighting bug can be bisected without a rebuild, so it is worth the branch. Final, so
-     * the JIT hoists it out of the loop.
-     */
+    // Kill switch, not a tuning knob (dedup is strictly a win) — lets a lighting bug be bisected without a rebuild
     private final boolean deduplicate;
 
     private LongOpenHashSet seen;
@@ -57,17 +31,12 @@ public final class DeduplicatedLongQueue {
     private Segment head;
     private Segment tail;
 
-    /** Read cursor into {@link #head}. */
+    // Read cursor into head
     private int headIndex;
 
     private int size;
 
-    /**
-     * Whether the queue holds nothing.
-     *
-     * <p>Volatile so {@link #isEmpty()} is safe to call from a thread that does not hold the engine's
-     * lock. Writes to volatile fields are not free, so it is only written on the transitions.
-     */
+    // Volatile so isEmpty() is safe to call from a thread that doesn't hold the engine's lock
     private volatile boolean empty = true;
 
     public DeduplicatedLongQueue(Pool pool, int initialCapacity, boolean deduplicate) {
@@ -77,11 +46,7 @@ public final class DeduplicatedLongQueue {
         this.seen = deduplicate ? new LongOpenHashSet(initialCapacity) : null;
     }
 
-    /**
-     * Appends a value unless it is already pending.
-     *
-     * @return whether the value was appended
-     */
+    // Appends a value unless it is already pending; returns whether it was appended
     public boolean enqueue(long value) {
         if (this.deduplicate && !this.seen.add(value)) {
             return false;
@@ -103,7 +68,7 @@ public final class DeduplicatedLongQueue {
         return true;
     }
 
-    /** Removes and returns the oldest value. Undefined if the queue is empty. */
+    // Removes and returns the oldest value; undefined if the queue is empty
     public long dequeue() {
         long value = this.head.values[this.headIndex++];
 
@@ -134,11 +99,8 @@ public final class DeduplicatedLongQueue {
         return this.size;
     }
 
-    /**
-     * Forgets which values have been seen, so a position can be scheduled again.
-     *
-     * <p>Place the call so the set is empty when the next cycle's enqueues start; see the class comment.
-     */
+    // Forgets which values have been seen, so a position can be scheduled again; call so the set is
+    // empty when the next cycle's enqueues start (see class comment for placement per queue)
     public void resetDeduplication() {
         if (!this.deduplicate) {
             return;
@@ -151,22 +113,12 @@ public final class DeduplicatedLongQueue {
         }
     }
 
-    /**
-     * Segment store shared by every queue belonging to one engine.
-     *
-     * <p>Sharing matters: the darkening and brightening queues are used in strict succession, one
-     * light level at a time, so the segments one level frees are immediately reusable by the next
-     * instead of each of the thirty-four queues holding its own high-water mark.
-     */
+    // Segment store shared by every queue belonging to one engine. Sharing matters: darkening and
+    // brightening queues run in strict succession one light level at a time, so segments one level
+    // frees are immediately reusable by the next, instead of each of the 34 queues holding its own high-water mark.
     public static final class Pool {
-        /**
-         * Ceiling on retained segments, not on queue size — a queue can always allocate past this, it
-         * just will not get the memory back into the pool.
-         *
-         * <p>1024 segments is 8 MiB, well above any realistic high-water mark now that repeats are
-         * dropped before they reach the queue, and low enough that one pathological burst cannot leave
-         * the pool holding a large arena for the rest of the session.
-         */
+        // Ceiling on retained segments, not queue size (a queue can still allocate past this, it just
+        // won't get the memory back). 1024 segments = 8 MiB, comfortably above any realistic high-water mark.
         private static final int MAX_CACHED_SEGMENTS = 1 << 10;
 
         private Segment free;

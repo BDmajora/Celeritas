@@ -10,11 +10,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Enumerates the real fullscreen video modes reported by LWJGL and applies a chosen mode. Index 0 is always
- * "Current" (the desktop resolution); indices 1..N map to the distinct available {@link DisplayMode}s sorted by
- * resolution. This backs the General → Fullscreen Resolution option with genuine hardware values.
- */
+// Enumerates real fullscreen video modes from LWJGL for the Fullscreen Resolution option
+// Index 0 is always "Current" (desktop resolution); indices 1..N are distinct modes sorted by resolution
 public final class FullscreenResolutions {
     private static List<DisplayMode> modes;
 
@@ -53,7 +50,7 @@ public final class FullscreenResolutions {
         return modes;
     }
 
-    /** {@return the number of selectable entries, including the "Current" entry at index 0} */
+    // number of selectable entries, including "Current" at index 0
     public static int count() {
         return modes().size() + 1;
     }
@@ -67,7 +64,7 @@ public final class FullscreenResolutions {
         return mode.getWidth() + "x" + mode.getHeight();
     }
 
-    /** Applies the selected mode if the display is currently fullscreen; otherwise records it for later use. */
+    // applies the mode only if already fullscreen; otherwise it's just recorded for the next fullscreen switch
     public static void apply(int index) {
         if (index <= 0 || index > modes().size()) {
             return;

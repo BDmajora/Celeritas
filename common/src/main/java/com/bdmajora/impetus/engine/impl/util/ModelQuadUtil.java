@@ -7,20 +7,8 @@ import com.bdmajora.impetus.engine.api.util.NormI8;
 import com.bdmajora.impetus.engine.impl.render.chunk.vertex.format.ChunkVertexEncoder;
 import org.joml.Vector3f;
 
-/**
- * Provides some utilities and constants for interacting with vanilla's model quad vertex format.
- *
- * This is the current vertex format used by Minecraft for chunk meshes and model quads. Internally, it uses integer
- * arrays for store baked quad data, and as such the following table provides both the byte and int indices.
- *
- * Byte Index    Integer Index             Name                 Format                 Fields
- * 0 ..11        0..2                      Position             3 floats               x, y, z
- * 12..15        3                         Color                4 unsigned bytes       a, r, g, b
- * 16..23        4..5                      Block Texture        2 floats               u, v
- * 24..27        6                         Light Texture        2 shorts               u, v
- * 28..30        7                         Normal               3 unsigned bytes       x, y, z
- * 31                                      Padding              1 byte
- */
+// Vanilla's baked-quad vertex format, stored as an int[8] per vertex:
+// [0-2] position (3 floats), [3] color (4 bytes ARGB), [4-5] block UV (2 floats), [6] light UV (2 shorts), [7] normal (3 bytes) + 1 padding byte
 public class ModelQuadUtil {
     // Integer indices for vertex attributes, useful for accessing baked quad data
     public static final int POSITION_INDEX = 0,
@@ -32,10 +20,6 @@ public class ModelQuadUtil {
     // Size of vertex format in 4-byte integers
     public static final int VERTEX_SIZE = 8;
 
-    /**
-     * @param vertexIndex The index of the vertex to access
-     * @return The starting offset of the vertex's attributes
-     */
     public static int vertexOffset(int vertexIndex) {
         return vertexIndex * VERTEX_SIZE;
     }
@@ -115,11 +99,7 @@ public class ModelQuadUtil {
         return (sl << 16) | bl;
     }
 
-    /**
-     * Mixes two ABGR colors together like what Forge does in VertexConsumer.
-     *
-     * Despite the name, the method tries to avoid doing any work whenever possible.
-     */
+    // Mixes two ARGB colors like Forge's VertexConsumer does; bails early for the common single-source case
     public static int mixARGBColors(int colorA, int colorB) {
         // Most common case: Either quad coloring or tint-based coloring, but not both
         if (colorA == -1) {

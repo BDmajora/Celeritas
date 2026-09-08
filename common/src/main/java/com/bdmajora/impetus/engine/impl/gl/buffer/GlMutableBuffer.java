@@ -1,9 +1,6 @@
 package com.bdmajora.impetus.engine.impl.gl.buffer;
 
-/**
- * A mutable buffer type which is supported with OpenGL 1.5+. The buffer's storage can be reallocated at any time
- * without needing to re-create the buffer itself.
- */
+// OpenGL 1.5+ buffer whose storage can be reallocated without recreating the buffer object
 public class GlMutableBuffer extends GlBuffer {
     private long size = 0L;
 

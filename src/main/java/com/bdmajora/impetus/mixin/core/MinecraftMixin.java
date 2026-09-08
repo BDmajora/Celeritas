@@ -18,6 +18,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.bdmajora.impetus.ImpetusVintage;
 
+// Patches Minecraft's tick/display code: CPU render-ahead throttling, inactivity FPS caps, and a fullscreen-create fallback
 @Mixin(Minecraft.class)
 public class MinecraftMixin {
     @Shadow
@@ -45,10 +46,7 @@ public class MinecraftMixin {
         impetus$renderAheadManager.endFrame();
     }
 
-    /**
-     * Inactivity frame-rate limiting: caps the frame rate hard when the window is minimized, and (in AFK mode)
-     * when it is merely unfocused. Modern Sodium exposes the same behaviour as its "Inactivity FPS Limit" option.
-     */
+    // Caps framerate hard when minimized, or (in AFK mode) merely unfocused; mirrors Sodium's "Inactivity FPS Limit"
     @ModifyReturnValue(method = "getLimitFramerate", at = @At("RETURN"))
     private int impetus$applyInactivityFpsLimit(int limit) {
         ImpetusGameOptions.InactivityFpsLimit mode = ImpetusRuntimeOptions.inactivityFpsLimit;
@@ -70,6 +68,7 @@ public class MinecraftMixin {
         return limit;
     }
 
+    // Some drivers fail to create a fullscreen display; retry windowed instead of crashing to desktop
     @Redirect(method = "createDisplay", at = @At(value = "INVOKE", target = "Lorg/lwjgl/opengl/Display;create()V", remap = false))
     private void impetus$retryWindowedWhenFullscreenDisplayCreateFails() throws LWJGLException {
         try {

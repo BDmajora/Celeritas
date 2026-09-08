@@ -5,10 +5,7 @@ import static com.bdmajora.impetus.engine.impl.util.ModelQuadUtil.*;
 import com.bdmajora.impetus.engine.impl.model.quad.properties.ModelQuadFacing;
 import com.bdmajora.impetus.engine.impl.util.ModelQuadUtil;
 
-/**
- * A simple implementation of the {@link ModelQuadViewMutable} interface which can provide an on-heap scratch area
- * for storing quad vertex data.
- */
+// On-heap scratch implementation of ModelQuadViewMutable for holding quad vertex data
 public class ModelQuad implements ModelQuadViewMutable {
     private final int[] data = new int[VERTEX_SIZE * 4];
     private int flags;

@@ -24,36 +24,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Rewrites the block-damage half of an explosion.
- *
- * <p>Vanilla fires 1352 rays — every cell on the surface of a 16×16×16 grid — and steps each one 0.3
- * blocks at a time until its energy runs out. For a TNT-sized blast that is around twenty thousand
- * iterations, and each iteration allocates a {@link BlockPos} and performs a full
- * {@code World#getBlockState}, which resolves a chunk and then a section from scratch.
- *
- * <p>Two things about that are wasteful. The rays are much finer than the grid they walk: at 0.3
- * blocks per step, roughly two out of every three steps land in the same block as the step before,
- * and vanilla reads it again anyway. And the reads themselves go the long way round when consecutive
- * steps are, by construction, spatially adjacent.
- *
- * <p>So this tracks the integer position from the previous step and does work only when the ray
- * actually crosses into a new block, reading through a {@link ChunkSectionCursor} that keeps the
- * chunk and section between reads. What remains is one block position allocation and one section
- * lookup per <em>distinct block</em> per ray rather than per step.
- *
- * <p>Skipping a repeated position is not an approximation. The state is the same, so the resistance
- * it subtracts and the decision to add it are the same, and the set already holds it — the only
- * observable difference would be a Forge hook seeing fewer calls for the same block, which is not
- * something either hook is specified to count.
- *
- * <p>Everything else is preserved: ray directions, step size, energy arithmetic, the order positions
- * are visited in, which random generator supplies the per-ray energy, and both Forge hooks. The
- * entity half of the method is transcribed unchanged rather than left to vanilla, because there is no
- * injection point between the two halves that survives another mod reordering the bytecode.
- * Explosions are the most timing-visible thing on the server and a contraption that depends on which
- * blocks a blast destroys has to keep working.
- */
+// Rewrites the block-damage half of an explosion: skips re-reading a block state when consecutive ray steps land in the same block, using a ChunkSectionCursor to cache the chunk/section between reads
+// Entity half is transcribed unchanged - there's no injection point between the two halves that survives bytecode reordering by other mods
 @Mixin(Explosion.class)
 public abstract class ExplosionMixin {
     @Shadow
@@ -88,10 +60,7 @@ public abstract class ExplosionMixin {
     @Final
     private Map<EntityPlayer, Vec3d> playerKnockbackMap;
 
-    /**
-     * @author JellySquid
-     * @reason Read each block along a ray once, through a cached chunk section
-     */
+    // Read each block along a ray once, through a cached chunk section
     @Overwrite
     public void doExplosionA() {
         Set<BlockPos> affected = new HashSet<>();

@@ -9,34 +9,11 @@ import net.minecraft.world.IBlockAccess;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 
-/**
- * Records, once per block, whether its light values can depend on where it is.
- *
- * <p>Forge gives {@code Block} position-aware {@code getLightValue} and {@code getLightOpacity}
- * overloads so that blocks whose light varies with their surroundings — a fluid's level, a lamp's
- * powered state read from a tile entity — can say so. The overwhelming majority of blocks override
- * neither, and Forge's defaults simply forward back to the state.
- *
- * <p>That forwarding is not free. {@code state.getLightValue(world, pos)} dispatches to the state
- * implementation, which dispatches to the block, which calls {@code state.getLightValue()}, which
- * dispatches to the block again. Both dispatches are on {@code Block}, and in a large modpack that
- * call site sees hundreds of distinct implementations, so it never inlines. Knowing the block did not
- * override the overload lets the engine start at {@code state.getLightValue()} and pay half of it.
- *
- * <p>Halving one call is not much on its own; it is worth having because the engine makes it for six
- * neighbours of every position in every batch.
- *
- * <h2>Why reflection, and why lazily</h2>
- *
- * <p>The question is "did any class between this one and {@code Block} redeclare the method", which is
- * exactly what {@code getDeclaringClass} on the resolved method answers and nothing else does. Doing it
- * lazily rather than in the constructor matters because blocks are constructed during mod loading,
- * while ASM-based coremods may still be rewriting their classes; the first light query happens once a
- * world exists, long after that has settled.
- *
- * <p>Both method names are Forge additions and so are not obfuscated, which is what makes looking them
- * up by name work identically in development and in production.
- */
+// Mixes into Block to cache whether it overrides Forge's position-aware getLightValue/getLightOpacity
+// overloads; most blocks don't, and skipping the double dispatch through state->block->state saves work
+// done for six neighbours of every position in every lighting batch
+// Resolved lazily via reflection (not in the constructor) since ASM coremods may still be rewriting
+// classes at block-construction time; both method names are Forge additions so unobfuscated either way
 @Mixin(Block.class)
 public abstract class BlockMixin implements LightInfoBlock {
     @Unique
@@ -80,13 +57,8 @@ public abstract class BlockMixin implements LightInfoBlock {
         return flags;
     }
 
-    /**
-     * Whether something below {@code Block} declares the position-aware overload of {@code name}.
-     *
-     * <p>Fails safe: if the method cannot be resolved at all — a transformer removed it, a security
-     * manager refused — the block is treated as position-aware, which is the slower answer but never
-     * the wrong one.
-     */
+    // Fails safe: if the method can't be resolved (transformer removed it, security manager refused),
+    // treats the block as position-aware — slower but never wrong
     @Unique
     private boolean fulgor$overrides(String name) {
         try {

@@ -8,19 +8,15 @@ import net.minecraft.world.IBlockAccess;
 import net.minecraftforge.fluids.IFluidBlock;
 import net.minecraftforge.fml.common.Loader;
 
-/**
- * Whether a position is inside a fluid, which is what "extinguish when underwater" turns on.
- *
- * <p>Asks about the block's material and Forge's {@link IFluidBlock}, so modded fluids count as well
- * as water and lava.
- */
+// Whether a position is inside a fluid, which drives "extinguish when underwater"
+// Checks both the block's material and Forge's IFluidBlock, so modded fluids count too, not just water and lava
 public final class FluidHandler {
     private static final boolean FLUIDLOGGING = Loader.isModLoaded("fluidlogged_api");
 
     private FluidHandler() {
     }
 
-    /** Whether the entity's eyes are inside a fluid at the current render partial tick. */
+    // Whether the entity's eyes are inside a fluid at the current render partial tick
     public static boolean isFluid(Entity entity) {
         float partialTicks = Minecraft.getMinecraft().getRenderPartialTicks();
         return isFluid(entity.world, new BlockPos(entity.getPositionEyes(partialTicks)));
@@ -31,12 +27,7 @@ public final class FluidHandler {
         return state.getMaterial().isLiquid() || state.getBlock() instanceof IFluidBlock;
     }
 
-    /**
-     * The fluid occupying {@code pos}, which is not necessarily the block there.
-     *
-     * <p>With Fluidlogged API installed a position can hold both a block and a fluid; a torch inside a
-     * fluidlogged fence is submerged even though the block at that position is a fence.
-     */
+    // Fluid occupying pos, not necessarily the block there; with Fluidlogged API a position can hold both a block and a fluid (e.g. a fluidlogged fence)
     private static IBlockState getFluidState(IBlockAccess access, BlockPos pos) {
         return FLUIDLOGGING ? FluidloggedCompat.getFluidOrReal(access, pos) : access.getBlockState(pos);
     }

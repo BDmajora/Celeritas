@@ -7,16 +7,8 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.text.TextComponentString;
 import net.minecraft.util.text.TextFormatting;
 
-/**
- * {@code /equilibrium} — prints which optimizations are active and, for the ones that are not, who
- * turned them off.
- *
- * <p>Registered client-side, so it works in single-player and on any server without the mod.
- *
- * <p>The useful part is the second half of the output. "Twenty-two of twenty-four active" tells you
- * almost nothing; "block.redstone_wire disabled for mod compatibility (SpongeForge)" tells you why
- * the thing you installed this for is not helping, which is the question people actually arrive with.
- */
+// /equilibrium - reports active optimizations and who disabled the rest; registered client-side
+// so it works in single-player and on servers without the mod
 public class EquilibriumStatsCommand extends CommandBase {
     @Override
     public String getName() {

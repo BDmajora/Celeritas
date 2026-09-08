@@ -13,10 +13,7 @@ import java.util.stream.Stream;
 public class MixinClassValidator {
     private static final String MIXIN_DESC = "Lorg/spongepowered/asm/mixin/Mixin;";
 
-    /**
-     * Walks {@code packageRoot} recursively and returns the relative dot-separated class names
-     * (without {@code .class} suffix) for every class that carries a {@code @Mixin} annotation.
-     */
+    // Recursively finds every .class under packageRoot with an @Mixin annotation, returns their dot-separated class names
     public static List<String> scanMixinFolder(Path packageRoot) {
         List<String> mixins = new ArrayList<>();
         try (Stream<Path> stream = Files.find(packageRoot, Integer.MAX_VALUE,

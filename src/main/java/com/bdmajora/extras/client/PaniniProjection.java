@@ -3,7 +3,7 @@ package com.bdmajora.extras.client;
 import com.bdmajora.extras.Extras;
 import com.bdmajora.extras.ExtrasConfig;
 import com.bdmajora.extras.mixin.panini.ShaderGroupAccessor;
-import com.bdmajora.impetus.iris.Iris;
+import com.bdmajora.impetus.umbra.Umbra;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.OpenGlHelper;
@@ -111,7 +111,7 @@ public final class PaniniProjection {
             return false;
         }
 
-        return Iris.getRenderingPipeline() == null;
+        return Umbra.getRenderingPipeline() == null;
     }
 
     private static boolean ensureShaderGroup(Minecraft minecraft) {

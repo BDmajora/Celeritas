@@ -12,16 +12,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.List;
 
-/**
- * Compacts the model list of a weighted (random-variant) model.
- *
- * <p>Small on its own — these lists hold two to four entries — but weighted models are per-variant,
- * so packs with randomised grass, stone or ore textures create a great many of them, and an
- * {@code ArrayList} holding three elements is mostly overhead.
- *
- * <p>Note the list is only ever read through {@code WeightedRandom.getRandomItem}, which indexes it;
- * {@link com.bdmajora.coartatio.collections.FixedArrayList} indexes in the same O(1).
- */
+// Compacts WeightedBakedModel's model list. Each list is tiny (2-4 entries) but weighted models
+// are per-variant, so randomised grass/stone/ore textures create many of them; only ever read via
+// WeightedRandom.getRandomItem's indexed access, which FixedArrayList serves at the same O(1).
 @Mixin(WeightedBakedModel.class)
 public class WeightedBakedModelMixin {
     @Mutable

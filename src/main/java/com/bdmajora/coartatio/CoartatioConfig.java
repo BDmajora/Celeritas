@@ -15,89 +15,71 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-/**
- * Feature switches for the memory subsystem.
- *
- * <p>This is deliberately a plain {@link Properties} file rather than Forge's {@code Configuration}
- * or Impetus' own {@code ImpetusGameOptions}: it has to be readable from
- * {@link com.bdmajora.coartatio.mixin.CoartatioMixinPlugin}, which runs during coremod
- * setup, long before Forge or Minecraft classes are safe to touch. The only outside class referenced
- * here is {@link Launch}, which is already loaded by that point.
- */
+// Plain Properties file rather than Forge's Configuration or ImpetusGameOptions: must be
+// readable from CoartatioMixinPlugin during coremod setup, before Forge/MC classes are safe to touch.
+// Launch is the only outside class referenced since it's already loaded by then.
 public final class CoartatioConfig {
     private static final String FILE_NAME = "impetus-coartatio.cfg";
 
-    /**
-     * BiblioCraft derives block states in a way that assumes the vanilla table exists. Inherited from
-     * FoamFix, which hit the same wall.
-     */
+    // BiblioCraft assumes the vanilla block state table exists; inherited from FoamFix, same wall.
     private static final String DEFAULT_BLOCK_STATE_BLACKLIST = "jds.bibliocraft";
 
     private static CoartatioConfig instance;
 
-    /** Where {@link #save()} writes. Null only if the config directory could not be resolved. */
+    // Where save writes. Null only if the config directory could not be resolved.
     private Path file;
 
-    /** Interns the domain and path strings of every {@code ResourceLocation}. */
+    // Interns the domain and path strings of every ResourceLocation.
     public boolean deduplicateResourceLocations;
-    /** Interns the {@code variant} string of every {@code ModelResourceLocation}. */
+    // Interns the variant string of every ModelResourceLocation.
     public boolean deduplicateModelVariants;
-    /** Replaces {@code NBTTagCompound}'s {@code HashMap} with a compact array/hash hybrid. */
+    // Replaces NBTTagCompound's HashMap with a compact array/hash hybrid.
     public boolean compactNbtBackingMap;
-    /** Interns NBT keys through a shared string pool. Requires {@link #compactNbtBackingMap}. */
+    // Interns NBT keys through a shared string pool. Requires compactNbtBackingMap.
     public boolean internNbtKeys;
-    /** Entry count at which an NBT compound switches from array storage to hash storage. */
+    // Entry count at which an NBT compound switches from array storage to hash storage.
     public int nbtArrayMapThreshold;
-    /** Pools {@code BakedQuad.vertexData} arrays so identical geometry shares one array. */
+    // Pools BakedQuad.vertexData arrays so identical geometry shares one array.
     public boolean poolQuadVertexData;
-    /** Replaces the model classes' growable collections with exact-sized immutable ones. */
+    // Replaces the model classes' growable collections with exact-sized immutable ones.
     public boolean compactBakedModels;
-    /** Flattens and interns the predicates produced by multipart blockstate conditions. */
+    // Flattens and interns the predicates produced by multipart blockstate conditions.
     public boolean canonicalizeMultipartConditions;
-    /**
-     * Replaces every block state's property-value table with a packed {@code int} index into one
-     * shared array per block.
-     *
-     * <p>The largest single saving Coartatio makes. Falls back to vanilla states per block whenever
-     * the mapper declines one — blacklisted, too many states, or an {@code IProperty} it cannot
-     * index — so a problem block costs a missed optimisation rather than a crash.
-     */
+    // Replaces each block state's property-value table with a packed int index into a shared
+    // per-block array. Largest single saving Coartatio makes; falls back to vanilla states per
+    // block whenever the mapper declines one, so a problem block costs a missed optimisation, not a crash.
     public boolean optimizeBlockStates;
-    /** Block implementation class prefixes that keep vanilla states regardless of the above. */
+    // Block implementation class prefixes that keep vanilla states regardless of the above.
     public String[] blockStateBlacklist;
-    /**
-     * Replaces each block state's property {@code ImmutableMap} with a compact one that shares its
-     * key array across the block.
-     *
-     * <p>Requires {@link #optimizeBlockStates}, and a JVM that lets us define a class into Guava's
-     * package. Degrades silently to Guava's own map when either is missing.
-     */
+    // Replaces each block state's property ImmutableMap with a compact one sharing its key
+    // array. Requires optimizeBlockStates and a JVM that allows defining a class into Guava's
+    // package; degrades silently to Guava's own map when either is missing.
     public boolean compactStateProperties;
-    /** Swaps the model graph's unordered hash maps for fastutil equivalents. */
+    // Swaps the model graph's unordered hash maps for fastutil equivalents.
     public boolean compactModelGraph;
-    /** Strips a loaded chunk's NBT down to the tags entity loading still reads. */
+    // Strips a loaded chunk's NBT down to the tags entity loading still reads.
     public boolean stripChunkNbt;
-    /** Drops chunk sections holding no blocks and no light that could not be recomputed. */
+    // Drops chunk sections holding no blocks and no light that could not be recomputed.
     public boolean dropEmptyChunkSections;
-    /** Swaps {@code LaunchClassLoader}'s resource cache for one the GC can reclaim. */
+    // Swaps LaunchClassLoader's resource cache for one the GC can reclaim.
     public boolean weakenClassLoaderCache;
-    /** Releases the pixel data of static sprites once the atlas is on the GPU. */
+    // Releases the pixel data of static sprites once the atlas is on the GPU.
     public boolean releaseSpriteData;
-    /** Shares the camera transforms and override lists that every baked model carries. */
+    // Shares the camera transforms and override lists that every baked model carries.
     public boolean deduplicateModelTransforms;
-    /** Frees the model loader's unbaked models and load errors after baking. */
+    // Frees the model loader's unbaked models and load errors after baking.
     public boolean releaseBakeState;
-    /** Frees the play-scoped string pools when the player leaves a world or server. */
+    // Frees the play-scoped string pools when the player leaves a world or server.
     public boolean clearPoolsOnWorldLeave;
-    /** Defers building the creative search index until something actually searches. */
+    // Defers building the creative search index until something actually searches.
     public boolean lazySearchTrees;
-    /** Compacts registry, entity data and chunk entity-lookup collections. */
+    // Compacts registry, entity data and chunk entity-lookup collections.
     public boolean compactRuntimeCollections;
-    /** Upper bound on any single deduplication pool, after which it stops accepting new entries. */
+    // Upper bound on any single deduplication pool, after which it stops accepting new entries.
     public int poolSizeLimit;
-    /** Prints pool statistics to the log after every resource reload. */
+    // Prints pool statistics to the log after every resource reload.
     public boolean logStatistics;
-    /** Adds a Coartatio line to the F3 debug overlay. */
+    // Adds a Coartatio line to the F3 debug overlay.
     public boolean showDebugOverlay;
 
     private CoartatioConfig(Properties props) {
@@ -152,15 +134,8 @@ public final class CoartatioConfig {
         return config;
     }
 
-    /**
-     * Persists the current values.
-     *
-     * <p>Most switches are read once, when {@code CoartatioMixinPlugin} decides which mixins to
-     * apply, so changing them here takes effect on the next launch rather than immediately. The
-     * options screen marks those with a restart flag; the handful that are read live
-     * ({@link #logStatistics}, {@link #showDebugOverlay}, and the NBT map settings, which apply to
-     * compounds created from now on) take effect straight away.
-     */
+    // Most switches only take effect on next launch (read once by CoartatioMixinPlugin);
+    // logStatistics, showDebugOverlay and the NBT map settings are read live.
     public void save() {
         if (this.file != null) {
             writeBack(this.file);
@@ -180,10 +155,8 @@ public final class CoartatioConfig {
         return dir;
     }
 
-    /**
-     * Rewrites the file with every key present and commented, so a user who has never opened it
-     * still discovers the switches. Values already set by the user are preserved verbatim.
-     */
+    // Rewrites every key so a user who never opens the file still discovers the switches;
+    // values already set by the user are preserved verbatim.
     private void writeBack(Path file) {
         Map<String, String> values = new LinkedHashMap<>();
         values.put("deduplicateResourceLocations", Boolean.toString(this.deduplicateResourceLocations));
@@ -232,7 +205,7 @@ public final class CoartatioConfig {
                 : fallback;
     }
 
-    /** Comma-separated list; blank entries are dropped so a trailing comma is harmless. */
+    // Comma-separated list; blank entries are dropped so a trailing comma is harmless.
     private static String[] list(Properties props, String key, String fallback) {
         String value = props.getProperty(key);
 

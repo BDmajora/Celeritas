@@ -21,38 +21,19 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Replaces the model graph's hash maps with fastutil equivalents.
- *
- * <p>Hydrogen's {@code MixinModelLoader}, retargeted: on 1.12.2 the collections live on
- * {@code ModelBakery} rather than 1.16's {@code ModelLoader}, and there are more of them.
- *
- * <p>These are big. On a measured pack, {@code variants} alone holds 21k entries keyed by
- * {@code ModelResourceLocation}, and {@code models}/{@code blockDefinitions} are keyed by the
- * {@code ResourceLocation}s that make up the 109k-instance population Coartatio already interns.
- * A {@code HashMap.Node} is 32 bytes of key/value/hash/next per entry plus a table slot;
- * {@code Object2ObjectOpenHashMap} is open-addressed, so an entry is two array slots and nothing
- * else.
- *
- * <p>Ordering matters for two of them. {@code models}, {@code variants},
- * {@code multipartVariantMap} and {@code itemLocations} are {@code LinkedHashMap}s in vanilla, and
- * bake order affects which model wins a collision — so those keep insertion order by being left
- * alone. Only the genuinely unordered maps are swapped, which is the difference between a memory
- * optimisation and a rendering bug.
- *
- * <p>{@code variantNames} is an {@code IdentityHashMap} keyed by {@code Item}; the fastutil
- * equivalent is {@code Reference2ObjectOpenHashMap}, which keeps identity semantics.
- */
+// Swaps ModelBakery's hash maps for fastutil equivalents to shrink the model graph (open-addressed
+// maps avoid the per-entry HashMap.Node overhead). Only swaps maps that are plain HashMap/HashSet in
+// vanilla; models/variants/multipartVariantMap/itemLocations are LinkedHashMaps where bake order
+// affects which model wins a collision, so those are left alone. variantNames is an IdentityHashMap
+// keyed by Item, hence Reference2ObjectOpenHashMap to preserve identity semantics.
 @Mixin(ModelBakery.class)
 public abstract class ModelBakeryMixin implements BakeStateReleasable {
     @Shadow
     @Final
     private Map<ModelBlockDefinition, Collection<ModelResourceLocation>> multipartVariantMap;
 
-    /**
-     * Cleared from {@code ModelLoaderCleanupMixin} once baking is finished. It lives here rather
-     * than there because the field is private to this class — see {@link BakeStateReleasable}.
-     */
+    // Cleared from ModelLoaderCleanupMixin once baking finishes; lives here because the field
+    // is private to this class (see BakeStateReleasable).
     @Override
     public int coartatio$releaseBakeryState() {
         int size = this.multipartVariantMap.size();

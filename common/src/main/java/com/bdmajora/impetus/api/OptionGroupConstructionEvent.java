@@ -7,10 +7,7 @@ import com.bdmajora.impetus.api.options.OptionIdentifier;
 
 import java.util.List;
 
-/**
- * Fired when an option group is created, to allow replacing options in that group if desired. (Can be used,
- * for instance, to extend the VSync or fullscreen options.)
- */
+// Fired on option group creation so listeners can replace/extend its options (e.g. VSync, fullscreen)
 public class OptionGroupConstructionEvent extends ImpetusEvent {
     public static final EventHandlerRegistrar<OptionGroupConstructionEvent> BUS = new EventHandlerRegistrar<>();
 

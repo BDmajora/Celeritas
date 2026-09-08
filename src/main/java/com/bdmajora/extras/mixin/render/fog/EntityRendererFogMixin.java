@@ -9,16 +9,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Turns fog off.
- *
- * <p>At the {@code RETURN} of {@code setupFog}, deliberately: vanilla's colour, mode and range are
- * all left correctly configured, and only the enable bit is cleared. Anything that reads that state
- * afterwards — Impetus' own terrain shader among them — therefore sees a consistent picture rather
- * than a half-configured one.
- *
- * <p>Gameplay fog is exempt; see {@link FogState}.
- */
+// Turns fog off at the RETURN of setupFog, deliberately: colour/mode/range stay correctly configured, only the enable bit is cleared,
+// so anything reading that state afterwards (Impetus' terrain shader included) sees a consistent picture
+// Gameplay fog is exempt; see FogState
 @Mixin(EntityRenderer.class)
 public class EntityRendererFogMixin {
     @Inject(method = "setupFog", at = @At("RETURN"))

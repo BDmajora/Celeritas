@@ -13,11 +13,7 @@ import com.bdmajora.impetus.engine.impl.render.chunk.data.SectionRenderDataUnsaf
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 import com.bdmajora.impetus.lwjgl.LWJGLServiceProvider;
 
-/**
- * A multidraw emitter that uses indirect rendering to exploit hardware acceleration, which
- * reduces CPU overhead on some platforms.
- * @author Ven
- */
+// Uses GL indirect draw commands instead of building them CPU-side; cheaper on some drivers
 public class IndirectMultiDrawEmitter implements MultiDrawEmitter {
     // uint  count;
     // uint  instanceCount;

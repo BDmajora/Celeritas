@@ -23,33 +23,18 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
-/**
- * The loaded option tree, resolved against the user's config file and the mods that are present.
- *
- * <p>A direct port of Lithium's {@code LithiumConfig}, with two deliberate divergences.
- *
- * <p>The first is where the tree comes from: Lithium reads a properties resource its build generates
- * from annotations, we read {@link EquilibriumOptions}. The behaviour is identical, the declaration
- * just lives in Java.
- *
- * <p>The second is how mods override options. Lithium reads a {@code lithium:options} block out of
- * each mod's metadata, which the loader has already parsed by the time its mixin plugin runs. On
- * 1.12.2 nothing has parsed anything yet — this runs during coremod setup, before FML has a mod list
- * — so overrides come from {@link ModCompatibility} instead, which detects the mods that actually
- * conflict by looking for their classes.
- *
- * <p>Everything is read at coremod time and never re-read, so a change made in the GUI applies on the
- * next launch. The GUI says so.
- */
+// Port of Lithium's LithiumConfig, diverges in two ways: the tree comes from EquilibriumOptions
+// (Java, not a build-generated properties resource), and mod overrides come from ModCompatibility's
+// class detection instead of mod metadata, since nothing has parsed a mod list yet at coremod time
 public class EquilibriumConfig {
     private static final String FILE_NAME = "equilibrium.properties";
 
     private final Map<String, Option> options = new HashMap<>();
 
-    /** Only the options that have dependencies, so the fixpoint loop does not walk the whole tree. */
+    // Only the options that have dependencies, so the fixpoint loop does not walk the whole tree
     private final Set<Option> optionsWithDependencies = new LinkedHashSet<>();
 
-    /** Where {@link #save()} writes. Null only if the config directory could not be resolved. */
+    // Where save() writes; null only if the config directory could not be resolved
     private Path file;
 
     private EquilibriumConfig() {
@@ -64,14 +49,8 @@ public class EquilibriumConfig {
         }
     }
 
-    /**
-     * Loads the configuration file from the given location, creating it if it does not exist.
-     *
-     * <p>The file that gets written holds every option with its default commented out, rather than
-     * Lithium's empty file. A 1.12.2 user reaching for a properties file is usually doing so because
-     * something broke and they want to bisect it, and a file that lists what can be turned off is
-     * worth more to them than one that does not.
-     */
+    // Written file lists every option with its default commented out (unlike Lithium's empty file),
+    // since a 1.12.2 user opening this is usually bisecting a bug and needs to see what can be toggled
     public static EquilibriumConfig load(Path file) {
         EquilibriumConfig config = new EquilibriumConfig();
         config.file = file;

@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *
  * <p>Not the shader-pack pipeline — this is the spectator/creeper/entity-view effect chain, which is
  * both easy to activate by accident (F4 in spectator mode) and awkward next to Impetus' own
- * framebuffer handling. Nothing here touches Iris.
+ * framebuffer handling. Nothing here touches Umbra.
  *
  * <p>1.20's equivalents are {@code GameRenderer.loadPostProcessor} and
  * {@code togglePostProcessorEnabled}; on 1.12.2 they are {@code loadShader} and

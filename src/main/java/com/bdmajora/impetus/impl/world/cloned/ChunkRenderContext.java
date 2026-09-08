@@ -3,6 +3,7 @@ package com.bdmajora.impetus.impl.world.cloned;
 import net.minecraft.world.gen.structure.StructureBoundingBox;
 import com.bdmajora.impetus.engine.impl.util.position.SectionPos;
 
+// Snapshot of a chunk section and its neighbors handed to the render thread, decoupled from the live world
 public class ChunkRenderContext {
     private final SectionPos sectionCoord;
     private final ClonedChunkSection[] sections;

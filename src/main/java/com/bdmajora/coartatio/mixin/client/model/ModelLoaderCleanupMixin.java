@@ -18,24 +18,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Map;
 
-/**
- * Frees the model loader's intermediate state once baking is finished.
- *
- * <p>From FoamFix's {@code ModelLoaderCleanup}, and the natural companion to
- * {@link ModelLoaderMixin}: that one makes these maps smaller, this one lets them go entirely.
- *
- * <p>{@code stateModels} holds an unbaked {@code IModel} per blockstate variant — tens of thousands
- * on a large pack — and every one of them has already been turned into a baked model by the time
- * this runs. {@code loadingExceptions} accumulates a stack trace per model that failed to load,
- * which on a pack with broken models is not small.
- *
- * <p>The hook is {@code onPostBakeEvent} rather than {@code setupModelRegistry}, deliberately:
- * {@code ModelBakeEvent} fires inside it and mods legitimately read {@code stateModels} from that
- * event. Clearing at its return means every consumer has already had its turn. That ordering is the
- * whole reason this is safe, so it should not be moved.
- *
- * <p>Every field here is Forge-added, so each {@code @Shadow} opts out of remapping individually.
- */
+// Frees ModelLoader's intermediate bake state once baking finishes; companion to ModelLoaderMixin
+// (that one shrinks these maps, this one drops them entirely once every entry is baked).
+// Hooked at onPostBakeEvent's RETURN rather than setupModelRegistry because ModelBakeEvent fires
+// inside it and mods legitimately read stateModels from that event; clearing must happen after.
+// All fields here are Forge-added, so each @Shadow opts out of remapping individually.
 @Mixin(ModelLoader.class)
 public abstract class ModelLoaderCleanupMixin {
     @Shadow(remap = false)

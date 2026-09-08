@@ -8,6 +8,7 @@ import org.spongepowered.asm.mixin.*;
 import com.bdmajora.impetus.impl.render.frustum.IClippingHelper;
 import com.bdmajora.impetus.impl.render.terrain.CameraHelper;
 
+// Patches Frustum.isBoxInFrustum to test against the JOML frustum instead of vanilla's plane loop
 @Mixin(Frustum.class)
 public class FrustumMixin implements ViewportProvider {
     @Shadow
@@ -19,6 +20,7 @@ public class FrustumMixin implements ViewportProvider {
 
     @Overwrite
     public boolean isBoxInFrustum(double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
+        // Infinite bounds (e.g. render chunks awaiting real bounds) always pass
         if (Double.isInfinite(minX) || Double.isInfinite(minY) || Double.isInfinite(minZ) || Double.isInfinite(maxX) || Double.isInfinite(maxY) || Double.isInfinite(maxZ)) {
             return true;
         }

@@ -14,23 +14,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Map;
 
-/**
- * Releases sprite pixel data once it is on the GPU.
- *
- * <p>From LoliASM's {@code releaseSpriteFramesCache}. Every stitched sprite keeps its
- * {@code List<int[][]>} of raw pixels — the full mipmap chain — after the atlas has been uploaded.
- * For a static sprite nothing ever reads it again, and a large resource pack has thousands of them.
- *
- * <p>Animated sprites are left alone: {@code updateAnimation} reads the frame data every tick, so
- * clearing theirs would break animation outright. {@code hasAnimationMetadata()} is Forge's own test
- * for that, and {@code clearFramesTextureData()} is Forge's own accessor for doing the release, so
- * this needs no shadowing beyond the sprite map itself.
- *
- * <p>The one compatibility risk is a mod calling {@code getFrameTextureData} after the atlas is
- * built — connected-texture and custom-atlas mods occasionally do. That is why this is its own
- * switch, and why the log line names how many sprites were released: if something breaks, the
- * culprit and the remedy are both one setting away.
- */
+// Patches TextureMap.loadTextureAtlas to release static sprites' raw pixel data (the full mipmap
+// chain) once it's uploaded to the GPU, since nothing reads it again for non-animated sprites.
+// Animated sprites are skipped: updateAnimation reads frame data every tick.
+// Gated on its own config switch since some connected-texture/custom-atlas mods read pixel
+// data after the atlas is built, which this would break.
 @Mixin(TextureMap.class)
 public abstract class TextureMapMixin {
     @Shadow

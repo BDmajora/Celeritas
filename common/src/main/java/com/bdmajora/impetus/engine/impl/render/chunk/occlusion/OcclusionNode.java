@@ -18,9 +18,7 @@ public class OcclusionNode extends AbstractSection {
             adjacentWest,
             adjacentEast;
 
-    /**
-     * The occlusion culling data which determines this chunk's connectedness on the visibility graph.
-     */
+    // Encodes which faces of this section can see which other faces, for occlusion culling
     @Getter
     @Setter
     private long visibilityData = VisibilityEncoding.NULL;

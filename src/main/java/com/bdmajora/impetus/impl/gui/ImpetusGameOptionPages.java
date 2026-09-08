@@ -24,11 +24,8 @@ import com.bdmajora.impetus.impl.compat.modernui.MuiGuiScaleHook;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * General and Quality option pages, laid out to match modern Sodium (0.9.1) exactly: same groups, same options,
- * same order. Every option is a real, functional control backed by either vanilla {@link GameSettings} or the
- * Impetus engine — there are no display-only placeholders.
- */
+// General and Quality option pages, laid out to match modern Sodium (0.9.1) exactly: same groups, options, order
+// every option here is real and functional (backed by vanilla GameSettings or the Impetus engine), no placeholders
 public class ImpetusGameOptionPages {
     private static final ImpetusGameOptions sodiumOpts = ImpetusVintage.options();
     private static final MinecraftOptionsStorage vanillaOpts = new MinecraftOptionsStorage();

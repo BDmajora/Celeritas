@@ -8,12 +8,12 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.Slice;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import com.bdmajora.impetus.iris.Iris;
-import com.bdmajora.impetus.iris.pipeline.DeferredBlockOutline;
-import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
-import com.bdmajora.impetus.iris.pipeline.VanillaFeatureToggles;
-import com.bdmajora.impetus.iris.shaderpack.loading.ProgramId;
-import com.bdmajora.impetus.iris.uniforms.CelestialUniforms;
+import com.bdmajora.impetus.umbra.Umbra;
+import com.bdmajora.impetus.umbra.pipeline.DeferredBlockOutline;
+import com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline;
+import com.bdmajora.impetus.umbra.pipeline.VanillaFeatureToggles;
+import com.bdmajora.impetus.umbra.shaderpack.loading.ProgramId;
+import com.bdmajora.impetus.umbra.uniforms.CelestialUniforms;
 
 /**
  * Switches the sky phase to {@code gbuffers_skytextured} for the textured celestial bodies (sun and moon) inside
@@ -37,7 +37,7 @@ public class RenderGlobalMixin {
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/client/renderer/vertex/VertexBuffer;bindBuffer()V", ordinal = 0))
     private void impetus$drawHorizon(float partialTicks, int pass, CallbackInfo ci) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.drawSkyHorizon();
         }
@@ -55,7 +55,7 @@ public class RenderGlobalMixin {
      * construction: it leaves the rotation in the modelview that draws the celestial quads, then reads
      * {@code sunPosition} straight back out of that same matrix in {@code postCelestialRotate()}.
      * <p>
-     * Iris does <em>not</em> do this — it rotates only the uniform and the shadow matrix. That is survivable there
+     * Umbra does <em>not</em> do this — it rotates only the uniform and the shadow matrix. That is survivable there
      * because modern versions draw the sky through a different renderer and packs that care paint their own; on
      * 1.12 the vanilla sun disc goes through {@code gbuffers_skytextured} and the mismatch is plainly visible. This
      * is not a corner case: 19 of the 22 packs installed here set a non-zero value, most of them -40°.
@@ -64,7 +64,7 @@ public class RenderGlobalMixin {
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/client/multiplayer/WorldClient;getCelestialAngle(F)F", ordinal = 1))
     private void impetus$preCelestialRotate(float partialTicks, int pass, CallbackInfo ci) {
-        if (Iris.getRenderingPipeline() == null) {
+        if (Umbra.getRenderingPipeline() == null) {
             return;
         }
         float rotation = CelestialUniforms.getSunPathRotation();
@@ -107,7 +107,7 @@ public class RenderGlobalMixin {
 
     /**
      * OptiFine 1.12 brackets the actual cloud geometry inside {@code RenderGlobal.renderClouds} with
-     * {@code Shaders.beginClouds()}/{@code Shaders.endClouds()}, while modern Iris brackets
+     * {@code Shaders.beginClouds()}/{@code Shaders.endClouds()}, while modern Umbra brackets
      * {@code LevelRenderer.renderClouds} at method entry/return. Do this at the geometry boundary instead of at
      * {@code EntityRenderer}'s profiler label; shader-pack properties can cancel the dispatcher, and a leaked
      * {@code gbuffers_clouds} phase leaves colortex4 selected until the composite chain.
@@ -150,7 +150,7 @@ public class RenderGlobalMixin {
 
     /**
      * Binds {@code gbuffers_line} (falling back to {@code gbuffers_basic}) for the block selection box, matching
-     * Iris, which routes vanilla's line render type through that program.
+     * Umbra, which routes vanilla's line render type through that program.
      * <p>
      * Vanilla draws the outline in the {@code "outline"} profiler section, which runs straight after
      * {@code "entities"} and <em>before</em> {@code "destroyProgress"} ({@code EntityRenderer.renderWorldPass}: the
@@ -169,7 +169,7 @@ public class RenderGlobalMixin {
                                            float partialTicks, CallbackInfo ci) {
         // Only route the outline through the pack when the pack actually ships `gbuffers_line`.
         //
-        // Iris parity for packs that wrote one: those packs know the selection box arrives here and handle it
+        // Umbra parity for packs that wrote one: those packs know the selection box arrives here and handle it
         // deliberately (Complementary/Spooklementary have a whole `SELECT_OUTLINE` option group keyed on recognising
         // vanilla's (0,0,0,0.4) vertex colour). Nothing changes for them.
         //
@@ -189,7 +189,7 @@ public class RenderGlobalMixin {
         // Falling back to fixed-function is what vanilla does and what the pack was written to coexist with: the box
         // draws with vanilla's own blend, its per-vertex colour and alpha intact (so the connectors stay hidden), and
         // into the fixed-function draw-buffer mask only, so it cannot corrupt material data it has no values for.
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline == null || DeferredBlockOutline.isReplaying()) {
             // No pack, or this *is* the post-composite replay: let vanilla draw exactly as it always does.
             return;
@@ -225,7 +225,7 @@ public class RenderGlobalMixin {
      *
      * Both references keep the blend. OptiFine 1.12 (`RenderGlobal.drawSelectionBox`) leaves vanilla's
      * `enableBlend()` untouched and only swaps the program — its shader hook is `Shaders.disableTexture2D()`, i.e.
-     * `useProgram(ProgramBasic)`, nothing more. Iris maps the outline through `ShaderKey.LINES`, whose
+     * `useProgram(ProgramBasic)`, nothing more. Umbra maps the outline through `ShaderKey.LINES`, whose
      * `RenderPipelines.LINES` carries translucent transparency, and `ProgramId.Line`/`ProgramId.Basic` are declared
      * with no `BlendModeOverride` at all, so only an explicit `blend.gbuffers_line`/`blend.gbuffers_basic` directive
      * can turn it off. `setPhase` already applies that directive when a pack declares one.
@@ -253,7 +253,7 @@ public class RenderGlobalMixin {
     private void impetus$applyBackFaceCulling(net.minecraft.util.BlockRenderLayer layer, double partialTicks, int pass,
                                               net.minecraft.entity.Entity entity,
                                               org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<Integer> cir) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null && !pipeline.shouldCullBackFaces(layer.ordinal())) {
             net.minecraft.client.renderer.GlStateManager.disableCull();
             impetus$restoreCull = true;
@@ -283,7 +283,7 @@ public class RenderGlobalMixin {
     private void impetus$skipTerrain(net.minecraft.util.BlockRenderLayer layer, double partialTicks, int pass,
                                      net.minecraft.entity.Entity entity,
                                      org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<Integer> cir) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null && pipeline.skipAllRendering()) {
             cir.setReturnValue(0);
         }
@@ -349,7 +349,7 @@ public class RenderGlobalMixin {
     private static net.minecraft.util.ResourceLocation impetus$transparent;
 
     private static void impetus$setPhase(ProgramId phase) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.setPhase(phase);
         }
@@ -357,7 +357,7 @@ public class RenderGlobalMixin {
 
     /** Same, for a phase whose {@code renderStage} is finer than its {@link ProgramId} (sky basic covers sky/stars/void). */
     private static void impetus$setPhase(ProgramId phase, int renderStage) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.setPhase(phase, renderStage);
         }

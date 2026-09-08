@@ -19,6 +19,7 @@ import com.bdmajora.impetus.impl.compat.fluidlogged.FluidloggedCompat;
 
 import java.util.Map;
 
+// Immutable snapshot of a chunk section's blocks/biomes/light, taken off-thread so render code isn't touching live chunk data
 public class ClonedChunkSection {
     private static final ExtendedBlockStorage EMPTY_SECTION = new ExtendedBlockStorage(0, false);
 
@@ -50,7 +51,7 @@ public class ClonedChunkSection {
 
         ExtendedBlockStorage section = getChunkSection(chunk, y);
 
-        if (section == Chunk.NULL_BLOCK_STORAGE/*ChunkSection.isEmpty(section)*/) {
+        if (section == Chunk.NULL_BLOCK_STORAGE) {
             section = EMPTY_SECTION;
         }
 
@@ -138,12 +139,7 @@ public class ClonedChunkSection {
         this.lastUsedTimestamp = timestamp;
     }
 
-    /**
-     * @param x The local x-coordinate
-     * @param y The local y-coordinate
-     * @param z The local z-coordinate
-     * @return An index which can be used to key entities or blocks within a chunk
-     */
+    // Packs local (0-15) x/y/z into one short to key the block entity map
     private static short packLocal(int x, int y, int z) {
         return (short) (x << 8 | z << 4 | y);
     }

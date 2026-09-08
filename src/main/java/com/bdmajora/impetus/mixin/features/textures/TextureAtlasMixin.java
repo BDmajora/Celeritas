@@ -48,7 +48,7 @@ public class TextureAtlasMixin implements TextureMapExtension {
         BlockAtlasFiltering.apply(((AbstractTexture) (Object) this).getGlTextureId());
 
         // Build the shader-pipeline PBR atlases (normals/specular companions) mirroring this atlas's layout.
-        com.bdmajora.impetus.iris.pbr.PBRAtlasManager.rebuild(
+        com.bdmajora.impetus.umbra.pbr.PBRAtlasManager.rebuild(
                 this.mapUploadedSprites, this.impetus$width, this.impetus$height, this.mipmapLevels);
     }
 

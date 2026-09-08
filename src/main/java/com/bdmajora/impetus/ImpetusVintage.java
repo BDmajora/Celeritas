@@ -42,7 +42,7 @@ import com.bdmajora.impetus.impl.compat.ResourcePackScanner;
 import com.bdmajora.impetus.impl.gui.overlay.ImpetusToastRenderer;
 import com.bdmajora.impetus.impl.render.terrain.ImpetusWorldRenderer;
 import com.bdmajora.impetus.impl.util.PlatformUtil;
-import com.bdmajora.impetus.iris.Iris;
+import com.bdmajora.impetus.umbra.Umbra;
 
 @Mod(modid = ImpetusVintage.MODID, useMetadata = true, clientSideOnly = true, acceptableRemoteVersions = "*")
 public class ImpetusVintage {
@@ -103,7 +103,7 @@ public class ImpetusVintage {
 
         // Phase 1: load (parse only) the selected shader pack. No rendering changes happen here — if no pack is
         // selected or loading fails, Impetus renders exactly as before.
-        Iris.initialize(PlatformUtil.getGameDir().toPath());
+        Umbra.initialize(PlatformUtil.getGameDir().toPath());
         ResourcePackScanner.scanIfChanged(Minecraft.getMinecraft());
 
         // Runs here rather than earlier: every class a coremod will ask LaunchWrapper for has been
@@ -114,11 +114,11 @@ public class ImpetusVintage {
 
     @SubscribeEvent
     public void onRenderTick(TickEvent.RenderTickEvent event) {
-        // Render thread with a live GL context: build/rebuild the Iris pipeline the first frame after a pack change.
-        // No-op unless a shader pack was (un)loaded. Safe when Iris is disabled.
+        // Render thread with a live GL context: build/rebuild the Umbra pipeline the first frame after a pack change.
+        // No-op unless a shader pack was (un)loaded. Safe when Umbra is disabled.
         if (event.phase == TickEvent.Phase.START) {
             ResourcePackScanner.tick(Minecraft.getMinecraft());
-            Iris.updatePipeline();
+            Umbra.updatePipeline();
         }
     }
 

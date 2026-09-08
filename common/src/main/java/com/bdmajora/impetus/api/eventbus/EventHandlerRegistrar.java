@@ -3,9 +3,7 @@ package com.bdmajora.impetus.api.eventbus;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-/**
- * Holds a list of event handlers and handles event dispatching.
- */
+// Holds listeners for one event type and dispatches to them
 public class EventHandlerRegistrar<T extends ImpetusEvent> {
     private final List<Handler<T>> handlerList = new CopyOnWriteArrayList<>();
 
@@ -15,11 +13,7 @@ public class EventHandlerRegistrar<T extends ImpetusEvent> {
         handlerList.add(listener);
     }
 
-    /**
-     * Post the given event to all registered listeners.
-     * @param event The event to post
-     * @return true if the event is cancelable and was canceled, false otherwise
-     */
+    // Returns true if the event was cancelable and got canceled by a listener
     public boolean post(T event) {
         boolean canceled = false;
 

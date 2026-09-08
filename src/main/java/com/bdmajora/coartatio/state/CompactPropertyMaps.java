@@ -9,23 +9,10 @@ import java.lang.reflect.Constructor;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * Replaces each block state's property {@code ImmutableMap} with a compact one that shares its key
- * array across every state of the block.
- *
- * <p>The map itself lives in {@code com.google.common.collect} — see
- * {@code CoartatioPropertyMap} for why, and {@link ClassDefineTool} for how it gets there. This
- * class is the bridge: it owns the reflective handle, decides whether a given map can use the shared
- * keys, and degrades to the original map whenever anything is not exactly as expected.
- *
- * <h2>Sharing the keys</h2>
- *
- * <p>Every state of a block is produced by the same loop over the same property set, so every state
- * carries the same keys in the same order and differs only in the values. The first state of a block
- * donates its key array; later states are checked against it and only share if the sequence matches
- * <i>by identity, in order</i>. A mismatch is not an error — that state simply keeps its original
- * map — which means an unusual {@code BlockStateContainer} costs nothing but a missed optimisation.
- */
+// Replaces each block state's property ImmutableMap with a compact one sharing its key array across
+// every state of the block. The map class itself lives in com.google.common.collect (see ClassDefineTool
+// for how it's injected there); this class owns the reflective handle and falls back to the original map
+// whenever the key sequence doesn't match by identity and order (not an error, just a missed optimisation).
 public final class CompactPropertyMaps {
     private static final String MAP_CLASS = "com.google.common.collect.CoartatioPropertyMap";
 
@@ -38,10 +25,8 @@ public final class CompactPropertyMaps {
     private CompactPropertyMaps() {
     }
 
-    /**
-     * Attempts the class injection once. Safe to call repeatedly and safe to call before the config
-     * says the feature is wanted — a failure here only means {@link #compact} becomes a no-op.
-     */
+    // Attempts the class injection once. Safe to call repeatedly or before config wants the feature;
+    // a failure here just means compact() becomes a no-op.
     private static synchronized void initialise() {
         if (initialised) {
             return;
@@ -67,10 +52,7 @@ public final class CompactPropertyMaps {
         }
     }
 
-    /**
-     * @param sharedKeys the block's shared key array, from {@link PropertyValueMapper#sharedKeys}
-     * @return a compact equivalent of {@code original}, or {@code original} itself
-     */
+    // sharedKeys comes from PropertyValueMapper#sharedKeys; returns a compact equivalent of original, or original itself.
     public static ImmutableMap<net.minecraft.block.properties.IProperty<?>, Comparable<?>> compact(
             Object[] sharedKeys,
             ImmutableMap<net.minecraft.block.properties.IProperty<?>, Comparable<?>> original) {
@@ -114,7 +96,7 @@ public final class CompactPropertyMaps {
         }
     }
 
-    /** Property maps replaced with the compact implementation. */
+    // Property maps replaced with the compact implementation.
     public static long compacted() {
         return COMPACTED.get();
     }

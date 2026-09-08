@@ -116,13 +116,13 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                         // block.properties `layer.<rendertype>`: the pack can move a block to a different chunk
                         // render layer than the block itself reports (OptiFine's block render layer override).
                         BlockRenderLayer forcedLayer =
-                                com.bdmajora.impetus.iris.material.WorldRenderingSettings.getForcedRenderLayer(block);
+                                com.bdmajora.impetus.umbra.material.WorldRenderingSettings.getForcedRenderLayer(block);
 
                         // `voxelizeLightBlocks`: a block that emits light but draws nothing is invisible to a pack's
-                        // shadow-pass voxelization. Iris solves this for 1.17+'s `minecraft:light`; the 1.12.2
+                        // shadow-pass voxelization. Umbra solves this for 1.17+'s `minecraft:light`; the 1.12.2
                         // equivalent is any INVISIBLE-render-type block with a non-zero light value (modded light
                         // sources, mostly). Attributing it to the solid layer gives the voxelizer something to see.
-                        if (com.bdmajora.impetus.iris.material.WorldRenderingSettings.isVoxelizeLightBlocks()
+                        if (com.bdmajora.impetus.umbra.material.WorldRenderingSettings.isVoxelizeLightBlocks()
                                 && blockState.getRenderType() == EnumBlockRenderType.INVISIBLE
                                 && blockState.getLightValue(slice, blockPos) > 0) {
                             buildContext.recordVanillaBlockAttribution(
@@ -140,7 +140,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                                 } else {
                                     var buffer = buildContext.getBufferForLayer(layer);
                                     dispatcher.renderBlock(blockState, blockPos, slice, buffer);
-                                    // Attribute the emitted quads to this block for Iris terrain attributes.
+                                    // Attribute the emitted quads to this block for Umbra terrain attributes.
                                     buildContext.recordVanillaBlockAttribution(layer, blockState, blockPos);
                                 }
                             }

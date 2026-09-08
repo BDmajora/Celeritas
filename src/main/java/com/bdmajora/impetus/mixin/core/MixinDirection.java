@@ -6,10 +6,7 @@ import org.spongepowered.asm.mixin.Overwrite;
 
 @Mixin(EnumFacing.class)
 public class MixinDirection {
-    /**
-     * @author <a href="mailto:skaggsm333@gmail.com">Mitchell Skaggs</a>
-     * @reason Avoid looping over all directions and computing the dot product
-     */
+    // Overwrite: picks the facing directly from the biggest axis instead of looping over all directions and dotting each
     @Overwrite
     public static EnumFacing getFacingFromVector(float x, float y, float z) {
         // Vanilla quirk: return NORTH if all entries are zero

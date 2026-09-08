@@ -1,6 +1,6 @@
 package com.bdmajora.impetus.mixin.core.shader;
 
-import com.bdmajora.impetus.iris.pipeline.VanillaFeatureToggles;
+import com.bdmajora.impetus.umbra.pipeline.VanillaFeatureToggles;
 import net.minecraft.client.gui.GuiIngame;
 import net.minecraft.client.gui.ScaledResolution;
 import org.spongepowered.asm.mixin.Mixin;

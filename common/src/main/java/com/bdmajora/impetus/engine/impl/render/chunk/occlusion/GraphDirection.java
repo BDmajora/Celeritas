@@ -1,5 +1,6 @@
 package com.bdmajora.impetus.engine.impl.render.chunk.occlusion;
 
+// Direction indices double as bit positions for GraphDirectionSet, so values must stay 0-5
 public class GraphDirection {
     public static final int DOWN    = 0;
     public static final int UP      = 1;

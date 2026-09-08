@@ -1,8 +1,8 @@
 package com.bdmajora.impetus.mixin.core.shader;
 
-import com.bdmajora.impetus.iris.Iris;
-import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
-import com.bdmajora.impetus.iris.pipeline.IrisShadowRenderer;
+import com.bdmajora.impetus.umbra.Umbra;
+import com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline;
+import com.bdmajora.impetus.umbra.pipeline.UmbraShadowRenderer;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.tileentity.TileEntityBeaconRenderer;
 import net.minecraft.tileentity.TileEntityBeacon;
@@ -30,9 +30,9 @@ public class BeaconBeamDepthMixin {
     private boolean impetus$depthMaskOverridden;
 
     /**
-     * Iris parity: {@code mixin/shadows/MixinBeaconRenderer#iris$noLightBeamInShadowPass} cancels the beam outright
+     * Umbra parity: {@code mixin/shadows/MixinBeaconRenderer#umbra$noLightBeamInShadowPass} cancels the beam outright
      * while the shadow pass is running. The beam is a tall unlit quad column with no meaningful occlusion — drawing
-     * it into the shadow map casts a full-height shadow pillar from every beacon in range, which is why Iris drops
+     * it into the shadow map casts a full-height shadow pillar from every beacon in range, which is why Umbra drops
      * it rather than letting it participate.
      * <p>
      * Cancelling at HEAD also keeps the depth-mask override below from running in a pass that has no depthtex for a
@@ -42,7 +42,7 @@ public class BeaconBeamDepthMixin {
             at = @At("HEAD"), cancellable = true, require = 0)
     private void impetus$noBeamInShadowPass(TileEntityBeacon beacon, double x, double y, double z,
                                             float partialTicks, int destroyStage, float alpha, CallbackInfo ci) {
-        if (Iris.getRenderingPipeline() != null && IrisShadowRenderer.isShadowPass()) {
+        if (Umbra.getRenderingPipeline() != null && UmbraShadowRenderer.isShadowPass()) {
             ci.cancel();
         }
     }
@@ -69,7 +69,7 @@ public class BeaconBeamDepthMixin {
     }
 
     private static boolean impetus$wantsBeamDepth() {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         return pipeline != null && pipeline.shouldWriteBeaconBeamToDepthBuffer();
     }
 }

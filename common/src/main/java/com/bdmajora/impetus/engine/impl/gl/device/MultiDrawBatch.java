@@ -4,11 +4,9 @@ import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 import com.bdmajora.impetus.lwjgl.LWJGLServiceProvider;
 import java.nio.IntBuffer;
 
-/**
- * Provides a fixed-size queue for building a draw-command list usable with
- * {@link org.lwjgl.opengl.GL33#glMultiDrawElementsBaseVertex(int, IntBuffer, int, PointerBuffer, IntBuffer)}.
- */
+// Fixed-size queue backing glMultiDrawElementsBaseVertex calls
 public final class MultiDrawBatch {
+    // Raw off-heap arrays, manually allocated/freed below since this gets hit every frame
     public final long pElementPointer;
     public final long pElementCount;
     public final long pBaseVertex;

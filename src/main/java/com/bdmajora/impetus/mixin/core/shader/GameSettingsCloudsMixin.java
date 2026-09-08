@@ -1,6 +1,6 @@
 package com.bdmajora.impetus.mixin.core.shader;
 
-import com.bdmajora.impetus.iris.pipeline.VanillaFeatureToggles;
+import com.bdmajora.impetus.umbra.pipeline.VanillaFeatureToggles;
 import net.minecraft.client.settings.GameSettings;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -11,10 +11,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.OptionalInt;
 
 /**
- * {@code clouds = off | fast | fancy}: lets the pack override the player's cloud video setting, which is Iris'
+ * {@code clouds = off | fast | fancy}: lets the pack override the player's cloud video setting, which is Umbra'
  * {@code MixinOptions_CloudsOverride}.
  * <p>
- * Vanilla's own {@code renderDistanceChunks >= 4} gate is mirrored ahead of the override — as Iris does, and for the
+ * Vanilla's own {@code renderDistanceChunks >= 4} gate is mirrored ahead of the override — as Umbra does, and for the
  * same reason: injecting at the head means the real check has not run yet, and a pack must not be able to force clouds
  * on at a render distance where vanilla suppresses them.
  */

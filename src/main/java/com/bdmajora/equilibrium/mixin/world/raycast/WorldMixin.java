@@ -9,18 +9,10 @@ import org.spongepowered.asm.mixin.Overwrite;
 
 import javax.annotation.Nullable;
 
-/**
- * Replaces the world's block ray tracer with {@link FastRayCaster}.
- *
- * <p>Only the five-argument form is overwritten — the two shorter ones delegate to it, so they
- * inherit the change without needing to be touched, and anything injecting into them keeps working.
- */
+// Only the five-arg rayTraceBlocks is overwritten; the shorter overloads delegate to it so they inherit FastRayCaster for free
 @Mixin(World.class)
 public abstract class WorldMixin {
-    /**
-     * @author JellySquid
-     * @reason Trace without allocating a vector and a block position per step
-     */
+    // Trace without allocating a vector and a block position per step
     @Nullable
     @Overwrite
     public RayTraceResult rayTraceBlocks(Vec3d start, Vec3d end, boolean stopOnLiquid,

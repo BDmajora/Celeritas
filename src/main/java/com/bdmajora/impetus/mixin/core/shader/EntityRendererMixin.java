@@ -20,13 +20,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import net.minecraftforge.client.ForgeHooksClient;
 import com.bdmajora.extras.Extras;
 import com.bdmajora.extras.client.CloudPassState;
-import com.bdmajora.impetus.iris.Iris;
-import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
-import com.bdmajora.impetus.iris.shaderpack.loading.ProgramId;
-import com.bdmajora.impetus.iris.uniforms.CapturedRenderingState;
+import com.bdmajora.impetus.umbra.Umbra;
+import com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline;
+import com.bdmajora.impetus.umbra.shaderpack.loading.ProgramId;
+import com.bdmajora.impetus.umbra.uniforms.CapturedRenderingState;
 
 /**
- * Drives the Iris frame pipeline from vanilla's world render, the way modern Iris hooks {@code LevelRenderer}:
+ * Drives the Umbra frame pipeline from vanilla's world render, the way modern Umbra hooks {@code LevelRenderer}:
  * <ul>
  * <li>{@code renderWorld} HEAD — build the pipeline if a pack was (re)loaded, then bind the gbuffer so the whole world
  * pass (vanilla's fog-colored clear included) renders into the shader render targets;</li>
@@ -103,12 +103,12 @@ public class EntityRendererMixin {
      * {@code if (Config.isShaders()) Shaders.enableLightmap()/disableLightmap()}, which swap
      * {@code gbuffers_textured} and {@code gbuffers_textured_lit}. Vanilla only flips texture unit 1; without
      * telling the pipeline, geometry drawn while that unit is disabled keeps running the lit program, samples white
-     * from the dead unit and renders fullbright. See {@code IrisRenderingPipeline#setLightmapEnabled} for why items
+     * from the dead unit and renders fullbright. See {@code UmbraRenderingPipeline#setLightmapEnabled} for why items
      * in particular are affected.
      */
     @Inject(method = "enableLightmap", at = @At("RETURN"))
     private void impetus$onEnableLightmap(CallbackInfo ci) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.setLightmapEnabled(true);
         }
@@ -116,14 +116,14 @@ public class EntityRendererMixin {
 
     @Inject(method = "disableLightmap", at = @At("RETURN"))
     private void impetus$onDisableLightmap(CallbackInfo ci) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.setLightmapEnabled(false);
         }
     }
 
     private static void impetus$setPhase(ProgramId phase) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.setPhase(phase);
         }
@@ -135,7 +135,7 @@ public class EntityRendererMixin {
      * which one it is rather than from a guess in the pipeline.
      */
     private static void impetus$setPhase(ProgramId phase, int renderStage) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.setPhase(phase, renderStage);
         }
@@ -143,7 +143,7 @@ public class EntityRendererMixin {
 
     @Inject(method = "renderWorld", at = @At("HEAD"))
     private void impetus$beginShaderFrame(float partialTicks, long finishTimeNano, CallbackInfo ci) {
-        IrisRenderingPipeline pipeline = Iris.beginFrame();
+        UmbraRenderingPipeline pipeline = Umbra.beginFrame();
         if (pipeline != null) {
             pipeline.beginWorldRendering(partialTicks);
         }
@@ -154,7 +154,7 @@ public class EntityRendererMixin {
                     target = "Lnet/minecraft/profiler/Profiler;endStartSection(Ljava/lang/String;)V",
                     args = "ldc=frustum"))
     private void impetus$captureRenderingState(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             CapturedRenderingState.INSTANCE.setFogColor(this.fogColorRed, this.fogColorGreen, this.fogColorBlue);
             pipeline.captureRenderingState();
@@ -174,19 +174,19 @@ public class EntityRendererMixin {
     // --- Cloud ordering -------------------------------------------------------------------------------------------
 
     /**
-     * Moves the cloud draw to where Iris has it: after the deferred chain, not before terrain.
+     * Moves the cloud draw to where Umbra has it: after the deferred chain, not before terrain.
      * <p>
      * 1.12 renders clouds at one of two call sites depending on the camera's altitude — before terrain when below
      * {@code y=128} ({@code renderWorldPass} line 1361), after translucents when above it ({@code "aboveClouds"}).
      * Modern Minecraft has no such split: the clouds pass is scheduled after the main pass, so it always runs after
-     * translucent terrain, which is after Iris takes the {@code depthtex1} snapshot in {@code beginTranslucents}.
+     * translucent terrain, which is after Umbra takes the {@code depthtex1} snapshot in {@code beginTranslucents}.
      * <p>
      * Packs depend on that. Clouds write depth, so on 1.12's early call site they land in {@code depthtex1}, and any
      * pack that identifies untouched sky as "{@code depthtex1} is still 1.0" then classifies cloud pixels as opaque
      * world geometry. Body Camera's {@code composite} does exactly this: its pass-through branch is
      * {@code Depthv2 == 1 && normal == 0}, and a cloud that misses it falls through to
      * {@code Albedo * (LightmapColor + ShadowColor)} — with no lightmap ever written by {@code gbuffers_clouds}, that
-     * is black. Under Iris the same pack is correct, because there the clouds are simply not in that snapshot.
+     * is black. Under Umbra the same pack is correct, because there the clouds are simply not in that snapshot.
      * <p>
      * Rather than re-implement the draw at a new site, both altitude tests are moved below the world: the early one
      * ({@code < 128}) then never fires and the late one ({@code >= 128}) always does, so vanilla itself issues the
@@ -206,7 +206,7 @@ public class EntityRendererMixin {
      * <p>
      * Two {@code @ModifyConstant} handlers cannot share a constant — Mixin skips the second and, with
      * {@code required}, fails the load — so the two concerns are resolved here in priority order rather than in
-     * separate mixins. Iris wins: its slot choice is correctness, the Extras one is preference.
+     * separate mixins. Umbra wins: its slot choice is correctness, the Extras one is preference.
      */
     @ModifyConstant(method = "renderWorldPass", constant = {
             // The two occurrences are the only 128.0D in the method, and are the two halves of the same altitude
@@ -214,7 +214,7 @@ public class EntityRendererMixin {
             @Constant(doubleValue = 128.0D, ordinal = 0),
             @Constant(doubleValue = 128.0D, ordinal = 1)})
     private double impetus$cloudDrawSlot(double cloudLayer) {
-        if (Iris.getRenderingPipeline() != null) {
+        if (Umbra.getRenderingPipeline() != null) {
             return Double.NEGATIVE_INFINITY;
         }
 
@@ -256,7 +256,7 @@ public class EntityRendererMixin {
             @At(value = "INVOKE_STRING", target = PROFILER_END_START, args = "ldc=litParticles"),
             @At(value = "INVOKE_STRING", target = PROFILER_END_START, args = "ldc=particles")})
     private void impetus$phaseParticles(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
-        // Iris resolves particles as gbuffers_particles -> gbuffers_textured_lit, so packs that ship the modern
+        // Umbra resolves particles as gbuffers_particles -> gbuffers_textured_lit, so packs that ship the modern
         // program get it and everything else lands where it always did. (OptiFine differs: it uses plain
         // gbuffers_textured for the unlit particle pass and only gbuffers_textured_lit for "litParticles".)
         impetus$setPhase(ProgramId.Particles);
@@ -264,8 +264,8 @@ public class EntityRendererMixin {
 
     /**
      * {@code particles.ordering}. 1.12.2's {@code renderWorldPass} already draws particles after the "translucent"
-     * anchor, which is where the deferred chain runs — so the vanilla order is Iris's {@code after}, and that is also
-     * Iris's default for a pack with a deferred chain. Only {@code before} needs anything done: the vanilla draw is
+     * anchor, which is where the deferred chain runs — so the vanilla order is Umbra's {@code after}, and that is also
+     * Umbra's default for a pack with a deferred chain. Only {@code before} needs anything done: the vanilla draw is
      * suppressed here and re-issued ahead of the deferred chain.
      * <p>
      * {@code mixed} would need the opaque and translucent particles split across the deferred chain, but 1.12.2
@@ -296,7 +296,7 @@ public class EntityRendererMixin {
         // `rain.depth`: vanilla draws rain and snow with depth writes off. A pack that wants precipitation in
         // depthtex (so its composites can find it) asks for them back. No restore is needed — vanilla itself calls
         // depthMask(true) on the line right after renderRainSnow.
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null && pipeline.shouldWriteRainAndSnowToDepthBuffer()) {
             net.minecraft.client.renderer.GlStateManager.depthMask(true);
         }
@@ -315,7 +315,7 @@ public class EntityRendererMixin {
     /**
      * OptiFine's world order around translucents ({@code EntityRenderer.renderWorldPass}):
      * {@code ShadersRender.renderHand0} (solid first-person hand via {@code gbuffers_hand}) → {@code Shaders.preWater()}
-     * (depth snapshot + deferred) → translucent terrain. Iris does the same ({@code HandRenderer.renderSolid} before
+     * (depth snapshot + deferred) → translucent terrain. Umbra does the same ({@code HandRenderer.renderSolid} before
      * {@code beginTranslucents}). The solid hand MUST render before the deferred chain: deferred packs (Complementary)
      * only write gbuffer data in {@code gbuffers_hand} and do all lighting in {@code deferred*} — a hand drawn later
      * never gets lit and leaks raw buffer data through the composites.
@@ -323,7 +323,7 @@ public class EntityRendererMixin {
     @Inject(method = "renderWorldPass",
             at = @At(value = "INVOKE_STRING", target = PROFILER_END_START, args = "ldc=translucent"))
     private void impetus$beginTranslucents(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.beginHand();
             this.impetus$shaderHandRendered = false;
@@ -358,7 +358,7 @@ public class EntityRendererMixin {
     @Inject(method = "renderWorldPass",
             at = @At(value = "INVOKE_STRING", target = PROFILER_END_START, args = "ldc=hand"))
     private void impetus$compositeBeforeHand(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             if (this.impetus$shaderHandRendered && pipeline.beginHandTranslucentRendering()) {
                 try {
@@ -371,8 +371,8 @@ public class EntityRendererMixin {
             pipeline.finishWorldRendering();
             // The block selection box for packs with no gbuffers_line was skipped during the world pass and lands
             // here instead, so it darkens the finished image rather than the albedo the composite chain relights.
-            // See DeferredBlockOutline for why this deviates from Iris/OptiFine on 1.12.
-            com.bdmajora.impetus.iris.pipeline.DeferredBlockOutline.drawIfPending();
+            // See DeferredBlockOutline for why this deviates from Umbra/OptiFine on 1.12.
+            com.bdmajora.impetus.umbra.pipeline.DeferredBlockOutline.drawIfPending();
         }
     }
 
@@ -421,7 +421,7 @@ public class EntityRendererMixin {
                 this.enableLightmap();
                 this.itemRenderer.renderItemInFirstPerson(partialTicks);
                 // Unit 0 still holds whatever the arm draw sampled; identify it once (see the probe's javadoc).
-                IrisRenderingPipeline.logHandBoundTextureProbe();
+                UmbraRenderingPipeline.logHandBoundTextureProbe();
                 this.disableLightmap();
             }
         } finally {
@@ -473,13 +473,13 @@ public class EntityRendererMixin {
 
     @Inject(method = "renderWorld", at = @At("RETURN"))
     private void impetus$finishShaderFrame(float partialTicks, long finishTimeNano, CallbackInfo ci) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.finishWorldRendering();
         }
         // Safety net: this is the frame's last word. If the composite anchor above never ran, a captured outline is
         // still pending — drop it rather than let a stale capture replay into some later frame with the wrong
         // matrices. Costs at most one frame's outline on a path that already skipped the composite chain.
-        com.bdmajora.impetus.iris.pipeline.DeferredBlockOutline.discard();
+        com.bdmajora.impetus.umbra.pipeline.DeferredBlockOutline.discard();
     }
 }

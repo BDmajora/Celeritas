@@ -10,19 +10,10 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Slice;
 
-/**
- * Separate switches for the sun and the moon discs.
- *
- * <p>Celeritas Extra merged these into one "Sun &amp; Moon" switch; Sodium Extra keeps them apart,
- * and so does this. Vanilla draws both through the same code with only the bound texture differing,
- * so the two are told apart by slicing {@code renderSky} between the texture field references — sun
- * from {@code SUN_TEXTURES} to {@code MOON_PHASES_TEXTURES}, moon from there to the star-brightness
- * call that begins the star pass.
- *
- * <p>Suppression finishes and resets the buffer instead of skipping the draw: {@code Tessellator}
- * has already been filled by the time the draw happens, and leaving it dirty would corrupt whatever
- * uses it next.
- */
+// Separate switches for the sun and moon discs, matching Sodium Extra (Celeritas Extra merges them into one switch)
+// Vanilla draws both through the same code with only the texture differing, so they're told apart by slicing renderSky
+// between the SUN_TEXTURES/MOON_PHASES_TEXTURES field references
+// Suppression finishes+resets the buffer instead of skipping the draw, since Tessellator is already filled by draw time
 @Mixin(RenderGlobal.class)
 public class RenderGlobalSunMoonMixin {
     private static final String SUN_TEXTURES =

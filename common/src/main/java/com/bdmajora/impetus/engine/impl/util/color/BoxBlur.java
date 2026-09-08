@@ -17,9 +17,7 @@ public class BoxBlur {
         blurImpl(tmp.data, buf.data, buf.width, buf.height, radius); // Y-axis
     }
 
-    /**
-     * @deprecated Used by the biome color fallback ported from older Sodium, avoid using in new code.
-     */
+    // Used by the biome color fallback ported from older Sodium, avoid using in new code
     @Deprecated
     public static void blur(int[] data, int[] tmp, int width, int height, int radius) {
         if (isHomogenous(data)) {
@@ -83,22 +81,12 @@ public class BoxBlur {
         }
     }
 
-    /**
-     * Pre-computes a multiplier that can be used to avoid costly division when averaging the color data in the
-     * sliding window.
-     * @param size The size of the rolling window
-     * @author 2No2Name
-     */
+    // Pre-computes a multiplier so averaging can be done with a shift instead of a division (credit: 2No2Name)
     private static int getAveragingMultiplier(int size) {
         return (int)Math.ceil((1L << 24) / (double) size);
     }
 
-    /**
-     * Calculates the average color within the sliding window using the pre-computed constant.
-     * @param multiplier The pre-computed constant provided by {@link BoxBlur#getAveragingMultiplier(int)} for a window
-     *                   of the given size
-     * @author 2No2Name
-     */
+    // Averages using the multiplier from getAveragingMultiplier() for the matching window size
     public static int averageRGB(int red, int green, int blue, int multiplier) {
         int value = 0xFF << 24; // Alpha is constant (fully opaque)
         value |= ((blue * multiplier) >>> 24) << 0;

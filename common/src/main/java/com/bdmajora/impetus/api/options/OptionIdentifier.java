@@ -12,9 +12,7 @@ public final class OptionIdentifier<T> {
 
     private static final ObjectOpenHashSet<OptionIdentifier<?>> IDENTIFIERS = new ObjectOpenHashSet<>();
 
-    /**
-     * Constant {@link OptionIdentifier} that may be used to avoid returning null values.
-     */
+    // Sentinel identifier used instead of returning null
     public static final OptionIdentifier<Void> EMPTY = create("", "", Void.class);
 
     private OptionIdentifier(String modId, String path, Class<T> clz) {
@@ -44,6 +42,7 @@ public final class OptionIdentifier<T> {
         if (modId.equals("impetus")) {
             modId = "impetus";
         }
+        // Interns identifiers so equal (modId, path) pairs share one instance; matches() below relies on reference equality
         OptionIdentifier<T> ourIdentifier = new OptionIdentifier<>(modId, path, clz);
         OptionIdentifier<T> oldIdentifier = (OptionIdentifier<T>)IDENTIFIERS.addOrGet(ourIdentifier);
         if(oldIdentifier != null && oldIdentifier.clz != ourIdentifier.clz) {

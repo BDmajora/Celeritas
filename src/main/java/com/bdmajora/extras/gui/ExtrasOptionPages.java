@@ -28,18 +28,11 @@ import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 
-/**
- * The Extras page: everything Sodium Extra contributes, plus the finer OptiFine switches, as one tab
- * alongside General, Quality and Performance.
- *
- * <p>Upstream spreads this across five tabs (Animations, Particles, Details, Render, Extras). They
- * are groups here instead — Impetus' options screen already carries eight tabs, and the search bar
- * makes a long page navigable in a way a wide tab strip does not.
- *
- * <p>Sub-options are gated with {@code setEnabledPredicate} rather than hidden, so turning off a
- * master switch greys out what it governs instead of making controls appear and disappear as the
- * page is used.
- */
+// The Extras page: everything Sodium Extra contributes plus the finer OptiFine switches, as one tab
+// Upstream spreads this across five tabs; here they're groups since Impetus already has eight tabs
+// and the search bar makes a long page navigable
+// Sub-options use setEnabledPredicate instead of hiding, so a master switch greys out its children
+// rather than making controls appear/disappear while the page is in use
 public final class ExtrasOptionPages {
     private static final String MOD_ID = "impetus";
     private static final String LANG = "impetus.options.extras.";
@@ -367,13 +360,9 @@ public final class ExtrasOptionPages {
     // Options that do not bind to the Extras config
     // ------------------------------------------------------------------------------------------
 
-    /**
-     * Vertical sync, folding adaptive sync in with the vanilla on/off pair.
-     *
-     * <p>The available values are resolved once when the page is built rather than being a fixed
-     * list: offering ADAPTIVE where the driver has no tear control would give the user a setting
-     * that silently does nothing.
-     */
+    // Vertical sync, folding adaptive sync in with the vanilla on/off pair
+    // Available values resolve once at page build rather than being fixed — offering ADAPTIVE
+    // where the driver has no tear control would give a setting that silently does nothing
     private static OptionImpl<ExtrasConfig, ExtrasConfig.VerticalSync> verticalSync() {
         ExtrasConfig.VerticalSync[] available = AdaptiveSync.isSupported()
                 ? ExtrasConfig.VerticalSync.values()
@@ -390,12 +379,9 @@ public final class ExtrasOptionPages {
                 .build();
     }
 
-    /**
-     * Vanilla's advanced tooltips, which otherwise have no home but the F3+H chord.
-     *
-     * <p>Bound straight to the vanilla setting rather than mirrored into the Extras config, so
-     * pressing F3+H and using this control cannot disagree.
-     */
+    // Vanilla's advanced tooltips, which otherwise have no home but the F3+H chord
+    // Bound straight to the vanilla setting rather than mirrored into the Extras config, so F3+H
+    // and this control cannot disagree
     private static OptionImpl<ExtrasConfig, Boolean> advancedItemTooltips() {
         return OptionImpl.createBuilder(boolean.class, STORAGE)
                 .setId(option("advanced_item_tooltips", boolean.class))
@@ -415,13 +401,9 @@ public final class ExtrasOptionPages {
     // Per-class particle toggles
     // ------------------------------------------------------------------------------------------
 
-    /**
-     * One toggle per discovered particle class, grouped by owning mod.
-     *
-     * <p>Everything here is discovered at runtime — see {@link ParticleClassRegistry} for why 1.12.2
-     * leaves no other option — so a discovery failure must not be able to take the rest of the page
-     * with it. Hence the guard: a broken particle scan costs its own group, not the whole tab.
-     */
+    // One toggle per discovered particle class, grouped by owning mod
+    // Everything here is discovered at runtime (see ParticleClassRegistry), so a scan failure is
+    // caught here to cost only its own group, not the whole tab
     private static void addParticleClassGroups(List<OptionGroup> groups, BooleanSupplier particlesOn) {
         try {
             ParticleClassRegistry registry = ParticleClassRegistry.getInstance();
@@ -473,7 +455,7 @@ public final class ExtrasOptionPages {
     // Builders
     // ------------------------------------------------------------------------------------------
 
-    /** A texture-animation sub-switch: always asset-reloading, always gated on the master. */
+    // A texture-animation sub-switch: always asset-reloading, always gated on the master
     private static OptionImpl<ExtrasConfig, Boolean> animationToggle(
             String key, BooleanSupplier enabled,
             BiConsumer<ExtrasConfig, Boolean> setter, Function<ExtrasConfig, Boolean> getter) {

@@ -16,10 +16,7 @@ public abstract class ClassInheritanceMultiMapMixin<T> extends AbstractSet<T> {
     private List<T> values;
 
 
-    /**
-     * @author embeddedt
-     * @reason avoid iterator allocation when forEach is called
-     */
+    // Overwrite avoids allocating an iterator on every forEach call
     @Override
     public void forEach(Consumer<? super T> action) {
         this.values.forEach(action);

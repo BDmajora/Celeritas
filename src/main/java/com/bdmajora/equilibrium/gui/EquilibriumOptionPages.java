@@ -17,30 +17,9 @@ import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * The Optimizations page in Impetus' video options, alongside General, Quality, Performance, Memory,
- * Lighting and the Iris pages.
- *
- * <p>Named apart from the existing Performance page deliberately: that one holds the renderer's own
- * knobs, which trade visual fidelity for frame rate and take effect immediately. Nothing here trades
- * anything — every option is a patch that does the same work faster — and none of it takes effect
- * until the next launch. Putting the two on one page would invite reading them the same way.
- *
- * <p>Built by walking {@link EquilibriumOptions} rather than by listing options by hand, so an option
- * added to the tree appears here without this file being touched. The tree's top-level categories
- * become the page's groups, in declaration order, and each option becomes a tick box.
- *
- * <p>Every switch on this page carries {@link OptionFlag#REQUIRES_GAME_RESTART}, and that is not a
- * hedge. These options are read by {@code EquilibriumMixinPlugin} during coremod setup, before the
- * game window exists — by the time this screen can be opened, the decision each one governs has
- * already been made and the bytecode either was or was not rewritten. Turning one off at runtime can
- * only change what happens next launch, and a screen that implied otherwise would be lying.
- *
- * <p>Impact badges are assigned per category rather than per option, because the honest granularity
- * is coarser than the option tree: what a given optimization is worth depends entirely on what the
- * world is doing. The explosion patches are worth nothing until something explodes, and then they are
- * worth a great deal.
- */
+// Optimizations page in Impetus' video options; separate from Performance since these are patches, not fidelity tradeoffs
+// Built by walking EquilibriumOptions instead of hardcoding, so new tree entries show up here for free
+// All toggles need REQUIRES_GAME_RESTART - options are read by EquilibriumMixinPlugin before the game window exists
 public final class EquilibriumOptionPages {
     private static final String MOD_ID = "equilibrium";
 
@@ -103,12 +82,8 @@ public final class EquilibriumOptionPages {
         return builder.build();
     }
 
-    /**
-     * How much the category is worth, stated at the granularity the answer is actually knowable at.
-     *
-     * <p>The utility categories get no badge: they enable other options rather than removing work
-     * themselves, and a badge would suggest turning one on is worth something on its own.
-     */
+    // Impact assigned per category, not per option; utility categories get no badge since they enable
+    // other options rather than removing work themselves
     private static OptionImpact impactOf(EquilibriumOptions.Entry entry) {
         switch (entry.category()) {
             case "world":
@@ -127,7 +102,7 @@ public final class EquilibriumOptionPages {
         }
     }
 
-    /** {@code mixin.alloc.enum_values.piston_block} → {@code alloc_enum_values_piston_block}. */
+    // e.g. mixin.alloc.enum_values.piston_block -> alloc_enum_values_piston_block
     private static String key(EquilibriumOptions.Entry entry) {
         return entry.path().replace('.', '_');
     }

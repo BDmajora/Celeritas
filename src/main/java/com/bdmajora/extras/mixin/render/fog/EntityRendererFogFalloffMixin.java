@@ -9,20 +9,12 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 
-/**
- * Fog start and end distances.
- *
- * <p>Impetus reads {@code GL_FOG_START} and {@code GL_FOG_END} straight into its terrain and sky
- * shader uniforms, so both must stay finite with {@code start < end}. Writing {@code Float.MAX_VALUE}
- * to push fog "away" — the obvious way to express "no fog" — poisons the shader's fog math instead,
- * which is why turning fog off is handled by {@link EntityRendererFogMixin} clearing the enable bit
- * and this class leaves the values alone in that case.
- *
- * <p>Gameplay fog is exempt; see {@link FogState}.
- */
+// Fog start and end distances; Impetus reads GL_FOG_START/GL_FOG_END into shader uniforms, so both must stay finite with start < end
+// Writing Float.MAX_VALUE to fake "no fog" would poison the shader math instead, so disabling fog is left to EntityRendererFogMixin
+// Gameplay fog is exempt; see FogState
 @Mixin(EntityRenderer.class)
 public class EntityRendererFogFalloffMixin {
-    /** Vanilla's {@code GL_LINEAR} fog end, used to keep a custom start below it. */
+    // Vanilla's GL_LINEAR fog end, used to keep a custom start below it
     @Shadow
     private float farPlaneDistance;
 

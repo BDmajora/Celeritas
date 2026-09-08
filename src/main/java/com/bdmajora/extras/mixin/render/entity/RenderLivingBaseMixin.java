@@ -13,16 +13,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
- * Armor stand visibility and player name tags.
- *
- * <p>A hidden armor stand still draws its label. Armor stands are routinely used as invisible
- * signposts, and hiding the model to save the render while losing the text with it would break that
- * use rather than optimise it.
- *
- * <p>{@code RenderLivingBase} is 1.12.2's shared living-entity renderer, so both switches land in
- * one place.
- */
+// Armor stand visibility and player name tags; a hidden armor stand still draws its label, since stands are routinely
+// used as invisible signposts and losing the text along with the model would break that use
+// RenderLivingBase is 1.12.2's shared living-entity renderer, so both switches land in one place
 @Mixin(RenderLivingBase.class)
 public abstract class RenderLivingBaseMixin<T extends EntityLivingBase> extends Render<T> {
     private RenderLivingBaseMixin(RenderManager renderManager) {

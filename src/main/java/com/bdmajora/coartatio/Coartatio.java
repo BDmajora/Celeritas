@@ -13,45 +13,27 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Entry points for Impetus' memory-compression subsystem.
- *
- * <p>Coartatio is a backport of <a href="https://github.com/jellysquid3/hydrogen-fabric">Hydrogen</a>
- * combined with the parts of FoamFix, LoliASM and FerriteCore that solve the same problems better on
- * 1.12.2. See {@code COARTATIO_ROADMAP.md} for the feature inventory.
- *
- * <p>Nothing here is a mod entry point in the FML sense — the mixins do the work and the lifecycle
- * hangs off the resource reload. This class exists to own the logger and the pool lifecycle so the
- * two are never driven from more than one place.
- */
+// Backport of Hydrogen (jellysquid3/hydrogen-fabric) plus the parts of FoamFix, LoliASM and
+// FerriteCore solving the same problems on 1.12.2. Not an FML entry point itself — mixins do
+// the work; this owns the logger and pool lifecycle so both are driven from one place.
 public final class Coartatio {
     public static final Logger LOGGER = LogManager.getLogger("Coartatio");
 
     private Coartatio() {
     }
 
-    /**
-     * Called at the start of a resource reload, before any model is baked.
-     *
-     * <p>Pools that only exist to serve the bake are (re)opened here. Re-opening rather than clearing
-     * matters: the previous reload's canonical arrays are still referenced by whatever survived it,
-     * and we want the new pool to converge on the new resource pack's geometry rather than keep the
-     * old pack's alive.
-     */
+    // Re-opens (not clears) the bake-scoped pools: the previous reload's canonical arrays are
+    // still referenced by whatever survived it, and the new pool should converge on the new
+    // pack's geometry rather than keep the old pack's alive.
     public static void onResourceReloadStart() {
         ModelCaches.open();
         TransformCaches.open();
         ConditionCanonicalizer.open();
     }
 
-    /**
-     * Called once every model has been baked.
-     *
-     * <p>The bake-scoped pools are closed here. Closing releases the hash sets, not their contents —
-     * every quad keeps the canonical array it was given, we simply stop paying to track them. Quads
-     * created after this point (dynamic models, runtime bakes) skip deduplication entirely, which is
-     * the right trade: they are rare and they are the ones most likely to be mutated later.
-     */
+    // Closing releases the tracking hash sets, not the pooled contents — every quad keeps its
+    // canonical array. Quads baked after this point skip dedup entirely (rare, and most likely
+    // to be mutated later, so not worth tracking).
     public static void onResourceReloadFinish() {
         ModelCaches.close();
         TransformCaches.close();
@@ -67,19 +49,10 @@ public final class Coartatio {
         }
     }
 
-    /**
-     * Called when the player leaves a world or server.
-     *
-     * <p>FoamFix's {@code clClearCachesOnUnload}. Two pools grow with play rather than with loading:
-     * NBT keys pick up every key seen in world data, and resource paths pick up dynamically
-     * constructed locations such as downloaded skins. Neither shrinks on its own, so a long session
-     * followed by a return to the main menu leaves both holding a world's worth of strings that the
-     * next world will not reuse.
-     *
-     * <p>Resetting them frees the pools; strings already handed out stay valid and stay shared, they
-     * just stop being tracked. Model and block-state pools are deliberately untouched — those are
-     * keyed to resources and block registries, which survive a world change.
-     */
+    // Equivalent to FoamFix's clClearCachesOnUnload. NBT keys and resource paths grow with play
+    // (not loading) and never shrink on their own, so reset them here; strings already handed
+    // out stay valid, they just stop being tracked. Model/block-state pools survive a world
+    // change since they're keyed to resources and registries, not the world.
     public static void onWorldLeave() {
         int freed = StringPool.NBT_KEYS.size() + ResourceLocationCaches.PATHS.size();
 
@@ -89,7 +62,7 @@ public final class Coartatio {
         LOGGER.info("Released {} pooled strings on leaving the world", freed);
     }
 
-    /** Human-readable pool statistics, one entry per line. Shared by the log and the F3 overlay. */
+    // Shared by the log and the F3 overlay.
     public static List<String> statistics() {
         List<String> lines = new ArrayList<>();
         lines.add("Coartatio memory statistics");
@@ -110,13 +83,8 @@ public final class Coartatio {
         return lines;
     }
 
-    /**
-     * The single line Impetus adds to the F3 overlay.
-     *
-     * <p>Both counts are pooled-entry totals, which read low on purpose: they are what Coartatio
-     * kept, and the interesting number is how much they stand in for. {@code QUADS.size()} survives
-     * the pool being closed after the bake — before that was fixed this always displayed zero.
-     */
+    // Counts read low on purpose: they're what Coartatio kept, not what it stands in for.
+    // QUADS.size() survives the pool closing after bake — before that fix this always showed zero.
     public static String debugOverlayLine() {
         return String.format("Coartatio: ~%s saved (/coartatio for detail)", MemoryReport.summary());
     }

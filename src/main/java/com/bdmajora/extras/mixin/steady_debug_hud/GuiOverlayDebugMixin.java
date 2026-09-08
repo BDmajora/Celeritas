@@ -11,16 +11,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
- * Throttles how often the F3 overlay text is rebuilt.
- *
- * <p>Vanilla recomputes every line each frame, and some of those lines are not cheap — the biome
- * lookup and the chunk-relative position both hit the world. Rebuilding once a tick instead makes
- * the numbers readable as well as cheaper: at 200 FPS the vanilla overlay changes too fast to read.
- *
- * <p>The two cached lists are keyed off a single decision made at the top of the frame, so the left
- * and right columns can never show text from different ticks.
- */
+// Throttles how often the F3 overlay text is rebuilt; vanilla recomputes every line each frame, some of which hit the world (biome lookup, chunk pos)
+// Rebuilding once a tick makes the numbers readable too, since at high FPS vanilla's overlay changes too fast to read
+// Both cached lists share one rebuild decision per frame so left/right columns never show text from different ticks
 @Mixin(GuiOverlayDebug.class)
 public abstract class GuiOverlayDebugMixin {
     @Unique
@@ -50,15 +43,8 @@ public abstract class GuiOverlayDebugMixin {
         }
     }
 
-    /**
-     * A copy, not the cache itself.
-     *
-     * <p>{@code renderDebugInfoLeft} appends three lines ("Debug: Pie [shift]...", the F3+Q hint and
-     * a blank) to whatever {@code call()} hands it. Returning the live cache would let it grow by
-     * three lines on every frame until the next rebuild, so the overlay would sprout duplicate hint
-     * lines between refreshes. One list copy per frame is still far cheaper than recomputing the
-     * text, which is the whole point of this mixin.
-     */
+    // Returns a copy, not the cache itself; renderDebugInfoLeft appends 3 lines to whatever this returns,
+    // so handing back the live cache would let it grow every frame until the next rebuild
     @Inject(method = "call()Ljava/util/List;", at = @At("HEAD"), cancellable = true)
     private void impetus$leftFromCache(CallbackInfoReturnable<java.util.List<String>> cir) {
         if (!this.impetus$rebuild) {
@@ -74,7 +60,7 @@ public abstract class GuiOverlayDebugMixin {
         }
     }
 
-    /** Copied for the same reason as the left column, and because a mod may append to this one too. */
+    // Copied for the same reason as the left column, and because a mod may append to this one too
     @Inject(method = "getDebugInfoRight()Ljava/util/List;", at = @At("HEAD"), cancellable = true)
     private void impetus$rightFromCache(CallbackInfoReturnable<java.util.List<String>> cir) {
         if (!this.impetus$rebuild) {

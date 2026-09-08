@@ -9,7 +9,7 @@ import com.bdmajora.impetus.engine.api.util.ColorMixer;
  * {@link #IMPETUS} multiplies AO into RGB, which is what vanilla 1.12.2 effectively does. {@link #SEPARATE_AO}
  * instead carries AO in the alpha channel and leaves RGB as the pure block/biome tint — the shaders.properties
  * {@code separateAo} directive, which every modern pack sets, so its own lighting model can apply AO itself
- * (Iris does exactly this split in {@code XHFPTerrainVertex}).
+ * (Umbra does exactly this split in {@code XHFPTerrainVertex}).
  */
 public enum ChunkColorWriter {
     SEPARATE_AO {
@@ -33,7 +33,7 @@ public enum ChunkColorWriter {
     }
 
     /**
-     * Holder for the flag. Lives here rather than in the Iris packages because the mesher runs on worker threads in
+     * Holder for the flag. Lives here rather than in the Umbra packages because the mesher runs on worker threads in
      * the engine module, which must not depend on the shader-pack model.
      */
     public static final class SeparateAoState {

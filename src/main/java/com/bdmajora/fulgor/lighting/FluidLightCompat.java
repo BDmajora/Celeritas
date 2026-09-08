@@ -6,16 +6,9 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.chunk.Chunk;
 
-/**
- * Folds Fluidlogged API's second block state at a position into the light calculation.
- *
- * <p>A fluidlogged position holds two states — the block and the fluid occupying the same space — and
- * the position's real opacity and luminance are the larger of the two. Water inside a fence darkens
- * like water; a fluidlogged sea lantern still glows.
- *
- * <p>Isolated in its own class so the Fluidlogged classes are only ever resolved on a call, and
- * {@link com.bdmajora.fulgor.Fulgor#hasFluidloggedApi()} guards every call site.
- */
+// Folds Fluidlogged API's second block state (the fluid sharing the position) into light calc;
+// real opacity/luminance is the max of the block and fluid states, so a fluidlogged sea lantern still glows.
+// Kept isolated so the Fluidlogged classes only resolve when Fulgor.hasFluidloggedApi() is true.
 final class FluidLightCompat {
     private FluidLightCompat() {
     }

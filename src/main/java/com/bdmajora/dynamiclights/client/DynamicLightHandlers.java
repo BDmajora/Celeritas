@@ -15,30 +15,24 @@ import net.minecraft.tileentity.TileEntity;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * The registry of per-type light handlers, and the questions the tick path asks of it.
- *
- * <p>Handler lookup walks up the class hierarchy rather than matching the concrete class exactly.
- * Upstream matches exactly, which works on modern versions because {@code EntityType} is a registry
- * key — but on 1.12.2 the key is the class, so a mod subclassing {@code EntityItem} would silently
- * lose its glow. The walk is memoised per concrete class, so it costs one map lookup after the first
- * sighting of each type.
- */
+// Registry of per-type light handlers, plus the questions the tick path asks of it
+// Lookup walks up the class hierarchy instead of matching the concrete class like upstream does; on 1.12.2 the registry key is the class itself, so a subclassed EntityItem would otherwise lose its glow
+// The walk result is memoised per concrete class, so it costs one map lookup after the first sighting of each type
 public final class DynamicLightHandlers {
     private static final Map<Class<?>, DynamicLightHandler<?>> ENTITY_HANDLERS = new ConcurrentHashMap<>();
     private static final Map<Class<?>, DynamicLightHandler<?>> TILE_ENTITY_HANDLERS = new ConcurrentHashMap<>();
 
-    /** Concrete class to the handler found by walking its supertypes. Includes negative results. */
+    // Concrete class to the handler found by walking its supertypes; includes negative results
     private static final Map<Class<?>, Object> ENTITY_LOOKUP = new ConcurrentHashMap<>();
     private static final Map<Class<?>, Object> TILE_ENTITY_LOOKUP = new ConcurrentHashMap<>();
 
-    /** Stands in for "no handler", which a {@link ConcurrentHashMap} cannot store as a value. */
+    // Stands in for "no handler", since ConcurrentHashMap can't store null as a value
     private static final Object NONE = new Object();
 
     private DynamicLightHandlers() {
     }
 
-    /** The vanilla light sources that are not simply "an entity holding a bright item". */
+    // Vanilla light sources that aren't simply "an entity holding a bright item"
     public static void registerDefaultHandlers() {
         registerEntityHandler(EntityBlaze.class, DynamicLightHandler.makeHandler(blaze -> 10, blaze -> true));
         registerEntityHandler(EntityCreeper.class, DynamicLightHandler.makeCreeperEntityHandler(null));
@@ -57,24 +51,20 @@ public final class DynamicLightHandlers {
     // Registration
     // ------------------------------------------------------------------------------------------
 
-    /**
-     * Registers a handler for {@code entityClass} and everything that extends it.
-     *
-     * <p>Registering over an existing entry combines the two by taking the brighter result, so two
-     * mods can both contribute to the same type without either one winning outright.
-     */
+    // Registers a handler for entityClass and everything that extends it
+    // Registering over an existing entry combines the two by taking the brighter result, so two mods can both contribute without either winning outright
     public static <T extends Entity> void registerEntityHandler(Class<T> entityClass,
                                                                 DynamicLightHandler<T> handler) {
         register(ENTITY_HANDLERS, ENTITY_LOOKUP, entityClass, handler);
     }
 
-    /** As {@link #registerEntityHandler}, for block entities. */
+    // As registerEntityHandler, for block entities
     public static <T extends TileEntity> void registerTileEntityHandler(Class<T> tileEntityClass,
                                                                         DynamicLightHandler<T> handler) {
         register(TILE_ENTITY_HANDLERS, TILE_ENTITY_LOOKUP, tileEntityClass, handler);
     }
 
-    /** True when a mod has registered at least one block entity handler; nothing does by default. */
+    // True when a mod has registered at least one block entity handler; nothing does by default
     public static boolean hasTileEntityHandlers() {
         return !TILE_ENTITY_HANDLERS.isEmpty();
     }
@@ -131,11 +121,7 @@ public final class DynamicLightHandlers {
     // Gating
     // ------------------------------------------------------------------------------------------
 
-    /**
-     * Whether this entity is allowed to light up at all.
-     *
-     * <p>The player is gated on the first-person switch; everything else on its per-type toggle.
-     */
+    // Whether this entity is allowed to light up at all; player is gated on the first-person switch, everything else on its per-type toggle
     public static boolean canEntityLightUp(Entity entity) {
         if (entity == Minecraft.getMinecraft().player && !DynamicLights.options().selfLightSource) {
             return false;
@@ -148,7 +134,7 @@ public final class DynamicLightHandlers {
         return LightSourceSettings.getInstance().isBlockEntityEnabled(tileEntity);
     }
 
-    /** The luminance this entity's registered handler reports, or zero if it has none or is gated off. */
+    // The luminance this entity's registered handler reports, or zero if it has none or is gated off
     public static <T extends Entity> int getLuminanceFrom(T entity) {
         if (!DynamicLights.options().entitiesLightSource) {
             return 0;
@@ -170,7 +156,7 @@ public final class DynamicLightHandlers {
         return clamp(handler.getLuminance(entity));
     }
 
-    /** As {@link #getLuminanceFrom(Entity)}, for block entities. */
+    // As getLuminanceFrom(Entity), for block entities
     public static <T extends TileEntity> int getLuminanceFrom(T tileEntity) {
         if (!DynamicLights.options().blockEntitiesLightSource) {
             return 0;
@@ -190,14 +176,7 @@ public final class DynamicLightHandlers {
         return clamp(handler.getLuminance(tileEntity));
     }
 
-    /**
-     * Caps a handler's answer at 14.
-     *
-     * <p>An enderman carrying glowstone would otherwise report 15, and a source at 15 reads as a
-     * full-bright block: the distance falloff stops being visible and the lit area looks like a
-     * rectangle of light rather than a glow. Held items are capped the same way in
-     * {@link DynamicLightsEngine#getLuminanceFromItemStack}.
-     */
+    // Caps a handler's answer at 14; a source at 15 reads as a full-bright block with no visible falloff, so it looks like a rectangle of light instead of a glow
     private static int clamp(int luminance) {
         return Math.min(luminance, 14);
     }

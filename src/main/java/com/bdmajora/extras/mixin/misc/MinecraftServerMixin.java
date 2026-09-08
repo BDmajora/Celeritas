@@ -7,19 +7,9 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
 
-/**
- * OptiFine's Autosave switch: how often the integrated server writes the world out.
- *
- * <p>Vanilla saves every 900 ticks, and on a large world that is a visible hitch. Raising the
- * interval trades how much progress an unclean exit costs for how often the game stutters.
- *
- * <p>Zero means never, which vanilla's {@code tickCounter % interval} would divide by — so it is
- * translated into an interval nothing can be congruent to instead. The world is still saved on
- * quit; this only affects the periodic save.
- *
- * <p>Only reachable in single-player. Impetus is client-only, so on a dedicated server this class
- * is not present and the server's own interval applies.
- */
+// OptiFine's Autosave switch: how often the integrated server writes the world out; vanilla's 900-tick default hitches on large worlds
+// Zero means never; vanilla's tickCounter % interval would divide by that, so it's translated to an interval nothing is congruent to
+// Only reachable in single-player, since Impetus is client-only and this class isn't present on a dedicated server
 @Mixin(MinecraftServer.class)
 public class MinecraftServerMixin {
     @ModifyConstant(method = "tick", constant = @Constant(intValue = 900))

@@ -33,10 +33,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+// Implements the engine's abstract DrawContext on top of 1.12.2's GuiScreen/GlStateManager calls
 public class VintageDrawContext implements DrawContext {
     private final FontRenderer font = Minecraft.getMinecraft().fontRenderer;
+    // caches compiled ITextComponents since TextComponent objects are treated as immutable keys
     private final Map<TextComponent, ITextComponent> componentCache;
 
+    // caches generated dynamic texture locations for mod logos, keyed by mod ID
     private static final Map<String, String> MOD_LOGOS = new HashMap<>();
 
     public VintageDrawContext() {
@@ -182,8 +185,8 @@ public class VintageDrawContext implements DrawContext {
 
     @Override
     public TextComponent getFriendlyModName(String modId) {
-        if ("iris".equals(modId)) {
-            return TextComponent.literal("Iris");
+        if ("umbra".equals(modId)) {
+            return TextComponent.literal("Umbra");
         }
 
         var container = Loader.instance().getIndexedModList().get(modId);
@@ -195,7 +198,7 @@ public class VintageDrawContext implements DrawContext {
 
     @Override
     public @Nullable String getModVersion(String modId) {
-        if ("iris".equals(modId)) {
+        if ("umbra".equals(modId)) {
             return "1.12.2-port";
         }
 

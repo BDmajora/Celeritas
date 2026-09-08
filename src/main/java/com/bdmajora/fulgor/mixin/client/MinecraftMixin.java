@@ -16,18 +16,10 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * The client's once-per-tick flush.
- *
- * <p>On the server every path that reads light goes through the engine, so deferral resolves itself.
- * The client has one that does not: Impetus' terrain renderer copies light arrays straight out of the
- * chunk sections when it prepares a build task, which would silently capture a stale batch. So the
- * client tick resolves everything up front, in two stages that have to happen in this order.
- *
- * <p>First the world's engine runs, which writes the new light values and calls
- * {@code World.notifyLightSet} for each — filling the renderer's queue. Then the renderer's queue is
- * drained into chunk rebuilds. Draining first would leave a tick of latency on every light change.
- */
+// Mixes into Minecraft.runTick to flush pending light updates once per client tick, in two ordered
+// stages: world engine first (writes light + queues renderer notifications), then renderer drain —
+// reversing the order would leave a tick of latency since the terrain renderer copies light arrays
+// straight out of chunk sections and would otherwise capture a stale batch
 @SideOnly(Side.CLIENT)
 @Mixin(Minecraft.class)
 public abstract class MinecraftMixin {
@@ -44,13 +36,8 @@ public abstract class MinecraftMixin {
     @Shadow
     private boolean isGamePaused;
 
-    /**
-     * Stage one, injected just before the {@code levelRenderer} profiler section opens.
-     *
-     * <p>Opening a {@code lighting} section here and letting vanilla's own
-     * {@code endStartSection("levelRenderer")} close it keeps the profiler balanced and puts the cost
-     * where it can be seen.
-     */
+    // Stage one: injected just before the "levelRenderer" profiler section opens; opens a "lighting"
+    // section here and lets vanilla's endStartSection("levelRenderer") close it, keeping the profiler balanced
     @Inject(method = "runTick", at = @At(value = "CONSTANT", args = "stringValue=levelRenderer"))
     private void fulgor$processWorldLightUpdates(CallbackInfo ci) {
         if (this.world == null || (this.isGamePaused && FulgorConfig.get().skipUpdatesWhilePaused)) {
@@ -62,10 +49,8 @@ public abstract class MinecraftMixin {
         ((LightingEngineProvider) this.world).fulgor$getLightingEngine().processLightUpdates();
     }
 
-    /**
-     * Stage two, injected just before the {@code level} section, which is immediately after
-     * {@code renderGlobal.updateClouds()} — the call whose light-update drain Fulgor took over.
-     */
+    // Stage two: injected just before the "level" section, right after renderGlobal.updateClouds() —
+    // the call whose light-update drain Fulgor took over
     @Inject(method = "runTick", at = @At(value = "CONSTANT", args = "stringValue=level"))
     private void fulgor$processRenderLightUpdates(CallbackInfo ci) {
         if (this.isGamePaused && FulgorConfig.get().skipUpdatesWhilePaused) {

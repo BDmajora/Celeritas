@@ -12,19 +12,10 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
- * Replaces the leaf of every multipart condition with a flattened, interned predicate.
- *
- * <p>Vanilla's {@code getPredicate} allocates a fresh anonymous {@code Predicate} per call — and for
- * a multi-valued condition ({@code facing=north|south}) also a {@code Predicates.or} composite and a
- * transformed {@code Iterable} over the value list. Every one of those closures captures the
- * property and the parsed value, and none of them can ever compare equal to another, so identical
- * conditions across hundreds of blockstate files each keep their own.
- *
- * <p>Cancelling at {@code HEAD} rather than using {@code @Overwrite} is deliberate: it produces the
- * same result while leaving other mods' injections into this method valid, and it will not fail the
- * mixin apply if another mod also targets it.
- */
+// Replaces ConditionPropertyValue.getPredicate's leaf predicate with a flattened, interned one:
+// vanilla allocates a fresh anonymous Predicate (plus an OR composite for multi-valued conditions
+// like facing=north|south) per call, and none of those closures can ever compare equal.
+// Cancels at HEAD instead of @Overwrite so other mods' injections into this method still apply.
 @Mixin(ConditionPropertyValue.class)
 public class ConditionPropertyValueMixin {
     @Shadow

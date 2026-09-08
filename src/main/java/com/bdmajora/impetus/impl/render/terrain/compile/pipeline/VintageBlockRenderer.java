@@ -38,9 +38,9 @@ import com.bdmajora.impetus.impl.render.terrain.compile.VintageChunkBuildContext
 import com.bdmajora.impetus.impl.render.terrain.compile.light.LightDataCache;
 import com.bdmajora.impetus.impl.render.terrain.compile.light.VintageDiffuseProvider;
 import com.bdmajora.impetus.impl.world.cloned.ImpetusBlockAccess;
-import com.bdmajora.impetus.iris.terrain.IrisTerrainProgramOverride;
-import com.bdmajora.impetus.iris.vertices.NormI8;
-import com.bdmajora.impetus.iris.vertices.NormalHelper;
+import com.bdmajora.impetus.umbra.terrain.UmbraTerrainProgramOverride;
+import com.bdmajora.impetus.umbra.vertices.NormI8;
+import com.bdmajora.impetus.umbra.vertices.NormalHelper;
 import com.bdmajora.impetus.mixin.core.terrain.BlockColorsAccessor;
 
 import java.util.Arrays;
@@ -234,40 +234,21 @@ public class VintageBlockRenderer {
             out.midBlockZ = 0.5f - quad.getZ(srcIndex);
         }
 
-        if (IrisTerrainProgramOverride.areShadersActive()) {
-            populateIrisVertexData(vertices, quad, trueNormal, pos);
+        if (UmbraTerrainProgramOverride.areShadersActive()) {
+            populateUmbraVertexData(vertices, quad, trueNormal, pos);
         }
 
         var vertexBuffer = builder.getVertexBuffer(normalFace);
         vertexBuffer.push(vertices, material);
     }
 
-    /**
-     * Fills the OptiFine per-vertex attributes ({@code mc_midTexCoord}, {@code at_tangent}, {@code mc_Entity}) that
-     * {@code IrisChunkVertexType} encodes while a shader pack is active. All four vertices of a quad share the values.
-     */
-    private void populateIrisVertexData(ChunkVertexEncoder.Vertex[] vertices, BakedQuadView quad, int trueNormal, BlockPos pos) {
-        // mc_midTexCoord is the centre of the texture region mapped to THIS QUAD, not the centre of the sprite.
-        // The two coincide for the full-sprite quads that make up most terrain, which is why using the sprite
-        // hid this for so long -- but they diverge on any face that maps a sub-rect, and the torch's cap faces are
-        // the worst case in vanilla: torch.json gives `up` uv [7,6,9,8] and `down` uv [7,13,9,15], 2x2-texel rects,
-        // while its sides use the full [0,0,16,16].
-        //
-        // Chocapic-derived packs (RedHat, BSL, Sildur's, ...) rebuild the sprite basis from this attribute:
-        //     texcoordminusmid = texcoord - midcoord;
-        //     vtexcoordam.pq   = abs(texcoordminusmid) * 2;   // extent
-        //     vtexcoordam.st   = min(texcoord, midcoord - texcoordminusmid);
-        //     vtexcoord.xy     = sign(texcoordminusmid) * 0.5 + 0.5;
-        // That only closes if midcoord is the quad's UV centre, so every vertex is offset by +/- half the extent.
-        // Feeding the sprite centre broke it two ways on torches: the `up` face has a vertex sitting exactly on the
-        // sprite centre (v 8/16), where sign() yields 0 -- so vtexcoord lands on 0.5 instead of 0/1 and the extent
-        // collapses to 0 -- and the `down` face (v 13/16..15/16) reports an extent 5-7x too large. Both feed
-        // dcdx/dcdy = dFdx(vtexcoord.st * vtexcoordam.pq), so the pack samples the atlas at a wildly wrong LOD and
-        // the cap comes back as a ~1px band of averaged torch orange. Zooming shrinks the derivatives back under the
-        // mip threshold, which is why a zoom mod made it disappear.
-        //
-        // Iris does exactly this (XHFPTerrainVertex.write: "the center point of the texture region which is mapped
-        // to the quad", summing the four vertex UVs * 0.25).
+    // Fills the OptiFine per-vertex attributes (mc_midTexCoord, at_tangent, mc_Entity) that UmbraChunkVertexType
+    // encodes while a shader pack is active. All four vertices of a quad share the values.
+    private void populateUmbraVertexData(ChunkVertexEncoder.Vertex[] vertices, BakedQuadView quad, int trueNormal, BlockPos pos) {
+        // mc_midTexCoord must be the centre of THIS QUAD's mapped region, not the sprite centre -- they diverge on
+        // any face mapping a sub-rect (e.g. torch cap faces), and Chocapic-derived packs (RedHat, BSL, Sildur's)
+        // rebuild their sprite basis from this value, so feeding the sprite centre broke torch caps into a smeared
+        // 1px band via wrong-LOD derivatives. Umbra computes it the same way (sum of the four UVs * 0.25).
         float midU = 0.0f, midV = 0.0f;
         for (int i = 0; i < 4; i++) {
             midU += quad.getTexU(i);
@@ -278,7 +259,7 @@ public class VintageBlockRenderer {
 
         // Read positions/UVs straight off the source quad, never off `vertices`: those have already been rewritten in
         // ModelQuadOrientation order (the AO diagonal flip), and a rotated vertex triple yields a tangent turned 90°
-        // about the face normal. Iris computes this from the unrotated ModelQuadView for the same reason — with the
+        // about the face normal. Umbra computes this from the unrotated ModelQuadView for the same reason — with the
         // rotated triple, water blocks alternate tangents block-to-block and Sildur's wave normals (bump * tbnMatrix)
         // checkerboard, which is invisible head-on but glaring once grazing-angle fresnel drives the reflection.
         int tangent = NormalHelper.computeTangent(
@@ -295,7 +276,7 @@ public class VintageBlockRenderer {
         if (state != null) {
             int metadata = state.getBlock().getMetaFromState(state);
             blockRenderType = state.getRenderType().ordinal();
-            blockId = com.bdmajora.impetus.iris.material.WorldRenderingSettings.getBlockStateId(state);
+            blockId = com.bdmajora.impetus.umbra.material.WorldRenderingSettings.getBlockStateId(state);
             blockData = metadata;
             if (this.currentBlockAccess != null) {
                 blockEmission = clampBlockEmission(state.getLightValue(this.currentBlockAccess, pos));

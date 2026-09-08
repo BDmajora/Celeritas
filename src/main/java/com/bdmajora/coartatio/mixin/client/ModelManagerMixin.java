@@ -8,18 +8,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Drives the lifecycle of the bake-scoped pools.
- *
- * <p>{@code ModelManager.onResourceManagerReload} brackets the entire bake — it constructs the
- * bakery, runs it, and installs the result — so it is the one place that sees both ends of the phase.
- * Forge replaces the {@code ModelBakery} inside with its own {@code ModelLoader} but leaves this
- * method's signature alone, so the hook is stable across Forge versions and unaffected by mods that
- * add model loaders.
- *
- * <p>Opening at {@code HEAD} rather than clearing at {@code RETURN} means a second reload (resource
- * pack change, F3+T) does not keep the previous pack's geometry alive through the pool.
- */
+// Patches ModelManager.onResourceManagerReload, which brackets the whole model bake (builds the
+// bakery, runs it, installs the result). Opens/closes the bake-scoped pools around it so a
+// second reload (resource pack swap, F3+T) doesn't keep the previous pack's geometry alive.
 @Mixin(ModelManager.class)
 public class ModelManagerMixin {
     @Inject(method = "onResourceManagerReload", at = @At("HEAD"))

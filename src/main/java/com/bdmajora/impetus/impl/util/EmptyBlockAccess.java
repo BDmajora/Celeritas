@@ -11,6 +11,7 @@ import net.minecraft.world.WorldType;
 import net.minecraft.world.biome.Biome;
 import org.jetbrains.annotations.Nullable;
 
+// Stub world used when a real IBlockAccess isn't available yet (e.g. before world load); everything is air
 public enum EmptyBlockAccess implements IBlockAccess {
     INSTANCE;
 

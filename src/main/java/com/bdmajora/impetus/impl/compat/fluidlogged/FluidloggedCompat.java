@@ -12,9 +12,7 @@ import com.bdmajora.impetus.impl.render.terrain.compile.VintageChunkBuildContext
 import com.bdmajora.impetus.impl.world.cloned.ImpetusBlockAccess;
 
 public class FluidloggedCompat {
-    /**
-     * The mod ID of Fluidlogged API.
-     */
+    // Mod ID of Fluidlogged API
     public static final String MODID = "fluidlogged_api";
     public static final boolean IS_LOADED = Loader.isModLoaded(MODID);
 
@@ -24,6 +22,7 @@ public class FluidloggedCompat {
 
     public static void renderFluidState(ImpetusBlockAccess blockAccess, BlockPos pos, IBlockState state, VintageChunkBuildContext context, BlockRendererDispatcher dispatcher) {
         FluidState fluidState = blockAccess.getFluidState(pos);
+        // only render the fluid if the block isn't fluidloggable, or if it explicitly opts in to rendering the fluid underneath it
         if (fluidState != FluidState.EMPTY && (!(state.getBlock() instanceof IFluidloggable) || ((IFluidloggable)state.getBlock()).shouldFluidRender(blockAccess, pos, state, fluidState))) {
             IBlockState renderState = fluidState.getState().getActualState(blockAccess, pos);
             var block = renderState.getBlock();

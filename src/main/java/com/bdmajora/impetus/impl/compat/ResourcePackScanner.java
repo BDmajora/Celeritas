@@ -91,7 +91,7 @@ public final class ResourcePackScanner {
             return;
         }
 
-        LOGGER.warn("The following resource packs contain Minecraft shader program assets that may conflict with Impetus/Iris rendering: {}",
+        LOGGER.warn("The following resource packs contain Minecraft shader program assets that may conflict with Impetus/Umbra rendering: {}",
                 String.join(", ", riskyPacks));
 
         List<String> lines = new ArrayList<>();

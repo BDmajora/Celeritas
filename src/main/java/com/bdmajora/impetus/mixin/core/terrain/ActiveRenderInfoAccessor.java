@@ -6,6 +6,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 import java.nio.FloatBuffer;
 
+// Exposes the static projection/modelview buffers ActiveRenderInfo keeps private
 @Mixin(ActiveRenderInfo.class)
 public interface ActiveRenderInfoAccessor {
     @Accessor("PROJECTION")

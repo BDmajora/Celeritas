@@ -8,13 +8,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Hides the moving-piston block entity — the extending head and the block it pushes.
- *
- * <p>The piston still works; only the in-between animation is skipped, so blocks appear to jump to
- * their destination. Worth it next to a large redstone contraption, which is the case this exists
- * for.
- */
+// Hides the moving-piston block entity (extending head and pushed block); the piston still works,
+// only the in-between animation is skipped, so blocks jump straight to their destination
 @Mixin(TileEntityPistonRenderer.class)
 public class TileEntityPistonRendererMixin {
     @Inject(

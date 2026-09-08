@@ -14,25 +14,13 @@ import java.util.Arrays;
 
 import static com.bdmajora.impetus.engine.impl.model.light.data.LightDataAccess.*;
 
-/**
- * A light pipeline which implements "classic-style" lighting through simply using the light value of the adjacent
- * block to a face.
- */
+// "Classic-style" lighting - just uses the light value of the block adjacent to a face
 @RequiredArgsConstructor
 public class FlatLightPipeline implements LightPipeline {
-    /**
-     * The cache which light data will be accessed from.
-     */
     private final LightDataAccess lightCache;
-
-    /**
-     * Used to retrieve the directional shading value for quads.
-     */
     private final DiffuseProvider diffuseProvider;
 
-    /**
-     * Whether or not to even attempt to shade quads using their normals rather than light face.
-     */
+    // If false, always shade by light face instead of quad normal
     private final boolean useQuadNormalsForShading;
 
     @Override
@@ -71,13 +59,9 @@ public class FlatLightPipeline implements LightPipeline {
         Arrays.fill(out.br, this.diffuseProvider.getDiffuse(NormI8.unpackX(normal), NormI8.unpackY(normal), NormI8.unpackZ(normal), shade));
     }
 
-    /**
-     * When vanilla computes an offset lightmap with flat lighting, it passes the original BlockState but the
-     * offset BlockPos to LevelRenderer.getLightColor(BlockAndTintGetter, BlockState, BlockPos).
-     * This does not make much sense but fixes certain issues, primarily dark quads on light-emitting blocks
-     * behind tinted glass. {@link LightDataAccess} cannot efficiently store lightmaps computed with
-     * inconsistent values so this method exists to mirror vanilla behavior as closely as possible.
-     */
+    // Vanilla mixes the origin BlockState with the offset BlockPos here - doesn't make much sense but fixes
+    // dark quads on light-emitting blocks behind tinted glass. LightDataAccess can't cache that inconsistent
+    // combo directly, so this manually recombines origin luminance with offset block/sky light to match it.
     private int getOffsetLightmap(int x, int y, int z, ModelQuadFacing face) {
         int word = this.lightCache.get(x, y, z);
 

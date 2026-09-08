@@ -38,7 +38,7 @@ public class ImpetusVideoOptionsController implements Renderable {
     private AbstractFrame frame;
     private FlatButtonWidget applyButton, closeButton, undoButton;
 
-    /** Title (and identifier) of the synthesized search-results page. */
+    // Title/id of the synthesized search-results page
     private static final TextComponent SEARCH_RESULTS_TITLE = TextComponent.translatable("impetus.search_results");
 
     private SearchBarWidget searchBar;
@@ -196,12 +196,7 @@ public class ImpetusVideoOptionsController implements Renderable {
                 .addChild(dim -> this.closeButton);
     }
 
-    /**
-     * Live search: while the query is non-empty, a synthesized "Search Results" page (containing every option
-     * whose name or tooltip matches, across all pages) is added as a tab and selected. The matched options are
-     * the live instances, so they can be edited directly from the results view. Clearing the query restores the
-     * previously selected tab.
-     */
+    // Live search: while query is non-empty, shows a synthesized "Search Results" tab with matching live option instances (editable in place); clearing restores the previous tab
     private void setSearchQuery(String query) {
         var trimmed = query.trim();
 

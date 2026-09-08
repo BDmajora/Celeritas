@@ -43,16 +43,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-/**
- * Takes a slice of world state (block states, biome and light data arrays) and copies the data for use in off-thread
- * operations. This allows chunk build tasks to see a consistent snapshot of chunk data at the exact moment the task was
- * created.
- *
- * World slices are not safe to use from multiple threads at once, but the data they contain is safe from modification
- * by the main client thread.
- *
- * Object pooling should be used to avoid huge allocations as this class contains many large arrays.
- */
+// Copies a slice of world state (blocks, biomes, light) off-thread so chunk build tasks see a consistent snapshot
+// Not thread-safe to share across threads at once; pool instances since the backing arrays are large
 public class WorldSlice implements ImpetusBlockAccess {
     // The number of blocks on each axis in a section.
     private static final int SECTION_BLOCK_LENGTH = 16;
@@ -466,9 +458,6 @@ public class WorldSlice implements ImpetusBlockAccess {
         return getBlockState(pos).isSideSolid(this, pos, side);
     }
 
-    /**
-     * Gets or computes the biome at the given global coordinates.
-     */
     public Biome getBiome(int x, int y, int z) {
         int relX = x - this.baseX;
         int relY = y - this.baseY;
@@ -531,9 +520,7 @@ public class WorldSlice implements ImpetusBlockAccess {
         return section;
     }
 
-    /**
-     * Read the block state off the main thread (safely) by cloning the needed section.
-     */
+    // Reads the block state safely off the main thread by cloning the needed section
     private IBlockState getBlockStateFallback(int x, int y, int z) {
         if (Minecraft.getMinecraft().isCallingFromMinecraftThread()) {
             this.fallbackPos.setPos(x, y, z);

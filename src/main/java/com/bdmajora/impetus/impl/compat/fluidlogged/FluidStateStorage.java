@@ -10,9 +10,7 @@ import org.apache.commons.lang3.mutable.MutableInt;
 
 import java.util.Objects;
 
-/**
- * Holds a 16x16x16 copy of {@link IFluidStateContainer} data.
- */
+// Holds a 16x16x16 copy of IFluidStateContainer data, one per chunk section
 public class FluidStateStorage {
     private final BlockStateContainer data = new BlockStateContainer();
     private final int nonEmptyCount;
@@ -22,6 +20,7 @@ public class FluidStateStorage {
         MutableInt counter = new MutableInt();
         container.forEach((pos, fluidState) -> {
             int y = container.deserializeY(pos);
+            // container spans the whole chunk, so filter down to just this section's Y range
             if (y >> 4 == yIn >> 4) {
                 int x = container.deserializeX(pos);
                 int z = container.deserializeZ(pos);

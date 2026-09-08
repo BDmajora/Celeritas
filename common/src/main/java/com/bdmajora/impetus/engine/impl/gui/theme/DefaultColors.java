@@ -10,7 +10,7 @@ public class DefaultColors {
     public static final int BACKGROUND_HOVERED = 0xE0202020;
     public static final int BACKGROUND_DISABLED = 0x60000000;
 
-    private static final int IRIS_ACCENT = 0xFFD86AFF;
+    private static final int UMBRA_ACCENT = 0xFFD86AFF;
     private static final int[] MOD_ACCENT_PALETTE = {
             0xFF80CBC4,
             0xFFFFB86C,
@@ -35,7 +35,7 @@ public class DefaultColors {
 
         return switch (modId) {
             case "minecraft", "impetus", "sodium" -> ELEMENT_ACTIVATED;
-            case "iris" -> IRIS_ACCENT;
+            case "umbra" -> UMBRA_ACCENT;
             default -> MOD_ACCENT_PALETTE[Math.floorMod(modId.hashCode(), MOD_ACCENT_PALETTE.length)];
         };
     }

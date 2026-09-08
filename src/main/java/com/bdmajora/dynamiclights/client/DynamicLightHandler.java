@@ -8,20 +8,13 @@ import net.minecraft.item.ItemStack;
 
 import java.util.function.Function;
 
-/**
- * Reports how brightly one kind of entity or block entity glows.
- *
- * <p>The public extension point: a mod registers a handler for its own type through
- * {@link DynamicLightHandlers}, and everything else — tracking, chunk rebuilds, the lightmap — comes
- * for free.
- *
- * @param <T> the light source type
- */
+// Reports how brightly one kind of entity or block entity glows
+// Mods register a handler for their own type via DynamicLightHandlers; tracking, chunk rebuilds, and the lightmap come for free
 public interface DynamicLightHandler<T> {
-    /** Luminance in the vanilla 0-15 scale. */
+    // Luminance in the vanilla 0-15 scale
     int getLuminance(T lightSource);
 
-    /** Whether this source is extinguished by being underwater. */
+    // Whether this source is extinguished by being underwater
     default boolean isWaterSensitive(T lightSource) {
         return false;
     }
@@ -41,7 +34,7 @@ public interface DynamicLightHandler<T> {
         };
     }
 
-    /** Wraps {@code handler} so the entity's held and worn items count towards its luminance too. */
+    // Wraps handler so the entity's held and worn items count towards its luminance too
     static <T extends EntityLivingBase> DynamicLightHandler<T> makeLivingEntityHandler(
             DynamicLightHandler<T> handler) {
         return entity -> Math.max(
@@ -49,11 +42,7 @@ public interface DynamicLightHandler<T> {
                 handler.getLuminance(entity));
     }
 
-    /**
-     * A creeper handler that follows the configured explosive lighting mode.
-     *
-     * @param handler an extra handler to take the maximum with, or null
-     */
+    // Creeper handler that follows the configured explosive lighting mode; handler is an extra one to max with, or null
     static <T extends EntityCreeper> DynamicLightHandler<T> makeCreeperEntityHandler(
             DynamicLightHandler<T> handler) {
         return new DynamicLightHandler<T>() {

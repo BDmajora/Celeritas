@@ -19,28 +19,12 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Compacts the quad lists of the most common baked model type.
- *
- * <p>{@code SimpleBakedModel} is built by a {@code Builder} using {@code Lists.newArrayList()}, which
- * leaves each of the seven lists (six faces plus general) with a growth buffer that is on average a
- * third empty, plus the {@code ArrayList} object itself. Multiplied by every model in the game, the
- * slack is worth more than it looks.
- *
- * <p>{@code faceQuads} is rebuilt as an {@code EnumMap} rather than edited in place. Vanilla's
- * {@code Builder} hands over a mutable {@code EnumMap}, but {@code SimpleBakedModel} is public and
- * plenty of mods construct one directly with {@code ImmutableMap.of(...)} — and
- * {@code Entry.setValue} on an immutable map throws. Rebuilding is also a small win in that case,
- * since an {@code EnumMap} over {@code EnumFacing} is a six-slot array against
- * {@code ImmutableMap}'s hash table.
- *
- * <p>Absent faces stay absent: {@code getQuads} returns whatever the map holds for a side, so
- * copying only the present keys preserves a null return exactly where the model already had one.
- *
- * <p>The injection targets every constructor rather than a fixed descriptor so it survives Forge or
- * a coremod adding a parameter. {@link CollectionHelper#fixed} is idempotent, so a delegating
- * constructor chain compacting twice is harmless.
- */
+// Compacts SimpleBakedModel's quad lists (six faces + general), which vanilla builds with
+// Lists.newArrayList() leaving each with an oversized growth buffer, times every model in the game.
+// faceQuads is rebuilt rather than edited in place because some mods construct SimpleBakedModel
+// directly with an ImmutableMap, where Entry.setValue would throw; EnumMap is also just cheaper.
+// Targets every constructor (not a fixed descriptor) to survive Forge/coremods adding params;
+// CollectionHelper.fixed is idempotent so double-compacting via a delegating ctor chain is harmless.
 @Mixin(SimpleBakedModel.class)
 public class SimpleBakedModelMixin {
     @Mutable

@@ -9,26 +9,16 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Gates each Fulgor mixin on its config switch, and refuses to load at all next to a world
- * implementation Fulgor cannot reason about.
- *
- * <p>Same structure as {@code CoartatioMixinPlugin} and for the same reason: the mixins are declared in
- * {@code mixins.fulgor.json} rather than discovered by scanning, so they route through
- * {@link #shouldApplyMixin} and "off" means "never loaded" rather than "loaded and inert". For a mod
- * that replaces something as load-bearing as the lighting engine, being able to remove a suspected
- * mixin without a rebuild is worth more than the tidiness of package scanning.
- */
+// Gates each Fulgor mixin on its config switch, and refuses to load next to a world implementation
+// Fulgor can't reason about (e.g. Cubic Chunks). Mixins are declared in mixins.fulgor.json rather than
+// discovered by scanning, so "off" here means "never loaded", not "loaded and inert" — lets a suspected
+// mixin be pulled without a rebuild, which matters for something as load-bearing as the lighting engine
 public class FulgorMixinPlugin implements IMixinConfigPlugin {
     private static final String PACKAGE = "com.bdmajora.fulgor.mixin.";
 
-    /**
-     * Cubic Chunks replaces the chunk column with a cube grid and brings its own lighting engine.
-     *
-     * <p>Every assumption in Fulgor — 16 sections, an 8-bit y field, a heightmap per column — is wrong
-     * there, and the failure mode is silent corruption rather than a crash, so the check is a hard
-     * refusal rather than a warning.
-     */
+    // Cubic Chunks replaces the chunk column with a cube grid + its own lighting engine, breaking every
+    // assumption Fulgor makes (16 sections, 8-bit y field, per-column heightmap); silent corruption
+    // rather than a crash, so this is a hard refusal, not a warning
     private static final String CUBIC_CHUNKS_MARKER =
             "io.github.opencubicchunks.cubicchunks.core.asm.CubicChunksCoreContainer";
 
@@ -96,12 +86,8 @@ public class FulgorMixinPlugin implements IMixinConfigPlugin {
         }
     }
 
-    /**
-     * Deliberately does not initialise the class.
-     *
-     * <p>This runs during coremod setup, where loading a foreign class early can change the order
-     * everything else loads in. All that is wanted is whether it exists.
-     */
+    // Deliberately doesn't initialize the class (initialize=false): this runs during coremod setup,
+    // where eagerly loading a foreign class can change mod load order; only existence is wanted
     private static boolean isClassPresent(String name) {
         try {
             Class.forName(name, false, FulgorMixinPlugin.class.getClassLoader());

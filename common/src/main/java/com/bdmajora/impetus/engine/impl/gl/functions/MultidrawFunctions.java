@@ -16,6 +16,7 @@ public enum MultidrawFunctions {
     FALLBACK {
         @Override
         public void multiDrawElementsBaseVertex(int mode, long pCount, int type, long pIndices, int size, long pBaseVertex) {
+            // No real multidraw call available, so just issue one glDrawElementsBaseVertex per batch entry
             for (int i = 0; i < size; i++) {
                 long off = i * 4L;
                 int count = LWJGL.memGetInt(pCount + off);

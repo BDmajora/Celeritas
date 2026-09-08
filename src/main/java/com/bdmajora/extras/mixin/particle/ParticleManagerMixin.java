@@ -16,23 +16,13 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * The catch-all particle gate: the block-break and block-hit switches, the master switch, and the
- * per-class filter.
- *
- * <p>Every particle reaches {@code addEffect}, whatever spawned it, which is what makes the
- * per-class toggles work for mod particles that never go through {@code RenderGlobal}. The
- * id-keyed named switches live in {@link RenderGlobalParticleMixin} instead, because several vanilla
- * ids share one class and cannot be told apart here.
- */
+// The catch-all particle gate: block-break/block-hit switches, master switch, and per-class filter
+// Every particle reaches addEffect regardless of source, which is what makes per-class toggles work for mod particles too
+// Id-keyed named switches live in RenderGlobalParticleMixin instead, since several vanilla ids share one class here
 @Mixin(ParticleManager.class)
 public class ParticleManagerMixin {
-    /**
-     * Records which mod registered each factory, while its container is still the active one.
-     *
-     * <p>This is the only reliable attribution for factories written as lambdas or anonymous
-     * classes, whose class name says nothing about where they came from.
-     */
+    // Records which mod registered each factory while its container is still the active one;
+    // the only reliable attribution for lambda/anonymous factories, whose class name says nothing about the source
     @Inject(method = "registerParticle", at = @At("HEAD"))
     private void impetus$captureFactoryMod(int id, IParticleFactory particleFactory, CallbackInfo ci) {
         if (particleFactory == null) {
@@ -72,12 +62,8 @@ public class ParticleManagerMixin {
         }
     }
 
-    /**
-     * Records the class and applies the master and per-class filters.
-     *
-     * <p>{@code recordClass} is identity-guarded and {@code isEmptyDisabled} short-circuits the
-     * common case where nothing is filtered, so the steady-state cost here is a set lookup.
-     */
+    // Records the class and applies the master and per-class filters;
+    // recordClass is identity-guarded and isEmptyDisabled short-circuits the common no-filter case
     @Inject(method = "addEffect", at = @At("HEAD"), cancellable = true)
     private void impetus$filterEffect(Particle effect, CallbackInfo ci) {
         if (effect == null) {

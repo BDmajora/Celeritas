@@ -3,10 +3,7 @@ package com.bdmajora.impetus.engine.impl.util.color;
 
 import com.bdmajora.impetus.engine.api.util.ColorARGB;
 
-/**
- * This is a port of the fast-srgb8 library from thomcc on <a href="https://github.com/thomcc/fast-srgb8">GitHub</a>.
- * The source code is provided under both the MIT and Apache-2.0 licenses, whichever is more suitable for your purposes.
- */
+// Ported from thomcc/fast-srgb8 (MIT/Apache-2.0 dual licensed)
 public class ColorSRGB {
     private static final int[] TO_SRGB8_TABLE = new int[] {
             0x0073000d, 0x007a000d, 0x0080000d, 0x0087000d, 0x008d000d, 0x0094000d, 0x009a000d, 0x00a1000d,
@@ -65,31 +62,17 @@ public class ColorSRGB {
     private static final float MIN_BOUND = Float.intBitsToFloat(MIN_BITS);
     private static final float MAX_BOUND = Float.intBitsToFloat(MAX_BITS);
 
-    /**
-     * Converts a linear sRGB component into a non-linear RGB component.
-     * @param c The non-linear sRGB component (0 to 255)
-     * @return The linear RGB component (0.0 to 1.0)
-     */
+    // Non-linear sRGB (0-255) -> linear RGB (0.0-1.0) via lookup table
     public static float srgbToLinear(int c) {
         return FROM_SRGB8_TABLE[c & 255];
     }
 
-    /**
-     * Converts the linear RGB components into non-linear sRGB space, and then packs them alongside a non-linear alpha.
-     * @param r The red-component in non-linear sRGB space (0.0 to 1.0)
-     * @param g The green-component in non-linear sRGB space (0.0 to 1.0)
-     * @param b The blue-component in non-linear sRGB space (0.0 to 1.0)
-     * @param a The alpha-component in linear RGB space (0 to 255)
-     */
+    // r/g/b are linear (0.0-1.0), a is already non-linear (0-255); packs into non-linear sRGB+alpha
     public static int linearToSrgb(float r, float g, float b, int a) {
         return ColorARGB.pack(linearToSrgb(r), linearToSrgb(g), linearToSrgb(b), a);
     }
 
-    /**
-     * Converts a linear RGB component into a non-linear SRGB8 component.
-     * @param c The linear RGB component (0.0 to 1.0)
-     * @return The non-linear SRGB8 component (0 to 255)
-     */
+    // Linear RGB (0.0-1.0) -> non-linear SRGB8 (0-255) via lookup table + bit tricks
     private static int linearToSrgb(float c) {
         int inputBits = Float.floatToRawIntBits(clampLinearInput(c));
         int entry = TO_SRGB8_TABLE[((inputBits - MIN_BITS) >> 20)];

@@ -7,10 +7,7 @@ import java.util.*;
 import java.util.concurrent.locks.StampedLock;
 import java.util.stream.Collectors;
 
-/**
- * An efficient StampedLock-based wrapper around a given map. Common operations like get/put are efficient, but collection-based
- * operations like entrySet/keySet/values are slow as they must allocate a copy.
- */
+// StampedLock-backed map; get/put are cheap, but entrySet/keySet/values copy the whole map
 public class StampedMap<K, V> implements Map<K, V> {
     private final Map<K, V> backingMap;
     private final StampedLock lock;

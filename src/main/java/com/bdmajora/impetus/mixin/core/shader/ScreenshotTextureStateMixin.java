@@ -1,6 +1,6 @@
 package com.bdmajora.impetus.mixin.core.shader;
 
-import com.bdmajora.impetus.iris.gl.GlTextureUnits;
+import com.bdmajora.impetus.umbra.gl.GlTextureUnits;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.shader.Framebuffer;
 import net.minecraft.util.ScreenShotHelper;

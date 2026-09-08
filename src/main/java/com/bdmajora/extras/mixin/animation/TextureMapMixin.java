@@ -14,19 +14,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Predicate;
 
-/**
- * Gates each animated sprite's tick on its category switch, so turning off (say) lava animation
- * stops paying for it rather than just hiding it.
- *
- * <p>Sodium Extra can ask the sprite what it is. 1.12.2 cannot: {@code TextureAtlasSprite} carries
- * only an icon name, so the category has to be recovered by matching that name. Matching is
- * substring-based on purpose — resource packs and mods prefix and suffix these names freely, and a
- * pack that renames {@code water_still} out of recognition falls through to "animate it", which is
- * the safe direction to be wrong in.
- *
- * <p>The table is built once per atlas on first use; it cannot be static because the sprite names a
- * given atlas contains are not known until it is stitched.
- */
+// Gates each animated sprite's tick on its category switch, so disabling lava animation stops paying for it, not just hiding it
+// 1.12.2 sprites carry only an icon name, so the category is recovered by substring match; unmatched names fall through to "animate it"
+// Table is built once per atlas on first use, not static, since sprite names aren't known until the atlas is stitched
 @Mixin(TextureMap.class)
 public abstract class TextureMapMixin {
     @Unique

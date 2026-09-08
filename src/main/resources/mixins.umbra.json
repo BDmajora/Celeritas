@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.bdmajora.impetus.umbra.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "client": [
+    "compat.GlStateManagerBlendGuardMixin",
+    "compat.UmbraRenderingPipelineBlendGuardMixin",
+    "compat.ProgramBlendStateBlendGuardMixin",
+    "debug.ScreenshotProbeMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

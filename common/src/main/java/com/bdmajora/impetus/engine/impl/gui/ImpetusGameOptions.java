@@ -31,10 +31,9 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
     public final PerformanceSettings performance = new PerformanceSettings();
     public final NotificationSettings notifications = new NotificationSettings();
 
-    /** Selected fullscreen video mode as an index into the monitor's available modes; 0 = current/desktop. */
+    // Index into the monitor's available modes; 0 = current/desktop
     public int fullscreenResolution = 0;
 
-    /** Fullscreen presentation mode (windowed / borderless / exclusive). */
     public FullscreenMode fullscreenMode = FullscreenMode.OFF;
 
     private boolean readOnly;
@@ -125,7 +124,6 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
 
     public static class NotificationSettings {
         public boolean showToasts = true;
-        /** Shows a brief indicator while the integrated server autosaves. */
         public boolean autosaveIndicator = true;
         public boolean forceDisableDonationPrompts = false;
 
@@ -158,7 +156,7 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
         }
     }
 
-    /** Deferral policy for chunk mesh uploads, mirroring modern Sodium's DeferMode. */
+    // Deferral policy for chunk mesh uploads, mirrors modern Sodium's DeferMode
     public enum DeferChunkUpdatesMode implements TextProvider {
         ZERO_FRAMES("impetus.options.defer_chunk_updates.zero"),
         ONE_FRAME("impetus.options.defer_chunk_updates.one"),
@@ -175,18 +173,18 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
             return this.name;
         }
 
-        /** {@return whether a section not visible last frame should still be deferred} */
+        // Whether a section not visible last frame should still be deferred
         public boolean defersInvisible() {
             return this != ZERO_FRAMES;
         }
 
-        /** {@return whether even visible sections should be deferred (never block the frame)} */
+        // Whether even visible sections should be deferred (never block the frame)
         public boolean defersVisible() {
             return this == ALWAYS;
         }
     }
 
-    /** Frame-rate limiting behaviour while the window is unfocused/idle. */
+    // Frame-rate limiting behavior while the window is unfocused/idle
     public enum InactivityFpsLimit implements TextProvider {
         NO_LIMIT("impetus.options.inactivity_fps_limit.no_limit"),
         AFK("impetus.options.inactivity_fps_limit.afk"),
@@ -204,7 +202,7 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
         }
     }
 
-    /** Terrain quad-splitting mode used by the translucency sorter. */
+    // Terrain quad-splitting mode used by the translucency sorter
     public enum QuadSplittingMode implements TextProvider {
         DISABLED("impetus.options.quad_splitting.disabled"),
         ENABLED("impetus.options.quad_splitting.enabled");
@@ -225,7 +223,7 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
         }
     }
 
-    /** Magnification filtering applied to the block atlas (per-pixel look). */
+    // Magnification filtering applied to the block atlas (per-pixel look)
     public enum PixelFilteringMode implements TextProvider {
         NEAREST("impetus.options.pixel_filtering.nearest"),
         LINEAR("impetus.options.pixel_filtering.linear");
@@ -242,8 +240,7 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
         }
     }
 
-    /** Fullscreen presentation mode. On LWJGL2/1.12.2, EXCLUSIVE and BORDERLESS both map to the display's
-     *  fullscreen mode; the distinction is preserved for config parity and future backends. */
+    // On LWJGL2/1.12.2, EXCLUSIVE and BORDERLESS both map to the display's fullscreen mode; distinction kept for config parity and future backends
     public enum FullscreenMode implements TextProvider {
         OFF("impetus.options.fullscreen_mode.off"),
         BORDERLESS("impetus.options.fullscreen_mode.borderless"),

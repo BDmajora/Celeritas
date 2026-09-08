@@ -11,20 +11,10 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-/**
- * Every setting the Extras page owns, persisted to {@code config/impetus-extras.cfg}.
- *
- * <p>Unlike {@code FulgorConfig} and {@code CoartatioConfig}, nothing here is read during coremod
- * setup — every Extras mixin consults its switch at call time, so the switches are live and this can
- * be a normal Forge {@link Configuration} rather than a {@link java.util.Properties} file that
- * {@link net.minecraft.launchwrapper.Launch} can read before Minecraft exists.
- *
- * <p>Simple booleans and bounded integers are declared in the {@link BooleanProperty} and
- * {@link IntProperty} tables so load and save stay in lockstep; enums (stored by ordinal) and the
- * particle-class lists are handled explicitly in {@link #loadFrom(Configuration)} and
- * {@link #writeChanges()}. <b>Enum constant order is part of the on-disk format</b> — appending is
- * safe, reordering silently changes what a saved config means.
- */
+// Every setting the Extras page owns, persisted to config/impetus-extras.cfg
+// Unlike FulgorConfig/CoartatioConfig, nothing here is read during coremod setup, so this can be a
+// normal Forge Configuration instead of a Properties file
+// Enum constant order is part of the on-disk format — appending is safe, reordering is not
 public final class ExtrasConfig {
     private static final String CAT_ANIMATION = "animation";
     private static final String CAT_PARTICLE = "particle";
@@ -205,13 +195,9 @@ public final class ExtrasConfig {
 
     private Configuration config;
 
-    /**
-     * Reads {@code file}, adding any keys it does not yet contain.
-     *
-     * <p>A read failure yields a fresh defaults instance that is deliberately <em>not</em> written
-     * back: overwriting a config we failed to parse would destroy the user's settings along with
-     * whatever confused us.
-     */
+    // Reads file, adding any keys it does not yet contain
+    // A read failure yields fresh defaults that are deliberately NOT written back — overwriting a
+    // config we failed to parse would destroy the user's settings along with whatever confused us
     public static ExtrasConfig load(File file) {
         ExtrasConfig options = new ExtrasConfig();
         Configuration config = new Configuration(file);
@@ -262,7 +248,7 @@ public final class ExtrasConfig {
                 new String[0], "Cache of discovered particle classes; rebuilt automatically"));
     }
 
-    /** Flushes every setting back to disk. */
+    // Flushes every setting back to disk
     public void writeChanges() {
         if (config == null) {
             return;
@@ -303,7 +289,7 @@ public final class ExtrasConfig {
     // Enums. Persisted by ordinal — append only.
     // ----------------------------------------------------------------------------------------
 
-    /** Where the FPS/coordinate overlay is anchored. */
+    // Where the FPS/coordinate overlay is anchored
     public enum OverlayCorner implements Localized {
         TOP_LEFT("impetus.options.extras.overlay_corner.top_left"),
         TOP_RIGHT("impetus.options.extras.overlay_corner.top_right"),
@@ -330,7 +316,7 @@ public final class ExtrasConfig {
         }
     }
 
-    /** How overlay text is made readable against the world behind it. */
+    // How overlay text is made readable against the world behind it
     public enum TextContrast implements Localized {
         NONE("impetus.options.extras.text_contrast.none"),
         BACKGROUND("impetus.options.extras.text_contrast.background"),
@@ -348,7 +334,7 @@ public final class ExtrasConfig {
         }
     }
 
-    /** When clouds fade to translucent. */
+    // When clouds fade to translucent
     public enum CloudTranslucency implements Localized {
         DEFAULT("impetus.options.extras.cloud_translucency.default"),
         ALWAYS("impetus.options.extras.cloud_translucency.always"),
@@ -366,17 +352,11 @@ public final class ExtrasConfig {
         }
     }
 
-    /**
-     * The distance metric the terrain shader fogs by.
-     *
-     * <p>Same four names Sodium Extra uses, but not the same four formulas: Sodium's baseline is
-     * cylindrical, so its "Radial" is the spherical one. Impetus already fogs spherically (which is
-     * what fixed-function GL does, and therefore what entities and particles do), so VANILLA is the
-     * spherical case here and RADIAL is the genuinely different horizontal-only one. Picking any
-     * non-VANILLA shape means terrain and entities no longer agree at the same distance.
-     *
-     * <p>The ordinals are the {@code u_FogShape} values consumed by {@code fog.glsl}.
-     */
+    // The distance metric the terrain shader fogs by
+    // Sodium's baseline is cylindrical so its "Radial" is spherical; Impetus already fogs
+    // spherically like entities/particles do, so here VANILLA is spherical and RADIAL is the
+    // genuinely different horizontal-only one — non-VANILLA means terrain and entities disagree
+    // Ordinals are the u_FogShape values consumed by fog.glsl
     public enum FogShape implements Localized {
         VANILLA("impetus.options.extras.fog_shape.vanilla"),
         CYLINDRICAL("impetus.options.extras.fog_shape.cylindrical"),
@@ -394,13 +374,13 @@ public final class ExtrasConfig {
             return this.key;
         }
 
-        /** The {@code u_FogShape} uniform value; see {@code assets/impetus/shaders/include/fog.glsl}. */
+        // The u_FogShape uniform value; see assets/impetus/shaders/include/fog.glsl
         public int shaderIndex() {
             return this.ordinal();
         }
     }
 
-    /** Client-side time-of-day lock. */
+    // Client-side time-of-day lock
     public enum TimeOverride implements Localized {
         DEFAULT("impetus.options.extras.time.default"),
         DAY("impetus.options.extras.time.day"),
@@ -418,7 +398,7 @@ public final class ExtrasConfig {
         }
     }
 
-    /** Client-side weather lock. */
+    // Client-side weather lock
     public enum WeatherOverride implements Localized {
         DEFAULT("impetus.options.extras.weather.default"),
         CLEAR("impetus.options.extras.weather.clear"),
@@ -437,7 +417,7 @@ public final class ExtrasConfig {
         }
     }
 
-    /** Vertical sync mode, folding adaptive sync in beside the vanilla on/off pair. */
+    // Vertical sync mode, folding adaptive sync in beside the vanilla on/off pair
     public enum VerticalSync implements Localized {
         OFF("options.off"),
         ON("options.on"),
@@ -455,7 +435,7 @@ public final class ExtrasConfig {
         }
     }
 
-    /** Something with a lang key; lets the option page build cycling controls generically. */
+    // Something with a lang key; lets the option page build cycling controls generically
     public interface Localized {
         String translationKey();
 
@@ -468,10 +448,8 @@ public final class ExtrasConfig {
     // Setting groups
     // ----------------------------------------------------------------------------------------
 
-    /**
-     * Texture animation switches. {@link #all} gates every other field here; the finer switches
-     * below {@link #blockAnimations} are the ones OptiFine breaks out separately.
-     */
+    // Texture animation switches; "all" gates every other field, the finer ones below
+    // blockAnimations are what OptiFine breaks out separately
     public static final class AnimationSettings {
         public boolean all = true;
         public boolean water = true;
@@ -486,11 +464,8 @@ public final class ExtrasConfig {
         public boolean sculkSensor = true;
     }
 
-    /**
-     * Particle switches. {@link #all} gates everything; the named switches cover the effects
-     * OptiFine and Sodium Extra expose, and anything else is reachable through the per-class
-     * toggles built from {@link ParticleClassRegistry}.
-     */
+    // Particle switches; "all" gates everything, named switches cover OptiFine/Sodium Extra
+    // effects, anything else goes through the per-class toggles from ParticleClassRegistry
     public static final class ParticleSettings {
         public boolean all = true;
         public boolean rainSplash = true;
@@ -504,7 +479,7 @@ public final class ExtrasConfig {
         public boolean fireworkParticles = true;
     }
 
-    /** Celestial and environmental detail switches. */
+    // Celestial and environmental detail switches
     public static final class DetailSettings {
         public static final int STARS_MIN = 500;
         public static final int STARS_DEFAULT = 1500;
@@ -524,16 +499,12 @@ public final class ExtrasConfig {
         public boolean heldItemTooltips = true;
     }
 
-    /**
-     * World-render switches and the fog/cloud tuning values.
-     *
-     * <p>Cloud <em>height</em> and <em>distance</em> are deliberately absent: Impetus already owns
-     * both on its Quality page, where its own cloud renderer consumes them. Adding a second copy
-     * here would give the user two sliders for one value and no way to tell which one wins.
-     */
+    // World-render switches and fog/cloud tuning values
+    // Cloud height/distance are deliberately absent — Impetus's Quality page already owns those;
+    // a second copy here would give two sliders for one value with no way to tell which wins
     public static final class RenderSettings {
         public static final int CLOUD_SCALE_MIN = 1;
-        /** The internal scale value that reproduces vanilla's 1.00x cloud size. */
+        // The internal scale value that reproduces vanilla's 1.00x cloud size
         public static final int CLOUD_SCALE_VANILLA = 4;
         public static final int CLOUD_SCALE_MAX = 16;
 
@@ -559,12 +530,12 @@ public final class ExtrasConfig {
         public boolean profileEntityRendering = false;
     }
 
-    /** Overlay, toast and quality-of-life settings. */
+    // Overlay, toast and quality-of-life settings
     public static final class ExtraSettings {
         public static final int STEADY_HUD_REFRESH_MIN = 1;
         public static final int STEADY_HUD_REFRESH_DEFAULT = 1;
         public static final int STEADY_HUD_REFRESH_MAX = 20;
-        /** {@code MinecraftServer.tick} autosaves every 900 ticks. */
+        // MinecraftServer.tick autosaves every 900 ticks
         public static final int AUTOSAVE_VANILLA_TICKS = 900;
         public static final int AUTOSAVE_MIN_TICKS = 0;
         public static final int AUTOSAVE_MAX_TICKS = 36000;
@@ -595,7 +566,7 @@ public final class ExtrasConfig {
     // Declarative property bindings
     // ----------------------------------------------------------------------------------------
 
-    /** A boolean config entry bound to its in-memory field, so load and save cannot drift apart. */
+    // A boolean config entry bound to its in-memory field, so load and save cannot drift apart
     @Desugar
     private record BooleanProperty(String category, String key, boolean defaultValue, String comment,
                                    Consumer<Boolean> setter, Supplier<Boolean> getter) {
@@ -608,7 +579,7 @@ public final class ExtrasConfig {
         }
     }
 
-    /** As {@link BooleanProperty}, with an inclusive range {@link Configuration} clamps to on load. */
+    // As BooleanProperty, with an inclusive range Configuration clamps to on load
     @Desugar
     private record IntProperty(String category, String key, int defaultValue, int min, int max, String comment,
                                Consumer<Integer> setter, Supplier<Integer> getter) {

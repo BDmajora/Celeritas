@@ -18,10 +18,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The Memory page in Impetus' video options, alongside General, Quality, Performance and the Iris
+ * The Memory page in Impetus' video options, alongside General, Quality, Performance and the Umbra
  * pages.
  *
- * <p>Built the same way {@code IrisOptionPages} is: an {@link OptionStorage} over the subsystem's own
+ * <p>Built the same way {@code UmbraOptionPages} is: an {@link OptionStorage} over the subsystem's own
  * config object, and {@link OptionImpl} bindings that write straight through to it.
  *
  * <h2>Why almost everything says "requires restart"</h2>

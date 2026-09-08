@@ -23,14 +23,14 @@ public interface ChunkVertexEncoder {
          */
         public int trueNormal;
 
-        // ---- Iris (Impetus shader pipeline) extended per-vertex data ----
-        // These are only read by an Iris-extended ChunkVertexType/encoder; the default encoders ignore them, so they
+        // ---- Umbra (Impetus shader pipeline) extended per-vertex data ----
+        // These are only read by an Umbra-extended ChunkVertexType/encoder; the default encoders ignore them, so they
         // are inert (and cost nothing) unless a shader pack is active. Populated by the meshing pipeline only when
-        // Iris is in use. See com.bdmajora.impetus.iris.vertices.
+        // Umbra is in use. See com.bdmajora.impetus.umbra.vertices.
 
         /**
          * {@code mc_midTexCoord.x} — U of the centre of the texture region mapped to this QUAD (the mean of the
-         * four vertex Us), matching Iris. NOT the sprite centre: the two agree only for full-sprite quads, and
+         * four vertex Us), matching Umbra. NOT the sprite centre: the two agree only for full-sprite quads, and
          * using the sprite wrecks the atlas basis Chocapic-derived packs rebuild from this attribute on any face
          * that maps a sub-rect (vanilla torch cap faces being the worst case).
          */
@@ -47,7 +47,7 @@ public interface ChunkVertexEncoder {
         public int tangent;
         /**
          * {@code at_midBlock} — offset from this vertex to the CENTER of the block it belongs to, in block units
-         * (range roughly -0.5..0.5 for a full block). Iris/OptiFine shaders read {@code at_midBlock.xyz / 64.0}, so the
+         * (range roughly -0.5..0.5 for a full block). Umbra/OptiFine shaders read {@code at_midBlock.xyz / 64.0}, so the
          * encoder scales these by 64 into signed bytes. Colored-lighting voxelization depends on this: sampling at the
          * block center (an X.5,Y.5,Z.5 world position) keeps the voxel-grid lookup off cell boundaries, where it would
          * otherwise flip between cells under sub-voxel precision noise and make the light volume shimmer.
@@ -55,7 +55,7 @@ public interface ChunkVertexEncoder {
         public float midBlockX;
         public float midBlockY;
         public float midBlockZ;
-        /** {@code at_midBlock.w} — block light emission, matching Iris' Sodium terrain extension. */
+        /** {@code at_midBlock.w} — block light emission, matching Umbra' Sodium terrain extension. */
         public int blockEmission;
 
         public static Vertex[] uninitializedQuad() {

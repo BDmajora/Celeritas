@@ -13,95 +13,42 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Properties;
 
-/**
- * Feature switches for the lighting subsystem.
- *
- * <p>A plain {@link Properties} file for the same reason {@code CoartatioConfig} is one: it has to be
- * readable from {@link com.bdmajora.fulgor.mixin.FulgorMixinPlugin}, which runs during coremod setup,
- * long before Forge or Minecraft classes are safe to touch. The only outside class referenced here is
- * {@link Launch}, which is already loaded by that point.
- */
+// Feature switches for the lighting subsystem. Plain Properties file (like CoartatioConfig) because it
+// must be readable from FulgorMixinPlugin during coremod setup, before Forge/Minecraft classes are safe
+// to touch; the only outside class referenced here (Launch) is already loaded by that point.
 public final class FulgorConfig {
     private static final String FILE_NAME = "impetus-fulgor.cfg";
 
     private static FulgorConfig instance;
 
-    /** Where {@link #save()} writes. Null only if the config directory could not be resolved. */
+    // Where save() writes; null only if the config directory could not be resolved
     private Path file;
 
-    /**
-     * Master switch for the whole subsystem.
-     *
-     * <p>Off means vanilla lighting, unmodified. Kept separate from the individual switches because
-     * "is this bug Fulgor's fault" is the first question anyone asks, and answering it should not
-     * require understanding what the other options do.
-     */
+    // Off means vanilla lighting, unmodified; kept separate from the individual switches so "is this
+    // bug Fulgor's fault" doesn't require understanding what the other options do
     public boolean enabled;
-    /**
-     * Replaces vanilla's immediate, recursive light propagation with the batched engine.
-     *
-     * <p>The subsystem's whole point. Everything else either supports this or fixes a vanilla bug the
-     * batching exposes.
-     */
+    // The subsystem's whole point; everything else supports this or fixes a vanilla bug the batching exposes
     public boolean deferredLightUpdates;
-    /**
-     * Collapses repeated updates for the same position into one.
-     *
-     * <p>Alfheim's headline change over Phosphor. Bulk edits — world generation, {@code /fill},
-     * explosions, quarries — schedule the same position from several neighbours in the same tick;
-     * without this each one is evaluated separately.
-     */
+    // Alfheim's headline change over Phosphor: bulk edits (worldgen, /fill, explosions) schedule the
+    // same position from several neighbours in one tick; without this each gets evaluated separately
     public boolean deduplicateUpdates;
-    /**
-     * Caches, per block, whether its light values can vary with position.
-     *
-     * <p>Phosphor's {@code BlockStateLightInfo}, adapted. The overwhelming majority of blocks answer
-     * {@code getLightOpacity}/{@code getLightValue} from the state alone, but Forge's default
-     * implementation still costs a virtual dispatch and — for luminance — a redundant world lookup on
-     * every neighbour of every update.
-     *
-     * <p>Ignored while Dynamic Lights or Fluidlogged API is installed; see
-     * {@link Fulgor#requiresPositionAwareLight()}.
-     */
+    // Phosphor's BlockStateLightInfo, adapted. Forge's default position-aware getLightOpacity/getLightValue
+    // still cost a virtual dispatch (and a redundant world lookup for luminance) even though most blocks'
+    // answers don't depend on position. Ignored while Dynamic Lights or Fluidlogged API is installed.
     public boolean cacheBlockLightInfo;
-    /**
-     * Propagates skylight into a chunk's neighbours across the chunk boundary.
-     *
-     * <p>Fixes MC-3329 and its relatives. Vanilla drops boundary updates when the neighbour is not
-     * loaded and never revisits them, which is where world-generation light seams come from.
-     */
+    // Fixes MC-3329: vanilla drops boundary light updates to unloaded neighbours and never revisits them
     public boolean fixChunkBoundaryLighting;
-    /**
-     * Sends chunk sections whose lighting is non-trivial even when they hold no blocks.
-     *
-     * <p>Fixes MC-116690. Vanilla's emptiness test counts blocks only, so a fully-carved-out section
-     * with real light data is skipped by the chunk packet and the client relights it to whatever the
-     * fallback rule produces.
-     */
+    // Fixes MC-116690: vanilla's emptiness test counts blocks only, so a carved-out section with real
+    // light data gets skipped by the chunk packet and the client relights it wrong
     public boolean sendNonTrivialSectionLight;
-    /**
-     * Drains the renderer's light-update queue through a deduplicated long queue.
-     *
-     * <p>Also fixes MC-80966: vanilla skips the drain entirely whenever the chunk builder is busy, so
-     * light changes can sit unrendered indefinitely under load.
-     */
+    // Also fixes MC-80966: vanilla skips the render light-update drain entirely while the chunk builder
+    // is busy, so changes can sit unrendered indefinitely under load
     public boolean optimizeRenderLightUpdates;
-    /** Skips light processing while the game is paused. */
+    // Skips light processing while the game is paused
     public boolean skipUpdatesWhilePaused;
-    /**
-     * Number of queued updates for one light type after which the engine processes them immediately
-     * rather than waiting for a query.
-     *
-     * <p>A memory bound, not a performance knob. Deferral is what makes the engine fast; this only
-     * stops a pathological producer from growing the queue without limit.
-     */
+    // Memory bound, not a performance knob: stops a pathological producer from growing a queue unbounded
     public int maxScheduledUpdates;
-    /**
-     * Warns when a thread that does not own a world modifies its lighting.
-     *
-     * <p>Inherited from Phosphor. It is always another mod's bug, the engine survives it either way,
-     * and the warning is loud — so it is on by default but switchable.
-     */
+    // Inherited from Phosphor; always another mod's bug and the engine survives it either way, but loud by default
     public boolean warnOnIllegalThreadAccess;
     /** Prints engine statistics to the log when the player leaves a world. */
     public boolean logStatistics;
@@ -148,13 +95,8 @@ public final class FulgorConfig {
         return config;
     }
 
-    /**
-     * Persists the current values.
-     *
-     * <p>Every switch except the two diagnostics and {@link #skipUpdatesWhilePaused} decides whether a
-     * mixin is applied, so changing one takes effect on the next launch. The options screen marks
-     * those with a restart flag.
-     */
+    // Every switch except the two diagnostics and skipUpdatesWhilePaused decides whether a mixin is
+    // applied, so changing one takes effect on the next launch (options screen marks those with a restart flag)
     public void save() {
         if (this.file != null) {
             writeBack(this.file);
@@ -174,10 +116,8 @@ public final class FulgorConfig {
         return dir;
     }
 
-    /**
-     * Rewrites the file with every key present, so a user who has never opened it still discovers the
-     * switches. Values already set by the user are preserved verbatim.
-     */
+    // Rewrites the file with every key present so a user who never opened it still discovers the
+    // switches; values already set by the user are preserved verbatim
     private void writeBack(Path file) {
         Map<String, String> values = new LinkedHashMap<>();
         values.put("enabled", Boolean.toString(this.enabled));

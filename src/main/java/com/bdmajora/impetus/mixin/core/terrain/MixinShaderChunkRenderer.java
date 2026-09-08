@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-import com.bdmajora.impetus.iris.terrain.IrisTerrainProgramOverride;
+import com.bdmajora.impetus.umbra.terrain.UmbraTerrainProgramOverride;
 
 import java.util.Map;
 
@@ -25,12 +25,12 @@ public class MixinShaderChunkRenderer {
     @Inject(method = "compileProgram", at = @At("HEAD"), cancellable = true)
     private void impetus$overrideTerrainProgram(ChunkShaderOptions options,
                                                   CallbackInfoReturnable<GlProgram<ChunkShaderInterface>> cir) {
-        if (!IrisTerrainProgramOverride.areShadersActive()) {
+        if (!UmbraTerrainProgramOverride.areShadersActive()) {
             return;
         }
-        if (com.bdmajora.impetus.iris.pipeline.IrisShadowRenderer.isShadowPass()) {
+        if (com.bdmajora.impetus.umbra.pipeline.UmbraShadowRenderer.isShadowPass()) {
             // Shadow programs use their own cache.
-            cir.setReturnValue(IrisTerrainProgramOverride.getShadowProgramOverride(options));
+            cir.setReturnValue(UmbraTerrainProgramOverride.getShadowProgramOverride(options));
             return;
         }
         if (this.programs.containsKey(options)) {
@@ -38,7 +38,7 @@ public class MixinShaderChunkRenderer {
             cir.setReturnValue(this.programs.get(options));
             return;
         }
-        GlProgram<ChunkShaderInterface> override = IrisTerrainProgramOverride.getProgramOverride(options);
+        GlProgram<ChunkShaderInterface> override = UmbraTerrainProgramOverride.getProgramOverride(options);
         if (override != null) {
             this.programs.put(options, override);
             cir.setReturnValue(override);

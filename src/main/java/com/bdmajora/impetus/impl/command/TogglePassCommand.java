@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+// Debug command to enable/disable a specific terrain render pass at runtime, e.g. for isolating shader issues
 public class TogglePassCommand extends CommandBase {
     @Override
     public int getRequiredPermissionLevel() {
@@ -34,6 +35,7 @@ public class TogglePassCommand extends CommandBase {
     private static Stream<TerrainRenderPass> getAllPasses() {
         var renderer = ImpetusWorldRenderer.instanceNullable();
 
+        // renderer isn't initialized yet (e.g. command ran before world load), so no passes exist
         if (renderer == null) {
             return Stream.empty();
         }

@@ -17,15 +17,9 @@ import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
-/**
- * The Lighting page in Impetus' video options, alongside General, Quality, Performance, Memory and the
- * Iris pages.
- *
- * <p>Built the same way {@code CoartatioOptionPages} is, and carries the same caveat: every switch here
- * except the two diagnostics and the pause behaviour is read by {@code FulgorMixinPlugin} before the
- * game window exists, so turning one off at runtime cannot un-apply a mixin. Those are flagged
- * {@link OptionFlag#REQUIRES_GAME_RESTART} so the screen says so rather than appearing to work.
- */
+// Lighting page in Impetus' video options (alongside General, Quality, Performance, Memory, Umbra)
+// Except for diagnostics and pause behaviour, these are read by FulgorMixinPlugin before the game window
+// exists, so toggling at runtime can't un-apply a mixin — hence REQUIRES_GAME_RESTART on most of them
 public final class FulgorOptionPages {
     private static final String MOD_ID = "fulgor";
 

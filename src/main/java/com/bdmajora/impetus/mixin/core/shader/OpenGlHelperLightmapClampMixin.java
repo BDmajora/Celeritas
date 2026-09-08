@@ -1,6 +1,6 @@
 package com.bdmajora.impetus.mixin.core.shader;
 
-import com.bdmajora.impetus.iris.Iris;
+import com.bdmajora.impetus.umbra.Umbra;
 import net.minecraft.client.renderer.OpenGlHelper;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -25,7 +25,7 @@ public class OpenGlHelperLightmapClampMixin {
     }
 
     private static float impetus$clamp(float coord) {
-        if (coord <= MAX_LIGHTMAP_COORD || Iris.getRenderingPipeline() == null) {
+        if (coord <= MAX_LIGHTMAP_COORD || Umbra.getRenderingPipeline() == null) {
             return coord;
         }
         return MAX_LIGHTMAP_COORD;

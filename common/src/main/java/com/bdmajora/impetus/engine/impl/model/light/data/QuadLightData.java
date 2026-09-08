@@ -1,17 +1,10 @@
 package com.bdmajora.impetus.engine.impl.model.light.data;
 
-/**
- * Stores the computed light data for a block model quad. The vertex order of each array is defined as that of the
- * quad's vertex order.
- */
+// Computed light data for a quad, indexed in the same vertex order as the quad itself
 public class QuadLightData {
-    /**
-     * The brightness of each vertex in the quad as normalized floats.
-     */
+    // Per-vertex brightness, normalized 0..1
     public final float[] br = new float[4];
 
-    /**
-     * The lightmap texture coordinates for each vertex in the quad.
-     */
+    // Per-vertex lightmap texture coords
     public final int[] lm = new int[4];
 }

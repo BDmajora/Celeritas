@@ -1,6 +1,6 @@
 package com.bdmajora.impetus.impl.render.clouds;
 
-import com.bdmajora.impetus.iris.uniforms.CapturedRenderingState;
+import com.bdmajora.impetus.umbra.uniforms.CapturedRenderingState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.BufferBuilder;
@@ -19,32 +19,13 @@ import org.apache.logging.log4j.Logger;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 
-/**
- * Sodium's cloud renderer, ported to 1.12.2's fixed-function cloud geometry.
- * <p>
- * Vanilla 1.12 builds the fancy cloud volume by emitting <em>every</em> face of <em>every</em> cell in range — the
- * bottom, and a full wall at every cell boundary — and then hides the ones inside the volume with a two-pass trick:
- * the whole mesh is drawn once with {@code colorMask(false, false, false, false)} to prime the depth buffer, then a
- * second time for colour, where the interior faces lose the {@code LEQUAL} test against the exterior face in front of
- * them. Nothing about that mesh is correct on its own; it is correct only as long as both passes rasterise to
- * bit-identical depth and nothing perturbs the depth state between them.
- * <p>
- * That is a bad bet under a shader pipeline. {@code gbuffers_clouds} runs with the pack's draw-buffer mask, its own
- * blend state, and a cloud-specific projection whose far plane is {@code farPlaneDistance * 4} — and when the trick
- * fails there is no partial degradation: every interior wall in the volume becomes visible at once, blending on top of
- * itself into the lit lattice that covers the whole sky.
- * <p>
- * Upstream Sodium deleted the bet rather than trying to make it hold: {@code CloudRendererMixin#buildMesh} emits only
- * faces that can actually be seen — a side face only where the neighbouring cell is empty <em>and</em> that side faces
- * the camera, the top or bottom only on the side of the layer the camera is on, and a full inside-out box only for the
- * cell the camera is standing in. A mesh with no interior faces in it needs no depth pre-pass to hide them, so it
- * renders the same under any pack. This is a port of that algorithm; see
- * {@code net.caffeinemc.mods.sodium.mixin.features.render.world.clouds.CloudRendererMixin}.
- * <p>
- * The 1.12-specific parts are kept as vanilla left them, because shader packs are written against them: 12-block cells,
- * a 4-block thick layer, the per-face tints (bottom 0.7, X 0.9, Z 0.8), 0.8 vertex alpha, the cell-centre texture
- * column sampled by walls, and the 2048-cell coordinate wrap that keeps the float texcoords precise far from origin.
- */
+// Sodium's cloud renderer, ported to 1.12.2's fixed-function cloud geometry.
+// Vanilla hides its cloud volume's interior faces with a two-pass depth-mask trick that only holds if both passes
+// rasterise identical depth; under a shader pipeline (custom blend state, different far plane) that bet fails and
+// every interior wall lights up at once. Sodium's fix, ported here, is to just not emit faces that can't be seen —
+// see net.caffeinemc.mods.sodium.mixin.features.render.world.clouds.CloudRendererMixin.
+// The 1.12-specific numbers (12-block cells, 4-block layer, per-face tints, 0.8 alpha, 2048-cell wrap) are kept as
+// vanilla left them since shader packs are written against them.
 public final class SodiumCloudRenderer {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Clouds");
     private static final ResourceLocation CLOUDS_TEXTURES = new ResourceLocation("textures/environment/clouds.png");
@@ -71,11 +52,8 @@ public final class SodiumCloudRenderer {
     private static final float TINT_X = 0.9F;
     private static final float TINT_Z = 0.8F;
 
-    /**
-     * Where the camera sits relative to the cloud layer — Sodium's {@code CloudRenderer.RelativeCameraPos}
-     * ({@code ViewOrientation}): below means top faces are not rendered, above means bottom faces are not, and inside
-     * means every face must be.
-     */
+    // Where the camera sits relative to the cloud layer (Sodium's CloudRenderer.RelativeCameraPos):
+    // below means top faces are skipped, above means bottom faces are skipped, inside means every face is emitted.
     private static final int BELOW = 0;
     private static final int INSIDE = 1;
     private static final int ABOVE = 2;
@@ -89,24 +67,15 @@ public final class SodiumCloudRenderer {
     private SodiumCloudRenderer() {
     }
 
-    /**
-     * True when the cloud texture has been read successfully, so the caller can fall back to vanilla's own cloud
-     * geometry before it commits to a {@code gbuffers_clouds} phase.
-     */
+    // True once the cloud texture has been read successfully, so the caller can fall back to vanilla's cloud
+    // geometry before committing to a gbuffers_clouds phase.
     public static boolean isReady(Minecraft mc) {
         return getCells(mc) != null;
     }
 
-    /**
-     * Draws the whole cloud layer in one call. {@code cloudHeight} is the configured altitude in blocks (vanilla reads
-     * {@code world.provider.getCloudHeight()} here, which the cloud-height option redirects) and {@code radiusCells}
-     * is the mesh radius in cells.
-     *
-     * @param cellSize the cell edge length in blocks; {@link #CELL_SIZE} unless the Extras cloud-scale option has
-     *                 changed it. Scaling the cell rather than the finished mesh keeps the cloud texture at one texel
-     *                 per cell, which is what stops large scales from turning into a blur.
-     * @return false when the cloud texture could not be read and the caller should run vanilla's renderer instead
-     */
+    // Draws the whole cloud layer in one call. cellSize scales the cell rather than the finished mesh, which keeps
+    // the cloud texture at one texel per cell instead of blurring at large scales (Extras cloud-scale option).
+    // Returns false if the cloud texture could not be read and the caller should fall back to vanilla's renderer.
     public static boolean render(Minecraft mc, WorldClient world, TextureManager textureManager, int cloudTickCounter,
             float partialTicks, int pass, double cameraX, double cameraY, double cameraZ, boolean fancy,
             int radiusCells, float cloudHeight, float cellSize) {
@@ -213,11 +182,7 @@ public final class SodiumCloudRenderer {
         return true;
     }
 
-    /**
-     * Sodium's fast path: one face per cell, carrying the top colour. No walls, no second layer — the whole point is
-     * that fast clouds are a flat sheet, and vanilla 1.12 only achieves that by stretching a single quad grid over
-     * 2048 blocks at a texel scale that does not even match its own fancy clouds.
-     */
+    // Sodium's fast path: one face per cell, no walls or second layer, since fast clouds are just a flat sheet.
     private static void emitFastCell(BufferBuilder buffer, CloudCells cells, int cellX, int cellZ, int offsetX,
             int offsetZ, float subCellX, float subCellZ, float bottomY, int cameraSide, float red, float green,
             float blue) {
@@ -239,10 +204,8 @@ public final class SodiumCloudRenderer {
         vertex(buffer, x0, bottomY, z0, u0, v0, red, green, blue, 0.0F, normalY, 0.0F);
     }
 
-    /**
-     * Sodium's {@code emitCellGeometryExterior} and {@code emitCellGeometryInterior}. The interior form is the same
-     * cell turned inside out: every face present, every normal reversed.
-     */
+    // Sodium's emitCellGeometryExterior/emitCellGeometryInterior. The interior form is the same cell turned inside
+    // out: every face present, every normal reversed.
     private static void emitCell(BufferBuilder buffer, CloudCells cells, int cellX, int cellZ, int offsetX,
             int offsetZ, float subCellX, float subCellZ, float bottomY, int cameraSide, int flags, boolean interior,
             float red, float green, float blue) {
@@ -300,7 +263,7 @@ public final class SodiumCloudRenderer {
         vertex(buffer, x0, y, z0, u0, v0, red, green, blue, 0.0F, normalY, 0.0F);
     }
 
-    /** A wall in the XY plane. It samples the cell's own texture row, so it takes that cell's colour. */
+    // A wall in the XY plane. It samples the cell's own texture row, so it takes that cell's colour.
     private static void zWall(BufferBuilder buffer, float x0, float x1, float y0, float y1, float z, float u0,
             float u1, float vc, float red, float green, float blue, float normalZ) {
         float r = red * TINT_Z;
@@ -312,7 +275,7 @@ public final class SodiumCloudRenderer {
         vertex(buffer, x0, y0, z, u0, vc, r, g, b, 0.0F, 0.0F, normalZ);
     }
 
-    /** A wall in the ZY plane, sampling the cell's own texture column. */
+    // A wall in the ZY plane, sampling the cell's own texture column.
     private static void xWall(BufferBuilder buffer, float x, float y0, float y1, float z0, float z1, float uc,
             float v0, float v1, float red, float green, float blue, float normalX) {
         float r = red * TINT_X;
@@ -357,11 +320,8 @@ public final class SodiumCloudRenderer {
         return cachedCells;
     }
 
-    /**
-     * The cloud texture reduced to per-cell occupancy plus which of its four sides border air — Sodium's
-     * {@code CloudRenderer.TextureData}, whose {@code isNorthEmpty}/{@code isSouthEmpty}/{@code isWestEmpty}/
-     * {@code isEastEmpty} predicates this replaces.
-     */
+    // The cloud texture reduced to per-cell occupancy plus which of its four sides border air.
+    // Sodium's CloudRenderer.TextureData; replaces its isNorthEmpty/isSouthEmpty/isWestEmpty/isEastEmpty predicates.
     private static final class CloudCells {
         private final byte[] flags;
         private final int width;
@@ -403,7 +363,7 @@ public final class SodiumCloudRenderer {
             return this.flags[index(x, z)];
         }
 
-        /** Texture coordinate of a cell boundary. The texture repeats, so an unwrapped cell index is fine here. */
+        // Texture coordinate of a cell boundary. The texture repeats, so an unwrapped cell index is fine here.
         private float u(int cellX) {
             return (float) cellX / (float) this.width;
         }
@@ -412,7 +372,7 @@ public final class SodiumCloudRenderer {
             return (float) cellZ / (float) this.height;
         }
 
-        /** Walls sample the middle of the cell's texel, as vanilla does, so they take the cell's own colour. */
+        // Walls sample the middle of the cell's texel, as vanilla does, so they take the cell's own colour.
         private float uCentre(int cellX) {
             return ((float) cellX + 0.5F) / (float) this.width;
         }
@@ -421,11 +381,8 @@ public final class SodiumCloudRenderer {
             return ((float) cellZ + 0.5F) / (float) this.height;
         }
 
-        /**
-         * Sodium's threshold, inverted: {@code isTransparent(argb) = ColorARGB.unpackAlpha(argb) < 10}. It has to be
-         * well above zero — vanilla's clouds.png stores its gaps as {@code (255,255,255,1)}, not as alpha 0, so a
-         * plain {@code != 0} test would classify the whole texture as cloud.
-         */
+        // Sodium's threshold, inverted (isTransparent = alpha < 10). Vanilla's clouds.png stores gaps as alpha 1,
+        // not alpha 0, so a plain != 0 test would classify the whole texture as cloud.
         private boolean isOpaque(int[] pixels, int x, int z) {
             return ((pixels[index(x, z)] >>> 24) & 255) >= 10;
         }

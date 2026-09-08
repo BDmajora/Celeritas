@@ -7,10 +7,10 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import com.bdmajora.impetus.iris.Iris;
-import com.bdmajora.impetus.iris.material.WorldRenderingSettings;
-import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
-import com.bdmajora.impetus.iris.uniforms.CapturedRenderingState;
+import com.bdmajora.impetus.umbra.Umbra;
+import com.bdmajora.impetus.umbra.material.WorldRenderingSettings;
+import com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline;
+import com.bdmajora.impetus.umbra.uniforms.CapturedRenderingState;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -41,11 +41,11 @@ public class RenderManagerEntityIdMixin {
      * Sends the id change to the bound program. Setting it only on {@link CapturedRenderingState} leaves it in Java —
      * the uniform is uploaded when a phase is bound, and one phase covers every entity in the frame, so the batch
      * would render with whichever entity's id happened to be current at phase entry. See
-     * {@link IrisRenderingPipeline#refreshDynamicUniforms()}.
+     * {@link UmbraRenderingPipeline#refreshDynamicUniforms()}.
      */
     @Unique
     private static void impetus$pushIdToGpu() {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.refreshDynamicUniforms();
         }

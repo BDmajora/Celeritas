@@ -98,7 +98,7 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
      * into {@link #getBufferForLayer}'s builder. No-op when no shader pack is active.
      */
     public void recordVanillaBlockAttribution(BlockRenderLayer layer, net.minecraft.block.state.IBlockState state, BlockPos pos) {
-        if (!com.bdmajora.impetus.iris.terrain.IrisTerrainProgramOverride.areShadersActive()) {
+        if (!com.bdmajora.impetus.umbra.terrain.UmbraTerrainProgramOverride.areShadersActive()) {
             return;
         }
         int i = layer.ordinal();
@@ -118,7 +118,7 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
         }
         int renderType = state.getRenderType().ordinal();
         int metadata = state.getBlock().getMetaFromState(state);
-        int id = com.bdmajora.impetus.iris.material.WorldRenderingSettings.getBlockStateId(state);
+        int id = com.bdmajora.impetus.umbra.material.WorldRenderingSettings.getBlockStateId(state);
         runs.add(quadCount);
         runs.add(id);
         runs.add(renderType);
@@ -242,18 +242,18 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
                 vertex.vanillaNormal = trueNormal;
                 vertex.trueNormal = trueNormal;
             }
-            if (com.bdmajora.impetus.iris.terrain.IrisTerrainProgramOverride.areShadersActive()) {
+            if (com.bdmajora.impetus.umbra.terrain.UmbraTerrainProgramOverride.areShadersActive()) {
                 // OptiFine extended attributes for the vanilla-sourced path (fluids etc.). mc_Entity comes from the
                 // per-block attribution runs recorded during meshing; mid-tex and tangent are derivable here.
                 // Centre of the texture region mapped to this quad, not the sprite centre -- see the long note in
-                // VintageBlockRenderer.populateIrisVertexData. The centroid is already to hand: it is what the
+                // VintageBlockRenderer.populateUmbraVertexData. The centroid is already to hand: it is what the
                 // sprite lookup above searches by.
                 float midU = uSum * 0.25f;
                 float midV = vSum * 0.25f;
-                int tangent = com.bdmajora.impetus.iris.vertices.NormalHelper.computeTangent(
-                        com.bdmajora.impetus.iris.vertices.NormI8.unpackX(trueNormal),
-                        com.bdmajora.impetus.iris.vertices.NormI8.unpackY(trueNormal),
-                        com.bdmajora.impetus.iris.vertices.NormI8.unpackZ(trueNormal),
+                int tangent = com.bdmajora.impetus.umbra.vertices.NormalHelper.computeTangent(
+                        com.bdmajora.impetus.umbra.vertices.NormI8.unpackX(trueNormal),
+                        com.bdmajora.impetus.umbra.vertices.NormI8.unpackY(trueNormal),
+                        com.bdmajora.impetus.umbra.vertices.NormI8.unpackZ(trueNormal),
                         quad[0].x, quad[0].y, quad[0].z, quad[0].u, quad[0].v,
                         quad[1].x, quad[1].y, quad[1].z, quad[1].u, quad[1].v,
                         quad[2].x, quad[2].y, quad[2].z, quad[2].u, quad[2].v);

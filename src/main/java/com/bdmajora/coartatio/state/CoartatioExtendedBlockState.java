@@ -12,30 +12,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-/**
- * The packed-state equivalent of Forge's {@code ExtendedStateImplementation}.
- *
- * <p>Note this <i>implements</i> {@code IExtendedBlockState} rather than extending Forge's class:
- * {@code ExtendedStateImplementation} is {@code protected static}, and inheriting from it would need
- * an access transformer and would drag in its table-based {@code withProperty}. Implementing the
- * interface on top of {@link CoartatioBlockState} keeps one packed-state code path.
- *
- * <h2>Clean versus dirty states</h2>
- *
- * <p>A block with unlisted properties still has an ordinary cartesian product of <i>listed</i>
- * states, and those are the ones the container builds and the mapper registers. They are "clean":
- * every unlisted value is {@code Optional.empty()}.
- *
- * <p>Setting an unlisted property produces a "dirty" state, created on the fly and never registered
- * with the mapper. It still carries the packed index of the clean state it came from, which is what
- * makes {@link #getClean()} and listed-property changes O(1) rather than a search. Clearing the last
- * unlisted value returns the registered clean instance, so identity comparisons against
- * {@code getBaseState()} keep working.
- *
- * <p>This mirrors Forge's own contract, where {@code cleanState} plays the same role — the
- * difference is that Forge threads the clean state's {@code ImmutableTable} through every dirty
- * state, and we thread an {@code int}.
- */
+// Packed-state equivalent of Forge's ExtendedStateImplementation.
+// Implements IExtendedBlockState rather than extending Forge's class, since that class is protected static
+// and its withProperty is table-based; this keeps one packed-state code path via CoartatioBlockState.
+//
+// "Clean" states are the ordinary listed-property cartesian product the container builds and the mapper
+// registers (all unlisted values Optional.empty()). Setting an unlisted property produces a "dirty" state,
+// created on the fly and never registered, but still carrying the clean state's packed index — that's what
+// makes getClean() and listed-property changes O(1). Mirrors Forge's own cleanState, but threads an int
+// instead of an ImmutableTable.
 public class CoartatioExtendedBlockState extends CoartatioBlockState implements IExtendedBlockState {
     private final ImmutableMap<IUnlistedProperty<?>, Optional<?>> unlistedProperties;
     private final boolean dirty;
@@ -102,8 +87,7 @@ public class CoartatioExtendedBlockState extends CoartatioBlockState implements 
         }
 
         if (!anyPresent) {
-            // Back to fully clean: return the registered instance so that identity comparisons and
-            // the mapper's array stay authoritative.
+            // Back to fully clean: return the registered instance so identity comparisons stay valid.
             return (IExtendedBlockState) getClean();
         }
 

@@ -13,16 +13,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
- * OptiFine's Swamp Colors switch: drops the swamp's hard-coded green-grey grass and foliage tint
- * back to the ordinary temperature-and-rainfall colour every other biome uses.
- *
- * <p>{@code BiomeSwamp} overrides the base methods with literal colours (and, for grass, a noise
- * lookup) rather than adjusting the base result, so there is nothing to "undo" — the base
- * computation is reproduced here instead. Going through {@link ColorizerGrass} and
- * {@link ColorizerFoliage} rather than returning a constant is what keeps resource-pack colourmaps
- * working.
- */
+// OptiFine's Swamp Colors switch: replaces the swamp's hard-coded grass/foliage tint with the ordinary temperature-and-rainfall colour
+// BiomeSwamp overrides with literal colours rather than adjusting a base result, so the base computation is reproduced here instead
+// Goes through ColorizerGrass/ColorizerFoliage rather than a constant so resource-pack colourmaps still work
 @Mixin(BiomeSwamp.class)
 public class BiomeSwampMixin {
     @Inject(method = "getGrassColorAtPos", at = @At("HEAD"), cancellable = true)

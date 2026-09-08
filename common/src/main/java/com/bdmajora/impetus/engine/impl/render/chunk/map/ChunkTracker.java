@@ -16,15 +16,8 @@ public class ChunkTracker implements ClientChunkEventListener {
         this(1);
     }
 
-    /**
-     * Constructs a new chunk tracker.
-     * @param requiredNeighborRadius the radius of chunks around a given chunk that must be available before the chunk
-     *                               itself is considered loaded (0 requires no chunks to be loaded, 1 requires
-     *                               all adjacent chunks). Note that a radius of 0 is guaranteed to produce incorrect
-     *                               rendering of the edge chunks for blocks that rely on data from the adjacent chunk
-     *                               (e.g. fences, fluids). Vanilla handles this by updating the chunks again as
-     *                               neighbors load, but this wastes CPU time and looks bad
-     */
+    // radius 0 is technically valid but produces wrong edge rendering for blocks that read neighbor data (fences, fluids);
+    // vanilla papers over this by re-updating chunks as neighbors load, which wastes CPU and still looks bad
     public ChunkTracker(int requiredNeighborRadius) {
         if (requiredNeighborRadius < 0) {
             throw new IllegalArgumentException("requiredNeighborRadius must be nonnegative");

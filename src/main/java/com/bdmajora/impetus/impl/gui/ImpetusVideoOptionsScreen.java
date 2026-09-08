@@ -12,7 +12,7 @@ import com.bdmajora.equilibrium.gui.EquilibriumOptionPages;
 import com.bdmajora.dynamiclights.gui.DynamicLightsOptionPages;
 import com.bdmajora.extras.gui.ExtrasOptionPages;
 import com.bdmajora.fulgor.gui.FulgorOptionPages;
-import com.bdmajora.impetus.iris.gui.modern.IrisOptionPages;
+import com.bdmajora.impetus.umbra.gui.modern.UmbraOptionPages;
 import org.lwjgl.input.Mouse;
 import com.bdmajora.impetus.ImpetusVintage;
 
@@ -73,8 +73,8 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
         pages.add(EquilibriumOptionPages.optimizations());
 
         if (ShaderModBridge.isShaderModPresent()) {
-            pages.add(IrisOptionPages.shaderPacks(parent));
-            pages.add(IrisOptionPages.settings(parent));
+            pages.add(UmbraOptionPages.shaderPacks(parent));
+            pages.add(UmbraOptionPages.settings(parent));
         }
 
         return pages;

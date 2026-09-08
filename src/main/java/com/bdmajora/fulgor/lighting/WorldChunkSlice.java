@@ -3,24 +3,17 @@ package com.bdmajora.fulgor.lighting;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.IChunkProvider;
 
-/**
- * A 5×5 snapshot of the chunks around one column.
- *
- * <p>Exists for {@code Chunk.recheckGaps}, which walks all 256 columns of a chunk and asks about the
- * height of each column's four neighbours. Done through the chunk provider that is 1024 lookups per
- * call, all of them into the same twenty-five chunks; taken once up front it is twenty-five.
- *
- * <p>Entries may be null. A caller that needs the whole neighbourhood present should ask
- * {@link #isLoaded} rather than null-checking as it goes, because a partial answer from a partially
- * loaded neighbourhood is what produces the skylight seams in the first place.
- */
+// 5x5 snapshot of chunks around one column, for Chunk.recheckGaps: taken once up front (25 lookups)
+// instead of via the chunk provider per column-neighbour pair (1024 lookups into the same 25 chunks).
+// Entries may be null; use isLoaded rather than null-checking piecemeal, since a partial answer from
+// a partially loaded neighbourhood is exactly what produces skylight seams.
 public final class WorldChunkSlice {
     private static final int DIAMETER = 5;
     private static final int RADIUS = DIAMETER / 2;
 
     private final Chunk[] chunks = new Chunk[DIAMETER * DIAMETER];
 
-    /** Chunk coordinates of the slice's corner, so world coordinates can be rebased onto the array. */
+    // Chunk coords of the slice's corner, for rebasing world coords onto the array
     private final int originX;
     private final int originZ;
 
@@ -36,12 +29,12 @@ public final class WorldChunkSlice {
         this.originZ = z - RADIUS;
     }
 
-    /** The chunk containing the given block coordinates, or null if it was not loaded. */
+    // The chunk containing the given block coordinates, or null if it was not loaded
     public Chunk getChunkFromWorldCoords(int x, int z) {
         return getChunk((x >> 4) - this.originX, (z >> 4) - this.originZ);
     }
 
-    /** Whether every chunk within {@code radius} blocks of the given position is present. */
+    // Whether every chunk within radius blocks of the given position is present
     public boolean isLoaded(int x, int z, int radius) {
         int xStart = ((x - radius) >> 4) - this.originX;
         int zStart = ((z - radius) >> 4) - this.originZ;

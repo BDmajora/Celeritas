@@ -3,25 +3,9 @@ package com.bdmajora.impetus.engine.impl.texture;
 import com.bdmajora.impetus.engine.api.util.ColorARGB;
 import com.bdmajora.impetus.engine.impl.util.color.ColorSRGB;
 
-/**
- * Implements a significantly enhanced mipmap downsampling filter.
- *
- * <p>This algorithm combines ideas from vanilla Minecraft -- using linear color spaces instead of sRGB for blending) --
- * with ideas from OptiFine -- using the alpha values for weighting in downsampling -- to produce a novel downsampling
- * algorithm for mipmapping that produces minimal visual artifacts.</p>
- *
- * <p>This implementation fixes a number of issues with other implementations:</p>
- *
- * <li>
- *     <ul>OptiFine blends in sRGB space, resulting in brightness losses.</ul>
- *     <ul>Vanilla applies gamma correction to alpha values, which has weird results when alpha values aren't the same.</ul>
- *     <ul>Vanilla computes a simple average of the 4 pixels, disregarding the relative alpha values of pixels. In
- *         cutout textures, this results in a lot of pixels with high alpha values and dark colors, causing visual
- *         artifacts.</ul>
- * </li>
- *
- * This Mixin is ported from Iris at <a href="https://github.com/IrisShaders/Iris/blob/41095ac23ea0add664afd1b85c414d1f1ed94066/src/main/java/net/coderbot/iris/mixin/bettermipmaps/MixinMipmapGenerator.java">MixinMipmapGenerator</a>.
- */
+// Mipmap downsampling that blends in linear space (unlike OptiFine's sRGB blend, which loses brightness) and
+// weights by alpha (unlike vanilla's flat average, which causes dark-edge artifacts on cutout textures)
+// Ported from Umbra's MixinMipmapGenerator
 public class MipmapHelper {
     public static int weightedAverageColor(int one, int two) {
         int alphaOne = ColorARGB.unpackAlpha(one);

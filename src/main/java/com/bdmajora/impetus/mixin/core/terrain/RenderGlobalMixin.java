@@ -23,9 +23,9 @@ import com.bdmajora.impetus.engine.impl.gl.device.RenderDevice;
 import com.bdmajora.impetus.engine.impl.render.terrain.SimpleWorldRenderer;
 import com.bdmajora.impetus.engine.impl.render.viewport.ViewportProvider;
 import com.bdmajora.impetus.impl.render.clouds.SodiumCloudRenderer;
-import com.bdmajora.impetus.iris.Iris;
-import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
-import com.bdmajora.impetus.iris.shaderpack.loading.ProgramId;
+import com.bdmajora.impetus.umbra.Umbra;
+import com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline;
+import com.bdmajora.impetus.umbra.shaderpack.loading.ProgramId;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -188,8 +188,8 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         try {
             // `frustum.culling = false`: the pack wants off-screen geometry drawn too, so the frustum test is
             // replaced with one that accepts everything (the same trick the shadow pass uses).
-            com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline pipeline =
-                    com.bdmajora.impetus.iris.Iris.getRenderingPipeline();
+            com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline pipeline =
+                    com.bdmajora.impetus.umbra.Umbra.getRenderingPipeline();
             com.bdmajora.impetus.engine.impl.render.viewport.Viewport viewport =
                     (pipeline != null && pipeline.shouldDisableFrustumCulling())
                             ? unculledViewport(((ViewportProvider) camera).impetus$createViewport())
@@ -259,7 +259,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
             return;
         }
 
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.setPhase(ProgramId.Clouds);
         }
@@ -425,7 +425,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
             impetus$entityGatherer.clear();
             impetus$collectedEntities = impetus$entityGatherer.getLoadedEntityList(world);
         }
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null && pass == 1 && pipeline.isRenderingPostDeferredTranslucents()) {
             // These are entities even when the pack ships no gbuffers_entities_translucent and the phase falls back to
             // gbuffers_textured_lit — which this pipeline also uses for particles. State the stage here rather than

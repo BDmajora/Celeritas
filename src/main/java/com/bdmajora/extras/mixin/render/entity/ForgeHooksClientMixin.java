@@ -12,14 +12,8 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 
 import java.util.List;
 
-/**
- * Item-frame LOD on Forge's emissive-item render path.
- *
- * <p>{@code ForgeModContainer.allowEmissiveItems} defaults to true, so most item rendering never
- * reaches {@code RenderItem.renderModel} at all — it goes through {@code renderLitItem}, which makes
- * the same per-face {@code getQuads} calls. Hooking both is what makes the LOD work regardless of
- * that setting.
- */
+// Item-frame LOD on Forge's emissive-item render path; ForgeModContainer.allowEmissiveItems defaults to true, so most
+// item rendering goes through renderLitItem instead of RenderItem.renderModel — hooking both makes the LOD work either way
 @Mixin(ForgeHooksClient.class)
 public class ForgeHooksClientMixin {
     // Not remap = false, tempting as it looks on a Forge class: the enclosing method is Forge's and

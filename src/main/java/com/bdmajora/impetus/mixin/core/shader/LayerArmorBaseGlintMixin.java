@@ -1,7 +1,7 @@
 package com.bdmajora.impetus.mixin.core.shader;
 
-import com.bdmajora.impetus.iris.Iris;
-import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
+import com.bdmajora.impetus.umbra.Umbra;
+import com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline;
 import net.minecraft.client.model.ModelBase;
 import net.minecraft.client.renderer.entity.RenderLivingBase;
 import net.minecraft.client.renderer.entity.layers.LayerArmorBase;
@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Routes the armour enchantment glint through {@code gbuffers_armor_glint}. See
- * {@link IrisRenderingPipeline#beginArmorGlint()} for why the glint needs its own program.
+ * {@link UmbraRenderingPipeline#beginArmorGlint()} for why the glint needs its own program.
  * <p>
  * The anchors mirror OptiFine exactly: its patched {@code LayerArmorBase.renderEnchantedGlint} wraps the whole method
  * body in {@code ShadersRender.renderEnchantedGlintBegin()} / {@code renderEnchantedGlintEnd()}, so HEAD/RETURN here
@@ -27,7 +27,7 @@ public class LayerArmorBaseGlintMixin {
                                                 float limbSwing, float limbSwingAmount, float partialTicks,
                                                 float ageInTicks, float netHeadYaw, float headPitch, float scale,
                                                 CallbackInfo ci) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.beginArmorGlint();
         }
@@ -38,7 +38,7 @@ public class LayerArmorBaseGlintMixin {
                                               float limbSwing, float limbSwingAmount, float partialTicks,
                                               float ageInTicks, float netHeadYaw, float headPitch, float scale,
                                               CallbackInfo ci) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.endArmorGlint();
         }

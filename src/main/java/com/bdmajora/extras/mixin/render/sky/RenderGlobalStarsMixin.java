@@ -10,17 +10,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
 
-/**
- * Star visibility and star count.
- *
- * <p>Visibility goes through the brightness value rather than the draw call: returning zero makes
- * vanilla skip the star pass on its own, so the geometry never has to be rebuilt and the switch is
- * free to flip at any time.
- *
- * <p>The count is a constant swap inside the generator, which leaves both the VBO and display-list
- * build paths intact. It only takes effect on a renderer reload, which is why the option carries
- * {@code REQUIRES_RENDERER_RELOAD}.
- */
+// Star visibility and star count; visibility goes through brightness rather than the draw call, since returning zero
+// makes vanilla skip the star pass on its own, so the switch is free to flip at any time without rebuilding geometry
+// Count is a constant swap inside the generator, leaving VBO/display-list paths intact; only takes effect on renderer reload
 @Mixin(RenderGlobal.class)
 public class RenderGlobalStarsMixin {
     @WrapOperation(

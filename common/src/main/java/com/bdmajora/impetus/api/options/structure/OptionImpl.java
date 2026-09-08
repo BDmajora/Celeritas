@@ -30,9 +30,7 @@ public class OptionImpl<S, T> implements Option<T> {
 
     private final OptionImpact impact;
 
-    /**
-     * The new value the user wants to provide, or null if they have not changed the option yet.
-     */
+    // Null until the user changes the option; applyChanges() flushes it back into the binding and clears it
     private @Nullable T modifiedValue;
 
     private final BooleanSupplier enabled;

@@ -1,7 +1,7 @@
 package com.bdmajora.impetus.mixin.core.shader;
 
-import com.bdmajora.impetus.iris.Iris;
-import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
+import com.bdmajora.impetus.umbra.Umbra;
+import com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline;
 import net.minecraft.client.renderer.entity.layers.LayerEndermanEyes;
 import net.minecraft.entity.monster.EntityEnderman;
 import org.spongepowered.asm.mixin.Mixin;
@@ -19,7 +19,7 @@ public class LayerEndermanEyesMixin {
             require = 0)
     private void impetus$beginEyes(EntityEnderman entity, float limbSwing, float limbSwingAmount, float partialTicks,
                                    float ageInTicks, float netHeadYaw, float headPitch, float scale, CallbackInfo ci) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.beginEyes();
         }
@@ -29,7 +29,7 @@ public class LayerEndermanEyesMixin {
             at = @At("RETURN"), require = 0)
     private void impetus$endEyes(EntityEnderman entity, float limbSwing, float limbSwingAmount, float partialTicks,
                                  float ageInTicks, float netHeadYaw, float headPitch, float scale, CallbackInfo ci) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
             pipeline.endEyes();
         }

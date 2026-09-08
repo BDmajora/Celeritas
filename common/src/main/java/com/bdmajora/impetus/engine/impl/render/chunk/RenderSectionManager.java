@@ -194,7 +194,7 @@ public abstract class RenderSectionManager {
 
     public void update(Viewport positionedViewport, int frame, boolean spectator) {
         if (isInShadowPass()) {
-            // Iris parity. `ShadowRenderer` wraps the whole shadow pass in `CullingDataCache#saveState`/
+            // Umbra parity. `ShadowRenderer` wraps the whole shadow pass in `CullingDataCache#saveState`/
             // `restoreState`, which swaps out the visible-section list AND the camera memo so the shadow frustum
             // never becomes the renderer's idea of where the camera is. The list is already separated here (see
             // `getCurrentRenderListManager`), but `cameraPosition` and `lastCameraPosition` are single fields
@@ -491,8 +491,8 @@ public abstract class RenderSectionManager {
         // `!getCurrentRenderListManager().isNeedsUpdate()` and drained here, and the "clearing is safe because the
         // graph will regenerate the list" argument only holds for the manager that is about to run a graph update.
         //
-        // SimpleWorldRenderer#setupTerrain no longer calls this method during the Iris shadow pass at all (that
-        // pass is culling-only, matching Iris's ShadowRenderer, which never runs vanilla's chunk build dispatch),
+        // SimpleWorldRenderer#setupTerrain no longer calls this method during the Umbra shadow pass at all (that
+        // pass is culling-only, matching Umbra's ShadowRenderer, which never runs vanilla's chunk build dispatch),
         // so `mainPass` is true for every caller today. The guards here and on `tickSchedulingBudget()` /
         // `setDispatchBudgetLimited()` are kept as a backstop: everything in this method is scoped to whichever
         // manager is current, so reaching it from the shadow pass drains the shadow list's rebuild queue and spends

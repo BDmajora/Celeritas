@@ -5,9 +5,7 @@ import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.biome.BiomeColorHelper;
 import com.bdmajora.impetus.impl.compat.fluidlogged.FluidloggedBlockAccess;
 
-/**
- * Contains extensions to the vanilla {@link IBlockAccess}.
- */
+// Extends vanilla IBlockAccess with biome tinting and fluidlogged block support
 public interface ImpetusBlockAccess extends IBlockAccess, FluidloggedBlockAccess {
     int getBlockTint(BlockPos pos, BiomeColorHelper.ColorResolver resolver);
 }

@@ -12,11 +12,11 @@ public class ShaderModBridge {
     static {
         MethodHandle shadersEnabled = null, shaderOpenScreen = null;
         try {
-            Class<?> irisApiClass = Class.forName("net.irisshaders.iris.api.v0.IrisApi");
+            Class<?> irisApiClass = Class.forName("net.irisshaders.umbra.api.v0.UmbraApi");
             Method instanceGetter = irisApiClass.getDeclaredMethod("getInstance");
             Object irisApiInstance = instanceGetter.invoke(null);
             shadersEnabled = MethodHandles.lookup().unreflect(irisApiClass.getDeclaredMethod("isShaderPackInUse")).bindTo(irisApiInstance);
-            shaderOpenScreen =  MethodHandles.lookup().unreflect(irisApiClass.getDeclaredMethod("openMainIrisScreenObj", Object.class)).bindTo(irisApiInstance);
+            shaderOpenScreen =  MethodHandles.lookup().unreflect(irisApiClass.getDeclaredMethod("openMainUmbraScreenObj", Object.class)).bindTo(irisApiInstance);
         } catch (NoSuchMethodException e) {
             e.printStackTrace();
         } catch (Throwable ignored) {

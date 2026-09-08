@@ -107,13 +107,7 @@ public class ScrollableFrame extends AbstractFrame {
         super.buildFrame();
     }
 
-    /**
-     * Apply an offset to the given coordinate based on the position of the given scrollbar.
-     * @param component A scrollbar. May be null, in which case nothing is changed
-     * @param coord The coordinate to apply the offset to
-     * @param negate Whether the offset should be applied in the negative or positive direction
-     * @return The adjusted coordinate
-     */
+    // Shifts a coordinate by the scrollbar's offset; null component means no-op
     private double applyOffset(ScrollBarComponent component, double coord, boolean negate) {
         if(component == null) {
             return coord;

@@ -21,48 +21,22 @@ import net.minecraftforge.fml.relauncher.SideOnly;
 
 import java.util.concurrent.locks.ReentrantLock;
 
-/**
- * The batched light propagator that replaces vanilla's recursive one. One per {@code World}.
- *
- * <h2>What is actually different</h2>
- *
- * <p>Vanilla's {@code World.checkLightFor} propagates immediately and recursively, from the position
- * outwards, re-reading and rewriting the same positions as many times as there are paths to them. It
- * also does this synchronously with the block change that caused it, so a single {@code /fill} pays
- * for every intermediate lighting state on the way to the final one.
- *
- * <p>Fulgor only records the position. Nothing is propagated until something asks to read light —
- * {@code Chunk.getLightFor}, a chunk packet, a save — at which point the whole accumulated batch is
- * processed at once. That turns the repeated work into a single pass, and it lets identical requests
- * collapse: {@link DeduplicatedLongQueue} drops a position that is already pending, so the thousand
- * neighbours that all scheduled the same block cost one evaluation instead of a thousand.
- *
- * <p>The pass itself walks light levels from brightest to darkest, running the darkening and
- * brightening queues for each level in lockstep. That ordering is what makes one pass sufficient: by
- * the time level <i>n</i> is reached, every position that could have been lit by something brighter
- * has already been, so no position is ever revisited.
- *
- * <h2>Coordinate encoding</h2>
- *
- * <p>Positions travel as {@code long}s laid out {@code [light(4)][y(8)][x(26)][z(26)]}, with x and z
- * biased by 2<sup>25</sup> so they are unsigned and a neighbour offset is plain addition. The 8-bit y
- * field cannot hold the carry out of a y overflow, so a single mask test ({@code Y_CHECK}) catches
- * stepping off the top or bottom of the world.
- *
- * @see <a href="https://github.com/CaffeineMC/phosphor-fabric">Phosphor</a> for the original
- * @see <a href="https://github.com/Desoroxxx/Alfheim">Alfheim</a> for the deduplication
- */
+// Batched light propagator replacing vanilla's recursive World.checkLightFor. One per World.
+// Ported from Phosphor (https://github.com/CaffeineMC/phosphor-fabric), dedup from Alfheim
+// (https://github.com/Desoroxxx/Alfheim).
+// Positions are only recorded here; nothing propagates until something reads light, at which point
+// the whole batch runs in one pass. DeduplicatedLongQueue collapses repeat scheduling of the same
+// position so N neighbours flagging one block cost one evaluation instead of N.
+// The pass walks light levels brightest-to-darkest, darkening then brightening each level in lockstep;
+// by the time level n is reached everything brighter is already settled, so nothing is revisited.
+// Coordinates are packed as [light(4)][y(8)][x(26)][z(26)] longs, x/z biased by 2^25 so a neighbour
+// offset is plain addition; Y_CHECK catches the y field's carry-out when stepping off the world.
 public final class LightingEngine {
     private static final int MAX_LIGHT = 15;
 
-    /**
-     * Starting capacity of every queue's deduplication set. Grows as needed; shrinks after a burst.
-     *
-     * <p>Deliberately small. There are thirty-four queues per engine and an engine per world — four of
-     * them in a single-player game with the Nether and the End loaded — so every doubling of this
-     * number costs megabytes of mostly-empty hash table before a single block has been placed. Growth
-     * is amortised and the queues that matter reach their working size within the first few passes.
-     */
+    // Starting capacity of each queue's dedup set (grows/shrinks with load). Kept small deliberately:
+    // 34 queues per engine x up to 4 engines (overworld/nether/end/etc) means every doubling costs
+    // megabytes of empty hash table before a single block is placed.
     private static final int QUEUE_CAPACITY = 512;
 
     // Layout parameters: length of each bit segment.
@@ -84,13 +58,13 @@ public final class LightingEngine {
     private static final long M_L = (1L << L_L) - 1;
     private static final long M_POS = (M_Y << S_Y) | (M_X << S_X) | (M_Z << S_Z);
 
-    /** Set when a neighbour offset carried out of the y field, i.e. stepped outside the world. */
+    // Set when a neighbour offset carried out of the y field, i.e. stepped outside the world
     private static final long Y_CHECK = 1L << (S_Y + L_Y);
 
-    /** Isolates the chunk a position belongs to, so the chunk lookup can be skipped when it repeats. */
+    // Isolates the chunk a position belongs to, so the chunk lookup can be skipped when it repeats
     private static final long M_CHUNK = ((M_X >> 4) << (4 + S_X)) | ((M_Z >> 4) << (4 + S_Z));
 
-    /** Encoded offsets for the six neighbours, added directly to an encoded position. */
+    // Encoded offsets for the six neighbours, added directly to an encoded position
     private static final long[] NEIGHBOR_SHIFTS = new long[6];
 
     static {
@@ -105,26 +79,22 @@ public final class LightingEngine {
     private final World world;
     private final Profiler profiler;
 
-    /**
-     * The thread that constructed the world, and therefore the only one allowed to change its light.
-     *
-     * <p>Kept purely to name the offender in {@link #lock()}'s warning.
-     */
+    // The thread that constructed the world, kept only to name the offender in lock()'s warning
     private final Thread ownerThread = Thread.currentThread();
 
     private final ReentrantLock lock = new ReentrantLock();
 
-    /** Positions handed to {@code checkLightFor}, one queue per light type. */
+    // Positions handed to checkLightFor, one queue per light type
     private final DeduplicatedLongQueue[] scheduledUpdates = new DeduplicatedLongQueue[EnumSkyBlock.values().length];
 
-    /** Positions to spread from, bucketed by the light level they were set to. */
+    // Positions to spread from, bucketed by the light level they were set to
     private final DeduplicatedLongQueue[] brighteningQueues = new DeduplicatedLongQueue[MAX_LIGHT + 1];
-    /** Positions to clear, bucketed by the light level they held. */
+    // Positions to clear, bucketed by the light level they held
     private final DeduplicatedLongQueue[] darkeningQueues = new DeduplicatedLongQueue[MAX_LIGHT + 1];
 
-    /** Scheduled positions that turned out to be brighter than stored; carries the new level in bits 60-63. */
+    // Scheduled positions found brighter than stored; new level carried in bits 60-63
     private final DeduplicatedLongQueue initialBrightenings;
-    /** Scheduled positions that turned out to be darker than stored. */
+    // Scheduled positions found darker than stored
     private final DeduplicatedLongQueue initialDarkenings;
 
     private final int maxScheduledUpdates;
@@ -143,7 +113,7 @@ public final class LightingEngine {
     private boolean isNeighborDataValid;
     private boolean updating;
 
-    /** Positions dequeued during the current pass, published to {@link Fulgor} when it ends. */
+    // Positions dequeued during the current pass, published to Fulgor when it ends
     private long processedThisPass;
 
     public LightingEngine(World world) {
@@ -175,11 +145,8 @@ public final class LightingEngine {
         }
     }
 
-    /**
-     * Records that a position's light may be stale, to be resolved on the next read.
-     *
-     * <p>This is the whole of {@code World.checkLightFor} under Fulgor.
-     */
+    // Records that a position's light may be stale, resolved on next read; this is Fulgor's whole
+    // replacement for World.checkLightFor
     public void scheduleLightUpdate(EnumSkyBlock lightType, BlockPos pos) {
         lock();
 
@@ -205,13 +172,13 @@ public final class LightingEngine {
         }
     }
 
-    /** Resolves everything pending, for both light types. */
+    // Resolves everything pending, for both light types
     public void processLightUpdates() {
         processLightUpdatesForType(EnumSkyBlock.SKY);
         processLightUpdatesForType(EnumSkyBlock.BLOCK);
     }
 
-    /** Resolves everything pending for one light type. */
+    // Resolves everything pending for one light type
     public void processLightUpdatesForType(EnumSkyBlock lightType) {
         // The client reaches this from a dozen places, several of them off-thread — chunk builders,
         // the sound engine, mod render hooks. Those threads must not mutate the world, and unlike the
@@ -242,14 +209,8 @@ public final class LightingEngine {
         return Minecraft.getMinecraft().isCallingFromMinecraftThread();
     }
 
-    /**
-     * Takes the lock, complaining first if it was already held.
-     *
-     * <p>Only one thread should ever be here, so contention means another mod is changing the world
-     * from the wrong thread. Blocking is the wrong outcome — it will stall — but it is a far better
-     * one than the corruption that would follow from proceeding, and the warning names the thread so
-     * the report goes to the right project.
-     */
+    // Contention here means another mod is touching the world from the wrong thread; blocking will
+    // stall but beats the corruption that proceeding anyway would cause, so warn and block
     private void lock() {
         if (this.lock.tryLock()) {
             return;
@@ -422,23 +383,14 @@ public final class LightingEngine {
         this.profiler.endSection();
     }
 
-    /**
-     * Points the cursor at a queue and clears its deduplication set.
-     *
-     * <p>Resetting here, immediately before the drain, is what leaves the set empty for the next pass:
-     * every queue is filled before it is drained, never during. See
-     * {@link DeduplicatedLongQueue#resetDeduplication()}.
-     */
+    // Points the cursor at a queue and clears its dedup set; safe because every queue is fully filled
+    // before it's drained, never during
     private void beginDraining(DeduplicatedLongQueue queue) {
         this.currentQueue = queue;
         queue.resetDeduplication();
     }
 
-    /**
-     * Advances the cursor.
-     *
-     * @return whether there was anything left
-     */
+    // Advances the cursor; returns whether there was anything left
     private boolean nextItem() {
         if (this.currentQueue.isEmpty()) {
             this.currentQueue = null;
@@ -462,12 +414,8 @@ public final class LightingEngine {
         return true;
     }
 
-    /**
-     * Fills {@link #neighborInfos} for the cursor position, if it has moved since the last fill.
-     *
-     * <p>A neighbour whose chunk is not loaded gets a null chunk and is skipped by every caller; the
-     * rest of its entry is left stale on purpose, since nothing reads it.
-     */
+    // Fills neighborInfos for the cursor position if it moved since the last fill; an unloaded
+    // neighbour gets a null chunk (skipped by every caller) and its other fields left stale on purpose
     private void fetchNeighborDataFromCursor(EnumSkyBlock lightType) {
         if (this.isNeighborDataValid) {
             return;
@@ -506,7 +454,7 @@ public final class LightingEngine {
         }
     }
 
-    /** The brightest a position could legitimately be, given its own luminosity and its neighbours'. */
+    // The brightest a position could legitimately be, given its own luminosity and its neighbours'
     private int calculateNewLightFromCursor(EnumSkyBlock lightType) {
         IBlockState state = LightUtil.posToState(this.currentPos, this.currentChunk);
 
@@ -565,14 +513,14 @@ public final class LightingEngine {
         enqueueBrightening(this.currentPos, this.currentData, newLight, this.currentChunk, lightType);
     }
 
-    /** Queues the position for spreading and writes the new level, so a second visit is a no-op. */
+    // Queues the position for spreading and writes the new level, so a second visit is a no-op
     private void enqueueBrightening(BlockPos pos, long key, int newLight, Chunk chunk, EnumSkyBlock lightType) {
         this.brighteningQueues[newLight].enqueue(key);
 
         chunk.setLightFor(lightType, pos, newLight);
     }
 
-    /** Queues the position for clearing and zeroes it, so a second visit is a no-op. */
+    // Queues the position for clearing and zeroes it, so a second visit is a no-op
     private void enqueueDarkening(BlockPos pos, long key, int oldLight, Chunk chunk, EnumSkyBlock lightType) {
         this.darkeningQueues[oldLight].enqueue(key);
 
@@ -583,14 +531,8 @@ public final class LightingEngine {
         return ((ChunkLightingData) this.currentChunk).fulgor$getCachedLightFor(lightType, this.currentPos);
     }
 
-    /**
-     * The same read as {@code ChunkLightingData.fulgor$getCachedLightFor}, but for a section the caller
-     * already resolved.
-     *
-     * <p>{@link #fetchNeighborDataFromCursor} needs the section anyway — it hands it to
-     * {@code posToState} — so looking it up once and reading light out of it directly saves the
-     * neighbour path a second walk down the storage array.
-     */
+    // Same read as ChunkLightingData.fulgor$getCachedLightFor, but for an already-resolved section —
+    // fetchNeighborDataFromCursor needs the section anyway, so this avoids a second storage-array walk
     private int getCachedLightFor(Chunk chunk, ExtendedBlockStorage section, BlockPos pos, EnumSkyBlock type) {
         if (section == Chunk.NULL_BLOCK_STORAGE) {
             return type == EnumSkyBlock.SKY && chunk.canSeeSky(pos) ? type.defaultLightValue : 0;
@@ -609,12 +551,8 @@ public final class LightingEngine {
         return type == EnumSkyBlock.BLOCK ? section.getBlockLight(x, y, z) : type.defaultLightValue;
     }
 
-    /**
-     * How much light the cursor position produces on its own.
-     *
-     * <p>For skylight that is a property of the heightmap rather than the block: everything with open
-     * sky above it is a full-strength source, everything else is not a source at all.
-     */
+    // For skylight, luminosity is a heightmap property not a block one: open sky above means
+    // full-strength source, otherwise not a source at all
     private int getCursorLuminosity(IBlockState state, EnumSkyBlock lightType) {
         if (lightType == EnumSkyBlock.SKY) {
             return this.currentChunk.canSeeSky(this.currentPos) ? EnumSkyBlock.SKY.defaultLightValue : 0;
@@ -624,7 +562,7 @@ public final class LightingEngine {
                 0, MAX_LIGHT);
     }
 
-    /** Clamped to at least 1: a zero-opacity step would let light travel unattenuated forever. */
+    // Clamped to at least 1: a zero-opacity step would let light travel unattenuated forever
     private int getPosOpacity(BlockPos pos, IBlockState state, Chunk chunk) {
         return MathHelper.clamp(LightUtil.getLightOpacity(state, this.world, pos, chunk), 1, MAX_LIGHT);
     }
@@ -646,7 +584,7 @@ public final class LightingEngine {
                 | ((long) pos.getZ() + (1 << L_Z - 1) << S_Z);
     }
 
-    /** Scratch space for one neighbour, reused across the whole pass. */
+    // Scratch space for one neighbour, reused across the whole pass
     private static final class NeighborInfo {
         final MutableBlockPos pos = new MutableBlockPos();
 

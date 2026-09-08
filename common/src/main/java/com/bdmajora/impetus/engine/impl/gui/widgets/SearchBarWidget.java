@@ -8,11 +8,7 @@ import com.bdmajora.impetus.engine.impl.util.Dim2i;
 
 import java.util.function.Consumer;
 
-/**
- * A flat text-input field used to search the options list. Editing keys are matched primarily on the produced
- * character, with both LWJGL2 and GLFW key codes accepted as fallbacks, so the widget behaves identically on
- * every runtime the engine targets. While focused, all key input is consumed so game keybinds don't fire.
- */
+// Text-input field for filtering the options list; matches key input on typedChar first, LWJGL2/GLFW keyCode as fallback
 public class SearchBarWidget extends AbstractWidget {
     private static final int TEXT_PADDING = 6;
 

@@ -8,16 +8,13 @@ import com.bdmajora.impetus.engine.impl.util.Dim2i;
 
 import java.util.Objects;
 
-/**
- * Sidebar header for a mod's group of option pages: the mod's icon at the left, its display name, and (when
- * known) its version in gray beneath the name — matching the modern Iris/Sodium settings layout.
- */
+// Sidebar header for a mod's group of pages: icon, name, and version (Umbra/Sodium style layout)
 public class TabHeaderWidget extends FlatButtonWidget {
     private static final String FALLBACK_TEXTURE = "textures/misc/unknown_pack.png";
     private static final int ICON_SIZE = 20;
     private static final int ICON_PADDING = 5;
 
-    /** Row height used by the sidebar when laying this widget out. */
+    // Row height used by the sidebar when laying this widget out
     public static final int HEIGHT = 30;
 
     private final String modId;

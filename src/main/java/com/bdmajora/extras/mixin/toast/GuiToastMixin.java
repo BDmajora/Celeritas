@@ -13,16 +13,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Suppresses toast pop-ups by kind.
- *
- * <p>Dropped at {@code add} rather than at render time, so a suppressed toast never enters the
- * queue and cannot delay the ones that are still wanted.
- *
- * <p>A modded toast that is not one of the four vanilla kinds is only affected by the master
- * switch — there is nothing to match it against, and guessing would silence things the user never
- * asked to silence.
- */
+// Suppresses toast pop-ups by kind; dropped at add rather than render time so a suppressed toast never enters the queue
+// Modded toasts that aren't one of the four vanilla kinds are only affected by the master switch — nothing to match them against
 @Mixin(GuiToast.class)
 public class GuiToastMixin {
     @Inject(method = "add", at = @At("HEAD"), cancellable = true)

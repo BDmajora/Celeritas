@@ -13,23 +13,12 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
- * Flattens {@code AND} conditions into a single array-backed predicate.
- *
- * <p>This is where the bulk of the saving is. Vanilla returns
- * {@code Predicates.and(Iterables.transform(conditions, ...))}, which is: the composite, the
- * transforming {@code Iterable}, the {@code Function}, and one anonymous predicate per child — and
- * the transformed {@code Iterable} holds the original {@code ICondition} list and its
- * {@code BlockStateContainer} alive for as long as the baked model exists.
- *
- * <p>When every child is a plain {@code property=value} test — which is nearly always, since that is
- * what a multipart {@code "when"} block with several keys compiles to — the whole tree collapses to
- * one {@link com.bdmajora.coartatio.state.predicate.AllMatchOne} holding two arrays.
- *
- * <p>The {@code conditions} field is declared package-private here so the shadow is valid whether
- * the target field is private (vanilla) or package-private (as some mappings render it): Mixin
- * requires a shadow to be at least as visible as its target, never less.
- */
+// Replaces ConditionAnd.getPredicate: vanilla allocates a Predicates.and/Iterables.transform chain
+// that keeps the original ICondition list and BlockStateContainer alive for the model's lifetime.
+// When every child is a plain property=value test (the common case), the whole tree collapses to
+// one AllMatchOne holding two arrays instead.
+// conditions is shadowed package-private since vanilla/mappings render its visibility differently,
+// and a Mixin shadow must be at least as visible as its target.
 @Mixin(ConditionAnd.class)
 public class ConditionAndMixin {
     @Shadow

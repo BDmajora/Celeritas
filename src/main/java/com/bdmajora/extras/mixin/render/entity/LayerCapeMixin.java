@@ -8,12 +8,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * OptiFine's Show Capes switch.
- *
- * <p>Only the cape layer. Elytra rendering shares the cape texture slot but is a different layer and
- * is left alone — hiding a player's wings would be a gameplay change, not a cosmetic one.
- */
+// OptiFine's Show Capes switch; only the cape layer — elytra shares the texture slot but is a different layer, left alone
+// since hiding wings would be a gameplay change, not a cosmetic one
 @Mixin(LayerCape.class)
 public class LayerCapeMixin {
     @Inject(

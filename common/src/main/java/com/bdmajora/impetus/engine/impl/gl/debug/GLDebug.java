@@ -1,5 +1,5 @@
 /*
- * Copyright LWJGL. All rights reserved. Modified by IMS for use in Iris (net.coderbot.iris.gl).
+ * Copyright LWJGL. All rights reserved. Modified by IMS for use in Umbra (net.coderbot.umbra.gl).
  * License terms: https://www.lwjgl.org/license
  */
 
@@ -21,21 +21,14 @@ public final class GLDebug {
 
 	private static DebugState debugState = new UnsupportedDebugState();
 
-	/**
-	 * Sets up debug callbacks
-	 *
-	 * @return 0 for failure, 1 for success, 2 for restart required.
-	 */
+	// Returns 0 for failure, 1 for success, 2 for restart required
 	public static int setupDebugMessageCallback() {
 		reloadDebugState();
 		return setupDebugMessageCallback(LWJGL.getDebugStream());
 	}
 
 	private static void trace(Consumer<String> output) {
-		/*
-		 * We can not just use a fixed stacktrace element offset, because some methods
-		 * are intercepted and some are not. So, check the package name.
-		 */
+		// Can't use a fixed stacktrace offset here since some methods get intercepted and some don't
 		StackTraceElement[] elems = filterStackTrace(new Throwable(), 4).getStackTrace();
 		for (StackTraceElement ste : elems) {
 			output.accept(ste.toString());

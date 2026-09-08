@@ -9,33 +9,20 @@ import net.minecraft.util.EnumFacing;
 import net.minecraft.world.EnumSkyBlock;
 import net.minecraft.world.chunk.Chunk;
 
-/**
- * The bookkeeping behind Fulgor's chunk-boundary fix.
- *
- * <p>Vanilla propagates light into a neighbouring chunk only if that chunk happens to be loaded, and
- * silently drops the update otherwise. During world generation neighbours are routinely absent, which
- * is where the lighting seams of MC-3329, MC-117067 and MC-117094 come from: the light was never
- * wrong, it was never calculated.
- *
- * <p>The fix, inherited from Phosphor, is to record what was skipped. Each chunk carries a table of
- * {@code short} section masks — one entry per (light type, direction, half of the edge, inward or
- * outward) — and {@code Chunk.onLoad} replays whatever its table and its new neighbours' tables agree
- * is outstanding. Because a chunk can be saved with work still owed, the table is serialised too.
- *
- * <h2>Why the edge is split in half</h2>
- *
- * <p>A boundary update needs both the neighbour and the <i>diagonal</i> neighbour on the side the
- * column sits on, since skylight can arrive around the corner. Splitting each 16-block edge into two
- * 8-block halves lets a half be replayed as soon as its own diagonal is available instead of waiting
- * for both.
- */
+// Bookkeeping for Fulgor's chunk-boundary fix (inherited from Phosphor): vanilla drops light
+// propagation into a chunk that isn't loaded yet (MC-3329, MC-117067, MC-117094 come from this).
+// Each chunk keeps a table of short section masks, one per (light type, direction, edge half,
+// in/out); Chunk.onLoad replays whatever's outstanding once both sides agree, and the table is
+// serialised since a chunk can be saved with work still owed.
+// Edge is split into 8-block halves because skylight can arrive around the diagonal neighbour,
+// letting a half replay as soon as its own diagonal loads instead of waiting on both.
 public final class NeighborLightFlags {
     public static final String NBT_KEY = "NeighborLightChecks";
 
     private NeighborLightFlags() {
     }
 
-    /** Which side of a boundary an outstanding check belongs to. */
+    // Which side of a boundary an outstanding check belongs to
     public enum BoundaryFacing {
         IN,
         OUT;
@@ -59,18 +46,14 @@ public final class NeighborLightFlags {
         return index(lightType, dir.getXOffset(), dir.getZOffset(), axisDirection, boundaryFacing);
     }
 
-    /**
-     * Which half of the edge the column at {@code (x, z)} falls in.
-     *
-     * <p>The coordinate perpendicular to the facing is the one that picks the half.
-     */
+    // Which half of the edge (x, z) falls in; picked by the coordinate perpendicular to the facing
     public static EnumFacing.AxisDirection axisDirection(EnumFacing dir, int x, int z) {
         return ((dir.getAxis() == EnumFacing.Axis.X ? z : x) & 15) < 8
                 ? EnumFacing.AxisDirection.NEGATIVE
                 : EnumFacing.AxisDirection.POSITIVE;
     }
 
-    /** Records that {@code sectionMask}'s sections owe a check across {@code dir}, and dirties the chunk. */
+    // Records that sectionMask's sections owe a check across dir, and dirties the chunk
     public static void flagBoundary(Chunk chunk, short sectionMask, EnumSkyBlock lightType, EnumFacing dir,
                                     EnumFacing.AxisDirection axisDirection, BoundaryFacing boundaryFacing) {
         ChunkLightingData data = (ChunkLightingData) chunk;
@@ -81,12 +64,8 @@ public final class NeighborLightFlags {
         chunk.markDirty();
     }
 
-    /**
-     * Writes the table into the chunk tag, skipping it entirely when nothing is outstanding.
-     *
-     * <p>The all-zero case is the overwhelming majority once a world has settled, and a 32-entry list
-     * of zeroes per chunk is not worth writing.
-     */
+    // Skips writing entirely when the table is all-zero (the common case once a world settles),
+    // to avoid a 32-entry list of zeroes per chunk
     public static void write(Chunk chunk, NBTTagCompound compound) {
         short[] flags = ((ChunkLightingData) chunk).fulgor$getNeighborLightChecks();
 
@@ -110,7 +89,7 @@ public final class NeighborLightFlags {
         }
     }
 
-    /** Reads the table back, ignoring one whose length does not match — a foreign or stale write. */
+    // Ignores the table if its length doesn't match — a foreign or stale write
     public static void read(Chunk chunk, NBTTagCompound compound) {
         // Type 9 is TAG_List; the entries inside it are type 2, TAG_Short.
         if (!compound.hasKey(NBT_KEY, 9)) {

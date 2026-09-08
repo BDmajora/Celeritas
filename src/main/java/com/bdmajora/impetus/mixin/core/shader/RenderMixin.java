@@ -4,15 +4,15 @@ import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import net.minecraft.client.renderer.entity.Render;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import com.bdmajora.impetus.iris.Iris;
-import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
+import com.bdmajora.impetus.umbra.Umbra;
+import com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline;
 
 @Mixin(Render.class)
 public class RenderMixin {
     @ModifyExpressionValue(method = "doRenderShadowAndFire",
             at = @At(value = "FIELD", target = "Lnet/minecraft/client/settings/GameSettings;entityShadows:Z"))
     private boolean impetus$disableVanillaEntityShadowsWithShaderShadows(boolean entityShadows) {
-        IrisRenderingPipeline pipeline = Iris.getRenderingPipeline();
+        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         return entityShadows && (pipeline == null || !pipeline.shouldDisableVanillaEntityShadows());
     }
 }

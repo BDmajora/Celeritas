@@ -10,20 +10,10 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 
-/**
- * Reaches AtomicStryker's Dynamic Lights without compiling against it.
- *
- * <p>Dynamic Lights reports luminance for things that are not blocks at all — an entity holding a
- * torch, a dropped glowstone — by intercepting the light lookup rather than by overriding anything on
- * {@code Block}. So when it is installed the engine cannot ask the block state; it has to ask the mod,
- * which is what Phosphor-Forge and its descendants all do.
- *
- * <p>Bound through a {@link MethodHandle} rather than {@code Method.invoke} because this sits on the
- * per-neighbour path of every light update, and a {@code static final} handle called with
- * {@code invokeExact} inlines like a direct call. If the class or method is missing — a Dynamic Lights
- * fork with a different API — the bridge reports itself unavailable and the engine falls back to
- * vanilla luminance rather than failing.
- */
+// Reaches AtomicStryker's Dynamic Lights without compiling against it; it reports luminance for
+// non-block light sources (held torches, dropped glowstone) by intercepting the lookup itself.
+// Bound via MethodHandle+invokeExact (inlines like a direct call) since this runs per-neighbour on
+// every light update; missing class/method just makes the bridge unavailable, falling back to vanilla.
 final class DynamicLightsBridge {
     private static final String CLASS_NAME = "atomicstryker.dynamiclights.client.DynamicLights";
 
@@ -40,9 +30,8 @@ final class DynamicLightsBridge {
         try {
             return (int) GET_LIGHT_VALUE.invokeExact(state.getBlock(), state, world, pos);
         } catch (Throwable t) {
-            // invokeExact is declared to throw Throwable, so this catch is unavoidable rather than
-            // defensive. Anything arriving here came out of Dynamic Lights; rethrow it with the
-            // position attached, since a bare stack trace through a MethodHandle says very little.
+            // invokeExact forces this catch; rethrow with the position since a bare MethodHandle
+            // stack trace is useless
             throw new IllegalStateException("Dynamic Lights threw while reporting luminance at " + pos, t);
         }
     }

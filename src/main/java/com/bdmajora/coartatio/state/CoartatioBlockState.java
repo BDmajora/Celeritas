@@ -9,22 +9,12 @@ import net.minecraft.block.state.IBlockState;
 
 import java.util.Map;
 
-/**
- * A block state that carries a packed {@code int} instead of a property-value table.
- *
- * <p>See {@link PropertyValueMapper} for the layout. The two overrides that matter are
- * {@link #buildPropertyValueTable}, which registers the state with the mapper instead of building a
- * table, and {@link #withProperty}, which becomes a mask plus an array index.
- *
- * <p>Instances are produced from {@code BlockStateContainer.createState}, which Forge added as an
- * extension point precisely so that a state implementation can be swapped out. Nothing here replaces
- * the container itself, so a mod with its own {@code BlockStateContainer} subclass that overrides
- * {@code createState} keeps its own states and is unaffected.
- */
+// Block state that carries a packed int (see PropertyValueMapper) instead of a property-value table.
+// Produced via BlockStateContainer.createState, a Forge extension point, so mods with their own createState override are unaffected.
 public class CoartatioBlockState extends BlockStateContainer.StateImplementation {
     protected final PropertyValueMapper mapper;
 
-    /** This state's packed index. Assigned in {@link #buildPropertyValueTable}. */
+    // This state's packed index, assigned in buildPropertyValueTable().
     protected int value;
 
     public CoartatioBlockState(PropertyValueMapper mapper, Block block,
@@ -36,11 +26,8 @@ public class CoartatioBlockState extends BlockStateContainer.StateImplementation
         this.mapper = mapper;
     }
 
-    /**
-     * Constructor for states synthesised at runtime rather than during container setup — currently
-     * only {@link CoartatioExtendedBlockState}, whose unlisted-property states are not part of the
-     * container's cartesian product and therefore never get {@link #buildPropertyValueTable} called.
-     */
+    // For states synthesised at runtime (only CoartatioExtendedBlockState) rather than by container setup;
+    // these never go through buildPropertyValueTable() since they aren't part of the cartesian product.
     protected CoartatioBlockState(PropertyValueMapper mapper, Block block,
                                   ImmutableMap<IProperty<?>, Comparable<?>> properties, int value) {
         super(block, properties);
@@ -48,11 +35,8 @@ public class CoartatioBlockState extends BlockStateContainer.StateImplementation
         this.value = value;
     }
 
-    /**
-     * Registers with the mapper instead of building an {@code ImmutableTable}. This is the call that
-     * deletes the memory: the container invokes it on every state once they all exist, and what
-     * would have been a table per state becomes one array entry per state.
-     */
+    // Registers with the mapper instead of building an ImmutableTable; called on every state once the
+    // container has built them all, turning a table-per-state into one array entry per state.
     @Override
     public void buildPropertyValueTable(
             Map<Map<IProperty<?>, Comparable<?>>, BlockStateContainer.StateImplementation> map) {
@@ -85,19 +69,10 @@ public class CoartatioBlockState extends BlockStateContainer.StateImplementation
         return state;
     }
 
-    /**
-     * Rebuilds the property-value table on demand.
-     *
-     * <p>FoamFix leaves this returning {@code null}, which breaks any mod that reads the table
-     * directly — a real and recurring source of crashes, because the accessor is public API on
-     * Forge's {@code IBlockProperties}. Reconstructing it costs exactly the memory vanilla would have
-     * spent, but only for the states somebody actually asks about, which in practice is a handful.
-     *
-     * <p>The result is stored into the inherited field so that code reaching the field directly
-     * (Forge's own {@code ExtendedStateImplementation} does) sees it too. Racing threads may both
-     * build it; the loser's table is discarded and the winner's is safe to publish unsynchronised,
-     * because {@code ImmutableTable} has only final fields.
-     */
+    // Rebuilds the property-value table on demand, lazily, only for states someone actually queries.
+    // FoamFix returns null here, which crashes mods reading the table via Forge's public IBlockProperties accessor.
+    // Stored into the inherited field so direct field access (Forge's ExtendedStateImplementation) still sees it;
+    // racing threads may both build it, but ImmutableTable is all-final so publishing unsynchronised is safe.
     @Override
     @SuppressWarnings({"unchecked", "rawtypes"})
     public ImmutableTable<IProperty<?>, Comparable<?>, IBlockState> getPropertyValueTable() {
