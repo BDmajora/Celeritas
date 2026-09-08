@@ -1,0 +1,15 @@
+{
+  "_comment": "Item light source definitions to load. 1.12.2's resource manager cannot list a directory, so every file must be named here. Resource packs may ship their own copy of this index; all copies are merged, so adding a file here does not remove the ones Impetus ships.",
+  "files": [
+    "blaze_powder.json",
+    "blaze_rod.json",
+    "fire_charge.json",
+    "glowstone_dust.json",
+    "lava_bucket.json",
+    "nether_star.json",
+    "prismarine_crystals.json",
+    "redstone_torch.json",
+    "spectral_arrow.json",
+    "torch.json"
+  ]
+}

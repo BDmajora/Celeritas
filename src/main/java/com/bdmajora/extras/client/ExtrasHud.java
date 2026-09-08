@@ -1,0 +1,121 @@
+package com.bdmajora.extras.client;
+
+import com.bdmajora.extras.Extras;
+import com.bdmajora.extras.ExtrasConfig;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.FontRenderer;
+import net.minecraft.client.gui.Gui;
+import net.minecraft.client.gui.ScaledResolution;
+import net.minecraft.client.resources.I18n;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraftforge.client.event.RenderGameOverlayEvent;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * The FPS and coordinate overlay, drawn in the configured corner with the configured contrast.
+ *
+ * <p>Hidden while F3 is up (it would duplicate the debug screen) and while the GUI is hidden. The
+ * light-updates warning is not optional: with that switch off the world quietly stops relighting,
+ * and the resulting shadows look like a rendering bug rather than a setting.
+ */
+@Mod.EventBusSubscriber(Side.CLIENT)
+@SideOnly(Side.CLIENT)
+public final class ExtrasHud {
+    private static final int TEXT_COLOR = 0xFFFFFF;
+    private static final int BACKGROUND_COLOR = 0x90505050;
+    private static final int MARGIN = 2;
+
+    private ExtrasHud() {
+    }
+
+    @SubscribeEvent
+    public static void onRenderOverlay(RenderGameOverlayEvent.Text event) {
+        Minecraft minecraft = Minecraft.getMinecraft();
+
+        if (minecraft.gameSettings.showDebugInfo || minecraft.gameSettings.hideGUI) {
+            return;
+        }
+
+        ExtrasConfig options = Extras.options();
+        List<String> lines = collectLines(minecraft, options);
+
+        if (lines.isEmpty()) {
+            return;
+        }
+
+        FontRenderer font = minecraft.fontRenderer;
+        ScaledResolution resolution = event.getResolution();
+        ExtrasConfig.OverlayCorner corner = options.extra.overlayCorner;
+
+        int lineHeight = font.FONT_HEIGHT + 2;
+        int y = corner.isBottom()
+                ? resolution.getScaledHeight() - font.FONT_HEIGHT - MARGIN
+                : MARGIN;
+
+        for (String line : lines) {
+            int x = corner.isRight()
+                    ? resolution.getScaledWidth() - font.getStringWidth(line) - MARGIN
+                    : MARGIN;
+
+            drawLine(font, line, x, y, options.extra.textContrast);
+
+            // Stack away from the anchored corner so the block never runs off screen.
+            y += corner.isBottom() ? -lineHeight : lineHeight;
+        }
+    }
+
+    private static List<String> collectLines(Minecraft minecraft, ExtrasConfig options) {
+        List<String> lines = new ArrayList<>();
+        ExtrasConfig.ExtraSettings settings = options.extra;
+
+        if (settings.showFps) {
+            String text = I18n.format("impetus.options.extras.overlay.fps", Minecraft.getDebugFPS());
+
+            if (settings.showFpsExtended) {
+                text = text + " " + I18n.format("impetus.options.extras.overlay.fps_extended",
+                        FrameCounter.getAverageFps(),
+                        FrameCounter.getOnePercentLowFps(),
+                        FrameCounter.getPointOnePercentLowFps());
+            }
+
+            lines.add(text);
+        }
+
+        // reducedDebugInfo is a server-side restriction; overriding it is opt-in.
+        if (settings.showCoords
+                && (settings.ignoreReducedDebugInfo || !minecraft.gameSettings.reducedDebugInfo)) {
+            EntityPlayer player = minecraft.player;
+            if (player != null) {
+                lines.add(I18n.format("impetus.options.extras.overlay.coordinates",
+                        String.format("%.2f", player.posX),
+                        String.format("%.2f", player.posY),
+                        String.format("%.2f", player.posZ)));
+            }
+        }
+
+        if (!options.render.lightUpdates) {
+            lines.add(I18n.format("impetus.options.extras.overlay.light_updates"));
+        }
+
+        return lines;
+    }
+
+    private static void drawLine(FontRenderer font, String text, int x, int y,
+                                 ExtrasConfig.TextContrast contrast) {
+        switch (contrast) {
+            case BACKGROUND -> {
+                int width = font.getStringWidth(text);
+                Gui.drawRect(x - 1, y - 1, x + width + 1, y + font.FONT_HEIGHT + 1, BACKGROUND_COLOR);
+                font.drawString(text, x, y, TEXT_COLOR);
+            }
+            case SHADOW -> font.drawStringWithShadow(text, x, y, TEXT_COLOR);
+            default -> font.drawString(text, x, y, TEXT_COLOR);
+        }
+    }
+}

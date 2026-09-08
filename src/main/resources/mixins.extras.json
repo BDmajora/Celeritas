@@ -1,0 +1,50 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "plugin": "com.bdmajora.extras.mixin.ExtrasMixinPlugin",
+  "package": "com.bdmajora.extras.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [
+    "misc.MinecraftServerMixin",
+    "misc.WorldServerMixin",
+    "light_updates.WorldMixin",
+    "biome_colors.BiomeColorHelperMixin",
+    "sky_colors.BiomeMixin",
+    "sky_colors.BiomeSwampMixin"
+  ],
+  "client": [
+    "animation.TextureMapMixin",
+    "particle.EntityRendererRainSplashMixin",
+    "particle.ParticleManagerAccessor",
+    "particle.ParticleManagerMixin",
+    "particle.RenderGlobalParticleMixin",
+    "profiler.RenderManagerMixin",
+    "profiler.TileEntityRendererDispatcherMixin",
+    "prevent_shaders.EntityRendererPreventShadersMixin",
+    "steady_debug_hud.GuiOverlayDebugMixin",
+    "toast.GuiToastMixin",
+    "misc.GuiIngameMixin",
+    "panini.EntityRendererPaniniMixin",
+    "panini.ShaderGroupAccessor",
+    "render.block_entity.TileEntityBeaconRendererMixin",
+    "render.block_entity.TileEntityEnchantmentTableRendererMixin",
+    "render.block_entity.TileEntityPistonRendererMixin",
+    "render.entity.ForgeHooksClientMixin",
+    "render.entity.LayerCapeMixin",
+    "render.entity.RenderEntityItemMixin",
+    "render.entity.RenderItemFrameMixin",
+    "render.entity.RenderItemMixin",
+    "render.entity.RenderLivingBaseMixin",
+    "render.entity.RenderPaintingMixin",
+    "render.fog.EntityRendererFogFalloffMixin",
+    "render.fog.EntityRendererFogMixin",
+    "render.fog.EntityRendererVoidFogMixin",
+    "render.sky.RenderGlobalSkyMixin",
+    "render.sky.RenderGlobalStarsMixin",
+    "render.sky.RenderGlobalSunMoonMixin",
+    "render.weather.EntityRendererWeatherMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

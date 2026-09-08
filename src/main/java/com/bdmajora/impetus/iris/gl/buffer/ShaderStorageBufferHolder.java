@@ -23,7 +23,14 @@ public final class ShaderStorageBufferHolder {
     /** GL43 constants (the generated constant classes track LWJGL's; avoid a hard dependency for two values). */
     private static final int GL_SHADER_STORAGE_BUFFER = 0x90D2;
     private static final int GL_MAX_SHADER_STORAGE_BLOCK_SIZE = 0x90DE;
+    private static final int GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS = 0x90DD;
     private static final int GL_NO_ERROR = 0;
+
+    /** {@code NVX_gpu_memory_info}: free video memory in KiB. The only portable-ish availability query there is. */
+    private static final int GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX = 0x9049;
+
+    /** What Iris assumes when the vendor query is unavailable ({@code IrisRenderSystem.getVRAM}). */
+    private static final long ASSUMED_VRAM_BYTES = 4L * 1024 * 1024 * 1024;
 
     /** Fill descriptor for the server-side zero: one unsigned byte per byte of buffer. */
     private static final int GL_R8 = 0x8229;
@@ -51,6 +58,17 @@ public final class ShaderStorageBufferHolder {
 
     /** Driver's per-buffer ceiling, queried once against a live context; 0 until then. */
     private static long cachedMaxBufferBytes;
+
+    /** Driver's count of indexed shader-storage binding points, queried once; 0 until then. */
+    private static int cachedMaxBindings;
+
+    /**
+     * Every buffer this class has created and not yet deleted, id -&gt; byte size. Iris keeps the same registry
+     * ({@code ShaderStorageBufferHolder.ACTIVE_BUFFERS}) precisely because {@link #destroy()} is not guaranteed to be
+     * reached — a pipeline that is replaced without being torn down would otherwise strand its buffers in video memory
+     * with no way to name or reclaim them. At these sizes that is close to a gigabyte per leak.
+     */
+    private static final Map<Integer, Long> ACTIVE_BUFFERS = new LinkedHashMap<>();
 
     public static final class Definition {
         final int index;
@@ -122,14 +140,42 @@ public final class ShaderStorageBufferHolder {
     public void destroy() {
         for (int buffer : this.buffers.values()) {
             LWJGL.glDeleteBuffers(buffer);
+            ACTIVE_BUFFERS.remove(buffer);
         }
         this.buffers.clear();
+    }
+
+    /**
+     * Deletes any buffer this class allocated that its owning holder never destroyed, and reports the total. Iris runs
+     * the equivalent ({@code forceDeleteBuffers}) when a pipeline is torn down, because a holder that is dropped
+     * without {@link #destroy()} leaves its allocations resident with no remaining reference — and a pack like
+     * Complementary at high colored-lighting settings measures those in hundreds of megabytes each.
+     */
+    public static void forceDeleteBuffers() {
+        if (ACTIVE_BUFFERS.isEmpty()) {
+            return;
+        }
+        long leaked = ACTIVE_BUFFERS.values().stream().mapToLong(Long::longValue).sum();
+        LOGGER.warn("[Iris] {} shader storage buffer(s) totalling {} bytes were never released by their holder; "
+                + "deleting them now", ACTIVE_BUFFERS.size(), leaked);
+        ACTIVE_BUFFERS.keySet().forEach(LWJGL::glDeleteBuffers);
+        ACTIVE_BUFFERS.clear();
     }
 
     private void allocate(int newWidth, int newHeight) {
         for (Definition definition : this.definitions.values()) {
             // Fixed-size buffers survive resizes (they may hold accumulated history data).
             if (this.buffers.containsKey(definition.index) && !definition.relative) {
+                continue;
+            }
+
+            // Iris rejects an out-of-range binding index outright; glBindBufferBase would otherwise raise
+            // GL_INVALID_VALUE once per frame for a binding no program can reach anyway.
+            int maxBindings = maxBindings();
+            if (definition.index < 0 || definition.index >= maxBindings) {
+                LOGGER.error("[Iris] bufferObject.{} asks for shader storage binding {}, but this driver only has {} "
+                                + "({}); ignoring it",
+                        definition.index, definition.index, maxBindings, "GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS");
                 continue;
             }
 
@@ -143,9 +189,25 @@ public final class ShaderStorageBufferHolder {
                 continue;
             }
 
+            // GL_MAX_SHADER_STORAGE_BLOCK_SIZE is a *format* ceiling, not an availability one — NVIDIA reports a value
+            // in the gigabytes regardless of how much video memory is actually free, so the check above passes for
+            // requests the GPU cannot possibly satisfy. Iris gates on free VRAM instead
+            // (ShaderStorageBufferHolder's constructor, via IrisRenderSystem.getVRAM), and this port did not, which is
+            // how Complementary's 773 MiB reflection buffer got allocated alongside ~1.1 GiB of colored-lighting
+            // volumes with nothing checking whether the card had room.
+            long availableVram = availableVideoMemoryBytes();
+            if (bytes > availableVram) {
+                LOGGER.error("[Iris] bufferObject.{} requests {} bytes but only {} bytes of video memory are free; "
+                                + "refusing the allocation. Lower the pack's colored lighting resolution or turn off "
+                                + "world-space reflections. Shaders reading that block will see undefined data.",
+                        definition.index, bytes, availableVram);
+                continue;
+            }
+
             Integer existing = this.buffers.remove(definition.index);
             if (existing != null) {
                 LWJGL.glDeleteBuffers(existing);
+                ACTIVE_BUFFERS.remove(existing);
             }
 
             int buffer = LWJGL.glGenBuffers();
@@ -166,6 +228,7 @@ public final class ShaderStorageBufferHolder {
             LWJGL.glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
             this.buffers.put(definition.index, buffer);
+            ACTIVE_BUFFERS.put(buffer, bytes);
             LOGGER.info("[Iris] Shader storage buffer {} allocated: {} bytes{}", definition.index, bytes,
                     definition.relative ? " (screen-relative)" : "");
         }
@@ -195,6 +258,39 @@ public final class ShaderStorageBufferHolder {
             cachedMaxBufferBytes = reported < 0 ? Integer.MAX_VALUE : reported;
         }
         return cachedMaxBufferBytes;
+    }
+
+    /** Number of indexed {@code GL_SHADER_STORAGE_BUFFER} binding points, queried once and cached. */
+    private static int maxBindings() {
+        if (cachedMaxBindings > 0) {
+            return cachedMaxBindings;
+        }
+        LWJGL.glGetError();
+        int reported = LWJGL.glGetInteger(GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS);
+        // GL 4.3 guarantees at least 8; fall back to that rather than to zero, which would reject every buffer.
+        cachedMaxBindings = (LWJGL.glGetError() != GL_NO_ERROR || reported <= 0) ? 8 : reported;
+        return cachedMaxBindings;
+    }
+
+    /**
+     * Free video memory in bytes, matching Iris's {@code IrisRenderSystem.getVRAM()}: the {@code NVX_gpu_memory_info}
+     * query where it exists (NVIDIA, and it reports KiB), otherwise Iris's flat 4 GiB assumption.
+     * <p>
+     * Deliberately <em>current</em> free memory rather than total, because that is what decides whether this
+     * allocation can succeed — the render targets, shadow maps and custom images are already resident by the time a
+     * holder is constructed, and on a pack like Complementary they account for well over a gigabyte before the first
+     * {@code bufferObject} is touched.
+     */
+    private static long availableVideoMemoryBytes() {
+        if (!LWJGL.isExtensionSupported(GLExtension.NVX_gpu_memory_info)) {
+            return ASSUMED_VRAM_BYTES;
+        }
+        LWJGL.glGetError();
+        int kib = LWJGL.glGetInteger(GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX);
+        if (LWJGL.glGetError() != GL_NO_ERROR || kib <= 0) {
+            return ASSUMED_VRAM_BYTES;
+        }
+        return kib * 1024L;
     }
 
     /**

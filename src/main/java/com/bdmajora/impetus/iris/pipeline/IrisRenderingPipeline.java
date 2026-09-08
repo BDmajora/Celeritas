@@ -4516,6 +4516,9 @@ public class IrisRenderingPipeline {
             this.shaderStorageBuffers.destroy();
             this.shaderStorageBuffers = null;
         }
+        // Iris sweeps the same registry on teardown: a holder replaced without destroy() would otherwise strand
+        // hundreds of megabytes of video memory per reload with nothing left referencing it.
+        com.bdmajora.impetus.iris.gl.buffer.ShaderStorageBufferHolder.forceDeleteBuffers();
         com.bdmajora.impetus.iris.uniforms.custom.ActiveCustomUniforms.clear();
         com.bdmajora.impetus.iris.terrain.IrisTerrainProgramOverride.destroyShadowPrograms();
         if (this.shadowRenderer != null) {

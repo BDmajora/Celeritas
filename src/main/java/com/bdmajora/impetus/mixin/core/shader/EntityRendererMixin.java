@@ -18,6 +18,8 @@ import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import net.minecraftforge.client.ForgeHooksClient;
+import com.bdmajora.extras.Extras;
+import com.bdmajora.extras.client.CloudPassState;
 import com.bdmajora.impetus.iris.Iris;
 import com.bdmajora.impetus.iris.pipeline.IrisRenderingPipeline;
 import com.bdmajora.impetus.iris.shaderpack.loading.ProgramId;
@@ -194,14 +196,36 @@ public class EntityRendererMixin {
      * issued after it would fail to depth-test against water and paint over it; the pipeline turns depth writes back
      * on for translucents ({@code beginTranslucents}, so shader water reaches {@code depthtex0}), which is precisely
      * what makes the late slot safe.
+     *
+     * <h4>Cloud Translucency</h4>
+     * The Extras option rides on the same constant, because it is asking the same question. Which of the two slots
+     * runs decides whether translucent terrain is drawn over the clouds or the clouds over it — which is what "are
+     * clouds translucent" means here. So ALWAYS forces the late slot, NEVER the early one, and DEFAULT substitutes
+     * the altitude clouds are actually drawn at (vanilla's literal 128 is wrong the moment the cloud height option
+     * moves them, which it does by default).
+     * <p>
+     * Two {@code @ModifyConstant} handlers cannot share a constant — Mixin skips the second and, with
+     * {@code required}, fails the load — so the two concerns are resolved here in priority order rather than in
+     * separate mixins. Iris wins: its slot choice is correctness, the Extras one is preference.
      */
     @ModifyConstant(method = "renderWorldPass", constant = {
             // The two occurrences are the only 128.0D in the method, and are the two halves of the same altitude
             // split: `< 128` guards the early draw, `>= 128` the late one. Both move together.
             @Constant(doubleValue = 128.0D, ordinal = 0),
             @Constant(doubleValue = 128.0D, ordinal = 1)})
-    private double impetus$moveCloudsToIrisSlot(double cloudLayer) {
-        return Iris.getRenderingPipeline() != null ? Double.NEGATIVE_INFINITY : cloudLayer;
+    private double impetus$cloudDrawSlot(double cloudLayer) {
+        if (Iris.getRenderingPipeline() != null) {
+            return Double.NEGATIVE_INFINITY;
+        }
+
+        switch (Extras.options().render.cloudTranslucency) {
+            case ALWAYS:
+                return Double.NEGATIVE_INFINITY;
+            case NEVER:
+                return Double.POSITIVE_INFINITY;
+            default:
+                return CloudPassState.cloudHeight((float) cloudLayer);
+        }
     }
 
     /**

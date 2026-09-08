@@ -79,6 +79,7 @@ public record LWJGL3Service(
             case ARB_texture_storage -> caps.GL_ARB_texture_storage;
             case ARB_base_instance -> caps.GL_ARB_base_instance;
             case ARB_compatibility -> caps.GL_ARB_compatibility;
+            case NVX_gpu_memory_info -> caps.GL_NVX_gpu_memory_info;
         };
     }
 

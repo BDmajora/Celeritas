@@ -265,9 +265,11 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         }
 
         try {
+            float cellSize = com.bdmajora.extras.client.CloudPassState.cellSize();
+
             if (SodiumCloudRenderer.render(this.mc, this.world, this.renderEngine, this.cloudTickCounter, partialTicks,
-                    pass, x, y, z, mode == 2, impetus$cloudRadiusCells(),
-                    ImpetusVintage.options().quality.cloudHeight)) {
+                    pass, x, y, z, mode == 2, impetus$cloudRadiusCells(cellSize),
+                    ImpetusVintage.options().quality.cloudHeight, cellSize)) {
                 ci.cancel();
             }
         } finally {
@@ -301,12 +303,15 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
      * Cloud radius in cells. Clamped at the bottom to vanilla's own extent (8 tiles of 8 cells, so 32 either side of
      * the camera) and at the top to the cloud projection's far plane — {@code renderCloudsCheck} builds it at
      * {@code farPlaneDistance * 4}, and cells past that are clipped away anyway.
+     * <p>
+     * The distance the user asked for is in blocks, so it is divided by the <em>effective</em> cell size rather than
+     * by vanilla's 12: raising the cloud scale must make the cells bigger, not push the cloud layer further out.
      */
     @Unique
-    private int impetus$cloudRadiusCells() {
+    private int impetus$cloudRadiusCells(float cellSize) {
         int requested = Math.max(8, ImpetusVintage.options().quality.cloudDistance) * 16;
         int farPlane = this.mc.gameSettings.renderDistanceChunks * 16 * 4;
-        return Math.max(32, (int) Math.ceil(Math.min(requested, farPlane) / 12.0D));
+        return Math.max(32, (int) Math.ceil(Math.min(requested, farPlane) / (double) cellSize));
     }
 
     @Inject(method = "loadRenderers", at = @At("RETURN"))

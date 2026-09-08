@@ -30,8 +30,10 @@ import com.bdmajora.coartatio.Coartatio;
 import com.bdmajora.coartatio.CoartatioConfig;
 import com.bdmajora.coartatio.gui.CoartatioStatsCommand;
 import com.bdmajora.coartatio.launch.ClassLoaderCleaner;
+import com.bdmajora.dynamiclights.DynamicLights;
 import com.bdmajora.equilibrium.Equilibrium;
 import com.bdmajora.equilibrium.gui.EquilibriumStatsCommand;
+import com.bdmajora.extras.Extras;
 import com.bdmajora.fulgor.Fulgor;
 import com.bdmajora.fulgor.FulgorConfig;
 import com.bdmajora.fulgor.gui.FulgorStatsCommand;
@@ -62,6 +64,16 @@ public class ImpetusVintage {
         // Seed the engine's hot-path option snapshot from the loaded config.
         com.bdmajora.impetus.engine.impl.ImpetusRuntimeOptions.apply(CONFIG);
 
+        // Load the Extras options now rather than leaving it to whichever mixin body happens to run
+        // first. They are all read on the render or client thread, so the lazy path would otherwise
+        // do its first file read from inside a frame.
+        Extras.initialize();
+
+        // Same reasoning for Dynamic Lights, which additionally reads its options from the chunk
+        // builder's worker threads — the last place a lazy first-touch file read belongs. Only the
+        // config is loaded here; see DynamicLights#onClientInit for why the rest waits.
+        DynamicLights.initialize();
+
         // Platform compatibility: GL strings must be read on the client thread (which owns the context during
         // FML construction); the adapter probe and overlay scan then continue on a background thread.
         StartupChecks.installCrashDialog();
@@ -73,6 +85,10 @@ public class ImpetusVintage {
         if ((Boolean) Launch.blackboard.get("fml.deobfuscatedEnvironment")) {
             ClientCommandHandler.instance.registerCommand(new TogglePassCommand());
         }
+
+        // Item light sources are read from resource packs here rather than at construction, because
+        // the registry they resolve items against does not exist until now.
+        DynamicLights.onClientInit();
 
         ClientCommandHandler.instance.registerCommand(new CoartatioStatsCommand());
         ClientCommandHandler.instance.registerCommand(new FulgorStatsCommand());

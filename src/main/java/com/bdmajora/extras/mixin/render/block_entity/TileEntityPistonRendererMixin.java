@@ -1,0 +1,31 @@
+package com.bdmajora.extras.mixin.render.block_entity;
+
+import com.bdmajora.extras.Extras;
+import net.minecraft.client.renderer.tileentity.TileEntityPistonRenderer;
+import net.minecraft.tileentity.TileEntityPiston;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+/**
+ * Hides the moving-piston block entity — the extending head and the block it pushes.
+ *
+ * <p>The piston still works; only the in-between animation is skipped, so blocks appear to jump to
+ * their destination. Worth it next to a large redstone contraption, which is the case this exists
+ * for.
+ */
+@Mixin(TileEntityPistonRenderer.class)
+public class TileEntityPistonRendererMixin {
+    @Inject(
+            method = "render(Lnet/minecraft/tileentity/TileEntityPiston;DDDFIF)V",
+            at = @At("HEAD"),
+            cancellable = true
+    )
+    private void impetus$render(TileEntityPiston piston, double x, double y, double z,
+                                float partialTicks, int destroyStage, float alpha, CallbackInfo ci) {
+        if (!Extras.options().render.pistons) {
+            ci.cancel();
+        }
+    }
+}

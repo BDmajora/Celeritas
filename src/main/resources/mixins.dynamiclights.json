@@ -1,0 +1,30 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "plugin": "com.bdmajora.dynamiclights.mixin.DynamicLightsMixinPlugin",
+  "package": "com.bdmajora.dynamiclights.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [],
+  "client": [
+    "GuiOverlayDebugMixin",
+    "ItemRendererMixin",
+    "MinecraftMixin",
+    "ParticleMixin",
+    "RenderGlobalMixin",
+    "RenderGlobalRebuildAccessor",
+    "StateImplementationMixin",
+    "TileEntityRegistryAccessor",
+    "TileEntityRendererDispatcherMixin",
+    "WorldClientMixin",
+    "lightsource.EntityHangingMixin",
+    "lightsource.EntityLivingBaseMixin",
+    "lightsource.EntityMinecartMixin",
+    "lightsource.EntityMixin",
+    "lightsource.EntityPlayerMixin",
+    "lightsource.EntityTNTPrimedMixin",
+    "lightsource.TileEntityMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -344,3 +344,227 @@ impetus.options.equilibrium.world_raycast.name=Raycast
 impetus.options.equilibrium.world_raycast.tooltip=Block ray tracing steps through the world without allocating a vector and a block position per step.\n\nTakes effect after a restart.
 impetus.options.equilibrium.world_tick_scheduler.name=Tick Scheduler
 impetus.options.equilibrium.world_tick_scheduler.tooltip=The set of pending scheduled block ticks is a fastutil open hash set rather than a java.util.HashSet, which removes a node allocation per scheduled tick and a pointer chase from every lookup. Redstone, liquids and crops schedule thousands of these per second on a busy world.\n\nTakes effect after a restart.
+
+#
+# Extras
+#
+impetus.options.pages.extras=Extras
+
+impetus.options.extras.overlay.fps=FPS: %s
+impetus.options.extras.overlay.fps_extended=(avg %s, 1%% low %s, 0.1%% low %s)
+impetus.options.extras.overlay.coordinates=XYZ: %s / %s / %s
+impetus.options.extras.overlay.light_updates=Light updates are disabled
+
+impetus.options.extras.animations.all.name=Animations
+impetus.options.extras.animations.all.tooltip=Master switch for animated block textures.\n\nAn animated texture is re-uploaded to the atlas every time it advances a frame, whether or not any of it is on screen. Turning the lot off is one of the larger single wins available on a weak GPU, at the cost of every fluid, fire and portal in the world being frozen on one frame.
+impetus.options.extras.animations.water.name=Water
+impetus.options.extras.animations.water.tooltip=Animates water textures. Still and flowing water are the most-uploaded animated textures in an ordinary world simply because there is so much of it.
+impetus.options.extras.animations.lava.name=Lava
+impetus.options.extras.animations.lava.tooltip=Animates lava textures.
+impetus.options.extras.animations.fire.name=Fire
+impetus.options.extras.animations.fire.tooltip=Animates fire textures.
+impetus.options.extras.animations.portal.name=Nether Portal
+impetus.options.extras.animations.portal.tooltip=Animates the nether portal texture.
+impetus.options.extras.animations.redstone.name=Redstone
+impetus.options.extras.animations.redstone.tooltip=Animates redstone textures, and allows redstone dust particles to spawn.
+impetus.options.extras.animations.explosion.name=Explosions
+impetus.options.extras.animations.explosion.tooltip=Animates explosion textures, and allows explosion particles to spawn.
+impetus.options.extras.animations.flame.name=Flames
+impetus.options.extras.animations.flame.tooltip=Animates flame textures, and allows flame particles to spawn.
+impetus.options.extras.animations.smoke.name=Smoke
+impetus.options.extras.animations.smoke.tooltip=Animates smoke textures, and allows smoke particles to spawn.
+impetus.options.extras.animations.sculk_sensor.name=Sculk Sensors
+impetus.options.extras.animations.sculk_sensor.tooltip=Animates sculk sensor textures.\n\n1.12.2 has no sculk sensor; this exists for mods that add one and name its texture accordingly.
+impetus.options.extras.animations.block.name=Other Blocks
+impetus.options.extras.animations.block.tooltip=Animates every other block texture, vanilla and modded — sea lanterns, magma, prismarine, and anything a mod animates.
+
+impetus.options.extras.particles.all.name=Particles
+impetus.options.extras.particles.all.tooltip=Master switch for all particles.\n\nParticles are ticked and re-sorted individually on the client thread, so a dense effect costs CPU time well before it costs GPU time. This is the switch to reach for when a modded machine or a mob farm tanks the frame rate.
+impetus.options.extras.particles.rain_splash.name=Rain Splashes
+impetus.options.extras.particles.rain_splash.tooltip=Spawns splash particles where rain lands.\n\nDisabling this skips the search for landing spots, not just the particles: the game raycasts candidate positions around the player every tick while it is raining.
+impetus.options.extras.particles.block_break.name=Block Break
+impetus.options.extras.particles.block_break.tooltip=Spawns the burst of particles when a block is destroyed.
+impetus.options.extras.particles.block_breaking.name=Block Breaking
+impetus.options.extras.particles.block_breaking.tooltip=Spawns the trickle of particles while a block is being mined.
+impetus.options.extras.particles.void.name=Void Particles
+impetus.options.extras.particles.void.tooltip=Spawns the drifting particles seen near the bottom of the world.
+impetus.options.extras.particles.water.name=Water Particles
+impetus.options.extras.particles.water.tooltip=Spawns the suspended particles seen underwater.
+impetus.options.extras.particles.portal.name=Portal Particles
+impetus.options.extras.particles.portal.tooltip=Spawns nether portal and end gateway particles.
+impetus.options.extras.particles.potion.name=Potion Particles
+impetus.options.extras.particles.potion.tooltip=Spawns the swirls around an entity under a potion effect.\n\nWorth knowing before you turn this off: those swirls are how you notice you have been poisoned or given a beneficial effect.
+impetus.options.extras.particles.dripping.name=Dripping Water & Lava
+impetus.options.extras.particles.dripping.tooltip=Spawns the drips that fall from water and lava overhead.
+impetus.options.extras.particles.firework.name=Firework Particles
+impetus.options.extras.particles.firework.tooltip=Spawns firework sparks. A large rocket volley is one of the densest particle effects in the game.
+
+impetus.options.extras.details.sky.name=Sky
+impetus.options.extras.details.sky.tooltip=Draws the sky box.\n\nThis takes the sun, moon and stars with it — vanilla draws them all in the same pass. Use the switches below to keep the sky while dropping what is on it.
+impetus.options.extras.details.stars.name=Stars
+impetus.options.extras.details.stars.tooltip=Draws the star field at night.
+impetus.options.extras.details.total_stars.name=Star Count
+impetus.options.extras.details.total_stars.tooltip=How many stars to generate. Vanilla uses 1500.\n\nThe star field is built once into a buffer, so this costs geometry rather than frame time — but it is rebuilt on a renderer reload, which is why changing it triggers one.
+impetus.options.extras.details.sun.name=Sun
+impetus.options.extras.details.sun.tooltip=Draws the sun disc.
+impetus.options.extras.details.moon.name=Moon
+impetus.options.extras.details.moon.tooltip=Draws the moon disc.
+impetus.options.extras.details.rain_snow.name=Rain & Snow
+impetus.options.extras.details.rain_snow.tooltip=Draws falling rain and snow.\n\nOnly the drawing. The weather still happens, so mob spawning, crop growth and sounds are unaffected — use the Weather option below to change the weather itself.
+impetus.options.extras.details.biome_colors.name=Biome Colors
+impetus.options.extras.details.biome_colors.tooltip=Tints grass, foliage and water by biome.\n\nThe cost is not the lookup but the blend around it: with a blend radius of 7 the game averages 225 biome samples for every block face it colours. Turning this off skips all of it and makes every biome look like plains.
+impetus.options.extras.details.sky_colors.name=Sky Colors
+impetus.options.extras.details.sky_colors.tooltip=Varies the sky colour by biome.\n\nOff gives every biome the same overworld blue while keeping vanilla's time-of-day and weather shading.
+impetus.options.extras.details.swamp_colors.name=Swamp Colors
+impetus.options.extras.details.swamp_colors.tooltip=Uses the swamp's own grey-green grass and foliage tint.\n\nOff gives swamps the ordinary temperature-and-rainfall colour every other biome uses.
+impetus.options.extras.details.void_fog.name=Void Fog
+impetus.options.extras.details.void_fog.tooltip=Darkens the view near the bottom of the world.
+impetus.options.extras.details.capes.name=Capes
+impetus.options.extras.details.capes.tooltip=Draws player capes. Elytra are unaffected.
+impetus.options.extras.details.held_item_tooltips.name=Held Item Tooltips
+impetus.options.extras.details.held_item_tooltips.tooltip=Shows the item name above the hotbar when you change slots.
+
+impetus.options.extras.render.fog.name=Fog
+impetus.options.extras.render.fog.tooltip=Draws atmospheric fog.\n\nFog that conveys gameplay state — blindness, being underwater, being in lava — is never removed by this, whatever it is set to.
+impetus.options.extras.render.fog_start.name=Fog Start
+impetus.options.extras.render.fog_start.tooltip=Where fog begins, as a percentage of where it ends. Lower values start the haze closer to the camera.
+impetus.options.extras.render.fog_distance.name=Fog Distance
+impetus.options.extras.render.fog_distance.tooltip=How far away fog becomes fully opaque, in chunks. Default follows the render distance.\n\nThis is not purely cosmetic: Impetus stops walking the chunk graph past the point fog is opaque, so a shorter fog distance means fewer chunks considered as well as fewer drawn.
+impetus.options.extras.render.fog_shape.name=Fog Shape
+impetus.options.extras.render.fog_shape.tooltip=Which distance the terrain shader fogs by.\n\nOnly terrain goes through that shader — entities, particles and the sky still fog by distance from the eye. Anything but Vanilla therefore makes terrain and what is drawn over it disagree about where fog starts, which is the point: it is how you fog the horizon without fogging the sky.
+impetus.options.extras.fog_shape.vanilla=Vanilla
+impetus.options.extras.fog_shape.cylindrical=Cylindrical
+impetus.options.extras.fog_shape.radial=Radial
+impetus.options.extras.fog_shape.planar=Planar
+
+impetus.options.extras.render.cloud_scale.name=Cloud Scale
+impetus.options.extras.render.cloud_scale.tooltip=Size of each cloud cell, relative to vanilla.\n\nLarger cells cover the same sky with fewer of them, so this is cheaper as well as different. Cloud height and distance live on the Quality page.
+impetus.options.extras.render.cloud_translucency.name=Cloud Translucency
+impetus.options.extras.render.cloud_translucency.tooltip=When clouds turn translucent.\n\nVanilla compares your altitude against a hard-coded 128, which is wrong as soon as the cloud height changes at all. Default uses the dimension's actual cloud height instead.
+impetus.options.extras.cloud_translucency.default=Default
+impetus.options.extras.cloud_translucency.always=Always
+impetus.options.extras.cloud_translucency.never=Never
+
+impetus.options.extras.time.name=Time
+impetus.options.extras.time.tooltip=Holds the world clock in day or night.\n\nSingle-player creative worlds only. The clock keeps running; it is pushed back inside the chosen half whenever it leaves it, rather than being frozen.
+impetus.options.extras.time.default=Default
+impetus.options.extras.time.day=Day Only
+impetus.options.extras.time.night=Night Only
+impetus.options.extras.weather.name=Weather
+impetus.options.extras.weather.tooltip=Holds the weather.\n\nSingle-player creative worlds only. Unlike Rain & Snow this changes the weather itself, so mob spawning, crop growth and sounds follow it.
+impetus.options.extras.weather.default=Default
+impetus.options.extras.weather.clear=Clear
+impetus.options.extras.weather.rain=Rain
+impetus.options.extras.weather.thunder=Thunder
+
+impetus.options.extras.render.item_frames.name=Item Frames
+impetus.options.extras.render.item_frames.tooltip=Draws item frames and their contents.\n\nA framed item is a full item model, so a wall of them in a storage room costs about as much as the same number of dropped items.
+impetus.options.extras.render.item_frame_lod.name=Item Frame LOD
+impetus.options.extras.render.item_frame_lod.tooltip=Distance past which a framed item drops the faces the frame hides anyway, and a framed map is skipped entirely.\n\nA backport of MoreCulling's Frame LOD. Only the four side faces of a 3D model go; flat sprite items are untouched, so the visible difference at distance is nothing.
+impetus.options.extras.render.item_frame_name_tag.name=Item Frame Name Tags
+impetus.options.extras.render.item_frame_name_tag.tooltip=Draws the hover name of a named item in a frame.
+impetus.options.extras.render.armor_stands.name=Armor Stands
+impetus.options.extras.render.armor_stands.tooltip=Draws armor stands.\n\nA hidden armor stand keeps its name tag, so stands used as signposts still work.
+impetus.options.extras.render.paintings.name=Paintings
+impetus.options.extras.render.paintings.tooltip=Draws paintings.
+impetus.options.extras.render.player_name_tag.name=Player Name Tags
+impetus.options.extras.render.player_name_tag.tooltip=Draws the name above other players.
+impetus.options.extras.render.dropped_items.name=Fancy Dropped Items
+impetus.options.extras.render.dropped_items.tooltip=Draws a pile of dropped items as up to five stacked models, scaled by stack size.\n\nOff draws one model per pile whatever the stack size. Worth it on a floor covered in drops: a single stack of 64 otherwise costs five full item models every frame.
+impetus.options.extras.render.beacons.name=Beacon Beams
+impetus.options.extras.render.beacons.tooltip=Draws beacon beams.
+impetus.options.extras.render.limit_beacon_beam.name=Limit Beacon Beam Height
+impetus.options.extras.render.limit_beacon_beam.tooltip=Stops beacon beams at the world ceiling instead of letting the last segment draw past it.
+impetus.options.extras.render.enchanting_books.name=Enchanting Table Books
+impetus.options.extras.render.enchanting_books.tooltip=Draws the animated floating book above an enchanting table.
+impetus.options.extras.render.pistons.name=Moving Pistons
+impetus.options.extras.render.pistons.tooltip=Draws the extending piston head and the block it pushes.\n\nOff makes pushed blocks jump to their destination rather than sliding. The piston still works; only the in-between animation is skipped. Worth it beside a large redstone contraption.
+
+impetus.options.extras.overlay.fps.name=Show FPS
+impetus.options.extras.overlay.fps.tooltip=Shows the frame rate on the HUD.
+impetus.options.extras.overlay.fps_extended.name=Extended FPS
+impetus.options.extras.overlay.fps_extended.tooltip=Adds the five-second average and the 1%% and 0.1%% lows.\n\nThe lows are the mean of the slowest 1%% and 0.1%% of frames — the benchmarking definition — so they measure stutter rather than throughput. A high average with poor lows is a hitching game.
+impetus.options.extras.overlay.coords.name=Show Coordinates
+impetus.options.extras.overlay.coords.tooltip=Shows your position on the HUD.
+impetus.options.extras.overlay.ignore_reduced_debug_info.name=Ignore Reduced Debug Info
+impetus.options.extras.overlay.ignore_reduced_debug_info.tooltip=Shows coordinates even where the server has asked that they be hidden.\n\nServers set that rule deliberately, usually on adventure maps or minigames. Overriding it is not a client-side exploit — the coordinates were already in the client — but it is the sort of thing a server may consider one.
+impetus.options.extras.overlay.corner.name=Overlay Corner
+impetus.options.extras.overlay.corner.tooltip=Which corner the FPS and coordinate lines are anchored to.
+impetus.options.extras.overlay_corner.top_left=Top Left
+impetus.options.extras.overlay_corner.top_right=Top Right
+impetus.options.extras.overlay_corner.bottom_left=Bottom Left
+impetus.options.extras.overlay_corner.bottom_right=Bottom Right
+impetus.options.extras.overlay.text_contrast.name=Text Contrast
+impetus.options.extras.overlay.text_contrast.tooltip=How overlay text is made readable against the world behind it.
+impetus.options.extras.text_contrast.none=None
+impetus.options.extras.text_contrast.background=Background
+impetus.options.extras.text_contrast.shadow=Shadow
+
+impetus.options.extras.toasts.all.name=Toasts
+impetus.options.extras.toasts.all.tooltip=Master switch for toast pop-ups.\n\nSuppressed toasts are dropped when they are raised, so they never queue up behind the ones you did want.
+impetus.options.extras.toasts.advancement.name=Advancement Toasts
+impetus.options.extras.toasts.advancement.tooltip=Shows the pop-up when an advancement is earned.
+impetus.options.extras.toasts.recipe.name=Recipe Toasts
+impetus.options.extras.toasts.recipe.tooltip=Shows the pop-up when a recipe is unlocked. The usual reason to be here: a large modpack unlocks hundreds at once.
+impetus.options.extras.toasts.tutorial.name=Tutorial Toasts
+impetus.options.extras.toasts.tutorial.tooltip=Shows the tutorial hints given to new players.
+impetus.options.extras.toasts.system.name=System Toasts
+impetus.options.extras.toasts.system.tooltip=Shows system messages such as world-save warnings.
+
+impetus.options.extras.vertical_sync.name=Vertical Sync
+impetus.options.extras.vertical_sync.tooltip=How frames are presented to the display.\n\nOn caps the frame rate to the refresh rate and removes tearing, at the cost of a dropped frame costing a whole refresh period. Adaptive keeps that behaviour above the refresh rate but disengages below it, so a dropped frame costs one frame rather than half a refresh.\n\nAdaptive is only offered where the driver supports tear control.
+impetus.options.extras.vertical_sync.adaptive=Adaptive
+
+impetus.options.extras.steady_debug_hud.name=Steady Debug HUD
+impetus.options.extras.steady_debug_hud.tooltip=Rebuilds the F3 overlay text on a fixed interval rather than every frame.\n\nCheaper — some of those lines hit the world — and more readable: at 200 FPS the vanilla overlay changes faster than it can be read.
+impetus.options.extras.steady_debug_hud_refresh.name=Debug HUD Interval
+impetus.options.extras.steady_debug_hud_refresh.tooltip=How often the F3 overlay text is rebuilt.
+
+impetus.options.extras.panini.name=Panini Projection
+impetus.options.extras.panini.tooltip=Applies a Panini projection to the finished frame.\n\nPanini is cylindrical horizontally and rectilinear vertically, which is what lets a wide field of view avoid the corner stretching a plain perspective projection gives past about 100 degrees.\n\nIt redistributes what was already drawn rather than widening the view, and is disabled while a shader pack is loaded — a pack owns the frame and its own screen-space effects would fall out of register with it.
+impetus.options.extras.panini_strength.name=Panini Strength
+impetus.options.extras.panini_strength.tooltip=How much of the Panini remap to apply. Zero is off.
+
+impetus.options.extras.advanced_item_tooltips.name=Advanced Item Tooltips
+impetus.options.extras.advanced_item_tooltips.tooltip=Shows an item's registry name and durability in its tooltip.\n\nThe same setting as F3 + H, bound to the vanilla option rather than mirrored, so the two can never disagree.
+impetus.options.extras.mod_name_tooltip.name=Mod Name Tooltip
+impetus.options.extras.mod_name_tooltip.tooltip=Appends the source mod's name to item tooltips.\n\nSkipped when JEI has already added the same line.
+impetus.options.extras.light_updates.name=Light Updates
+impetus.options.extras.light_updates.tooltip=Recomputes lighting on the client.\n\nOff is a large saving and a large caveat: light stops updating visibly, so a torch placed afterwards lights nothing until the chunk is rebuilt for some other reason. A warning is drawn on the HUD while this is off, because the symptom otherwise looks exactly like a rendering bug.
+impetus.options.extras.prevent_shaders.name=Prevent Vanilla Shaders
+impetus.options.extras.prevent_shaders.tooltip=Blocks the vanilla post-processing effect chain — the spectator, creeper and entity-view shaders.\n\nNothing to do with shader packs; Iris is unaffected. This is for the effects that are easy to activate by accident.
+impetus.options.extras.profile_entity_rendering.name=Profile Entity Rendering
+impetus.options.extras.profile_entity_rendering.tooltip=Splits entity and block-entity rendering by type in the F3 profiler pie chart.\n\nVanilla reports all of it as one slice, which tells you entities are expensive but not which ones. This is what turns an unexplained frame-time cliff into a mod name.
+impetus.options.extras.autosave_interval.name=Autosave Interval
+impetus.options.extras.autosave_interval.tooltip=How often the single-player world is written to disk. Vanilla saves every 45 seconds.\n\nA longer interval means fewer stutters and more progress lost to an unclean exit. Off disables the periodic save entirely; the world is still saved on quit.
+
+# ==========================================================================================
+# Dynamic Lights
+# ==========================================================================================
+impetus.options.pages.dynamiclights=Dynamic Lights
+
+impetus.options.dynamiclights.mode.name=Dynamic Lights
+impetus.options.dynamiclights.mode.tooltip=Lets held and dropped items, burning mobs and other entities light the world around them. Higher settings update the lighting more often as sources move; Realtime updates every tick. The cost is rebuilding the chunk mesh around each moving light, so this scales with how many lit things are near you rather than with render distance.
+impetus.options.dynamiclights.mode.off=Off
+impetus.options.dynamiclights.mode.slow=Slow
+impetus.options.dynamiclights.mode.fast=Fast
+impetus.options.dynamiclights.mode.realtime=Realtime
+
+impetus.options.dynamiclights.self.name=Handheld Lighting
+impetus.options.dynamiclights.self.tooltip=Lets what you are holding or wearing light your own surroundings. Worth turning off with a shader pack that does its own handheld lighting, otherwise the two stack and everything nearby is washed out.
+impetus.options.dynamiclights.entities.name=Entity Lighting
+impetus.options.dynamiclights.entities.tooltip=Lets other entities light the world: mobs carrying torches, dropped glowstone, item frames, burning creepers. Your own light is governed separately by Handheld Lighting.
+impetus.options.dynamiclights.block_entities.name=Block Entity Lighting
+impetus.options.dynamiclights.block_entities.tooltip=Lets block entities light the world. Nothing in vanilla uses this — light-emitting blocks already have real block light — so it only does anything with a mod whose machines register a dynamic light handler.
+impetus.options.dynamiclights.water_sensitive.name=Extinguish Underwater
+impetus.options.dynamiclights.water_sensitive.tooltip=Stops water-sensitive sources glowing while submerged. A torch or a lava bucket goes dark underwater; a nether star does not.
+impetus.options.dynamiclights.debug_info.name=Show Debug Info
+impetus.options.dynamiclights.debug_info.tooltip=Adds a line to the F3 overlay counting the tracked light sources, and how many of them re-lit their chunks on the last update.
+
+impetus.options.dynamiclights.tnt.name=TNT Lighting
+impetus.options.dynamiclights.tnt.tooltip=How primed TNT glows as its fuse burns down. Simple holds one brightness for the whole fuse; Fancy ramps up towards the explosion, which looks right but re-lights the surrounding chunks each time the value changes.
+impetus.options.dynamiclights.creeper.name=Creeper Lighting
+impetus.options.dynamiclights.creeper.tooltip=How a creeper glows while it is flashing. Simple holds one brightness; Fancy follows the flash, which re-lights the surrounding chunks as it swells.
+impetus.options.dynamiclights.explosive.off=Off
+impetus.options.dynamiclights.explosive.simple=Simple
+impetus.options.dynamiclights.explosive.fancy=Fancy

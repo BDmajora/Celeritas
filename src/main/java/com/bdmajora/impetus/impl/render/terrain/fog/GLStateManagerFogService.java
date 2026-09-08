@@ -23,9 +23,18 @@ public class GLStateManagerFogService implements FogService {
         return GlStateManager.fogState.density;
     }
 
+    /**
+     * The terrain shader's {@code u_FogShape}, driven by the Extras fog-shape option.
+     *
+     * <p>Only terrain goes through that shader. Entities, particles and the sky still fog through
+     * fixed-function GL, which can only measure distance from the eye — so any shape other than
+     * {@code VANILLA} makes terrain and everything drawn over it disagree about where fog begins.
+     * That is inherent to the option rather than a defect in it: the shapes exist precisely so the
+     * horizon can fog while what is above it does not.
+     */
     @Override
     public int getFogShapeIndex() {
-        return 0;
+        return com.bdmajora.extras.Extras.options().render.fogShape.shaderIndex();
     }
 
     /**

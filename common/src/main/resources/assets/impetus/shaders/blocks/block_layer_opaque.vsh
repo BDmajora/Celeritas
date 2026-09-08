@@ -43,15 +43,18 @@ void main() {
     vec3 translation = u_RegionOffset + _get_draw_translation(_draw_id);
     vec3 position = _vert_position + translation;
 
+    vec4 viewPosition = u_ModelViewMatrix * vec4(position, 1.0);
+
 #if defined(USE_FOG_POSTMODERN)
     v_SphericalFragDistance = getFragDistance(FOG_SHAPE_SPHERICAL, position);
     v_CylindricalFragDistance = getFragDistance(FOG_SHAPE_CYLINDRICAL, position);
 #elif defined(USE_FOG)
-    v_FragDistance = getFragDistance(u_FogShape, position);
+    // The view-space depth is what makes FOG_SHAPE_PLANAR possible; every other shape ignores it.
+    v_FragDistance = getFragDistance(u_FogShape, position, abs(viewPosition.z));
 #endif
 
     // Transform the vertex position into model-view-projection space
-    gl_Position = u_ProjectionMatrix * u_ModelViewMatrix * vec4(position, 1.0);
+    gl_Position = u_ProjectionMatrix * viewPosition;
 
     // Add the light color to the vertex color, and pass the texture coordinates to the fragment shader
 #ifdef IMPETUS_NO_LIGHTMAP

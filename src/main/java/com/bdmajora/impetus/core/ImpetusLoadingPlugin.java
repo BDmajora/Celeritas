@@ -72,8 +72,12 @@ public class ImpetusLoadingPlugin implements IFMLLoadingPlugin, IEarlyMixinLoade
         // 2. Coartatio: Must apply before vanilla NBT/ResourceLocation instantiation
         // 3. Fulgor: Injects required lighting fields into World/Chunk
         // 4. Equilibrium: Loads last so Fulgor's reads utilize Equilibrium's chunk cache
+        // 5. Extras: Pure feature switches over existing render paths; no ordering constraints
+        // 6. Dynamic Lights: Reads the lightmap Fulgor and the chunk builder produce; must not
+        //    precede them, and like Extras is otherwise order-independent
         return Arrays.asList("mixins.impetus.json", "mixins.iris.json", "mixins.coartatio.json",
-                "mixins.fulgor.json", "mixins.equilibrium.json");
+                "mixins.fulgor.json", "mixins.equilibrium.json", "mixins.extras.json",
+                "mixins.dynamiclights.json");
     }
 
     // Extracts just the config JSON names to pass to the hijacker

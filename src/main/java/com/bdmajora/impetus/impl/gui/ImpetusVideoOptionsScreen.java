@@ -9,6 +9,8 @@ import com.bdmajora.impetus.engine.impl.gui.options.CommonOptionPages;
 import com.bdmajora.impetus.engine.impl.render.ShaderModBridge;
 import com.bdmajora.coartatio.gui.CoartatioOptionPages;
 import com.bdmajora.equilibrium.gui.EquilibriumOptionPages;
+import com.bdmajora.dynamiclights.gui.DynamicLightsOptionPages;
+import com.bdmajora.extras.gui.ExtrasOptionPages;
 import com.bdmajora.fulgor.gui.FulgorOptionPages;
 import com.bdmajora.impetus.iris.gui.modern.IrisOptionPages;
 import org.lwjgl.input.Mouse;
@@ -50,6 +52,10 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
 
                 // Push hot-path option values into the engine's runtime snapshot.
                 com.bdmajora.impetus.engine.impl.ImpetusRuntimeOptions.apply(ImpetusVintage.options());
+
+                // The General page's VSync tickbox writes the swap interval directly, which clears
+                // adaptive sync behind its back. Re-assert it after any apply; no-op unless it is on.
+                com.bdmajora.extras.client.AdaptiveSync.reapply();
             }
         };
         resetDrag();
@@ -60,6 +66,8 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
         pages.add(ImpetusGameOptionPages.general());
         pages.add(ImpetusGameOptionPages.quality());
         pages.add(CommonOptionPages.performance(ImpetusVintage.options()));
+        pages.add(ExtrasOptionPages.extras());
+        pages.add(DynamicLightsOptionPages.dynamicLights());
         pages.add(CoartatioOptionPages.memory());
         pages.add(FulgorOptionPages.lighting());
         pages.add(EquilibriumOptionPages.optimizations());

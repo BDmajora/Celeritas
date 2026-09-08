@@ -1,0 +1,23 @@
+{
+    "targets": [
+        "impetus_panini_swap"
+    ],
+    "passes": [
+        {
+            "name": "impetus_panini",
+            "intarget": "minecraft:main",
+            "outtarget": "impetus_panini_swap"
+        },
+        {
+            "name": "blit",
+            "intarget": "impetus_panini_swap",
+            "outtarget": "minecraft:main",
+            "uniforms": [
+                {
+                    "name": "ColorModulate",
+                    "values": [ 1.0, 1.0, 1.0, 1.0 ]
+                }
+            ]
+        }
+    ]
+}

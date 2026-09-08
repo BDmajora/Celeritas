@@ -60,7 +60,8 @@ public final class SodiumCloudRenderer {
     /** The neighbour on +X is empty. */
     private static final int EAST_OPEN = 1 << 4;
 
-    private static final float CELL_SIZE = 12.0F;
+    /** Vanilla's cell edge length. The Extras cloud-scale option passes a multiple of this to {@code render}. */
+    public static final float CELL_SIZE = 12.0F;
     private static final float THICKNESS = 4.0F;
     /** Vanilla's inset on the far side of each cell, so coincident cell walls do not z-fight. */
     private static final float INSET = 9.765625E-4F;
@@ -99,13 +100,16 @@ public final class SodiumCloudRenderer {
     /**
      * Draws the whole cloud layer in one call. {@code cloudHeight} is the configured altitude in blocks (vanilla reads
      * {@code world.provider.getCloudHeight()} here, which the cloud-height option redirects) and {@code radiusCells}
-     * is the mesh radius in cells, one cell being 12 blocks.
+     * is the mesh radius in cells.
      *
+     * @param cellSize the cell edge length in blocks; {@link #CELL_SIZE} unless the Extras cloud-scale option has
+     *                 changed it. Scaling the cell rather than the finished mesh keeps the cloud texture at one texel
+     *                 per cell, which is what stops large scales from turning into a blur.
      * @return false when the cloud texture could not be read and the caller should run vanilla's renderer instead
      */
     public static boolean render(Minecraft mc, WorldClient world, TextureManager textureManager, int cloudTickCounter,
             float partialTicks, int pass, double cameraX, double cameraY, double cameraZ, boolean fancy,
-            int radiusCells, float cloudHeight) {
+            int radiusCells, float cloudHeight, float cellSize) {
         CloudCells cells = getCells(mc);
         if (cells == null) {
             return false;
@@ -114,8 +118,8 @@ public final class SodiumCloudRenderer {
         // Vanilla's cell-space camera position. The 2048-cell wrap matters: without it the texcoords derived from the
         // absolute cell index lose all sub-texel precision a few hundred thousand blocks out.
         double cloudTime = (double) ((float) cloudTickCounter + partialTicks);
-        double gridX = (cameraX + cloudTime * 0.029999999329447746D) / CELL_SIZE;
-        double gridZ = cameraZ / CELL_SIZE + 0.33000001311302185D;
+        double gridX = (cameraX + cloudTime * 0.029999999329447746D) / cellSize;
+        double gridZ = cameraZ / cellSize + 0.33000001311302185D;
         gridX -= (double) (MathHelper.floor(gridX / 2048.0D) * 2048);
         gridZ -= (double) (MathHelper.floor(gridZ / 2048.0D) * 2048);
 
@@ -160,7 +164,7 @@ public final class SodiumCloudRenderer {
                 GlStateManager.DestFactor.ZERO);
 
         GlStateManager.pushMatrix();
-        GlStateManager.scale(CELL_SIZE, 1.0F, CELL_SIZE);
+        GlStateManager.scale(cellSize, 1.0F, cellSize);
 
         Tessellator tessellator = Tessellator.getInstance();
         BufferBuilder buffer = tessellator.getBuffer();
