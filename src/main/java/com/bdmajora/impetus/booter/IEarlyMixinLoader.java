@@ -6,7 +6,6 @@ import java.util.List;
  * Early mixins are defined as mixins that affects vanilla or forge classes.
  * Or technically, classes that can be queried via the current state of {@link net.minecraft.launchwrapper.LaunchClassLoader}
  *
- * If you want to add mixins that affect mods, use {@link ILateMixinLoader}
  *
  * Implement this in your {@link net.minecraftforge.fml.relauncher.IFMLLoadingPlugin}.
  * Return all early mixin configs you want MixinBooter to queue and send to Mixin library.

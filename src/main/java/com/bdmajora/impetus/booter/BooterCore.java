@@ -1,5 +1,6 @@
 package com.bdmajora.impetus.booter;
 
+import com.llamalad7.mixinextras.MixinExtrasBootstrap;
 import net.minecraft.launchwrapper.Launch;
 import org.spongepowered.asm.launch.MixinBootstrap;
 import org.spongepowered.asm.logging.ILogger;
@@ -34,7 +35,13 @@ public final class BooterCore {
         System.setProperty("mixin.service", "com.bdmajora.impetus.booter.service.MixinBooterService");
 
         MixinBootstrap.init();
-        Mixins.addConfiguration("mixins.impetusbooter.json");
+
+        // Upstream does this from its own mixin config's IMixinConfigPlugin#onLoad. Impetus does not
+        // ship that config, so it is bootstrapped directly here. Without it MixinExtras annotations
+        // (@Local, @WrapOperation, @ModifyExpressionValue, ...) are never processed and every Impetus
+        // mixin using them fails to apply with an "Invalid descriptor" error.
+        MixinExtrasBootstrap.init();
+
         MixinBooterConfig.load();
         ModDiscoverer.discover();
         registerCoremodsRescuer();

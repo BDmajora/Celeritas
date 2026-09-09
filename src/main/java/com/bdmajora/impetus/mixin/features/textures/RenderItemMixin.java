@@ -9,7 +9,7 @@ import com.bdmajora.impetus.impl.render.terrain.sprite.SpriteUtil;
 
 @Mixin(RenderItem.class)
 public class RenderItemMixin {
-    @ModifyExpressionValue(method = { "func_175032_a", "renderQuads" }, at = @At(value = "INVOKE", target = "Ljava/util/List;get(I)Ljava/lang/Object;"))
+    @ModifyExpressionValue(method = "renderQuads", at = @At(value = "INVOKE", target = "Ljava/util/List;get(I)Ljava/lang/Object;"))
     private Object markSpriteActive(Object o) {
         if (o instanceof BakedQuad quad) {
             var sprite = quad.getSprite();

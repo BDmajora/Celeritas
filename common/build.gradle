@@ -85,10 +85,21 @@ tasks.named('test', Test) {
     }
 }
 
+// LWJGL is compileOnly on the lwjgl2/lwjgl3 source sets, so jvmdowngrader cannot resolve types like
+// org.lwjgl.PointerBuffer or org.lwjgl.opengl.GLSync while rewriting frames, and logs an ERROR per
+// class per downgrade pass. Handing it the same classpath the source sets compile against silences
+// that and lets it compute exact frames instead of falling back to a supertype.
+tasks.named('downgradeJar') {
+    classpath = classpath + files(
+            configurations.lwjgl2CompileClasspath,
+            configurations.lwjgl3CompileClasspath
+    )
+}
+
 publishing {
     publications {
         mavenJava(MavenPublication) {
-            artifactId 'impetus-common'
+            artifactId = 'impetus-common'
             from components.java
 
             artifact(shadeDowngradedApi) {

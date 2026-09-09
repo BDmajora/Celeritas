@@ -53,5 +53,5 @@ plugins {
 
 rootProject.name = "impetus"
 
-includeBuild("plugins/impetus-mdg-plugin")
+includeBuild("common/build-logic")
 include("common")

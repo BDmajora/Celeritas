@@ -20,7 +20,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 // legacy isItemEnchanted branch - go through it
 @Mixin(LayerArmorBase.class)
 public class LayerArmorBaseGlintMixin {
-    @Inject(method = {"renderEnchantedGlint", "func_188364_a"}, at = @At("HEAD"), require = 0)
+    @Inject(method = "renderEnchantedGlint", at = @At("HEAD"), require = 0)
     private static void impetus$beginArmorGlint(RenderLivingBase<?> renderer, EntityLivingBase entity, ModelBase model,
                                                 float limbSwing, float limbSwingAmount, float partialTicks,
                                                 float ageInTicks, float netHeadYaw, float headPitch, float scale,
@@ -31,7 +31,7 @@ public class LayerArmorBaseGlintMixin {
         }
     }
 
-    @Inject(method = {"renderEnchantedGlint", "func_188364_a"}, at = @At("RETURN"), require = 0)
+    @Inject(method = "renderEnchantedGlint", at = @At("RETURN"), require = 0)
     private static void impetus$endArmorGlint(RenderLivingBase<?> renderer, EntityLivingBase entity, ModelBase model,
                                               float limbSwing, float limbSwingAmount, float partialTicks,
                                               float ageInTicks, float netHeadYaw, float headPitch, float scale,

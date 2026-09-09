@@ -125,6 +125,9 @@ dependencies {
 tasks.named<JavaCompile>("compileJava") {
     sourceCompatibility = "21"
     options.release = 8
+    // Targeting 8 is intentional (jabel lowers Java 21 syntax), so javac's "obsolete source/target"
+    // notices are pure noise. This is the suppression javac itself recommends.
+    options.compilerArgs.add("-Xlint:-options")
     javaCompiler = javaToolchains.compilerFor {
         languageVersion = JavaLanguageVersion.of(21)
     }
