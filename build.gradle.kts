@@ -159,7 +159,7 @@ tasks.register<ShadowJar>("shadowRemapJar") {
     manifest.inheritFrom(tasks.named<Jar>("jar").get().manifest)
     relocate("org.joml", "com.bdmajora.impetus.engine.impl.shadow.joml")
     mergeServiceFiles()
-    from("COPYING", "COPYING.LESSER", "README.md")
+    from("LICENSE", "README.md")
 }
 
 tasks.named<ShadowJar>("shadowRemapJar") {
@@ -181,7 +181,7 @@ val booterLibsJar = tasks.register<ShadowJar>("booterLibsJar") {
     archiveClassifier.set("booter-libs")
     // The service declarations ship here rather than in the mod jar so that ServiceLoader cannot see
     // Impetus' Mixin service at all unless the bundled implementation was actually extracted.
-    from("src/booterLibs/resources")
+    from("common/src/booterLibs/resources")
     mergeServiceFiles()
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/MANIFEST.MF")
     exclude("module-info.class", "**/module-info.class", "**/LICENSE*")

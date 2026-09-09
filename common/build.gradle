@@ -123,8 +123,7 @@ publishing {
 }
 
 jar {
-    from(rootProject.file("COPYING"))
-    from(rootProject.file("COPYING.LESSER"))
+    from(rootProject.file("LICENSE"))
     from(sourceSets.lwjglCommon.output)
     from(sourceSets.lwjgl2.output)
     from(sourceSets.lwjgl3.output)
