@@ -36,5 +36,28 @@ public enum GLExtension {
     ARB_compatibility,
     // NVIDIA-only query for free video memory; Umbra refuses oversized shader storage buffer allocations when it
     // is present and simply hopes for the best when it is not
-    NVX_gpu_memory_info
+    NVX_gpu_memory_info,
+
+    // ---- mesh-shader terrain backend ----
+    // Everything below is queried only by MeshShaderSupport. None of it exists in LWJGL 2, so the LWJGL2 backend
+    // answers false for the whole group and the backend is simply never offered there
+    // Task/mesh shader stages; the backend's entire draw path is glDrawMeshTasksNV and its indirect form
+    NV_mesh_shader,
+    // Buffer GPU addresses and residency, so shaders reach buffers through raw 64-bit pointers instead of bindings
+    NV_shader_buffer_load,
+    // glBufferAddressRangeNV, used to bind the indirect command buffer by address
+    NV_vertex_buffer_unified_memory,
+    // The same, for the scene uniform block, which survives shader changes because it is bound by address
+    NV_uniform_buffer_unified_memory,
+    // Stops the occlusion rasterizer shading every covered fragment; one representative fragment per primitive is
+    // enough to record "this box was visible"
+    NV_representative_fragment_test,
+    // Indirect mesh draws sourced from a GPU-written command buffer, which is what removes the CPU from the loop
+    NV_bindless_multi_draw_indirect,
+    // 8/16-bit scalar types and 64-bit ints in GLSL; the section and region metadata packing depends on them
+    NV_gpu_shader5,
+    // gl_BaryCoordNV, so the fragment shader interpolates vertex attributes it fetched itself
+    NV_fragment_shader_barycentric,
+    // Sparse virtual allocation, so terrain geometry lives in one enormous buffer with pages committed on demand
+    ARB_sparse_buffer
 }

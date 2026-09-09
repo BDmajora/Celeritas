@@ -6,6 +6,7 @@ import org.lwjgl.opengl.*;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.system.Pointer;
 import com.bdmajora.impetus.lwjgl.GLExtension;
+import com.bdmajora.impetus.lwjgl.GLNv;
 import com.bdmajora.impetus.lwjgl.LWJGLService;
 import com.bdmajora.impetus.lwjgl.MemoryStack;
 
@@ -72,6 +73,15 @@ public record LWJGL3Service(
             case ARB_base_instance -> caps.GL_ARB_base_instance;
             case ARB_compatibility -> caps.GL_ARB_compatibility;
             case NVX_gpu_memory_info -> caps.GL_NVX_gpu_memory_info;
+            case NV_mesh_shader -> caps.GL_NV_mesh_shader;
+            case NV_shader_buffer_load -> caps.GL_NV_shader_buffer_load;
+            case NV_vertex_buffer_unified_memory -> caps.GL_NV_vertex_buffer_unified_memory;
+            case NV_uniform_buffer_unified_memory -> caps.GL_NV_uniform_buffer_unified_memory;
+            case NV_representative_fragment_test -> caps.GL_NV_representative_fragment_test;
+            case NV_bindless_multi_draw_indirect -> caps.GL_NV_bindless_multi_draw_indirect;
+            case NV_gpu_shader5 -> caps.GL_NV_gpu_shader5;
+            case NV_fragment_shader_barycentric -> caps.GL_NV_fragment_shader_barycentric;
+            case ARB_sparse_buffer -> caps.GL_ARB_sparse_buffer;
         };
     }
 
@@ -1079,5 +1089,106 @@ public record LWJGL3Service(
     @Override
     public ByteBuffer memSlice(ByteBuffer buffer, int offset, int capacity) {
         return MemoryUtil.memSlice(buffer, offset, capacity);
+    }
+
+    // ===================== DIRECT STATE ACCESS BUFFERS =====================
+
+    @Override
+    public int glCreateBuffers() {
+        return ARBDirectStateAccess.glCreateBuffers();
+    }
+
+    @Override
+    public void glNamedBufferStorage(int buffer, long size, int flags) {
+        ARBDirectStateAccess.glNamedBufferStorage(buffer, size, flags);
+    }
+
+    @Override
+    public long nglMapNamedBufferRange(int buffer, long offset, long length, int access) {
+        return ARBDirectStateAccess.nglMapNamedBufferRange(buffer, offset, length, access);
+    }
+
+    @Override
+    public void glUnmapNamedBuffer(int buffer) {
+        ARBDirectStateAccess.glUnmapNamedBuffer(buffer);
+    }
+
+    @Override
+    public void glFlushMappedNamedBufferRange(int buffer, long offset, long length) {
+        ARBDirectStateAccess.glFlushMappedNamedBufferRange(buffer, offset, length);
+    }
+
+    @Override
+    public void glCopyNamedBufferSubData(int readBuffer, int writeBuffer, long readOffset, long writeOffset, long size) {
+        ARBDirectStateAccess.glCopyNamedBufferSubData(readBuffer, writeBuffer, readOffset, writeOffset, size);
+    }
+
+    @Override
+    public void glClearNamedBufferSubDataZero(int buffer, int internalFormat, long offset, long size, int format, int type) {
+        ARBDirectStateAccess.nglClearNamedBufferSubData(buffer, internalFormat, offset, size, format, type, MemoryUtil.NULL);
+    }
+
+    @Override
+    public void glClearNamedBufferDataZero(int buffer, int internalFormat, int format, int type) {
+        ARBDirectStateAccess.nglClearNamedBufferData(buffer, internalFormat, format, type, MemoryUtil.NULL);
+    }
+
+    // ===================== BINDLESS BUFFERS =====================
+
+    @Override
+    public long glGetNamedBufferGpuAddressNV(int buffer) {
+        // The extension only offers the array form of the getter, so a one-element scratch array it is
+        long[] address = new long[1];
+        NVShaderBufferLoad.glGetNamedBufferParameterui64vNV(buffer, GLNv.GL_BUFFER_GPU_ADDRESS_NV, address);
+        return address[0];
+    }
+
+    @Override
+    public void glMakeNamedBufferResidentNV(int buffer, int access) {
+        NVShaderBufferLoad.glMakeNamedBufferResidentNV(buffer, access);
+    }
+
+    @Override
+    public void glMakeNamedBufferNonResidentNV(int buffer) {
+        NVShaderBufferLoad.glMakeNamedBufferNonResidentNV(buffer);
+    }
+
+    @Override
+    public void glBufferAddressRangeNV(int pname, int index, long address, long length) {
+        NVVertexBufferUnifiedMemory.glBufferAddressRangeNV(pname, index, address, length);
+    }
+
+    @Override
+    public void glEnableClientState(int cap) {
+        GL11.glEnableClientState(cap);
+    }
+
+    @Override
+    public void glDisableClientState(int cap) {
+        GL11.glDisableClientState(cap);
+    }
+
+    // ===================== MESH SHADERS =====================
+
+    @Override
+    public void glDrawMeshTasksNV(int first, int count) {
+        NVMeshShader.glDrawMeshTasksNV(first, count);
+    }
+
+    @Override
+    public void glMultiDrawMeshTasksIndirectNV(long indirect, int drawCount, int stride) {
+        NVMeshShader.glMultiDrawMeshTasksIndirectNV(indirect, drawCount, stride);
+    }
+
+    // ===================== SPARSE BUFFERS =====================
+
+    @Override
+    public void glBufferPageCommitmentARB(int target, long offset, long size, boolean commit) {
+        ARBSparseBuffer.glBufferPageCommitmentARB(target, offset, size, commit);
+    }
+
+    @Override
+    public void glFinish() {
+        GL11.glFinish();
     }
 }

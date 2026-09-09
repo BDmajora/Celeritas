@@ -193,6 +193,17 @@ public record LWJGL2Service(
             case ARB_base_instance -> caps.GL_ARB_base_instance;
             case ARB_compatibility -> caps.GL_ARB_compatibility;
             case NVX_gpu_memory_info -> caps.GL_NVX_gpu_memory_info;
+            // LWJGL 2.9.3 has no bindings for any of these, so the mesh-shader backend can never run on this
+            // path regardless of what the driver actually supports
+            case NV_mesh_shader,
+                 NV_shader_buffer_load,
+                 NV_vertex_buffer_unified_memory,
+                 NV_uniform_buffer_unified_memory,
+                 NV_representative_fragment_test,
+                 NV_bindless_multi_draw_indirect,
+                 NV_gpu_shader5,
+                 NV_fragment_shader_barycentric,
+                 ARB_sparse_buffer -> false;
         };
     }
 
@@ -1168,5 +1179,10 @@ public record LWJGL2Service(
     public ByteBuffer memSlice(ByteBuffer buffer, int offset, int capacity) {
         long address = MemoryUtilities.memAddress(buffer) + offset;
         return MemoryUtilities.memByteBuffer(address, capacity);
+    }
+
+    @Override
+    public void glFinish() {
+        GL11.glFinish();
     }
 }

@@ -1,0 +1,79 @@
+#version 460
+#extension GL_ARB_shading_language_include : enable
+#extension GL_NV_mesh_shader : require
+#extension GL_NV_gpu_shader5 : require
+#extension GL_NV_shader_buffer_load : require
+
+#import <impetus:mesh/scene.glsl>
+
+// Phase 1: one box per frustum-visible region, drawn against the depth buffer the previous frame's terrain left
+// behind. Anything that survives is a region worth testing sections in.
+//
+// Eight threads: one per corner of the box. Each emits its vertex and one of the twelve triangles; the low four
+// also emit the remaining four triangles.
+
+// A hair larger than the region, so a box exactly coplanar with the geometry that fills it cannot z-fight itself
+// out of existence.
+#define BOX_EXPAND (0.1 / 16.0)
+
+layout(local_size_x = 8) in;
+layout(triangles, max_vertices = 8, max_primitives = 12) out;
+
+// Corner indices of the box's twelve triangles, transposed so each thread reads one element of each table.
+const uint TRI_A[] = {0, 3, 6, 0, 1, 7, 4, 5};
+const uint TRI_B[] = {1, 2, 6, 4, 0, 7, 6, 4};
+const uint TRI_C[] = {2, 0, 4, 5, 1, 3, 7, 2};
+const uint TRI_D[] = {1, 2, 0, 5, 5, 1, 7, 7};
+const uint TRI_E[] = {6, 2, 3, 7};
+
+void main() {
+    Region data = regionData[regionIndices[gl_WorkGroupID.x]];
+
+    // The visibility slot is indexed by position in this frame's visible list, not by region id, so the section
+    // rasterizer can walk it with the same workgroup id.
+    int visibilityIndex = int(gl_WorkGroupID.x);
+
+    // A removed region's header is all ones. Clear its visibility and emit nothing.
+    if (data.a == uint64_t(-1)) {
+        regionVisibility[visibilityIndex] = uint8_t(0);
+        gl_PrimitiveCountNV = 0;
+        return;
+    }
+
+    ivec3 pos = unpackRegionPosition(data) - cameraChunk.xyz;
+    ivec3 size = unpackRegionSize(data);
+
+    vec3 start = vec3(pos) - BOX_EXPAND;
+    vec3 end = start + 1.0 + vec3(size) + (BOX_EXPAND * 2.0);
+
+    // Corner selection straight out of the thread id: bit 0 picks x, bit 2 picks y, bit 1 picks z.
+    vec3 corner = vec3(
+        ((gl_LocalInvocationID.x & 1u) == 0u) ? start.x : end.x,
+        ((gl_LocalInvocationID.x & 4u) == 0u) ? start.y : end.y,
+        ((gl_LocalInvocationID.x & 2u) == 0u) ? start.z : end.z
+    );
+
+    gl_MeshVerticesNV[gl_LocalInvocationID.x].gl_Position = MVP * vec4(corner * 16.0, 1.0);
+
+    uint base = gl_LocalInvocationID.x << 2;
+    gl_PrimitiveIndicesNV[base | 0u] = TRI_A[gl_LocalInvocationID.x];
+    gl_PrimitiveIndicesNV[base | 1u] = TRI_B[gl_LocalInvocationID.x];
+    gl_PrimitiveIndicesNV[base | 2u] = TRI_C[gl_LocalInvocationID.x];
+    gl_PrimitiveIndicesNV[base | 3u] = TRI_D[gl_LocalInvocationID.x];
+    gl_MeshPrimitivesNV[gl_LocalInvocationID.x].gl_PrimitiveID = visibilityIndex;
+
+    if (gl_LocalInvocationID.x < 4u) {
+        gl_PrimitiveIndicesNV[32u + gl_LocalInvocationID.x] = TRI_E[gl_LocalInvocationID.x];
+        gl_MeshPrimitivesNV[gl_LocalInvocationID.x + 8u].gl_PrimitiveID = visibilityIndex;
+
+        if (gl_LocalInvocationID.x == 0u) {
+            // Depth testing cannot see a box the camera is inside — every face is behind the near plane or
+            // backfacing — so that case is decided here instead.
+            bool cameraInside = all(lessThan(start * 16.0 + subChunkOffset.xyz, vec3(BOX_EXPAND * 16.0)))
+                             && all(lessThan(vec3(-BOX_EXPAND * 16.0), end * 16.0 + subChunkOffset.xyz));
+            regionVisibility[visibilityIndex] = cameraInside ? uint8_t(1) : uint8_t(0);
+        }
+
+        gl_PrimitiveCountNV = 12;
+    }
+}

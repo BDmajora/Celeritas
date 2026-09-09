@@ -205,6 +205,10 @@ public interface LWJGLService {
     void glCullFace(int mode);
     void glDrawArrays(int mode, int first, int count);
     int glGetError();
+    // Blocks until every issued command has completed
+    // Only the terrain upload ring uses this, and only when it fills mid-frame: stalling there is far better than
+    // overwriting staging bytes the GPU is still copying out of
+    void glFinish();
 
     // ===================== COMPATIBILITY PROFILE =====================
 
@@ -262,4 +266,96 @@ public interface LWJGLService {
     long memGetLong(long address);
     long memGetAddress(long address);
     ByteBuffer memSlice(ByteBuffer buffer, int offset, int capacity);
+
+    // ===================== DIRECT STATE ACCESS BUFFERS (GL 4.5 / ARB_direct_state_access) =====================
+
+    // Everything from here down exists only on the LWJGL3 backend
+    // Defaulted to a throw rather than declared abstract so the LWJGL2 backend stays untouched; nothing calls any
+    // of it without first clearing MeshShaderSupport, which cannot pass on LWJGL 2 because the extension probes
+    // all answer false there
+
+    default int glCreateBuffers() {
+        throw new UnsupportedOperationException("Direct state access is not supported");
+    }
+
+    default void glNamedBufferStorage(int buffer, long size, int flags) {
+        throw new UnsupportedOperationException("Direct state access is not supported");
+    }
+
+    default long nglMapNamedBufferRange(int buffer, long offset, long length, int access) {
+        throw new UnsupportedOperationException("Direct state access is not supported");
+    }
+
+    default void glUnmapNamedBuffer(int buffer) {
+        throw new UnsupportedOperationException("Direct state access is not supported");
+    }
+
+    default void glFlushMappedNamedBufferRange(int buffer, long offset, long length) {
+        throw new UnsupportedOperationException("Direct state access is not supported");
+    }
+
+    default void glCopyNamedBufferSubData(int readBuffer, int writeBuffer, long readOffset, long writeOffset, long size) {
+        throw new UnsupportedOperationException("Direct state access is not supported");
+    }
+
+    // Fills a range of a buffer with a repeated zero value; data is passed as a null pointer, which the spec
+    // defines as "clear to zero" and which is the only form this engine needs
+    default void glClearNamedBufferSubDataZero(int buffer, int internalFormat, long offset, long size, int format, int type) {
+        throw new UnsupportedOperationException("Direct state access is not supported");
+    }
+
+    default void glClearNamedBufferDataZero(int buffer, int internalFormat, int format, int type) {
+        throw new UnsupportedOperationException("Direct state access is not supported");
+    }
+
+    // ===================== BINDLESS BUFFERS (NV_shader_buffer_load) =====================
+
+    // The buffer's address in GPU virtual memory; only meaningful once the buffer has been made resident
+    default long glGetNamedBufferGpuAddressNV(int buffer) {
+        throw new UnsupportedOperationException("Bindless buffers are not supported");
+    }
+
+    default void glMakeNamedBufferResidentNV(int buffer, int access) {
+        throw new UnsupportedOperationException("Bindless buffers are not supported");
+    }
+
+    default void glMakeNamedBufferNonResidentNV(int buffer) {
+        throw new UnsupportedOperationException("Bindless buffers are not supported");
+    }
+
+    // Binds a buffer range by GPU address rather than by object name; how the scene uniform block and the
+    // indirect command buffer are attached
+    default void glBufferAddressRangeNV(int pname, int index, long address, long length) {
+        throw new UnsupportedOperationException("Bindless buffers are not supported");
+    }
+
+    // The unified-memory client states that switch the above address bindings on; fixed-function calls, which is
+    // why they need a compatibility profile
+    default void glEnableClientState(int cap) {
+        throw new UnsupportedOperationException("Client state is not supported");
+    }
+
+    default void glDisableClientState(int cap) {
+        throw new UnsupportedOperationException("Client state is not supported");
+    }
+
+    // ===================== MESH SHADERS (NV_mesh_shader) =====================
+
+    default void glDrawMeshTasksNV(int first, int count) {
+        throw new UnsupportedOperationException("Mesh shaders are not supported");
+    }
+
+    // Draws from a GPU-written command buffer previously bound with glBufferAddressRangeNV; a stride of 0 means
+    // tightly packed uvec2 commands
+    default void glMultiDrawMeshTasksIndirectNV(long indirect, int drawCount, int stride) {
+        throw new UnsupportedOperationException("Mesh shaders are not supported");
+    }
+
+    // ===================== SPARSE BUFFERS (ARB_sparse_buffer) =====================
+
+    // Commits or releases the physical pages backing a range of a sparse buffer; offset and size must both be
+    // multiples of GL_SPARSE_BUFFER_PAGE_SIZE_ARB
+    default void glBufferPageCommitmentARB(int target, long offset, long size, boolean commit) {
+        throw new UnsupportedOperationException("Sparse buffers are not supported");
+    }
 }

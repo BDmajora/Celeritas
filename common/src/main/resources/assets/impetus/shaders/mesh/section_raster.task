@@ -1,0 +1,49 @@
+#version 460
+#extension GL_ARB_shading_language_include : enable
+#extension GL_NV_mesh_shader : require
+#extension GL_NV_gpu_shader5 : require
+
+#import <impetus:mesh/scene.glsl>
+
+// Phase 2, part one, and the piece that takes the CPU out of the draw loop.
+//
+// One workgroup per visible region. It does two things:
+//   - dispatches one meshlet per live section, for the box rasterization below
+//   - writes the indirect draw command the terrain rasterizer will consume NEXT frame
+// Nothing reads that command back on the CPU, which is why the terrain draw runs a frame behind.
+
+layout(local_size_x = 1) in;
+
+taskNV out Task {
+    // Base index into sectionVisibility for this region: regionId << 8.
+    uint32_t visibilityBase;
+    // Base index into sectionData; the same value, kept separate because the two arrays could diverge.
+    uint32_t sectionBase;
+    // Section-space offset from the region to the camera, folded once here instead of per section.
+    ivec3 chunkShift;
+};
+
+void main() {
+    uint commandIndex = gl_WorkGroupID.x;
+
+    // The region rasterizer rejected this region, so nothing in it can be visible. Zero the command as well, or
+    // next frame's terrain draw would replay whatever was there before.
+    if (regionVisibility[gl_WorkGroupID.x] == uint8_t(0)) {
+        terrainCommandBuffer[commandIndex] = uvec2(0);
+        gl_TaskCountNV = 0;
+        return;
+    }
+
+    uint32_t regionId = regionIndices[gl_WorkGroupID.x];
+    Region data = regionData[regionId];
+    int count = unpackRegionCount(data) + 1;
+
+    visibilityBase = regionId << 8;
+    sectionBase = regionId << 8;
+    chunkShift = -cameraChunk.xyz;
+
+    gl_TaskCountNV = count;
+
+    // Meshlet count and the section index base, exactly the uvec2 the terrain task shader expects.
+    terrainCommandBuffer[commandIndex] = uvec2(uint32_t(count), visibilityBase);
+}

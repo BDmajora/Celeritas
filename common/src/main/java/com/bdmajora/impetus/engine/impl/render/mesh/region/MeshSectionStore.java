@@ -1,0 +1,183 @@
+package com.bdmajora.impetus.engine.impl.render.mesh.region;
+
+import com.bdmajora.impetus.engine.impl.model.quad.properties.ModelQuadFacing;
+import com.bdmajora.impetus.engine.impl.render.chunk.vertex.format.impl.MeshChunkVertex;
+import com.bdmajora.impetus.engine.impl.render.mesh.util.QuadArena;
+import com.bdmajora.impetus.engine.impl.render.mesh.util.SegmentedAllocator;
+import com.bdmajora.impetus.engine.impl.render.mesh.util.UploadStream;
+import com.bdmajora.impetus.engine.impl.util.PositionUtil;
+import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
+
+// Where a finished chunk build lands: geometry into the quad arena, metadata into the region store
+//
+// The section header the GPU reads is 32 bytes:
+//   header.x  chunkX << 8 | sizeX << 4 | minX
+//   header.y  (chunkY & 0x1FF) << 8 | sizeY << 4 | minY | hidden << 17 | sectionIndex << 18
+//   header.z  chunkZ << 8 | sizeZ << 4 | minZ
+//   header.w  first quad of this section in the arena
+//   ranges    eight uint16 quad counts, one per ModelQuadFacing plus the base offset
+// Position, extent and draw range all fit in those 32 bytes precisely so the section rasteriser can decide
+// visibility from one cache line
+public class MeshSectionStore {
+    private static final Logger LOGGER = LogManager.getLogger("Impetus/MeshBackend");
+
+    private final MeshRegionStore regions;
+    private final QuadArena arena;
+    private final UploadStream uploadStream;
+
+    // Section key -> id in the region store, and -> the first quad of its geometry
+    // Two maps rather than one object because both are hit on every build result and neither wants a pointer
+    // chase
+    private final Long2IntOpenHashMap sectionIds = new Long2IntOpenHashMap();
+    private final Long2IntOpenHashMap sectionQuads = new Long2IntOpenHashMap();
+
+    public MeshSectionStore(MeshRegionStore regions, QuadArena arena, UploadStream uploadStream) {
+        this.regions = regions;
+        this.arena = arena;
+        this.uploadStream = uploadStream;
+        this.sectionIds.defaultReturnValue(-1);
+        this.sectionQuads.defaultReturnValue(-1);
+    }
+
+    public MeshRegionStore getRegions() {
+        return this.regions;
+    }
+
+    public QuadArena getArena() {
+        return this.arena;
+    }
+
+    // Uploads one section's geometry and metadata; a null geometry means the section built to nothing and should
+    // be dropped
+    public void upload(int sectionX, int sectionY, int sectionZ, SectionGeometry geometry) {
+        long key = PositionUtil.packSection(sectionX, sectionY, sectionZ);
+
+        if (geometry == null || geometry.quadCount() == 0) {
+            this.remove(sectionX, sectionY, sectionZ);
+            return;
+        }
+
+        int quadAddress = this.sectionQuads.get(key);
+
+        // A rebuild that produced exactly as many quads as last time keeps its allocation, which is the common
+        // case for a block change and saves an arena round trip plus a sparse page recommit
+        if (quadAddress != -1 && !this.arena.canReuse(quadAddress, geometry.quadCount())) {
+            this.sectionQuads.remove(key);
+            this.arena.free(quadAddress);
+            quadAddress = -1;
+        }
+
+        if (quadAddress == -1) {
+            quadAddress = this.arena.alloc(geometry.quadCount());
+
+            if (quadAddress == (int) SegmentedAllocator.OUT_OF_SPACE) {
+                LOGGER.error("Terrain arena is full ({} MB resident); dropping section {} {} {}",
+                        this.arena.getResidentBytes() >> 20, sectionX, sectionY, sectionZ);
+                this.remove(sectionX, sectionY, sectionZ);
+                return;
+            }
+        }
+
+        this.sectionQuads.put(key, quadAddress);
+
+        long staging = this.arena.beginUpload(this.uploadStream, quadAddress);
+        LWJGL.memCopy(LWJGL.memAddress(geometry.geometry().getDirectBuffer()), staging, geometry.geometry().getLength());
+
+        int sectionId = this.sectionIds.get(key);
+
+        if (sectionId == -1) {
+            sectionId = this.regions.allocateSection(sectionX, sectionY, sectionZ);
+            this.sectionIds.put(key, sectionId);
+        }
+
+        writeHeader(sectionId, sectionX, sectionY, sectionZ, quadAddress, geometry);
+    }
+
+    public void remove(int sectionX, int sectionY, int sectionZ) {
+        long key = PositionUtil.packSection(sectionX, sectionY, sectionZ);
+
+        int sectionId = this.sectionIds.remove(key);
+        int quadAddress = this.sectionQuads.remove(key);
+
+        if (quadAddress != -1) {
+            this.arena.free(quadAddress);
+        }
+
+        if (sectionId != -1) {
+            this.regions.removeSection(sectionId);
+        }
+    }
+
+    // Drops every section in a region, used when the region is evicted for being out of range or when the arena
+    // needs its memory back
+    public void removeRegion(int regionId) {
+        if (!this.regions.regionExists(regionId)) {
+            return;
+        }
+
+        long key = this.regions.getRegionKey(regionId);
+        int baseX = unpackSectionX(key) << 3;
+        int baseY = unpackSectionY(key) << 2;
+        int baseZ = unpackSectionZ(key) << 3;
+
+        for (int x = 0; x < 8; x++) {
+            for (int y = 0; y < 4; y++) {
+                for (int z = 0; z < 8; z++) {
+                    this.remove(baseX + x, baseY + y, baseZ + z);
+                }
+            }
+        }
+    }
+
+    public void commit() {
+        this.regions.commit();
+    }
+
+    private void writeHeader(int sectionId, int sectionX, int sectionY, int sectionZ, int quadAddress,
+                             SectionGeometry geometry) {
+        long ptr = this.regions.beginSectionUpdate(sectionId);
+        int sectionIndex = this.regions.getSectionIndex(sectionId);
+
+        // Chunk Y is masked to 9 bits and sign-extended in the shader, which covers every build height the game
+        // has ever had while leaving the top bits for the section index
+        LWJGL.memPutInt(ptr, (sectionX << 8) | (geometry.sizeX() << 4) | geometry.minX());
+        LWJGL.memPutInt(ptr + 4, ((sectionY & 0x1FF) << 8) | (geometry.sizeY() << 4) | geometry.minY()
+                | (sectionIndex << 18));
+        LWJGL.memPutInt(ptr + 8, (sectionZ << 8) | (geometry.sizeZ() << 4) | geometry.minZ());
+        LWJGL.memPutInt(ptr + 12, quadAddress);
+
+        // Eight uint16s: six directional quad counts, the unassigned count, then the section's own base quad
+        // The task shader accumulates these into absolute offsets, so only counts are stored and a section can
+        // hold far more quads than a 16-bit absolute offset would allow
+        short[] counts = geometry.quadsPerFacing();
+        long ranges = ptr + 16;
+
+        for (int i = 0; i < 3; i++) {
+            int low = Short.toUnsignedInt(counts[i * 2]);
+            int high = Short.toUnsignedInt(counts[i * 2 + 1]);
+            LWJGL.memPutInt(ranges + i * 4L, low | (high << 16));
+        }
+
+        int unassigned = Short.toUnsignedInt(counts[ModelQuadFacing.UNASSIGNED.ordinal()]);
+        LWJGL.memPutInt(ranges + 12L, unassigned | (Short.toUnsignedInt(geometry.baseQuad()) << 16));
+    }
+
+    // PositionUtil.packSection has no matching unpackers, and only the region eviction path needs them
+    // Layout is x in bits 42..63 (22), z in bits 20..41 (22), y in bits 0..19 (20); the shifts sign-extend each
+    // field back out of its slot
+    private static int unpackSectionX(long key) {
+        return (int) (key >> 42);
+    }
+
+    private static int unpackSectionY(long key) {
+        return (int) (key << 44 >> 44);
+    }
+
+    private static int unpackSectionZ(long key) {
+        return (int) (key << 22 >> 42);
+    }
+}
