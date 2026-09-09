@@ -10,27 +10,25 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * The pool of color buffers ({@code colortex0..N}) and depth copies ({@code depthtex0..2}) used by the gbuffer,
- * deferred, and composite stages. This is the 1.12.2 analogue of OptiFine's {@code dfb*} arrays and of modern Umbra's
- * {@code RenderTargets}, built entirely on {@link UmbraRenderTarget}/{@link DepthTexture} over the LWJGL abstraction
- * (never vanilla's single-attachment {@code Framebuffer}).
- * <p>
- * Color targets are created lazily with a default {@link InternalTextureFormat#RGBA} unless the pack overrides the
- * format via {@link #setColorFormat(int, InternalTextureFormat)} before first use.
- */
+// The pool of colour buffers (colortex0..N) and depth copies (depthtex0..2) the gbuffer, deferred and composite
+// stages all draw from
+// The 1.12.2 analogue of OptiFine's dfb* arrays and of modern Iris's RenderTargets, built entirely on
+// UmbraRenderTarget and DepthTexture over the LWJGL abstraction — never on vanilla's Framebuffer, which supports
+// only one colour attachment
+// Colour targets are created LAZILY, defaulting to RGBA, so a pack that references colortex12 and nothing above it
+// allocates thirteen targets rather than sixteen
+// Format and size overrides must therefore be set before a target is first touched, since materialising it fixes both
 public class UmbraRenderTargets {
-    /** colortex0..15, matching modern Umbra. Targets past 7 are created lazily only when referenced. */
+    // colortex0..15, matching modern Iris. Everything past 7 is created only when a pack actually references it
     public static final int MAX_COLOR_BUFFERS = 16;
 
     private final UmbraRenderTarget[] targets = new UmbraRenderTarget[MAX_COLOR_BUFFERS];
     private final InternalTextureFormat[] formats = new InternalTextureFormat[MAX_COLOR_BUFFERS];
-    /**
-     * {@code size.buffer.colortexN} overrides: {@code {width, height}} per target, or null for "follow the render
-     * size". Absolute entries are texel counts; relative ones are fractions of the render size.
-     */
+    // size.buffer.colortexN overrides as {width, height} per target, or null meaning "follow the render size"
+    // Whether each number is a texel count or a fraction is decided by sizeRelative below, not by its magnitude
     private final float[][] sizeOverrides = new float[MAX_COLOR_BUFFERS][];
-    /** Per target, {@code {xRelative, yRelative}} — Umbra decides this per axis, so {@code 512 0.5} is valid. */
+    // Per target, {xRelative, yRelative} — decided PER AXIS the way Iris does it, so a pack writing `512 0.5` gets
+    // a fixed width and a half-height, which a single per-target flag could not express
     private final boolean[][] sizeRelative = new boolean[MAX_COLOR_BUFFERS][];
 
     private DepthTexture depthTexture;
@@ -60,12 +58,10 @@ public class UmbraRenderTargets {
                 GL14.GL_DEPTH_COMPONENT24, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT);
     }
 
-    /**
-     * Declares an explicit size for a color buffer ({@code size.buffer.colortexN}). Must be called before the buffer
-     * is first materialised, like {@link #setColorFormat}.
-     *
-     * @param relative when true, {@code x}/{@code y} are fractions of the render size rather than texel counts
-     */
+    // Declares an explicit size for a colour buffer, from size.buffer.colortexN
+    // Must be called before the buffer is first materialised, same rule as setColorFormat — once the texture exists
+    // its dimensions are fixed
+    // relative is per axis: true means that component is a fraction of the render size rather than a texel count
     public void setColorSize(int index, float x, float y, boolean[] relative) {
         requireValid();
         if (this.targets[index] != null) {
@@ -75,7 +71,9 @@ public class UmbraRenderTargets {
         this.sizeRelative[index] = relative.clone();
     }
 
-    /** The width this target is (or would be) created at, honouring any {@code size.buffer} override. */
+    // The width this target is, or would be, created at — honouring any size.buffer override
+    // Answers for a target that does not exist yet, which is what lets a pass work out its viewport before the
+    // texture is materialised
     public int getWidth(int index) {
         float[] override = this.sizeOverrides[index];
         if (override == null) {
@@ -94,12 +92,14 @@ public class UmbraRenderTargets {
         return Math.max(1, this.sizeRelative[index][1] ? (int) (this.height * override[1]) : (int) override[1]);
     }
 
-    /** True when this target does not match the main render size, so passes writing it need their own viewport. */
+    // True when this target does not match the main render size, so a pass writing it must set its own viewport —
+    // leaving the main one would render into a corner of the smaller texture
     public boolean hasCustomSize(int index) {
         return this.sizeOverrides[index] != null;
     }
 
-    /** Overrides the internal format for a color buffer. Must be called before the buffer is first materialised. */
+    // Overrides the internal format for a colour buffer, from the pack's formatN directive. Before first use, for
+    // the same reason as the size
     public void setColorFormat(int index, InternalTextureFormat format) {
         requireValid();
         if (this.targets[index] != null) {
@@ -144,10 +144,10 @@ public class UmbraRenderTargets {
         return this.height;
     }
 
-    /**
-     * Builds an FBO that writes to {@code drawBuffers}, attaching for each color index the texture that is currently
-     * the back buffer (alt if not yet flipped, main if flipped), so a pass writes to the side it isn't reading.
-     */
+    // Builds an FBO writing to the given draw buffers, attaching for each colour index whichever texture is
+    // currently the BACK buffer — alt when not yet flipped, main when flipped
+    // That is the whole ping-pong: the pass renders into the side it is not sampling, and the flipper then swaps
+    // which is which for the next pass
     public UmbraFramebuffer createColorFramebuffer(int[] drawBuffers) {
         requireValid();
         if (drawBuffers.length == 0) {
@@ -175,10 +175,9 @@ public class UmbraRenderTargets {
         return framebuffer;
     }
 
-    /**
-     * Builds an FBO for clearing one side of the requested color buffers. Attachments are packed densely just like
-     * composite FBOs: draw buffer k clears colortex[clearBuffers[k]].
-     */
+    // Builds an FBO for clearing ONE side of the requested colour buffers, chosen by the alt flag
+    // Attachments are packed densely exactly as the composite FBOs are, so draw buffer k clears
+    // colortex[clearBuffers[k]] rather than colortex[k]
     public UmbraFramebuffer createClearFramebuffer(boolean alt, int[] clearBuffers) {
         requireValid();
         if (clearBuffers.length == 0) {

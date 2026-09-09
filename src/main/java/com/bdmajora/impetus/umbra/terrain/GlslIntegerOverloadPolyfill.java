@@ -8,27 +8,23 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Widens {@code max}/{@code min} calls whose arguments are both integer-typed uniforms to their float overloads, for
- * {@code #version 120} sources. GLSL only gained {@code max(int, int)} in 130, so packs that use it are relying on
- * Umbra — which never hits the problem because {@code TransformPatcher} bumps every shader to at least
- * {@code #version 330}. This port keeps legacy packs on 120 on purpose, so the call has to be adapted instead.
- * <p>
- * Just Colored Lighting's {@code gbuffers_skybasic} does
- * {@code float(max(eyeBrightnessSmooth.y, eyeBrightness.y))/240.}, which the driver rejects with "ambiguous
- * overloaded function reference".
- * <p>
- * <b>Declaring an {@code int max(int, int)} overload instead does not work</b> and was tried: adding it to the
- * overload set makes previously-fine calls like {@code max(0, someFloat)} resolve to the integer candidate, and GLSL
- * 120 forbids the implicit float→int narrowing that follows. Sildur's and JCL both lost programs that way. Rewriting
- * the specific call sites keeps every other call's resolution exactly as it was.
- */
+// Widens max/min calls whose arguments are both integer-typed uniforms to their float overloads, on #version 120
+// sources only
+// GLSL only gained max(int, int) in 130, so a pack using it is relying on Iris — which never hits the problem
+// because its TransformPatcher bumps every shader to at least #version 330. This port keeps legacy packs on 120 on
+// purpose, so the call has to be adapted rather than the version raised
+// Just Colored Lighting's gbuffers_skybasic writes
+// float(max(eyeBrightnessSmooth.y, eyeBrightness.y))/240., which the driver rejects outright with "ambiguous
+// overloaded function reference"
+// Declaring an int max(int, int) overload instead DOES NOT WORK, and was tried: adding it to the overload set makes
+// previously fine calls like max(0, someFloat) resolve to the integer candidate, and GLSL 120 forbids the implicit
+// float-to-int narrowing that follows. Sildur's and JCL both lost programs that way
+// Rewriting the specific call sites leaves every other call's resolution exactly as it was
 public final class GlslIntegerOverloadPolyfill {
 
-    /**
-     * The integer-typed uniforms in the OptiFine/Umbra spec. Only calls whose arguments are built purely out of these
-     * (plus integer literals) are rewritten — anything else keeps GLSL's normal resolution.
-     */
+    // The integer-typed uniforms in the OptiFine/Iris spec
+    // A whitelist rather than type inference: only calls whose arguments are built purely from these plus integer
+    // literals are rewritten, and everything else keeps GLSL's normal resolution untouched
     private static final Set<String> INTEGER_UNIFORMS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "eyeBrightness", "eyeBrightnessSmooth", "worldTime", "worldDay", "moonPhase", "frameCounter",
             "isEyeInWater", "heldItemId", "heldItemId2", "heldBlockLightValue", "heldBlockLightValue2",
@@ -37,11 +33,12 @@ public final class GlslIntegerOverloadPolyfill {
 
     private static final Pattern VERSION_DIRECTIVE = Pattern.compile("(?m)^\\s*#version\\s+(\\d+)");
 
-    /** {@code max(<a>, <b>)} / {@code min(<a>, <b>)} with no nested parentheses or commas in either argument. */
+    // max(<a>, <b>) and min(<a>, <b>) with no nested parentheses or commas in either argument — a nested call
+    // cannot be matched by a regex and is left alone rather than mangled
     private static final Pattern SIMPLE_TWO_ARG_CALL = Pattern.compile(
             "(?<![A-Za-z0-9_])(max|min)\\s*\\(\\s*([^(),]+?)\\s*,\\s*([^(),]+?)\\s*\\)");
 
-    /** An integer-typed expression: an integer uniform with an optional swizzle, or an integer literal. */
+    // An integer-typed expression: one integer uniform with an optional swizzle, or one integer literal
     private static final Pattern INTEGER_EXPRESSION = Pattern.compile("([A-Za-z_][A-Za-z0-9_]*)(\\.[xyzwrgba]+)?|(\\d+)");
 
     private GlslIntegerOverloadPolyfill() {
@@ -69,7 +66,8 @@ public final class GlslIntegerOverloadPolyfill {
         return result.toString();
     }
 
-    /** True when the source is GLSL 120 or older (or declares no version, which also defaults below 130). */
+    // True for GLSL 120 or older, and also for a source declaring no #version at all — GLSL defaults to 110 there,
+    // which is likewise below 130
     private static boolean isLegacyVersion(String source) {
         Matcher matcher = VERSION_DIRECTIVE.matcher(source);
         if (!matcher.find()) {
@@ -82,11 +80,11 @@ public final class GlslIntegerOverloadPolyfill {
         }
     }
 
-    /**
-     * Conservative: the argument must be exactly one integer uniform reference (optionally swizzled) or one integer
-     * literal. A float literal, an arithmetic expression or an unknown identifier all decline the rewrite, because
-     * getting this wrong would change the type of an expression that compiles fine today.
-     */
+    // Deliberately conservative: the argument must be exactly one integer uniform reference, optionally swizzled,
+    // or one integer literal
+    // A float literal, an arithmetic expression or an unknown identifier all decline the rewrite. Getting this
+    // wrong would change the type of an expression that compiles fine today, which is a far worse outcome than
+    // leaving one broken pack broken
     private static boolean isIntegerExpression(String expression) {
         String trimmed = expression.trim();
         Matcher matcher = INTEGER_EXPRESSION.matcher(trimmed);

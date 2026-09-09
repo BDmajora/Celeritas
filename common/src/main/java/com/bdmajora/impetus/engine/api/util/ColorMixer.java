@@ -3,18 +3,12 @@ package com.bdmajora.impetus.engine.api.util;
 public class ColorMixer {
     private static final int CHANNEL_MASK = 0x00FF00FF;
 
-    /**
-     * Mixes a 32-bit color (with packed 8-bit components) into another using the given ratio. This is equivalent to
-     * (color1 * ratio) + (color2 * (1.0 - ratio)) but uses bitwise trickery for maximum performance.
-     * <p>
-     * The order of the channels within the packed color does not matter, and the output color will always
-     * have the same ordering as the input colors.
-     *
-     * @param aColor The color to mix towards
-     * @param bColor The color to mix away from
-     * @param ratio The percentage (in 0.0..1.0 range) to mix the first color into the second color
-     * @return The mixed color in packed 32-bit format
-     */
+    // mixes one packed 32-bit colour into another at the given ratio
+    // equivalent to (aColor * ratio) + (bColor * (1.0 - ratio)), but done with bitwise trickery for
+    // maximum performance
+    // the channel order within the packed colour does not matter, and the output keeps the same
+    // ordering as the inputs
+    // aColor is mixed towards, bColor is mixed away from, ratio is the 0.0..1.0 share of the first
     public static int mix(int aColor, int bColor, float ratio) {
         int aRatio = (int) (256 * ratio); // int(ratio)
         int bRatio = 256 - aRatio; // int(1.0 - ratio)
@@ -38,16 +32,9 @@ public class ColorMixer {
         return ((c1 << 0) | (c2 << 8));
     }
 
-    /**
-     * Multiplies the 32-bit colors (with packed 8-bit components) together.
-     * <p>
-     * The order of the channels within the packed color does not matter, and the output color will always
-     * have the same ordering as the input colors.
-     *
-     * @param a The first color to multiply
-     * @param b The second color to multiply
-     * @return The multiplied color in packed 32-bit format
-     */
+    // multiplies two packed 32-bit colours together
+    // the channel order within the packed colour does not matter, and the output keeps the same
+    // ordering as the inputs
     public static int mul(int a, int b) {
         // Take each 8-bit component pair, multiply them together to create intermediate 16-bit integers,
         // and then shift the high half of each 16-bit integer into 8-bit integers.
@@ -60,16 +47,10 @@ public class ColorMixer {
         return (c0 <<  0) | (c1 <<  8) | (c2 << 16) | (c3 << 24);
     }
 
-    /**
-     * Multiplies the RGB channels of a 32-bit color with packed 8-bit components by an 8-bit component.
-     * <p>
-     * Aside from alpha being in the most significant 8 bits, the order of the channels within the packed color does not
-     * matter, and the output color will always have the same ordering as the input colors.
-     *
-     * @param a The first color to multiply
-     * @param b The component to multiply the RGB components by
-     * @return The multiplied color in packed 32-bit format
-     */
+    // multiplies the RGB channels of a packed 32-bit colour by a single 8-bit component
+    // aside from alpha being in the most significant 8 bits the channel order does not matter, and the
+    // output keeps the same ordering as the inputs
+    // a is the colour, b is the component the RGB channels are multiplied by
     public static int mulSingleWithoutAlpha(int a, int b) {
         b &= 0xFF; // Mask the component for safety
         // Take each 8-bit component pair, multiply them together to create intermediate 16-bit integers,

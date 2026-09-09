@@ -44,12 +44,10 @@ public class VintageRenderSectionManager extends RenderSectionManager {
         this.sectionCache = new ClonedChunkSectionCache(world);
     }
 
-    /**
-     * The Umbra shadow pass re-drives this render path from the sun's point of view; routing it onto the dedicated
-     * shadow render lists (instead of the main camera's culled lists) is what lets the shadow pass draw every
-     * section in range regardless of player-view frustum/occlusion culling — the stability requirement behind
-     * Complementary's {@code shadow.culling = reversed} directive.
-     */
+    // the Umbra shadow pass re-drives this render path from the sun's point of view
+    // routing it onto the dedicated shadow render lists, instead of the main camera's culled lists, is
+    // what lets the shadow pass draw every section in range regardless of player-view frustum and
+    // occlusion culling - the stability requirement behind Complementary's shadow.culling = reversed
     @Override
     public boolean isInShadowPass() {
         return com.bdmajora.impetus.umbra.pipeline.UmbraShadowRenderer.isShadowPass();
@@ -147,11 +145,9 @@ public class VintageRenderSectionManager extends RenderSectionManager {
         super.updateChunks(updateImmediately);
     }
 
-    /**
-     * This ridiculous workaround is needed because some mods rely on side effects of calling getRenderBoundingBox
-     * to initialize tile entity state. It can be removed if we start using getRenderBoundingBox for TE rendering
-     * again.
-     */
+    // ridiculous workaround: some mods rely on side effects of calling getRenderBoundingBox to
+    // initialize tile entity state
+    // can be removed if we start using getRenderBoundingBox for TE rendering again
     @SuppressWarnings("unchecked")
     private static void retrieveBBForList(List<?> blockEntities) {
         if (!blockEntities.isEmpty()) {
@@ -181,19 +177,18 @@ public class VintageRenderSectionManager extends RenderSectionManager {
             super(device, renderPassConfiguration);
         }
 
-        /**
-         * Never in the shadow pass — Umbra disables this the same way
-         * ({@code MixinDefaultChunkRenderer#umbra$disableBlockFaceCullingInShadowPass}).
-         * <p>
-         * {@code getVisibleFaces} drops each section's quads by facing relative to the OCCLUSION camera, which is
-         * always the player's. That is correct for the gbuffer pass and completely wrong for the shadow pass, which
-         * draws the same geometry from the sun. Standing 20 blocks underground, every section above the player fails
-         * {@code originY > boundsMinY - 3}, so {@code MODEL_POS_Y} is cleared and every upward-facing block top in
-         * those sections is dropped — precisely the surfaces the sun hits. The ground overhead then never reaches the
-         * shadow map, those texels keep the 1.0 depth clear, and Complementary's light-shaft march reads
-         * {@code clamp((1.0 - shadowPos.z) * 65536.0, 0.0, 1.0) == 1.0} — fully lit — for samples sitting under solid
-         * rock. That is the sunlight leaking through the ground into caves.
-         */
+        // never in the shadow pass - Umbra disables this the same way, in
+        // MixinDefaultChunkRenderer#umbra$disableBlockFaceCullingInShadowPass
+        // getVisibleFaces drops each section's quads by facing relative to the OCCLUSION camera, which
+        // is always the player's; that is correct for the gbuffer pass and completely wrong for the
+        // shadow pass, which draws the same geometry from the sun
+        // standing 20 blocks underground, every section above the player fails
+        // originY > boundsMinY - 3, so MODEL_POS_Y is cleared and every upward-facing block top in
+        // those sections is dropped - precisely the surfaces the sun hits
+        // the ground overhead then never reaches the shadow map, those texels keep the 1.0 depth clear,
+        // and Complementary's light-shaft march reads clamp((1.0 - shadowPos.z) * 65536.0, 0.0, 1.0)
+        // == 1.0, fully lit, for samples sitting under solid rock
+        // that is the sunlight leaking through the ground into caves
         @Override
         public boolean useBlockFaceCulling(){
             if (com.bdmajora.impetus.umbra.pipeline.UmbraShadowRenderer.isShadowPass()) {

@@ -61,10 +61,10 @@ class ChunkJobQueue {
         return this.getNextTask();
     }
 
-    /**
-     * {@return whether a worker has blocked on an empty queue since this method was last called, atomically
-     * clearing the flag for the next window}
-     */
+    // Whether any worker has blocked on an empty queue since this was last called, clearing the flag atomically so
+    // the next call measures a fresh window
+    // The adaptive scheduler uses it as its starvation signal: a worker that blocked means the queue target is too
+    // low, and reading-and-clearing in one step is what keeps two consecutive windows from counting the same block
     public boolean checkAndClearWorkerBlocked() {
         return this.workerBlocked.getAndSet(false);
     }

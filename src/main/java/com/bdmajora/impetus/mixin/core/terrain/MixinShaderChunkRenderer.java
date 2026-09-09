@@ -14,7 +14,7 @@ import com.bdmajora.impetus.umbra.terrain.UmbraTerrainProgramOverride;
 
 import java.util.Map;
 
-/** Swaps terrain programs while shader packs are active. */
+// Swaps terrain programs while shader packs are active.
 @Mixin(ShaderChunkRenderer.class)
 public class MixinShaderChunkRenderer {
 

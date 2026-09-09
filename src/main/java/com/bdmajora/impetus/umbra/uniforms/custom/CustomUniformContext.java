@@ -1,20 +1,20 @@
 package com.bdmajora.impetus.umbra.uniforms.custom;
 
-/**
- * Resolution environment for evaluating a custom-uniform expression. Variable lookups resolve first against
- * pack-defined variables/uniforms (evaluated earlier this frame) and then against the built-in input uniforms.
- */
+// The environment one custom-uniform expression is evaluated against
+// Name lookup order matters: pack-defined variables and uniforms first (already evaluated earlier this frame, in
+// declaration order), then the built-in input uniforms. A pack that names a variable after a built-in therefore
+// shadows it, which is what packs expect
 public interface CustomUniformContext {
-    /** {@return the value of the named variable/uniform/builtin, or {@code null} if unknown} */
+    // Null for an unknown name rather than an exception: a pack referencing something this port does not provide
+    // should drop that one uniform, not fail the whole pack
     CustomUniformValue resolve(String name);
 
-    /**
-     * {@return per-call persistent state slot for {@code smooth()}}. The parser assigns each {@code smooth(...)}
-     * call a unique index so it can keep an exponentially-smoothed value across frames.
-     */
+    // Persistent state for one smooth() call site, keyed by an index the parser assigns per call
+    // Per CALL rather than per uniform, because one expression can contain several smooth() calls and each needs
+    // its own history — sharing a slot would make them interfere
     SmoothState smoothState(int index);
 
-    /** {@return seconds elapsed since the previous frame, for time-based functions like {@code smooth}} */
+    // Seconds since the previous frame, so smooth() converges at a rate independent of framerate
     float frameTime();
 
     final class SmoothState {

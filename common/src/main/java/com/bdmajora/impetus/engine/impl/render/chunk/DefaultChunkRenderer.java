@@ -178,9 +178,8 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
     private static final int MODEL_NEG_Y      = ModelQuadFacing.NEG_Y.ordinal();
     private static final int MODEL_NEG_Z      = ModelQuadFacing.NEG_Z.ordinal();
 
-    /**
-     * When true, block face culling checks are inverted to debug if the feature works properly.
-     */
+    // Inverts the block-face culling test, so the faces that WOULD be culled are the only ones drawn
+    // A compile-time constant, so the branch folds away entirely when it is false
     private static final boolean DEBUG_BLOCK_FACE_CULLING = false;
 
     private static int getVisibleFaces(int originX, int originY, int originZ, int chunkX, int chunkY, int chunkZ) {

@@ -12,18 +12,15 @@ import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Evaluates the C-preprocessor conditionals OptiFine allows in {@code *.properties} files
- * ({@code #if MC_VERSION >= 11300} … {@code #else} … {@code #endif}), producing the flattened property lines for the
- * active define set. The Impetus counterpart of Umbra's JCPP-backed {@code PropertiesPreprocessor}, self-contained
- * because properties files only ever use integer-comparison conditionals — no token pasting, no function macros.
- * <p>
- * Supported directives: {@code #if}, {@code #ifdef}, {@code #ifndef}, {@code #elif}, {@code #else}, {@code #endif}.
- * Expressions support integer literals, define names (their value parsed as an integer, {@code 0} if undefined or
- * non-numeric), {@code defined(NAME)}/{@code defined NAME}, parentheses, {@code !}, unary {@code -}/{@code +},
- * {@code * / %}, {@code + -}, comparisons, {@code ==}/{@code !=}, {@code &&}, {@code ||}. Any other {@code #} line is
- * a comment and is dropped; backslash line continuations are joined before processing.
- */
+// Evaluates the C-preprocessor conditionals OptiFine allows inside *.properties files — #if MC_VERSION >= 11300,
+// #else, #endif and friends — producing the flattened property lines for the active define set
+// The counterpart of Iris's JCPP-backed PropertiesPreprocessor, written from scratch rather than pulling in JCPP
+// because properties files only ever use integer-comparison conditionals: no token pasting, no function macros
+// Directives handled: #if, #ifdef, #ifndef, #elif, #else, #endif
+// Expressions support integer literals, define names (value parsed as an integer, 0 when undefined or
+// non-numeric), defined(NAME) and defined NAME, parentheses, !, unary - and +, * / %, + -, comparisons, == and !=,
+// && and ||
+// Any other # line is treated as a comment and dropped, and backslash continuations are joined before processing
 public final class PropertiesPreprocessor {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -34,27 +31,26 @@ public final class PropertiesPreprocessor {
         return preprocess(source, defines, false);
     }
 
-    /**
-     * {@link #preprocess} plus macro substitution into directive <em>values</em> — the shaders.properties flavour.
-     * <p>
-     * Umbra runs this file through JCPP, which expands macros in the text it passes through, not just in the
-     * conditionals. Packs rely on that for the directives whose fields are sizes: Complementary declares
-     * {@code image.wsr_img = wsr_sampler red_integer r16ui unsigned_int true false COLORED_LIGHTING 64
-     * COLORED_LIGHTING}, sizing its world-space-reflection volume by the colored-lighting option. Passing that
-     * through verbatim made {@code CustomImageDefinition.parse} throw on {@code Integer.parseInt("COLORED_LIGHTING")}
-     * and drop the directive, so the image was never created and {@code wsr_sampler} was left bound to nothing for
-     * the whole session — one WARN line and no other symptom.
-     * <p>
-     * <b>Only substitutes macros whose value is numeric</b>, which is a deliberate narrowing of what JCPP does. It
-     * covers every directive that takes a size or a count, while leaving the identifier-valued directives
-     * ({@code blend.*}'s {@code SRC_ALPHA ONE_MINUS_SRC_ALPHA …}) untouchable by a pack that happens to define a
-     * macro of the same name as a GL enum. Where a pack does define such a name numerically, JCPP would substitute
-     * too, so this never disagrees with Umbra in the other direction.
-     * <p>
-     * The option-menu directives are not at risk regardless: {@code ShaderProperties} reads {@code sliders},
-     * {@code screen*} and {@code profile.*} from the ORIGINAL file, never from this output, precisely so the menu can
-     * list option names while the pipeline sees resolved values.
-     */
+    // preprocess() plus macro substitution into directive VALUES — the shaders.properties flavour
+    //
+    // Iris runs this file through JCPP, which expands macros in the text it passes through, not only inside the
+    // conditionals, and packs rely on that for directives whose fields are sizes
+    // Complementary declares `image.wsr_img = wsr_sampler red_integer r16ui unsigned_int true false
+    // COLORED_LIGHTING 64 COLORED_LIGHTING`, sizing its world-space-reflection volume by the coloured-lighting
+    // option. Passing that through verbatim made CustomImageDefinition.parse throw on
+    // Integer.parseInt("COLORED_LIGHTING") and drop the directive, so the image was never created and wsr_sampler
+    // stayed bound to nothing for the whole session — one WARN line and no other symptom
+    //
+    // Only macros whose value is NUMERIC are substituted, which deliberately narrows what JCPP does
+    // That covers every directive taking a size or a count, while leaving the identifier-valued directives — the
+    // blend.* factors like SRC_ALPHA and ONE_MINUS_SRC_ALPHA — safe from a pack that happens to define a macro
+    // sharing a GL enum's name
+    // Where a pack DOES define such a name numerically, JCPP would substitute too, so this never disagrees with
+    // Iris in the other direction
+    //
+    // The option-menu directives are not at risk either way: ShaderProperties reads sliders, screen* and profile.*
+    // from the ORIGINAL file rather than from this output, precisely so the menu can list option names while the
+    // pipeline sees resolved values
     public static String preprocessProperties(String source, Map<String, String> defines) {
         return preprocess(source, defines, true);
     }
@@ -144,30 +140,29 @@ public final class PropertiesPreprocessor {
         return out.toString();
     }
 
-    /** An identifier not glued to a preceding word character or {@code .} (so {@code image.wsr_img} stays whole). */
+    // An identifier NOT glued to a preceding word character or dot, so a dotted key like image.wsr_img is never
+    // matched segment by segment
     private static final Pattern PROPERTY_IDENTIFIER =
             Pattern.compile("(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_])");
 
-    /** How far a {@code #define A B} / {@code #define B 256} chain is followed before giving up. */
+    // How far a `#define A B` then `#define B 256` chain is followed before giving up — a bound rather than cycle
+    // detection, since a self-referential define would otherwise loop forever
     private static final int MAX_DEFINE_HOPS = 8;
 
-    /**
-     * The option-menu layout directives, whose values are lists of option <em>names</em> and must stay names.
-     * {@code ShaderProperties} already reads all of these from the original file rather than from this output, so
-     * substituting into them changes nothing today — they are skipped so that the preprocessed text does not carry a
-     * {@code sliders = 256 …} line waiting to mislead whoever reads it next.
-     */
+    // The option-menu layout directives, whose values are lists of option NAMES and must stay names
+    // ShaderProperties already reads all of these from the original file rather than from this output, so skipping
+    // them changes nothing functionally — they are skipped so the preprocessed text does not carry a
+    // `sliders = 256 ...` line waiting to mislead whoever reads it next
     private static boolean isMenuLayoutKey(String key) {
         String trimmed = key.trim();
         return trimmed.equals("sliders") || trimmed.equals("screen")
                 || trimmed.startsWith("screen.") || trimmed.startsWith("profile.");
     }
 
-    /**
-     * Substitutes numerically-valued macros into the part of {@code line} after the first {@code =}. The key is left
-     * alone: property keys are dotted paths ({@code image.wsr_img}, {@code program.composite1.enabled}) whose
-     * segments would otherwise be candidates for substitution, and no pack expects its keys rewritten.
-     */
+    // Substitutes numerically-valued macros into the part of the line AFTER the first =
+    // The key is left untouched because property keys are dotted paths — image.wsr_img,
+    // program.composite1.enabled — whose segments would otherwise be substitution candidates, and no pack expects
+    // its keys rewritten
     private static String expandNumericMacrosInValue(String line, Map<String, String> defines) {
         int separator = line.indexOf('=');
         if (separator < 0 || defines.isEmpty() || isMenuLayoutKey(line.substring(0, separator))) {
@@ -190,10 +185,8 @@ public final class PropertiesPreprocessor {
         return substituted ? line.substring(0, separator + 1) + expanded : line;
     }
 
-    /**
-     * {@return the numeric text {@code name} ultimately expands to, or {@code null} if it is undefined, empty, or
-     * resolves to something that is not a number}
-     */
+    // The numeric text this name ultimately expands to, following a define chain, or null when it is undefined,
+    // empty, or resolves to something that is not a number — null being what keeps identifier-valued macros safe
     private static String resolveNumericDefine(String name, Map<String, String> defines) {
         String current = name;
         for (int hop = 0; hop < MAX_DEFINE_HOPS; hop++) {
@@ -229,11 +222,9 @@ public final class PropertiesPreprocessor {
         }
     }
 
-    /**
-     * JCPP ignores comments before it evaluates preprocessor directives. Shader-pack properties commonly use
-     * {@code #if OPTION // label} and {@code #endif // label}; feeding the comments into the expression parser makes
-     * otherwise-valid packs look unterminated.
-     */
+    // JCPP strips comments before evaluating directives, and this has to match
+    // Pack properties commonly write `#if OPTION // label` and `#endif // label`, and feeding those trailing
+    // comments into the expression parser makes an otherwise valid pack look unterminated
     private static String stripDirectiveComments(String directive) {
         StringBuilder out = new StringBuilder(directive.length());
         for (int i = 0; i < directive.length(); i++) {
@@ -260,7 +251,8 @@ public final class PropertiesPreprocessor {
         return out.toString();
     }
 
-    /** Whether every enclosing conditional level above the current one is active. */
+    // Whether every enclosing conditional level above the current one is active — a nested #if inside a false
+    // branch must stay false regardless of its own condition
     private static boolean parentActive(Deque<boolean[]> stack) {
         for (boolean[] frame : stack) {
             if (!frame[0]) {
@@ -270,7 +262,8 @@ public final class PropertiesPreprocessor {
         return true;
     }
 
-    /** Splits into lines, joining {@code \}-continued lines the way {@link java.util.Properties} would. */
+    // Splits into lines, joining backslash-continued ones the way java.util.Properties would — so a directive or
+    // value split across several physical lines is seen as one
     private static List<String> joinContinuations(String source) {
         String[] rawLines = source.split("\r\n|\r|\n", -1);
         List<String> lines = new ArrayList<>(rawLines.length);
@@ -311,13 +304,12 @@ public final class PropertiesPreprocessor {
         }
     }
 
-    /**
-     * Silent sibling of {@link #evaluateBooleanExpression}, for callers where "cannot evaluate this" is a normal
-     * outcome rather than a pack problem — chiefly {@code GlslPreprocessor.foldFloatConditionals}, which inspects
-     * every conditional in every shader and simply leaves the ones it cannot read to the driver. Photon alone has 20
-     * backslash-continued conditionals that a line-at-a-time reader can never evaluate; warning about each one on
-     * every compile would drown the log.
-     */
+    // The SILENT sibling of evaluateBooleanExpression, for callers where "cannot evaluate this" is a normal outcome
+    // rather than a pack problem
+    // Chiefly GlslPreprocessor.foldFloatConditionals, which inspects every conditional in every shader and leaves
+    // the ones it cannot read to the driver
+    // Photon alone has 20 backslash-continued conditionals that a line-at-a-time reader can never evaluate, so
+    // warning about each on every compile would drown the log
     public static Optional<Boolean> tryEvaluateBooleanExpression(String expression, Map<String, String> defines) {
         try {
             return Optional.of(new ExpressionParser(expression, defines).parse() != 0);
@@ -326,7 +318,8 @@ public final class PropertiesPreprocessor {
         }
     }
 
-    /** Minimal recursive-descent parser over the C-preprocessor integer expression grammar. */
+    // A minimal recursive-descent parser over the C-preprocessor integer expression grammar — enough for the
+    // conditionals properties files actually contain, and nothing more
     private static final class ExpressionParser {
         private final String text;
         private final Map<String, String> defines;
@@ -492,16 +485,14 @@ public final class PropertiesPreprocessor {
             throw new IllegalArgumentException("Unexpected character '" + c + "'");
         }
 
-        /**
-         * Scans one numeric literal. The C preprocessor grammar is integer-only, but JCPP — which is what Umbra runs
-         * over both properties files and shader sources — accepts a float literal and takes its {@code longValue()},
-         * i.e. truncates toward zero. Packs rely on that: Clarity gates its motion blur on
-         * {@code #if MOTION_BLUR > 0.0} with {@code MOTION_BLUR} a {@code 0.00}..{@code 1.00} slider, so under Umbra the
-         * branch only ever activates at exactly 1.00. Rejecting the literal instead (the previous behavior) failed the
-         * whole conditional and made the directive scan fall back to the raw source.
-         * <p>
-         * Integer suffixes ({@code u}, {@code l} and their combinations) are consumed and ignored, as JCPP does.
-         */
+        // Scans one numeric literal
+        // The C preprocessor grammar is integer-only, but JCPP — which is what Iris runs over both properties files
+        // and shader sources — accepts a float literal and takes its longValue(), truncating toward zero
+        // Packs rely on that truncation: Clarity gates its motion blur on `#if MOTION_BLUR > 0.0` where MOTION_BLUR
+        // is a 0.00..1.00 slider, so under Iris that branch only ever activates at exactly 1.00
+        // Rejecting the literal instead, which is what this used to do, failed the whole conditional and made the
+        // directive scan fall back to the raw source
+        // Integer suffixes — u, l and their combinations — are consumed and ignored, again as JCPP does
         private long parseNumber() {
             int start = this.pos;
             boolean hex = this.text.startsWith("0x", this.pos) || this.text.startsWith("0X", this.pos);
@@ -559,7 +550,7 @@ public final class PropertiesPreprocessor {
             }
         }
 
-        /** Consumes the operator if present. Guards {@code <}/{@code >} against their {@code <=}/{@code >=} forms. */
+        // Consumes the operator if present, guarding < and > against matching the first character of <= and >=
         private boolean eat(String op) {
             skipWhitespace();
             if (!this.text.startsWith(op, this.pos)) {
@@ -573,7 +564,8 @@ public final class PropertiesPreprocessor {
             return true;
         }
 
-        /** {@code -} needs care so it is not confused with a unary minus after another operator; here it never is. */
+        // Binary minus needs separating from a unary minus following another operator — at the one point this is
+        // called, the parser is past an operand, so it never is
         private boolean eatMinus() {
             skipWhitespace();
             if (this.pos < this.text.length() && this.text.charAt(this.pos) == '-') {

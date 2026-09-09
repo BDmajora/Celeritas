@@ -1,12 +1,10 @@
 package com.bdmajora.impetus.umbra.pipeline.shadow;
 
-/**
- * The four frustum planes adjacent to a given plane, used when extruding edge planes. Port of Umbra's
- * {@code shadows.frustum.advanced.NeighboringPlaneSet} (a record upstream; a plain class here for {@code --release 8}).
- * <p>
- * Planes are ordered -X, +X, -Y, +Y, far, near, so {@code planeIndex >>> 1} selects the axis and every plane on one
- * axis shares the same set of neighbours.
- */
+// The four frustum planes adjacent to a given plane, needed when extruding edge planes towards the light
+// Port of Iris's shadows.frustum.advanced.NeighboringPlaneSet — a record upstream, a plain class here because this
+// module compiles against --release 8
+// Only three instances exist because planes are ordered -X, +X, -Y, +Y, far, near: the two planes on an axis share
+// the same four neighbours, so the pair collapses to one entry and planeIndex >>> 1 picks it
 public final class NeighboringPlaneSet {
     private static final NeighboringPlaneSet FOR_PLUS_X = new NeighboringPlaneSet(2, 3, 4, 5);
     private static final NeighboringPlaneSet FOR_PLUS_Y = new NeighboringPlaneSet(0, 1, 4, 5);
@@ -26,6 +24,7 @@ public final class NeighboringPlaneSet {
         this.plane3 = plane3;
     }
 
+    // >>> 1 turns a plane index into its axis index, which is exactly the TABLE index
     public static NeighboringPlaneSet forPlane(int planeIndex) {
         return TABLE[planeIndex >>> 1];
     }

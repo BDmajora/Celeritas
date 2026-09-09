@@ -21,16 +21,15 @@ import java.util.function.Supplier;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * The camera-matrix uniforms ({@code gbufferModelView(Inverse)}, {@code gbufferProjection(Inverse)}, the
- * {@code gbufferPrevious*} pair, and {@code cameraPosition}/{@code previousCameraPosition}), all read from
- * {@link CapturedRenderingState} and {@link CameraUniforms}. The {@code EntityRenderer} mixin fills the matrices from
- * vanilla's own {@code ActiveRenderInfo} capture; {@code CameraUniforms} tracks the Umbra-compatible current/previous
- * camera positions once per rendered frame.
- */
+// The camera-matrix uniforms: gbufferModelView and its inverse, gbufferProjection and its inverse, the
+// gbufferPrevious* pair, and cameraPosition / previousCameraPosition
+// All read out of CapturedRenderingState and CameraUniforms rather than computed here — the EntityRenderer mixin
+// fills the matrices from vanilla's own ActiveRenderInfo capture, and CameraUniforms tracks the Iris-compatible
+// current and previous camera positions once per rendered frame
 public final class MatrixUniforms {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
-    /** One report per uniform name; a singular matrix repeats every frame until whatever caused it goes away. */
+    // One report per uniform name, because a singular matrix repeats every single frame until whatever caused it
+    // goes away — unbounded logging otherwise
     private static final java.util.Set<String> REPORTED_SINGULAR = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static final Matrix4fc IDENTITY = new Matrix4f();
     private static final int GL_ACTIVE_TEXTURE = 0x84E0;
@@ -157,29 +156,25 @@ public final class MatrixUniforms {
         return new Vector3f((float) position.x, (float) position.y, (float) position.z);
     }
 
-    /**
-     * Inverts {@code source}, substituting identity if the result is not finite.
-     * <p>
-     * Umbra inverts unguarded ({@code MatrixUniforms.Inverted}: {@code new Matrix4f(parent.get()).invert()}), and it can
-     * afford to — every matrix it inverts comes from a live pose stack that is invertible by construction. This port
-     * feeds the same code from 1.12.2 fixed-function readbacks ({@code ActiveRenderInfo}'s captured modelview,
-     * {@code GL_MODELVIEW_MATRIX}, a shadow ortho built from pack directives), any of which can be singular — an
-     * all-zero buffer captured before vanilla filled it, or a degenerate ortho. JOML's {@code invert()} divides by the
-     * determinant, so a singular input yields {@code Inf}/{@code NaN} in all sixteen elements with no exception and no
-     * GL error.
-     * <p>
-     * That is not a cosmetic failure. Complementary routes <em>every terrain vertex in both passes</em> through one of
-     * these inverses — {@code position = gbufferModelViewInverse * gl_ModelViewMatrix * gl_Vertex} in
-     * {@code gbuffers_terrain}, {@code position = shadowModelViewInverse * shadowProjectionInverse * ftransform()} in
-     * {@code shadow} — while entities use {@code gl_Position = ftransform()} and touch no inverse at all. One
-     * non-finite inverse therefore makes {@code gl_Position} NaN for all terrain, the non-finite guard in
-     * {@link com.bdmajora.impetus.umbra.terrain.ImpetusTerrainTransformer} collapses every one of those vertices behind
-     * the far plane, and the world silently disappears while entities, block entities and particles keep drawing.
-     * That is the recurring "world unloads randomly" report.
-     * <p>
-     * Identity is wrong, but it is finite: one frame renders from the wrong basis instead of not rendering at all, and
-     * the log names the uniform.
-     */
+    // Inverts a matrix, substituting identity when the result comes out non-finite
+    // Iris inverts unguarded and can afford to: every matrix it inverts comes off a live pose stack that is
+    // invertible by construction
+    // This port feeds the same code from 1.12.2 fixed-function readbacks — ActiveRenderInfo's captured modelview,
+    // GL_MODELVIEW_MATRIX, a shadow ortho built from pack directives — any of which can be singular, whether an
+    // all-zero buffer captured before vanilla filled it or a degenerate ortho
+    // JOML's invert() divides by the determinant, so a singular input yields Inf or NaN in all sixteen elements
+    // with no exception and no GL error at all
+    //
+    // Not a cosmetic failure. Complementary routes EVERY terrain vertex in both passes through one of these
+    // inverses — gbufferModelViewInverse * gl_ModelViewMatrix * gl_Vertex in gbuffers_terrain, and
+    // shadowModelViewInverse * shadowProjectionInverse * ftransform() in shadow — while entities use plain
+    // ftransform() and touch no inverse
+    // So one non-finite inverse makes gl_Position NaN for all terrain, the guard in ImpetusTerrainTransformer
+    // collapses every one of those vertices, and the world silently disappears while entities, block entities and
+    // particles keep drawing. That is the recurring "world unloads randomly" report
+    //
+    // Identity is wrong, but it is FINITE: one frame renders from the wrong basis instead of not rendering at all,
+    // and the log names which uniform did it
     private static Matrix4fc invertedOrIdentity(String name, Matrix4fc source) {
         Matrix4f inverse = new Matrix4f(source).invert();
         if (isFinite(inverse)) {
@@ -203,20 +198,16 @@ public final class MatrixUniforms {
         return true;
     }
 
-    /**
-     * {@return the inverse-transpose of the modelview that is live <em>right now</em>, i.e. this draw's normal matrix}
-     * <p>
-     * Umbra's per-draw equivalent reads {@code RenderSystem.getModelViewMatrix()}, which on 1.16+ is the pose stack
-     * (camera x model). On the compatibility profile the fixed-function {@code GL_MODELVIEW_MATRIX} holds the same
-     * thing at draw time, so reading it back here reproduces Umbra's value rather than approximating it with the
-     * camera matrix.
-     */
-    /** {@return the inverse of the modelview live <em>right now</em> — this draw's, not the frame's camera matrix} */
+    // The inverse of the modelview live RIGHT NOW — this draw's matrix, not the frame's camera matrix
+    // Iris's per-draw equivalent reads RenderSystem.getModelViewMatrix(), which on 1.16+ is the pose stack, i.e.
+    // camera times model. On the compatibility profile the fixed-function GL_MODELVIEW_MATRIX holds exactly that
+    // at draw time, so reading it back here reproduces Iris's value rather than approximating it with the camera
+    // matrix alone
     private static Matrix4fc getLiveModelViewInverse() {
         return invertedOrIdentity("iris_ModelViewMatrixInverse", getLiveModelView());
     }
 
-    /** {@return the fixed-function modelview as it stands at this instant, i.e. camera x model for the current draw} */
+    // The fixed-function modelview as it stands at this instant: camera times model for the draw in progress
     private static Matrix4fc getLiveModelView() {
         FloatBuffer buffer = ByteBuffer.allocateDirect(16 * Float.BYTES)
                 .order(ByteOrder.nativeOrder())
@@ -226,7 +217,8 @@ public final class MatrixUniforms {
         return new Matrix4f().set(buffer);
     }
 
-    /** {@return the inverse of whichever projection the pass currently running actually rasterises with} */
+    // The inverse of whichever projection the currently running pass actually rasterises with — the shadow pass
+    // uses its own ortho, so the frame's camera projection would be the wrong one there
     private static Matrix4fc getActiveProjectionInverse() {
         CapturedRenderingState state = CapturedRenderingState.INSTANCE;
         boolean shadow = com.bdmajora.impetus.umbra.pipeline.UmbraShadowRenderer.isShadowPass();
@@ -235,10 +227,9 @@ public final class MatrixUniforms {
                 : "iris_ProjectionMatrixInverse (camera projection)", projection);
     }
 
-    /**
-     * The normal matrix cannot delete geometry the way a position matrix can, but a non-finite one poisons every
-     * lit fragment, so it goes through the same guard. Reusing {@link #invertedOrIdentity} keeps one report per name.
-     */
+    // A non-finite normal matrix cannot delete geometry the way a position matrix can, but it poisons every lit
+    // fragment, so it goes through the same guard
+    // Reusing invertedOrIdentity also keeps the one-report-per-name behaviour rather than adding a second latch
     private static Matrix3fc getLiveNormalMatrix() {
         return new Matrix4f(invertedOrIdentity("iris_NormalMatrix", getLiveModelView()))
                 .transpose3x3(new Matrix3f());
@@ -263,14 +254,14 @@ public final class MatrixUniforms {
         }
     }
 
-    /**
-     * Supplies the previous frame's value of a matrix. State must roll forward exactly once per rendered frame, but
-     * {@link #get()} is invoked once per <em>program</em> that declares the uniform (every gbuffers/deferred/composite
-     * pass), many times within a single frame. Rolling on every call collapsed {@code previous} onto the current
-     * matrix after the first upload, so by the time the TAA composite ran, {@code gbufferPreviousModelView} equalled
-     * {@code gbufferModelView}: reprojection produced zero motion and TAA smeared history over moving geometry.
-     * Guard the roll on {@code frameCounter} so every pass in a frame sees the same, genuinely-previous matrix.
-     */
+    // Supplies the PREVIOUS frame's value of a matrix
+    // The state must roll forward exactly once per rendered frame, but get() is invoked once per PROGRAM that
+    // declares the uniform — every gbuffers, deferred and composite pass — so many times within one frame
+    // Rolling on every call collapsed `previous` onto the current matrix after the first upload, so by the time the
+    // TAA composite ran, gbufferPreviousModelView equalled gbufferModelView: reprojection produced zero motion and
+    // TAA smeared history across moving geometry
+    // The roll is therefore guarded on frameCounter, so every pass within a frame sees the same genuinely-previous
+    // matrix
     private static final class Previous implements Supplier<Matrix4fc> {
         private final Supplier<Matrix4fc> parent;
         private final Matrix4f previous = new Matrix4f();

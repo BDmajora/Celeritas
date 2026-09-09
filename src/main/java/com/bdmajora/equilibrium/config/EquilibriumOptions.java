@@ -6,38 +6,33 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * The option tree — every {@code mixin.*} rule Equilibrium recognises, its default, and what it does.
- *
- * <p>Lithium generates this from {@code @MixinConfigOption} annotations on {@code package-info} files
- * at build time, writing out a properties resource the config loader then reads. That machinery is a
- * Gradle plugin plus a build-time annotation processor, neither of which this project has, and both
- * of which exist to solve a problem we do not have: Lithium ships three loader-specific option sets
- * and needs them generated per platform.
- *
- * <p>So the tree is declared here instead, once, and three consumers read it: {@link EquilibriumConfig}
- * builds the rules from it, the config-file writer uses the descriptions as comments, and
- * {@code EquilibriumOptionPages} builds the GUI tab from it. The important property is preserved — an
- * option's name <em>is</em> its mixin package path, so a rule automatically governs every mixin
- * beneath it without anything having to be wired up by hand.
- *
- * <p>The tree is smaller than Lithium's, and deliberately so. Roughly a third of Lithium's options
- * patch code that 1.12.2 does not have (everything touching {@code VoxelShape}, the brain-based AI
- * rewrite, chunk tickets, game events) and another handful patch code 1.12.2 already gets right —
- * {@code ExtendedBlockStorage} has counted its randomly-ticking blocks since 1.8, and every
- * {@code Profiler} entry point already returns immediately when profiling is off. An option that
- * cannot remove work is worse than no option, because it invites a user to spend a launch bisecting
- * something that was never doing anything. {@code EQUILIBRIUM_ROADMAP.md} lists what was dropped and
- * why.
- */
+// the option tree: every mixin.* rule Equilibrium recognises, its default, and what it does
+// Lithium generates this from @MixinConfigOption annotations on package-info files at build time,
+// writing out a properties resource the config loader then reads; that machinery is a Gradle plugin
+// plus a build-time annotation processor, neither of which this project has, and both of which exist
+// to solve a problem we do not have - Lithium ships three loader-specific option sets and needs them
+// generated per platform
+// so the tree is declared here instead, once, and three consumers read it: EquilibriumConfig builds
+// the rules from it, the config-file writer uses the descriptions as comments, and
+// EquilibriumOptionPages builds the GUI tab from it
+// the important property is preserved - an option's name *is* its mixin package path, so a rule
+// automatically governs every mixin beneath it without anything having to be wired up by hand
+// the tree is smaller than Lithium's, and deliberately so: roughly a third of Lithium's options patch
+// code that 1.12.2 does not have (everything touching VoxelShape, the brain-based AI rewrite, chunk
+// tickets, game events) and another handful patch code 1.12.2 already gets right - ExtendedBlockStorage
+// has counted its randomly-ticking blocks since 1.8, and every Profiler entry point already returns
+// immediately when profiling is off
+// an option that cannot remove work is worse than no option, because it invites a user to spend a
+// launch bisecting something that was never doing anything; EQUILIBRIUM_ROADMAP.md lists what was
+// dropped and why
 public final class EquilibriumOptions {
-    /** Immutable, in declaration order; the config file and the GUI both present them this way. */
+    // Immutable, in declaration order; the config file and the GUI both present them this way.
     private static final Map<String, Entry> ENTRIES = build();
 
     private EquilibriumOptions() {
     }
 
-    /** One rule. */
+    // One rule.
     public static final class Entry {
         private final String name;
         private final boolean enabledByDefault;
@@ -66,7 +61,7 @@ public final class EquilibriumOptions {
             return this.description;
         }
 
-        /** How behaviour differs from vanilla, or null when it does not. */
+        // How behaviour differs from vanilla, or null when it does not.
         public String nonVanillaBehaviour() {
             return this.nonVanilla;
         }
@@ -75,19 +70,19 @@ public final class EquilibriumOptions {
             return this.dependencies;
         }
 
-        /** The name with the {@code mixin.} prefix removed, which is what the lang keys are built from. */
+        // The name with the mixin. prefix removed, which is what the lang keys are built from.
         public String path() {
             return this.name.substring("mixin.".length());
         }
 
-        /** The top-level category, used to group the GUI tab into sections. */
+        // The top-level category, used to group the GUI tab into sections.
         public String category() {
             String path = this.path();
             int split = path.indexOf('.');
             return split == -1 ? path : path.substring(0, split);
         }
 
-        /** How deep this rule sits, so the GUI can indent children under their parent. */
+        // How deep this rule sits, so the GUI can indent children under their parent.
         public int depth() {
             int depth = 0;
 
@@ -109,7 +104,7 @@ public final class EquilibriumOptions {
         return ENTRIES.get(name);
     }
 
-    /** The categories in declaration order, which is the order the GUI tab lists its groups in. */
+    // The categories in declaration order, which is the order the GUI tab lists its groups in.
     public static List<String> categories() {
         List<String> categories = new ArrayList<>();
 
@@ -295,7 +290,7 @@ public final class EquilibriumOptions {
         return builder.finish();
     }
 
-    /** Small fluent helper so the tree above reads as a list rather than a wall of constructor calls. */
+    // Small fluent helper so the tree above reads as a list rather than a wall of constructor calls.
     private static final class Builder {
         private final Map<String, Entry> entries = new LinkedHashMap<>();
         private final Map<String, Map<String, Boolean>> dependencies = new LinkedHashMap<>();

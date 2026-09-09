@@ -9,20 +9,19 @@ import java.nio.ByteOrder;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * Produces the OptiFine {@code centerDepthSmooth} uniform: the depth-buffer value at the centre of the screen,
- * smoothed over time with a configurable half-life ({@code const float centerDepthHalflife} in the pack, seconds,
- * default 1.0). Depth-of-field and auto-exposure effects key off this value.
- *
- * <p>The sample is a synchronous 1-pixel {@code glReadPixels} from a dedicated depth-only read framebuffer wrapping
- * {@code depthtex0} — the same strategy the original 1.12-era shaders mod used. One pixel per frame is cheap even
- * with the implied sync; if it ever shows up in profiles, this can move to a PBO ping-pong without changing callers.
- *
- * <p>The smoothed value is published through a static so {@code CommonUniforms} can register the uniform without
- * threading the pipeline instance through every program-compile path (consistent with this port's other uniforms).
- */
+// Produces OptiFine's centerDepthSmooth uniform: the depth value at the centre of the screen, smoothed over time
+// The half-life comes from the pack as `const float centerDepthHalflife` in seconds, defaulting to 1.0
+// Depth-of-field focus and auto-exposure both key off this — it is how a pack knows how far away the thing the
+// player is looking at is
+// The sample is a synchronous one-pixel glReadPixels from a dedicated depth-only read framebuffer wrapping
+// depthtex0, the same approach the original 1.12-era shaders mod took. One pixel per frame is cheap even with the
+// implied sync; if it ever shows up in a profile it can move to a PBO ping-pong without touching any caller
+// The result is published through a static so CommonUniforms can register the uniform without threading the
+// pipeline instance through every program-compile path, consistent with the port's other uniforms
 public final class CenterDepthSampler {
-    /** Latest smoothed centre depth, readable by uniform suppliers on any program. */
+    // Latest smoothed value, read by uniform suppliers on any program
+    // Starts at 1.0, the far-plane depth, so the first frame reads "looking at nothing" rather than "focused on
+    // the near plane" and the DoF does not blur the whole world for a frame
     private static float currentSmoothed = 1.0f;
 
     private final ByteBuffer pixel = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder());
@@ -35,13 +34,11 @@ public final class CenterDepthSampler {
         return currentSmoothed;
     }
 
-    /**
-     * Samples and smooths the centre depth. Callers may bind any framebuffer afterwards; this leaves the READ
-     * framebuffer binding pointing at the internal depth-only FBO.
-     *
-     * @param depthTexture the GL id of {@code depthtex0} (may change across resizes)
-     * @param halfLife     smoothing half-life in seconds; {@code <= 0} disables smoothing
-     */
+    // Samples and smooths the centre depth
+    // depthTexture is depthtex0's GL id, passed in per call rather than cached because it changes across resizes
+    // A halfLife of 0 or less disables smoothing and takes the raw sample
+    // Leaves the READ framebuffer binding pointing at the internal depth-only FBO; callers bind whatever they need
+    // afterwards, so this deliberately does not restore it
     public void sample(int depthTexture, int width, int height, float frameTime, float halfLife) {
         if (width <= 0 || height <= 0) {
             return;

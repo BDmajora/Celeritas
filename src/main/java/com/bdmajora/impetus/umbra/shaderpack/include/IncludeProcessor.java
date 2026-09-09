@@ -13,16 +13,14 @@ import java.util.regex.Pattern;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-/**
- * Resolves OptiFine-style {@code #include} directives by recursively inlining the referenced GLSL files.
- * <p>
- * The processor is given a flat map of every GLSL file in the pack (keyed by {@link AbsolutePackPath}). Includes are
- * resolved relative to the including file, cycles are detected and rejected, and the result is a single flattened
- * source. Line numbers are preserved as faithfully as practical by leaving the surrounding lines untouched.
- * <p>
- * This deliberately does <em>not</em> evaluate {@code #ifdef}/{@code #define} conditionals — those are handled later by
- * the GLSL compiler and the {@code GlslPreprocessor}. Only textual inclusion happens here.
- */
+// Resolves OptiFine-style #include directives by recursively inlining the referenced GLSL files
+// Works from a flat map of every GLSL file in the pack, keyed by AbsolutePackPath. Includes resolve relative to
+// the including file, cycles are detected and rejected, and the output is one flattened source
+// Surrounding lines are left untouched so line numbers stay as close to the original as inlining allows — which is
+// what makes a driver's error message point at something the pack author can find
+// Deliberately does NOT evaluate #ifdef or #define conditionals. Those are the GLSL compiler's and
+// GlslPreprocessor's job; this is textual inclusion and nothing else, so an include inside a false #ifdef is still
+// inlined here
 public final class IncludeProcessor {
     // Matches:  #include "path"   or   #include <path>   with optional surrounding whitespace.
     private static final Pattern INCLUDE_PATTERN =
@@ -31,18 +29,17 @@ public final class IncludeProcessor {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
     private final Map<AbsolutePackPath, String> sources;
-    /** Unresolved targets already reported, so one bad include doesn't log once per including program. */
+    // Targets already reported missing. A common.glsl included by forty programs would otherwise log the same
+    // unresolved include forty times
     private final Set<String> reportedMissing = new HashSet<>();
 
     public IncludeProcessor(Map<AbsolutePackPath, String> sources) {
         this.sources = sources;
     }
 
-    /**
-     * Flattens the file at {@code root}, inlining all transitively included files.
-     *
-     * @throws IllegalStateException if an include cannot be resolved or a cycle is detected.
-     */
+    // Flattens the file at root, inlining everything it transitively includes
+    // Throws IllegalStateException on an unresolvable include or a cycle: both mean the pack cannot produce a
+    // compilable source, and continuing would hand the driver a truncated shader
     public List<String> process(AbsolutePackPath root) {
         String source = this.sources.get(root);
         if (source == null) {

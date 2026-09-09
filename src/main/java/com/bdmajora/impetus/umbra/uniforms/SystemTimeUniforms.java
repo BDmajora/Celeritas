@@ -8,12 +8,14 @@ import org.joml.Vector3i;
 
 import java.time.LocalDateTime;
 
-/**
- * The wall-clock frame uniforms: {@code frameTimeCounter} (seconds since load, wrapping at 3600 to preserve float
- * precision, exactly as OptiFine does) and {@code frameCounter} (an int incremented per frame, wrapping at 720720).
- * <p>
- * {@link #COUNTER} must be ticked once per frame via {@link Timer#beginFrame(long)} from the frame-setup hook.
- */
+// The wall-clock frame uniforms
+// frameTimeCounter is seconds since load, wrapping at 3600 exactly as OptiFine does — the wrap is there to keep
+// the float from losing sub-frame precision after an hour of play, which would make every time-driven animation
+// judder
+// frameCounter is an int incremented per frame, wrapping at 720720 (a highly composite number, so it divides
+// evenly by every small cycle length a pack might modulo it against)
+// COUNTER has to be ticked exactly once per frame from the frame-setup hook, or every time-driven effect in the
+// pack runs at the wrong rate
 public final class SystemTimeUniforms {
     public static final Timer COUNTER = new Timer();
 
@@ -58,7 +60,9 @@ public final class SystemTimeUniforms {
         private float lastFrameTime;
         private long lastFrameTimeNanos = -1L;
 
-        /** Advances the counters using the supplied monotonic timestamp (nanoseconds), e.g. {@code System.nanoTime()}. */
+        // Advances the counters from a monotonic nanosecond timestamp
+        // Monotonic specifically: a wall-clock source would jump backwards on an NTP correction and hand the pack
+        // a negative frame time
         public void beginFrame(long nowNanos) {
             if (this.lastFrameTimeNanos >= 0) {
                 float deltaSeconds = (nowNanos - this.lastFrameTimeNanos) / 1_000_000_000.0f;
@@ -72,7 +76,8 @@ public final class SystemTimeUniforms {
             this.frameCounter = (this.frameCounter + 1) % FRAME_COUNTER_WRAP;
         }
 
-        /** The previous frame's duration in seconds (OptiFine's {@code frameTime}). */
+        // The previous frame's duration in seconds, OptiFine's frameTime — what packs multiply by to make an
+        // animation run at a rate independent of framerate
         public float getLastFrameTime() {
             return this.lastFrameTime;
         }

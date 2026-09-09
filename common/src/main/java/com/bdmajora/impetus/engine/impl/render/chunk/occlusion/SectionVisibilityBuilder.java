@@ -5,10 +5,8 @@ import it.unimi.dsi.fastutil.ints.IntArrayList;
 
 import java.util.BitSet;
 
-/**
- * A helper class that computes the visibility graph for a section, inspired by the writeup on
- * <a href="https://tomcc.github.io/2014/08/31/visibility-1.html">Tommaso Checchi's blog</a>.
- */
+// computes the visibility graph for a section, following the approach in Tommaso Checchi's writeup
+// at https://tomcc.github.io/2014/08/31/visibility-1.html
 public class SectionVisibilityBuilder {
     private static final int SECTION_AXIS_SIZE = 16;
     private static final int SECTION_AXIS_MASK = SECTION_AXIS_SIZE - 1;
@@ -19,9 +17,7 @@ public class SectionVisibilityBuilder {
     private static final int Z_SHIFT = BITS_PER_AXIS;
     private static final int Y_SHIFT = BITS_PER_AXIS * 2;
 
-    /**
-     * All indices that are touching the edge of a section. These are used as the starting points for the floodfill.
-     */
+    // all indices touching the edge of a section, used as the starting points for the floodfill
     private static final int[] INDICES_TO_INITIATE_FLOODFILL = buildFloodfillIndices();
 
     private final BitSet blocks;

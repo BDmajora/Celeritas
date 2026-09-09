@@ -22,28 +22,23 @@ import org.spongepowered.asm.mixin.Unique;
 
 import javax.annotation.Nullable;
 
-/**
- * Stops hoppers re-discovering the same two inventories several times a second.
- *
- * <p>Every transfer attempt resolves the inventory the hopper faces and the one above it from
- * scratch. Each resolution is a block read, a tile entity lookup that constructs a tile entity as a
- * side effect if the block wants one and has none, and — whenever neither produces an inventory — an
- * entity query over the block. An idle hopper does all of this every single tick, because the
- * eight-tick cooldown is only set after a <em>successful</em> transfer.
- *
- * <p>Two idle hoppers side by side are therefore running six entity queries a tick between them. A
- * storage hall is running thousands, forever, to discover nothing.
- *
- * <p>Each hopper gets two {@link HopperInventoryCache}s, one per side. What they may and may not
- * remember is documented there; in short, a non-chest tile entity is cached against the identity of
- * the block state that was present when it was found, chests are always re-resolved because forming a
- * double chest changes no block state, and the entity fallback is not cached at all — it is skipped
- * outright when the world provably holds no inventory entities.
- *
- * <p>{@code getInventoryAtPosition} is deliberately left alone. It is public, static, and called by
- * droppers, dispensers and a great deal of mod code that has nowhere to hang a cache. The two
- * instance-scoped entry points below are where the hopper's own repetition actually lives.
- */
+// stops hoppers re-discovering the same two inventories several times a second
+// every transfer attempt resolves the inventory the hopper faces and the one above it from scratch,
+// and each resolution is a block read, a tile entity lookup that constructs a tile entity as a side
+// effect if the block wants one and has none, and - whenever neither produces an inventory - an entity
+// query over the block
+// an idle hopper does all of this every single tick, because the eight-tick cooldown is only set after
+// a *successful* transfer
+// two idle hoppers side by side are therefore running six entity queries a tick between them, and a
+// storage hall is running thousands, forever, to discover nothing
+// each hopper gets two HopperInventoryCaches, one per side; what they may and may not remember is
+// documented there, but in short a non-chest tile entity is cached against the identity of the block
+// state that was present when it was found, chests are always re-resolved because forming a double
+// chest changes no block state, and the entity fallback is not cached at all - it is skipped outright
+// when the world provably holds no inventory entities
+// getInventoryAtPosition is deliberately left alone: it is public, static, and called by droppers,
+// dispensers and a great deal of mod code that has nowhere to hang a cache
+// the two instance-scoped entry points below are where the hopper's own repetition actually lives
 @Mixin(TileEntityHopper.class)
 public abstract class TileEntityHopperMixin extends TileEntity implements IHopper, HopperCacheHolder {
     @Unique
@@ -52,13 +47,10 @@ public abstract class TileEntityHopperMixin extends TileEntity implements IHoppe
     @Unique
     private HopperInventoryCache equilibrium$source;
 
-    /**
-     * Created on first use rather than in a field initialiser.
-     *
-     * <p>Mixin can merge initialisers for fields a mixin adds, but it does so by rewriting the
-     * target's constructors, and this target has several inherited ones. A null check on a field the
-     * hopper reads twice per tick is not worth being clever about.
-     */
+    // created on first use rather than in a field initialiser
+    // Mixin can merge initialisers for fields a mixin adds, but it does so by rewriting the target's
+    // constructors, and this target has several inherited ones
+    // a null check on a field the hopper reads twice per tick is not worth being clever about
     @Override
     public HopperInventoryCache equilibrium$sourceCache() {
         if (this.equilibrium$source == null) {
@@ -110,15 +102,12 @@ public abstract class TileEntityHopperMixin extends TileEntity implements IHoppe
         return equilibrium$resolveUncached(hopper.getWorld(), x, y, z);
     }
 
-    /**
-     * [VanillaCopy] {@code TileEntityHopper#getInventoryAtPosition}, for hoppers that cannot cache.
-     *
-     * <p>Hopper minecarts reach this. They move, so a cache keyed on the block state at a fixed
-     * position would be answering about wherever the minecart used to be. The only thing they gain
-     * here is {@link HopperEntityLookup}, which skips the entity query when it provably has nothing
-     * to find — and that is exactly the query a minecart running along a rail with nothing above it
-     * would otherwise repeat every tick.
-     */
+    // [VanillaCopy] TileEntityHopper#getInventoryAtPosition, for hoppers that cannot cache
+    // hopper minecarts reach this; they move, so a cache keyed on the block state at a fixed position
+    // would be answering about wherever the minecart used to be
+    // the only thing they gain here is HopperEntityLookup, which skips the entity query when it
+    // provably has nothing to find - and that is exactly the query a minecart running along a rail
+    // with nothing above it would otherwise repeat every tick
     @Unique
     @Nullable
     private static IInventory equilibrium$resolveUncached(World world, double x, double y, double z) {

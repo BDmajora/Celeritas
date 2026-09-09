@@ -11,15 +11,13 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Routes the armour enchantment glint through {@code gbuffers_armor_glint}. See
- * {@link UmbraRenderingPipeline#beginArmorGlint()} for why the glint needs its own program.
- * <p>
- * The anchors mirror OptiFine exactly: its patched {@code LayerArmorBase.renderEnchantedGlint} wraps the whole method
- * body in {@code ShadersRender.renderEnchantedGlintBegin()} / {@code renderEnchantedGlintEnd()}, so HEAD/RETURN here
- * cover the same span. The method is {@code public static}, and both of vanilla's call sites (the enchanted-item and
- * the legacy {@code isItemEnchanted} branch) go through it.
- */
+// routes the armour enchantment glint through gbuffers_armor_glint
+// see UmbraRenderingPipeline#beginArmorGlint() for why the glint needs its own program
+// the anchors mirror OptiFine exactly: its patched LayerArmorBase.renderEnchantedGlint wraps the
+// whole method body in ShadersRender.renderEnchantedGlintBegin() / renderEnchantedGlintEnd(), so
+// HEAD/RETURN here cover the same span
+// the method is public static, and both of vanilla's call sites - the enchanted-item branch and the
+// legacy isItemEnchanted branch - go through it
 @Mixin(LayerArmorBase.class)
 public class LayerArmorBaseGlintMixin {
     @Inject(method = {"renderEnchantedGlint", "func_188364_a"}, at = @At("HEAD"), require = 0)

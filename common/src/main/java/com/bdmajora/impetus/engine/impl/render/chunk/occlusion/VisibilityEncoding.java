@@ -21,16 +21,12 @@ public class VisibilityEncoding {
     }
 
     public interface DataHolder {
-        /**
-         * {@return true if looking through the given GraphDirection allows seeing out to the other GraphDirection}
-         */
+        // true if looking through the given GraphDirection allows seeing out to the other GraphDirection
         boolean canFaceSeeFace(int fromDir, int toDir);
     }
 
-    /**
-     * {@return the bit that should be set to encode that you can see from the face on the 'from' side through to the
-     * face on the 'to' side}
-     */
+    // returns the bit that encodes "you can see from the face on the 'from' side through to the face
+    // on the 'to' side"
     static int bit(int from, int to) {
         return (from * 8) + to;
     }

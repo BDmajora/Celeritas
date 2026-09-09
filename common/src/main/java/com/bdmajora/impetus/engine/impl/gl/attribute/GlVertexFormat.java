@@ -8,19 +8,13 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 
-/**
- * Provides a generic vertex format which contains attributes. Other code can then retrieve
- * the attributes and work with encoded data in a generic manner without needing to rely on a specific format.
- */
+// a generic vertex format holding attributes, so other code can retrieve them and work with encoded
+// data generically rather than depending on one specific format
 @AllArgsConstructor
 public class GlVertexFormat {
-    /**
-     * Magic value that will have GlVertexFormat calculate the next pointer to use.
-     */
+    // magic value that has GlVertexFormat calculate the next pointer to use
     public static final int NEXT_ALIGNED_POINTER = -1;
-    /**
-     * The required alignment of attributes, must be a power of two.
-     */
+    // the required alignment of attributes; must be a power of two
     private static final int ATTRIBUTE_ALIGNMENT = 4;
 
     private final Reference2ReferenceLinkedOpenHashMap<String, GlVertexAttribute> attributesKeyed;
@@ -31,10 +25,8 @@ public class GlVertexFormat {
         return new Builder(stride);
     }
 
-    /**
-     * Returns the {@link GlVertexAttribute} of this vertex format bound to the type {@param name}.
-     * @throws NullPointerException If the attribute does not exist in this format
-     */
+    // the GlVertexAttribute of this format bound to the type "name"
+    // throws NullPointerException if the attribute does not exist in this format
     public GlVertexAttribute getAttribute(String name) {
         GlVertexAttribute attr = this.attributesKeyed.get(name);
 
@@ -49,9 +41,7 @@ public class GlVertexFormat {
         return Collections.unmodifiableCollection(this.attributesKeyed.values());
     }
 
-    /**
-     * @return The stride (or the size of) the vertex format in bytes
-     */
+    // the stride of the vertex format - its size in bytes
     public int getStride() {
         return this.stride;
     }
@@ -90,12 +80,8 @@ public class GlVertexFormat {
             return this.addElement(new GlVertexAttribute(format, name, count, normalized, pointer, this.stride, intType));
         }
 
-        /**
-         * Adds an vertex attribute which will be bound to the given generic attribute type.
-         *
-         * @param attribute The attribute to bind
-         * @throws IllegalStateException If an attribute is already bound to the generic type
-         */
+        // adds a vertex attribute, bound to the given generic attribute type
+        // throws IllegalStateException if an attribute is already bound to that generic type
         private Builder addElement(GlVertexAttribute attribute) {
             if (attribute.getPointer() >= this.stride) {
                 throw new IllegalArgumentException("Element " + attribute.getName() + " starts outside vertex format (" + attribute.getPointer() + ", stride is " + this.stride + ")");
@@ -112,9 +98,7 @@ public class GlVertexFormat {
             return this;
         }
 
-        /**
-         * Creates a {@link GlVertexFormat} from the current builder.
-         */
+        // creates a GlVertexFormat from the current builder
         public GlVertexFormat build() {
             if (this.attributes.isEmpty()) {
                 throw new IllegalArgumentException("Attempted to construct vertex format with no attributes");

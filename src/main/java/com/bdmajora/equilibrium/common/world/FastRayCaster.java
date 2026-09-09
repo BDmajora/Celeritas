@@ -12,35 +12,27 @@ import net.minecraft.world.World;
 
 import javax.annotation.Nullable;
 
-/**
- * An allocation-free transcription of {@code World#rayTraceBlocks}.
- *
- * <p>Vanilla's traversal allocates a {@link Vec3d} and a {@link BlockPos} on every one of its up-to-200
- * steps, and resolves a chunk from scratch for each block it looks at. Ray casting is not a rare
- * operation — it is what decides whether a mob can see a player, where a player is looking, whether
- * an arrow hit, and how much of an explosion reaches an entity — so those allocations add up to a
- * meaningful share of the young generation on a busy server.
- *
- * <p>The traversal itself is transcribed rather than replaced. It is an unusual DDA with several
- * fixups that look accidental — the {@code -0.0} correction, the one-block back-off when the ray
- * crosses a positive face — and it is not: those are what make block selection agree between client
- * and server. Changing any of them would move where players' crosshairs land. The only changes here
- * are that the running position is held in three doubles instead of a vector, that positions and
- * vectors are materialised only at the point they are handed to block code, and that block states
- * come from a {@link ChunkSectionCursor}.
- *
- * <p>One allocation vanilla makes is genuinely dropped rather than deferred: the {@code MISS} result
- * built for every non-colliding block along the ray, which vanilla constructs unconditionally and
- * then discards unless {@code returnLastUncollidableBlock} was requested. It is only built when the
- * caller asked for it.
- */
+// an allocation-free transcription of World#rayTraceBlocks
+// vanilla's traversal allocates a Vec3d and a BlockPos on every one of its up-to-200 steps, and
+// resolves a chunk from scratch for each block it looks at
+// ray casting is not a rare operation - it is what decides whether a mob can see a player, where a
+// player is looking, whether an arrow hit, and how much of an explosion reaches an entity - so those
+// allocations add up to a meaningful share of the young generation on a busy server
+// the traversal itself is transcribed rather than replaced: it is an unusual DDA with several fixups
+// that look accidental - the -0.0 correction, the one-block back-off when the ray crosses a positive
+// face - and it is not, because those are what make block selection agree between client and server
+// changing any of them would move where players' crosshairs land
+// the only changes here are that the running position is held in three doubles instead of a vector,
+// that positions and vectors are materialised only at the point they are handed to block code, and
+// that block states come from a ChunkSectionCursor
+// one allocation vanilla makes is genuinely dropped rather than deferred: the MISS result built for
+// every non-colliding block along the ray, which vanilla constructs unconditionally and then discards
+// unless returnLastUncollidableBlock was requested - here it is only built when the caller asked for it
 public final class FastRayCaster {
     private FastRayCaster() {
     }
 
-    /**
-     * @see World#rayTraceBlocks(Vec3d, Vec3d, boolean, boolean, boolean)
-     */
+    // matches World#rayTraceBlocks(Vec3d, Vec3d, boolean, boolean, boolean), with a cursor of its own
     @Nullable
     public static RayTraceResult rayTraceBlocks(World world, Vec3d start, Vec3d end, boolean stopOnLiquid,
                                                 boolean ignoreBlockWithoutBoundingBox,
@@ -61,12 +53,9 @@ public final class FastRayCaster {
                 returnLastUncollidableBlock);
     }
 
-    /**
-     * The same traversal against a caller-supplied cursor.
-     *
-     * <p>Explosion exposure fires dozens of rays that all converge on the same point, so they cross
-     * mostly the same blocks; sharing one cursor between them is where most of that win comes from.
-     */
+    // the same traversal against a caller-supplied cursor
+    // explosion exposure fires dozens of rays that all converge on the same point, so they cross mostly
+    // the same blocks - sharing one cursor between them is where most of that win comes from
     @Nullable
     public static RayTraceResult trace(World world, ChunkSectionCursor cursor, Vec3d start, Vec3d end,
                                        boolean stopOnLiquid, boolean ignoreBlockWithoutBoundingBox,

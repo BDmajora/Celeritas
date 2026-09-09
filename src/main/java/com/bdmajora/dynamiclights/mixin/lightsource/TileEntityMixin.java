@@ -19,17 +19,13 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Makes block entities light sources.
- *
- * <p>Nothing registers a block entity handler by default — vanilla's light-emitting blocks already
- * have real block light — so this is an API surface for mods whose machines glow while running.
- * {@link com.bdmajora.dynamiclights.client.TileEntityLightTicker} only walks the world's block
- * entities once a handler exists, so an unused API costs one boolean check per tick.
- *
- * <p>A block entity does not move, so unlike {@code EntityMixin} the tracked chunk set is computed
- * once and then only rebuilt when brightness changes.
- */
+// makes block entities light sources
+// nothing registers a block entity handler by default, because vanilla's light-emitting blocks
+// already have real block light, so this is purely an API surface for mods whose machines glow
+// while running; TileEntityLightTicker only walks the world's block entities once a handler exists,
+// so an unused API costs one boolean check per tick
+// a block entity does not move, so unlike EntityMixin the tracked chunk set is computed once and
+// then only rebuilt when the brightness changes
 @Mixin(TileEntity.class)
 public abstract class TileEntityMixin implements DynamicLightSource {
     @Shadow
@@ -47,7 +43,7 @@ public abstract class TileEntityMixin implements DynamicLightSource {
     private int impetus$lastLuminance;
     @Unique
     private long impetus$lastUpdate;
-    /** Allocated on first use; see {@code EntityMixin} for why these are not eager. */
+    // Allocated on first use; see EntityMixin for why these are not eager.
     @Unique
     private LongOpenHashSet impetus$trackedLitChunkPos;
 

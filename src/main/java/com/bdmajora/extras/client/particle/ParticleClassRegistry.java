@@ -20,49 +20,43 @@ import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * The set of particle classes seen so far, and which of them the user has switched off.
- *
- * <p>Sodium Extra can enumerate particles from the {@code ParticleType} registry. 1.12.2 has no such
- * registry — {@code ParticleManager} holds an {@code int -> IParticleFactory} map and the concrete
- * {@link Particle} subclass a factory produces is not recoverable from its type. So discovery runs
- * from three places, in decreasing order of authority:
- *
- * <ol>
- *   <li>{@link #scanFactories(ParticleManager)} — reflection over the registered factories, run once
- *       per {@code effectRenderer} by {@link ParticleDiscoveryHandler}. Resolves vanilla and any mod
- *       factory whose shape gives the particle class away.</li>
- *   <li>{@link #recordClass(Class)} — recorded when a particle actually spawns. The only thing that
- *       works for factories registered as lambdas or anonymous classes.</li>
- *   <li>{@link #registerFactoryMod(IParticleFactory, String)} — the owning mod captured at
- *       {@code registerParticle} time, used to group the toggles by mod.</li>
- * </ol>
- *
- * <p>Discovered classes are a cache: persisted so previously seen particles have toggles from the
- * next launch, and reconciled against what still loads. Only {@link #disabledClasses} is user data.
- */
+// the set of particle classes seen so far, and which of them the user has switched off
+// Sodium Extra can enumerate particles from the ParticleType registry, but 1.12.2 has no such registry
+// - ParticleManager holds an int -> IParticleFactory map, and the concrete Particle subclass a factory
+// produces is not recoverable from its type
+// so discovery runs from three places, in decreasing order of authority:
+//   scanFactories(ParticleManager) - reflection over the registered factories, run once per
+//   effectRenderer by ParticleDiscoveryHandler, resolving vanilla and any mod factory whose shape gives
+//   the particle class away
+//   recordClass(Class) - recorded when a particle actually spawns, the only thing that works for
+//   factories registered as lambdas or anonymous classes
+//   registerFactoryMod(IParticleFactory, String) - the owning mod captured at registerParticle time,
+//   used to group the toggles by mod
+// discovered classes are a cache: persisted so previously seen particles have toggles from the next
+// launch, and reconciled against what still loads
+// only disabledClasses is user data
 public final class ParticleClassRegistry {
     private static final ParticleClassRegistry INSTANCE = new ParticleClassRegistry();
 
-    /** Fully-qualified name to display name; the display name is never empty. */
+    // Fully-qualified name to display name; the display name is never empty.
     private final ConcurrentHashMap<String, String> discoveredClasses = new ConcurrentHashMap<>();
 
-    /** Fully-qualified name to owning mod id. */
+    // Fully-qualified name to owning mod id.
     private final ConcurrentHashMap<String, String> classModIds = new ConcurrentHashMap<>();
 
-    /** Factory instance to owning mod id, captured while {@code registerParticle} runs. */
+    // Factory instance to owning mod id, captured while registerParticle runs.
     private final Map<IParticleFactory, String> factoryModIds =
             Collections.synchronizedMap(new WeakHashMap<>());
 
-    /** The user's switched-off set. The only authoritative persisted state here. */
+    // The user's switched-off set. The only authoritative persisted state here.
     private final Set<String> disabledClasses = ConcurrentHashMap.newKeySet();
 
-    /** Per-session identity guard, so the spawn path does real work at most once per class. */
+    // Per-session identity guard, so the spawn path does real work at most once per class.
     private final Set<Class<?>> seenClasses = ConcurrentHashMap.newKeySet();
 
     private volatile boolean dirty;
 
-    /** Mod source jar/directory to mod id, built on first attribution. */
+    // Mod source jar/directory to mod id, built on first attribution.
     private volatile Map<File, String> sourceToModId;
 
     private ParticleClassRegistry() {
@@ -76,17 +70,14 @@ public final class ParticleClassRegistry {
     // Discovery
     // ------------------------------------------------------------------------------------------
 
-    /** Records a class seen at spawn time, where there is no factory to attribute it with. */
+    // Records a class seen at spawn time, where there is no factory to attribute it with.
     public void recordClass(Class<?> clazz) {
         recordClass(clazz, null);
     }
 
-    /**
-     * Records a discovered particle class.
-     *
-     * <p>Identity-guarded: the name and attribution work happens at most once per class per session,
-     * which is what makes this cheap enough to call for every particle spawned.
-     */
+    // records a discovered particle class
+    // identity-guarded: the name and attribution work happens at most once per class per session, which
+    // is what makes this cheap enough to call for every particle spawned
     public void recordClass(Class<?> clazz, IParticleFactory factory) {
         if (clazz == null) {
             return;
@@ -109,20 +100,17 @@ public final class ParticleClassRegistry {
         }
     }
 
-    /** Captures which mod registered a factory. The strongest attribution signal available. */
+    // Captures which mod registered a factory. The strongest attribution signal available.
     public void registerFactoryMod(IParticleFactory factory, String modId) {
         if (factory != null && modId != null) {
             factoryModIds.put(factory, modId);
         }
     }
 
-    /**
-     * Walks {@code ParticleManager}'s registered factories looking for the classes they produce.
-     *
-     * <p>Two shapes are resolvable: an inner-class factory (whose enclosing class is the particle,
-     * e.g. {@code ParticleFlame.Factory}), and a factory declaring a covariant return type. Lambda
-     * and anonymous factories match neither and are left to the spawn-time path.
-     */
+    // walks ParticleManager's registered factories looking for the classes they produce
+    // two shapes are resolvable: an inner-class factory whose enclosing class is the particle, e.g.
+    // ParticleFlame.Factory, and a factory declaring a covariant return type
+    // lambda and anonymous factories match neither and are left to the spawn-time path
     public void scanFactories(ParticleManager particleManager) {
         if (particleManager == null) {
             return;
@@ -166,10 +154,8 @@ public final class ParticleClassRegistry {
         }
     }
 
-    /**
-     * Reconciles the persisted cache against what currently loads: drops entries whose mod is gone,
-     * keeps entries that exist but cannot be linked right now, and back-fills mod attribution.
-     */
+    // reconciles the persisted cache against what currently loads: drops entries whose mod is gone,
+    // keeps entries that exist but cannot be linked right now, and back-fills mod attribution
     public void pruneDiscoveredCache() {
         ClassLoader loader = ParticleClassRegistry.class.getClassLoader();
 
@@ -260,7 +246,7 @@ public final class ParticleClassRegistry {
         return map;
     }
 
-    /** The owning mod id, {@code "minecraft"} for vanilla classes, or null when unattributable. */
+    // The owning mod id, "minecraft" for vanilla classes, or null when unattributable.
     public String getModId(String fullClassName) {
         String modId = classModIds.get(fullClassName);
         if (modId != null) {
@@ -277,7 +263,7 @@ public final class ParticleClassRegistry {
         return disabledClasses.contains(fullClassName);
     }
 
-    /** True when nothing is filtered, so the spawn path can skip the lookup entirely. */
+    // True when nothing is filtered, so the spawn path can skip the lookup entirely.
     public boolean isEmptyDisabled() {
         return disabledClasses.isEmpty();
     }
@@ -308,7 +294,7 @@ public final class ParticleClassRegistry {
     // Discovered-class cache
     // ------------------------------------------------------------------------------------------
 
-    /** An unmodifiable {@code fullClassName -> displayName} view. */
+    // An unmodifiable fullClassName -> displayName view.
     public Map<String, String> getDiscoveredClasses() {
         return Collections.unmodifiableMap(discoveredClasses);
     }
@@ -321,7 +307,7 @@ public final class ParticleClassRegistry {
         dirty = false;
     }
 
-    /** Reads back {@code "fullName|simpleName"} entries so toggles exist before anything spawns. */
+    // Reads back "fullName|simpleName" entries so toggles exist before anything spawns.
     public void loadDiscoveredClasses(String[] entries) {
         for (String entry : entries) {
             if (entry == null || entry.isEmpty()) {
@@ -358,17 +344,15 @@ public final class ParticleClassRegistry {
     // Naming
     // ------------------------------------------------------------------------------------------
 
-    /** {@code com.foo.Bar$Baz -> Baz}, {@code com.foo.Bar$1 -> 1}. */
+    // com.foo.Bar$Baz -> Baz, com.foo.Bar$1 -> 1.
     private static String toSimpleName(String fullName) {
         String name = fullName.substring(fullName.lastIndexOf('.') + 1);
         int dollar = name.lastIndexOf('$');
         return dollar >= 0 ? name.substring(dollar + 1) : name;
     }
 
-    /**
-     * A display name that is always usable, even for synthetic classes whose
-     * {@link Class#getSimpleName()} is empty or throws.
-     */
+    // a display name that is always usable, even for synthetic classes whose getSimpleName() is empty
+    // or throws
     private static String simpleNameOf(Class<?> clazz) {
         String name;
         try {

@@ -14,32 +14,27 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Which entity and block entity types the user has switched off.
- *
- * <p>Upstream LambDynLights builds this list from the {@code EntityType} and {@code BlockEntityType}
- * registries. 1.12.2 has equivalents — Forge's entity registry and {@code TileEntity}'s class-to-id
- * map — so unlike the Extras particle toggles this needs no reflection or spawn-time discovery; the
- * registries are authoritative and complete by the time the options screen can be opened.
- *
- * <p>Only the disabled sets are user data. Everything else is derived from the registries on demand.
- *
- * <p>Celeritas Dynamic Lights carries the same option surface but never populates it: its settings
- * map is a fresh empty {@code HashMap} built inside the lookup, so every type reads as enabled and
- * the toggles do nothing. This is the working version of that.
- */
+// which entity and block entity types the user has switched off
+// upstream LambDynLights builds this list from the EntityType and BlockEntityType registries, and
+// 1.12.2 has equivalents - Forge's entity registry and TileEntity's class-to-id map - so unlike the
+// Extras particle toggles this needs no reflection or spawn-time discovery: the registries are
+// authoritative and complete by the time the options screen can be opened
+// only the disabled sets are user data; everything else is derived from the registries on demand
+// Celeritas Dynamic Lights carries the same option surface but never populates it - its settings map
+// is a fresh empty HashMap built inside the lookup, so every type reads as enabled and the toggles do
+// nothing - and this is the working version of that
 public final class LightSourceSettings {
     private static final LightSourceSettings INSTANCE = new LightSourceSettings();
 
-    /** Registry ids the user has switched off. The only authoritative persisted state here. */
+    // Registry ids the user has switched off. The only authoritative persisted state here.
     private final Set<String> disabledEntities = ConcurrentHashMap.newKeySet();
     private final Set<String> disabledBlockEntities = ConcurrentHashMap.newKeySet();
 
-    /** Per-class memo of the registry id, so the hot tick path resolves it at most once per class. */
+    // Per-class memo of the registry id, so the hot tick path resolves it at most once per class.
     private final Map<Class<?>, String> entityIds = new ConcurrentHashMap<>();
     private final Map<Class<?>, String> blockEntityIds = new ConcurrentHashMap<>();
 
-    /** Stands in for "this class has no registry id", which a {@link ConcurrentHashMap} cannot store. */
+    // Stands in for "this class has no registry id", which a ConcurrentHashMap cannot store.
     private static final String UNREGISTERED = "";
 
     private LightSourceSettings() {
@@ -53,7 +48,7 @@ public final class LightSourceSettings {
     // Lookups on the tick path
     // ------------------------------------------------------------------------------------------
 
-    /** Whether this entity's type may light up. */
+    // Whether this entity's type may light up.
     public boolean isEntityEnabled(Entity entity) {
         if (this.disabledEntities.isEmpty()) {
             return true;
@@ -63,7 +58,7 @@ public final class LightSourceSettings {
         return id == null || !this.disabledEntities.contains(id);
     }
 
-    /** Whether this block entity's type may light up. */
+    // Whether this block entity's type may light up.
     public boolean isBlockEntityEnabled(TileEntity tileEntity) {
         if (this.disabledBlockEntities.isEmpty()) {
             return true;
@@ -73,14 +68,12 @@ public final class LightSourceSettings {
         return id == null || !this.disabledBlockEntities.contains(id);
     }
 
-    /**
-     * The registry id for this entity, or null if it has none.
-     *
-     * <p>Keyed on the concrete class rather than the instance because {@link EntityList#getKey} walks
-     * a map lookup and this runs once per entity per tick. A modded subclass registered under its own
-     * id resolves to that id; one that is not registered at all resolves to null and is therefore
-     * never filtered — which is the safe direction to fail, since an unlistable type has no toggle.
-     */
+    // the registry id for this entity, or null if it has none
+    // keyed on the concrete class rather than the instance because EntityList#getKey walks a map lookup
+    // and this runs once per entity per tick
+    // a modded subclass registered under its own id resolves to that id; one that is not registered at
+    // all resolves to null and is therefore never filtered - the safe direction to fail, since an
+    // unlistable type has no toggle
     private String entityId(Entity entity) {
         Class<?> clazz = entity.getClass();
         String cached = this.entityIds.get(clazz);
@@ -164,12 +157,9 @@ public final class LightSourceSettings {
     // Enumeration, for the options page
     // ------------------------------------------------------------------------------------------
 
-    /**
-     * Every registered entity type as {@code "namespace:path" -> display name}, sorted by id.
-     *
-     * <p>Built on demand rather than cached: the options page reads it once per open, and holding a
-     * copy would only go stale against a registry that can change on world join.
-     */
+    // every registered entity type as "namespace:path" -> display name, sorted by id
+    // built on demand rather than cached: the options page reads it once per open, and holding a copy
+    // would only go stale against a registry that can change on world join
     public static Map<String, String> listEntityTypes() {
         Map<String, String> types = new TreeMap<>();
 
@@ -183,12 +173,9 @@ public final class LightSourceSettings {
         return types;
     }
 
-    /**
-     * Every registered block entity type as {@code "namespace:path" -> display name}, sorted by id.
-     *
-     * <p>Block entities are still vanilla-registered on 1.12.2 — there is no Forge registry to walk —
-     * so this reaches {@code TileEntity.REGISTRY} through an accessor mixin.
-     */
+    // every registered block entity type as "namespace:path" -> display name, sorted by id
+    // block entities are still vanilla-registered on 1.12.2 - there is no Forge registry to walk - so
+    // this reaches TileEntity.REGISTRY through an accessor mixin
     public static Map<String, String> listBlockEntityTypes() {
         Map<String, String> types = new TreeMap<>();
 
@@ -199,7 +186,7 @@ public final class LightSourceSettings {
         return types;
     }
 
-    /** A human-readable label: the registered name where there is one, else the id's path. */
+    // A human-readable label: the registered name where there is one, else the id's path.
     private static String displayName(String registeredName, ResourceLocation id) {
         if (registeredName != null && !registeredName.isEmpty()) {
             return registeredName;
@@ -207,7 +194,7 @@ public final class LightSourceSettings {
         return prettify(id.getPath());
     }
 
-    /** {@code wall_banner -> Wall Banner}. */
+    // wall_banner -> Wall Banner.
     private static String prettify(String path) {
         StringBuilder out = new StringBuilder(path.length());
         boolean capitalise = true;

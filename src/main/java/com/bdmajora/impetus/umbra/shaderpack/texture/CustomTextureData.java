@@ -1,18 +1,16 @@
 package com.bdmajora.impetus.umbra.shaderpack.texture;
 
-/**
- * A parsed-but-not-yet-uploaded custom texture from a {@code texture.<stage>.<sampler>}, {@code texture.noise}, or
- * {@code customTexture.<name>} directive. Port of Umbra's {@code shaderpack.texture.CustomTextureData}; includes the
- * raw typed texture definitions modern Umbra packs use for precomputed 3D data textures.
- * <p>
- * Construction is Minecraft-free (bytes and names only); {@code pipeline.CustomTextureManager} turns these into GL
- * textures on the render thread.
- */
+// A custom texture that has been parsed but not yet uploaded, from a texture.<stage>.<sampler>, texture.noise or
+// customTexture.<name> directive
+// Port of Iris's shaderpack.texture.CustomTextureData, including the raw typed definitions modern packs use for
+// precomputed 3D data textures
+// Construction touches neither Minecraft nor GL — it holds bytes and names only — so parsing can happen off the
+// render thread. CustomTextureManager turns these into real GL textures later, on the render thread
 public abstract class CustomTextureData {
     private CustomTextureData() {
     }
 
-    /** A PNG file shipped inside the pack, plus its mcmeta filtering flags. */
+    // A PNG shipped inside the pack, carrying its .mcmeta blur/clamp flags alongside the bytes
     public static final class PngData extends CustomTextureData {
         private final TextureFilteringData filteringData;
         private final byte[] content;
@@ -31,10 +29,9 @@ public abstract class CustomTextureData {
         }
     }
 
-    /**
-     * The special {@code minecraft:dynamic/lightmap_1} location: the game's live lightmap texture. Resolved at bind
-     * time, since the lightmap object can be recreated.
-     */
+    // The special minecraft:dynamic/lightmap_1 location, meaning the game's live lightmap texture
+    // A marker rather than a stored id because the lightmap object is recreated on resource reloads and brightness
+    // changes, so it has to be resolved at bind time
     public static final class LightmapMarker extends CustomTextureData {
         @Override
         public boolean equals(Object obj) {
@@ -47,7 +44,8 @@ public abstract class CustomTextureData {
         }
     }
 
-    /** A {@code namespace:path} resource location resolved through Minecraft's TextureManager at bind time. */
+    // A namespace:path resource location, resolved through Minecraft's TextureManager at bind time — the resource
+    // pack it comes from can change under us, so nothing is cached here
     public static final class ResourceData extends CustomTextureData {
         private final String namespace;
         private final String location;
@@ -57,18 +55,20 @@ public abstract class CustomTextureData {
             this.location = location;
         }
 
-        /** @return the namespace of the texture; the caller is responsible for validating it. */
+        // Unvalidated: a pack naming a namespace no mod provides is a skipped texture, not a load failure, and
+        // that decision belongs to the caller that can log which sampler it affects
         public String getNamespace() {
             return this.namespace;
         }
 
-        /** @return the path / location of the texture; the caller is responsible for validating it. */
+        // Likewise unvalidated
         public String getLocation() {
             return this.location;
         }
     }
 
-    /** A raw binary texture definition, e.g. {@code image/foo.dat TEXTURE_3D RGB16F 32 64 32 RGB HALF_FLOAT}. */
+    // A raw binary texture, declared as e.g. `image/foo.dat TEXTURE_3D RGB16F 32 64 32 RGB HALF_FLOAT`
+    // Every field is explicit because there is no container format to read them from — the file is bare pixel data
     public static final class RawData extends CustomTextureData {
         private final String textureType;
         private final String internalFormat;

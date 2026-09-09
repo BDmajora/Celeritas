@@ -2,10 +2,10 @@ package com.bdmajora.impetus.umbra.shaderpack.materialmap;
 
 import java.util.Map;
 
-/**
- * A {@code %tag}-form entry from {@code block.properties}. Port of Umbra's {@code TagEntry}. 1.12.2 has no block-tag
- * system, so these parse for compatibility but the material mapping skips them with a debug log.
- */
+// A %tag-form entry from block.properties, e.g. `block.10001 = %minecraft:leaves`
+// 1.12.2 has no block-tag system at all, so these are parsed only so a modern pack's block.properties does not
+// fail outright — the material mapping then skips every one of them
+// Kept rather than dropped at parse time because the id and predicates are what the skip message names
 public final class TagEntry implements Entry {
     private final NamespacedId id;
     private final Map<String, String> propertyPredicates;

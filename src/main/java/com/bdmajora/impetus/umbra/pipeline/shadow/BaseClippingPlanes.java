@@ -4,13 +4,10 @@ import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
 import org.joml.Vector4f;
 
-/**
- * The six clipping planes of the player's view frustum, extracted from a model-view-projection matrix. Verbatim port
- * of Umbra's {@code shadows.frustum.advanced.BaseClippingPlanes}.
- * <p>
- * A plane {@code ax + by + cz = d} is stored as the 4-vector {@code (a, b, c, -d)}, so testing a point is a plain
- * dot product with {@code (x, y, z, 1)}: positive means inside, negative outside.
- */
+// The six clipping planes of the player's view frustum, pulled out of a model-view-projection matrix
+// Verbatim port of Iris's shadows.frustum.advanced.BaseClippingPlanes
+// A plane ax + by + cz = d is stored as the 4-vector (a, b, c, -d), which makes testing a point a plain dot
+// product against (x, y, z, 1): positive is inside, negative is outside
 public final class BaseClippingPlanes {
     private final Vector4f[] planes = new Vector4f[6];
 
@@ -29,6 +26,9 @@ public final class BaseClippingPlanes {
         this.planes[5] = transform(transform, 0, 0, 1);
     }
 
+    // Multiplying the transposed MVP by an axis-aligned unit vector extracts that clip plane in world space; the
+    // standard Gribb-Hartmann row combination, expressed as one multiply because the matrix is already transposed
+    // Normalised so the dot product yields a true signed DISTANCE, which the extrusion maths downstream relies on
     private static Vector4f transform(Matrix4fc transform, float x, float y, float z) {
         Vector4f vector = new Vector4f(x, y, z, 1.0f);
         vector.mul(transform);

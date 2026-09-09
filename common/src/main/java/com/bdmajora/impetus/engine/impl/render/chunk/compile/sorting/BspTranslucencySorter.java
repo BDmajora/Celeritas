@@ -2,13 +2,11 @@ package com.bdmajora.impetus.engine.impl.render.chunk.compile.sorting;
 
 import java.util.Arrays;
 
-/**
- * A compact BSP ordering pass for translucent quads.
- * <p>
- * It intentionally does not split intersecting quads; Minecraft terrain overwhelmingly consists of flat faces,
- * panes, fluids, and modded quads whose centers are enough to pick a stable side of each plane. When the captured
- * normals are unusable, callers should fall back to center-distance sorting.
- */
+// A compact BSP ordering pass for translucent quads
+// Deliberately does NOT split intersecting quads, which a textbook BSP would. Minecraft terrain is overwhelmingly
+// flat faces, panes, fluids and modded quads whose centres are enough to pick a stable side of each plane, and
+// splitting would multiply the quad count for a correctness gain nothing here can see
+// When the captured normals turn out to be unusable, the caller falls back to plain centre-distance sorting
 final class BspTranslucencySorter {
     private static final float PLANE_EPSILON = 1.0E-5f;
     private static final int MAX_BSP_QUADS = 2048;

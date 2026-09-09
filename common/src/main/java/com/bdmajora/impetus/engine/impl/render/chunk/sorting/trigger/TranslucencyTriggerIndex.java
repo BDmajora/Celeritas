@@ -7,22 +7,20 @@ import it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap;
 
 import java.util.function.Consumer;
 
-/**
- * Global face-normal index driving precise translucency re-sort scheduling.
- * <p>
- * Sections with dynamically-sorted translucent geometry register the planes of that geometry (grouped by
- * quantized normal). Each frame the camera moves, {@link #collectTriggered} treats the movement as a segment and
- * reports only the sections owning a plane that the segment crossed — the only situations in which the relative
- * order of two quads sharing a normal can flip. Compared to the legacy "re-sort everything near the camera on
- * every block of movement" heuristic, this both eliminates redundant sorts (movement parallel to all planes
- * triggers nothing) and catches crossings the heuristic missed (sub-block movement through a pane).
- * <p>
- * Not thread-safe; all access happens on the render thread alongside render-list building.
- */
+// global face-normal index driving precise translucency re-sort scheduling
+// sections with dynamically-sorted translucent geometry register the planes of that geometry, grouped
+// by quantized normal
+// each frame the camera moves, collectTriggered treats the movement as a segment and reports only the
+// sections owning a plane that the segment crossed - the only situations in which the relative order
+// of two quads sharing a normal can flip
+// compared to the legacy "re-sort everything near the camera on every block of movement" heuristic
+// this both eliminates redundant sorts (movement parallel to all planes triggers nothing) and catches
+// crossings the heuristic missed (sub-block movement through a pane)
+// not thread-safe; all access happens on the render thread alongside render-list building
 public final class TranslucencyTriggerIndex {
-    /** Movement components smaller than this can't meaningfully cross a plane; skips whole normal groups. */
+    // Movement components smaller than this can't meaningfully cross a plane; skips whole normal groups.
     private static final double MOVEMENT_EPSILON = 1.0E-9;
-    /** Widens the crossing window to absorb quantization/float error; in blocks. */
+    // Widens the crossing window to absorb quantization/float error; in blocks.
     private static final double PLANE_EPSILON = 1.0E-3;
 
     private final Int2ObjectOpenHashMap<Bucket> buckets = new Int2ObjectOpenHashMap<>();
@@ -42,9 +40,7 @@ public final class TranslucencyTriggerIndex {
     private record Entry(RenderSection section, float[] distances) {
     }
 
-    /**
-     * Registers (or refreshes) the watched planes for a section. Passing an empty array clears it.
-     */
+    // registers (or refreshes) the watched planes for a section; an empty array clears it
     public void update(RenderSection section, NormalPlanes[] planes) {
         this.remove(section);
 
@@ -101,10 +97,8 @@ public final class TranslucencyTriggerIndex {
         }
     }
 
-    /**
-     * Reports every registered section whose planes the camera segment {@code (x0,y0,z0) -> (x1,y1,z1)} crossed.
-     * A section may be reported more than once if several of its normal groups were crossed.
-     */
+    // reports every registered section whose planes the camera segment (x0,y0,z0) -> (x1,y1,z1) crossed
+    // a section may be reported more than once if several of its normal groups were crossed
     public void collectTriggered(double x0, double y0, double z0, double x1, double y1, double z1, Consumer<RenderSection> consumer) {
         var dx = x1 - x0;
         var dy = y1 - y0;
@@ -156,7 +150,7 @@ public final class TranslucencyTriggerIndex {
         this.keysBySection.clear();
     }
 
-    /** {@return the index of the first element not less than {@code value}, or {@code array.length}} */
+    // the index of the first element not less than value, or array.length
     private static int firstAtLeast(float[] array, double value) {
         int low = 0;
         int high = array.length;

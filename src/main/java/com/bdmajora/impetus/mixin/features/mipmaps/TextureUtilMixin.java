@@ -8,6 +8,7 @@ import static com.bdmajora.impetus.engine.impl.texture.MipmapHelper.weightedAver
 
 @Mixin(value = TextureUtil.class, priority = 900)
 public class TextureUtilMixin {
+    // @author / @reason are Mixin's required metadata on an @Overwrite, not documentation
     /**
      * @author coderbot
      * @reason replace the vanilla blending function with our improved function

@@ -9,13 +9,9 @@ import java.nio.ByteBuffer;
 import java.util.BitSet;
 
 public final class QuadPrimitiveType implements ChunkPrimitiveType {
-    /**
-     * Generates index buffers that decompose quads into two triangles (suitable for core profile rendering).
-     */
+    // generates index buffers that decompose quads into two triangles, for core profile rendering
     public static final QuadPrimitiveType TRIANGULATED = new QuadPrimitiveType(true);
-    /**
-     * Generates index buffers suited for working with quad(-like) primitives directly.
-     */
+    // generates index buffers suited for working with quad(-like) primitives directly
     public static final QuadPrimitiveType DIRECT = new QuadPrimitiveType(false);
 
     private final boolean triangulating;

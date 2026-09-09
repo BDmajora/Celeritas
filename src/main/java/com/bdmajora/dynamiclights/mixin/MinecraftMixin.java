@@ -8,13 +8,10 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Drops every tracked light source when the world changes.
- *
- * <p>Without this the set would hold entities from the world just left — they would never be ticked
- * again, so they would never go dark, and they would keep contributing light at whatever coordinates
- * they happened to die at in the new world.
- */
+// drops every tracked light source when the world changes
+// without this the set would hold entities from the world just left: they would never be ticked
+// again, so they would never go dark, and they would keep contributing light at whatever
+// coordinates they happened to die at in the new world
 @Mixin(Minecraft.class)
 public abstract class MinecraftMixin {
     @Inject(method = "loadWorld(Lnet/minecraft/client/multiplayer/WorldClient;Ljava/lang/String;)V",

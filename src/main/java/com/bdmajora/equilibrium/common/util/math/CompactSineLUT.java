@@ -2,57 +2,39 @@ package com.bdmajora.equilibrium.common.util.math;
 
 import net.minecraft.util.math.MathHelper;
 
-/**
- * A replacement for the sine lookup table in {@link MathHelper}, reducing its size and improving the
- * access pattern for the paired sin/cos calls that dominate its callers.
- *
- * <p>Two identities do the work:
- *
- * <ul>
- *   <li>{@code sin(-x) = -sin(x)}, which removes the negative half of the domain, and
- *   <li>{@code sin(x) = sin(pi/2 - x)}, which removes the supplementary angles.
- * </ul>
- *
- * <p>Together they take the table from 65 536 entries (256 KB) down to 16 384 (64 KB), small enough
- * to stay resident in L2 rather than being streamed from memory every time an entity rotates. The
- * reconstruction is branch-free integer arithmetic, so the cycles spent rebuilding the discarded
- * quadrants cost far less than the cache misses they avoid.
- *
- * <p>Unlike BetterFps' math algorithms — which trade accuracy for speed and offer a menu of how much
- * accuracy to give up — the values here are <em>bit-for-bit identical</em> to vanilla's. That matters
- * more than it might seem: entity positions, projectile arcs and explosion ray directions all run
- * through {@code sin}, and a client that computes them differently from the server desyncs.
- * {@link #init(float[])} verifies all 65 536 reconstructed values against the vanilla table before it
- * is discarded, so a mistake here fails loudly at startup rather than as a rubber-banding bug an hour
- * into a session.
- *
- * @author coderbot16   Author of the original implementation in Rust
- *  (<a href="https://gitlab.com/coderbot16/i73/-/tree/master/i73-trig/src">i73-trig</a>)
- * @author jellysquid3  Additional optimizations and the port to Java, in Lithium
- */
+// a replacement for the sine lookup table in MathHelper, reducing its size and improving the access
+// pattern for the paired sin/cos calls that dominate its callers
+// two identities do the work: sin(-x) = -sin(x), which removes the negative half of the domain, and
+// sin(x) = sin(pi/2 - x), which removes the supplementary angles
+// together they take the table from 65 536 entries (256 KB) down to 16 384 (64 KB), small enough to
+// stay resident in L2 rather than being streamed from memory every time an entity rotates
+// the reconstruction is branch-free integer arithmetic, so the cycles spent rebuilding the discarded
+// quadrants cost far less than the cache misses they avoid
+// unlike BetterFps' math algorithms - which trade accuracy for speed and offer a menu of how much
+// accuracy to give up - the values here are *bit-for-bit identical* to vanilla's
+// that matters more than it might seem: entity positions, projectile arcs and explosion ray directions
+// all run through sin, and a client that computes them differently from the server desyncs
+// init(float[]) verifies all 65 536 reconstructed values against the vanilla table before it is
+// discarded, so a mistake here fails loudly at startup rather than as a rubber-banding bug an hour
+// into a session
+// coderbot16 wrote the original implementation in Rust (https://gitlab.com/coderbot16/i73/-/tree/master/i73-trig/src)
+// jellysquid3 added further optimisations and the port to Java, in Lithium
 public class CompactSineLUT {
-    /**
-     * Raw float bits rather than floats.
-     *
-     * <p>The sign flip that reconstructs the negative half is a single XOR on the sign bit, which is
-     * only expressible on the integer representation. Storing ints avoids converting back and forth.
-     */
+    // raw float bits rather than floats
+    // the sign flip that reconstructs the negative half is a single XOR on the sign bit, which is only
+    // expressible on the integer representation, so storing ints avoids converting back and forth
     private static final int[] SINE_TABLE_INT = new int[16384 + 1];
 
-    /** {@code sin(pi)}, the one index neither identity can reach. */
+    // sin(pi), the one index neither identity can reach.
     private static float sineTableMidpoint;
 
     private CompactSineLUT() {
     }
 
-    /**
-     * Builds the compact table from vanilla's, and proves the two agree.
-     *
-     * <p>Called from the end of {@code MathHelper}'s static initialiser, which is the only moment at
-     * which the vanilla table is both fully populated and not yet used by anything.
-     *
-     * @param vanilla the fully populated 65 536-entry table from {@link MathHelper}
-     */
+    // builds the compact table from vanilla's, and proves the two agree
+    // called from the end of MathHelper's static initialiser, the only moment at which the vanilla
+    // table is both fully populated and not yet used by anything
+    // vanilla is that fully populated 65 536-entry table
     public static void init(float[] vanilla) {
         if (vanilla == null || vanilla.length != 65536) {
             throw new IllegalStateException("Expected a 65536-entry vanilla sine table, found "

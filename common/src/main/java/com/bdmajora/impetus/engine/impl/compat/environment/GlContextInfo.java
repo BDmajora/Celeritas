@@ -2,12 +2,11 @@ package com.bdmajora.impetus.engine.impl.compat.environment;
 
 import com.bdmajora.impetus.lwjgl.LWJGLServiceProvider;
 
-/**
- * A snapshot of the {@code GL_VENDOR}/{@code GL_RENDERER}/{@code GL_VERSION} strings of the current context.
- * <p>
- * {@link #capture()} must be called on a thread that owns a live GL context (on legacy Minecraft, the client
- * thread once the display exists). The result is immutable and safe to hand to background threads afterwards.
- */
+// A snapshot of the current context's GL_VENDOR, GL_RENDERER and GL_VERSION strings
+// capture() must run on a thread that owns a live GL context — on 1.12.2 that is the client thread, once the
+// display exists
+// The snapshot is immutable precisely so it can then be handed to the background compatibility checks, which have
+// no context of their own and could not query GL themselves
 public record GlContextInfo(String vendor, String renderer, String version) {
     // GL_VENDOR/GL_RENDERER/GL_VERSION are fixed by the GL specification; using the literals here avoids a
     // dependency on the generated GL constant classes.

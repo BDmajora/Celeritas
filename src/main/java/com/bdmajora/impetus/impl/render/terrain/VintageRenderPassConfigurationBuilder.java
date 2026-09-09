@@ -20,28 +20,24 @@ import java.util.Map;
 
 public class VintageRenderPassConfigurationBuilder {
 
-    /**
-     * Forces the block atlas's filter state for a terrain pass. Mods sometimes manage to corrupt it, so it is set
-     * rather than assumed.
-     * <p>
-     * <b>{@code allowMipmaps} is not cosmetic — it is why torches had a one-pixel orange halo.</b> Vanilla 1.12
-     * renders the CUTOUT layer with mipmapping switched <em>off</em>: {@code EntityRenderer.renderWorldPass} calls
-     * {@code setBlurMipmap(false, false)} before {@code renderBlockLayer(CUTOUT)} and {@code restoreLastBlurMipmap()}
-     * after, so CUTOUT geometry always samples mip 0 no matter how far away it is.
-     * <p>
-     * This port previously ran every pass mipmapped and leaned on the material's {@code mipped} bit instead, which the
-     * terrain shader turns into a <b>-4.0 LOD bias</b> ({@code _material_mip_bias} in {@code chunk_material.glsl}). A
-     * bias only shifts the level, it does not pin it to 0 — so past roughly four mip levels of distance CUTOUT
-     * geometry is still mipmapped. That is visible on torches because {@code torch_on.png} is opaque in only two of
-     * its sixteen columns: at mip 1 a 2x2 block pairing a transparent texel with a flame texel takes
-     * {@link com.bdmajora.impetus.engine.impl.texture.MipmapHelper}'s "ignore the transparent one" branch, which keeps
-     * the flame colour at {@code alpha = 255 >> 2 = 63}. 63/255 clears the 0.1 alpha test, so a texel of the sprite's
-     * warm average (~130,106,58) draws one texel outside the torch's real silhouette. Zooming lowers the LOD back
-     * under the threshold, which is why a zoom mod made it disappear.
-     * <p>
-     * The bias is still worth keeping for the consolidated CUTOUT_MIPPED geometry; this just stops it from being the
-     * <em>only</em> mechanism.
-     */
+    // forces the block atlas's filter state for a terrain pass; mods sometimes manage to corrupt it,
+    // so it is set rather than assumed
+    // allowMipmaps is not cosmetic - it is why torches had a one-pixel orange halo
+    // vanilla 1.12 renders the CUTOUT layer with mipmapping switched *off*:
+    // EntityRenderer.renderWorldPass calls setBlurMipmap(false, false) before renderBlockLayer(CUTOUT)
+    // and restoreLastBlurMipmap() after, so CUTOUT geometry always samples mip 0 no matter how far away
+    // this port previously ran every pass mipmapped and leaned on the material's mipped bit instead,
+    // which the terrain shader turns into a -4.0 LOD bias (_material_mip_bias in chunk_material.glsl)
+    // a bias only shifts the level, it does not pin it to 0, so past roughly four mip levels of
+    // distance CUTOUT geometry is still mipmapped
+    // that is visible on torches because torch_on.png is opaque in only two of its sixteen columns:
+    // at mip 1 a 2x2 block pairing a transparent texel with a flame texel takes MipmapHelper's
+    // "ignore the transparent one" branch, which keeps the flame colour at alpha = 255 >> 2 = 63
+    // 63/255 clears the 0.1 alpha test, so a texel of the sprite's warm average (~130,106,58) draws
+    // one texel outside the torch's real silhouette - zooming lowers the LOD back under the threshold,
+    // which is why a zoom mod made it disappear
+    // the bias is still worth keeping for the consolidated CUTOUT_MIPPED geometry; this just stops it
+    // from being the *only* mechanism
     private static final class AtlasMipmapState implements TerrainRenderPass.PipelineState {
         private final boolean allowMipmaps;
 

@@ -14,14 +14,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Enumerates display adapters using operating-system facilities, without requiring a GL context.
- * <p>
- * On Linux this reads the PCI ids exposed through {@code /sys/class/drm}; on Windows it queries
- * {@code Win32_VideoController} through PowerShell CIM. Both paths are strictly best-effort: any failure
- * (missing tools, sandboxing, exotic setups) degrades to an empty result rather than an exception, since the
- * caller only uses this to *refine* warnings, never to gate rendering.
- */
+// Enumerates display adapters through operating-system facilities, needing no GL context at all
+// On Linux it reads the PCI ids exposed under /sys/class/drm; on Windows it queries Win32_VideoController through
+// PowerShell CIM
+// Both paths are strictly best-effort. Any failure — missing tools, a sandbox, an exotic setup — degrades to an
+// empty result rather than an exception, because the caller only uses this to REFINE warnings and never to gate
+// rendering
 public final class GraphicsAdapterProbe {
     private static final long PROCESS_TIMEOUT_SECONDS = 5;
 

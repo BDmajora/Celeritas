@@ -5,10 +5,9 @@ import org.jetbrains.annotations.MustBeInvokedByOverriders;
 
 import java.util.Objects;
 
-/**
- * Class that holds context about the built data for a given render section. This class can be extended by implementations
- * to hold additional context and provide additional functionality.
- */
+// What a finished build produced for one render section
+// Extended per game version rather than being final, so a version-specific renderer can hang its own data off a
+// section without the shared engine having to know about it
 public class BuiltRenderSectionData {
     public boolean hasBlockGeometry;
     public long visibilityData;

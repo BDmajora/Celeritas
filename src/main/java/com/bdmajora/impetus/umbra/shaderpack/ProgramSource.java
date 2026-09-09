@@ -2,16 +2,14 @@ package com.bdmajora.impetus.umbra.shaderpack;
 
 import java.util.Optional;
 
-/**
- * The flattened GLSL source for a single shader program: a mandatory vertex + fragment pair, with optional geometry,
- * tessellation control and tessellation evaluation stages.
- * <p>
- * "Flattened" means {@code #include} directives have already been resolved by the
- * {@link com.bdmajora.impetus.umbra.shaderpack.include.IncludeProcessor}. The strings here are still pre-compilation —
- * {@code #version} normalization and {@code #define} injection happen at GL-program build time.
- */
+// The flattened GLSL source for one shader program: a mandatory vertex + fragment pair, plus optional geometry and
+// tessellation control/evaluation stages
+// "Flattened" means IncludeProcessor has already resolved every #include, so each string is one self-contained
+// source rather than a file with references out
+// Still pre-compilation though: #version normalisation and #define injection both happen later, at GL-program build
+// time, because they depend on the driver and the resolved option values
 public final class ProgramSource {
-    /** Umbra's compute-variant limit: the unsuffixed {@code .csh} plus {@code _a} .. {@code _z}. */
+    // Iris's compute-variant limit: the unsuffixed .csh plus _a through _z, so 1 + 26
     public static final int MAX_COMPUTE_VARIANTS = 27;
 
     private final String name;
@@ -20,11 +18,10 @@ public final class ProgramSource {
     private final String tessControlSource;
     private final String tessEvalSource;
     private final String fragmentSource;
-    /**
-     * The program's compute stages: index 0 is {@code <name>.csh}, index 1..26 are {@code <name>_a.csh} ..
-     * {@code <name>_z.csh} (an Umbra extension — Photon's {@code deferred4_a.csh} generates the skylight SH). Empty
-     * when the program declares no compute stage at all; entries inside it may still be null.
-     */
+    // The program's compute stages. Index 0 is <name>.csh; 1..26 are <name>_a.csh through <name>_z.csh, which is
+    // an Iris extension — Photon's deferred4_a.csh is the one that generates the skylight SH
+    // Empty when the program declares no compute stage at all, and entries inside it may still be null, since a
+    // pack can ship _a and _c without _b
     private final String[] computeSources;
 
     public ProgramSource(String name,
@@ -63,10 +60,8 @@ public final class ProgramSource {
         this.computeSources = computeSources == null ? new String[0] : computeSources.clone();
     }
 
-    /**
-     * @param variant 0 for the unsuffixed {@code .csh}, 1..26 for {@code _a} .. {@code _z}
-     * @return the source name the GL program should be logged/compiled under.
-     */
+    // The name a compute variant is compiled and logged under: variant 0 is the unsuffixed name, 1..26 append
+    // _a through _z
     public static String computeVariantName(String programName, int variant) {
         return variant == 0 ? programName : programName + "_" + (char) ('a' + variant - 1);
     }
@@ -95,20 +90,18 @@ public final class ProgramSource {
         return Optional.ofNullable(this.fragmentSource);
     }
 
-    /** The unsuffixed compute stage ({@code <name>.csh}), used by shadowcomp/composite compute passes. */
+    // The unsuffixed compute stage alone, which is what the shadowcomp and composite compute passes run
     public Optional<String> getComputeSource() {
         return Optional.ofNullable(this.computeSources.length == 0 ? null : this.computeSources[0]);
     }
 
-    /**
-     * Every compute stage attached to this program, indexed by variant (0 = unsuffixed, 1..26 = {@code _a}..{@code _z}).
-     * The returned array may be empty and may contain nulls; use {@link #computeVariantName} for the variant's name.
-     */
+    // Every compute stage on this program, indexed by variant — 0 unsuffixed, 1..26 for _a through _z
+    // May be empty and may contain nulls, so callers index defensively rather than iterating a dense list
     public String[] getComputeSources() {
         return this.computeSources.clone();
     }
 
-    /** @return true if this program declares at least one compute stage (unsuffixed or letter-suffixed). */
+    // True when at least one compute stage exists, suffixed or not
     public boolean hasComputeSource() {
         for (String source : this.computeSources) {
             if (source != null) {
@@ -118,16 +111,16 @@ public final class ProgramSource {
         return false;
     }
 
-    /**
-     * A program is only usable if it has at least a vertex and a fragment stage. OptiFine treats a program with only
-     * one of the two as malformed, falling back to the parent program.
-     */
+    // A program needs BOTH a vertex and a fragment stage to be usable
+    // OptiFine treats one without the other as malformed and falls back to the parent program rather than trying to
+    // compile half a pipeline, which is what ProgramSet.get reproduces
     public boolean isValid() {
         // A compute-only program (shadowcomp.csh, deferred4_a.csh) is valid without vertex/fragment stages.
         return (this.vertexSource != null && this.fragmentSource != null) || hasComputeSource();
     }
 
-    /** @return true if this program has the vertex+fragment pair needed to render a full-screen/geometry pass. */
+    // True when the vertex+fragment pair needed to raster anything is present — distinct from isValid only in
+    // intent: this asks "can it draw", where a compute-only program legitimately cannot
     public boolean hasRasterStages() {
         return this.vertexSource != null && this.fragmentSource != null;
     }

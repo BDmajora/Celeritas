@@ -2,30 +2,23 @@ package com.bdmajora.impetus.umbra.pipeline;
 
 import com.bdmajora.impetus.umbra.shaderpack.ShaderProperties;
 
-/**
- * What the shadow pass is allowed to draw, from the {@code shadowTerrain} / {@code shadowTranslucent} /
- * {@code shadowEntities} / {@code shadowBlockEntities} / {@code shadowLightBlockEntities} / {@code shadowPlayer}
- * directives, plus {@code shadow.culling}.
- * <p>
- * Every pack in use sets several of these — Photon asks for {@code shadowEntities = false},
- * {@code shadowBlockEntities = false}, {@code shadowPlayer = true}; Complementary switches them by its entity-shadow
- * option. Ignoring them costs real frame time drawing geometry the pack does not want shadowed, and shows up
- * visually as shadows the pack deliberately omitted.
- * <p>
- * Defaults follow OptiFine: everything except {@code shadowLightBlockEntities} is drawn unless the pack says
- * otherwise.
- */
+// What the shadow pass is allowed to draw, from the pack's shadowTerrain, shadowTranslucent, shadowEntities,
+// shadowBlockEntities, shadowLightBlockEntities and shadowPlayer directives, plus shadow.culling
+// Every pack in real use sets several of these. Photon asks for shadowEntities = false, shadowBlockEntities =
+// false and shadowPlayer = true; Complementary flips them from its own entity-shadow option
+// Ignoring them is not a cosmetic shortcut: it costs real frame time drawing geometry the pack does not want
+// shadowed at all, and it shows up on screen as shadows the pack deliberately omitted
+// Defaults follow OptiFine — everything except shadowLightBlockEntities is drawn unless the pack says otherwise
 public final class ShadowContentSettings {
-    /** {@code shadow.culling} — how the shadow pass culls chunks. */
+    // shadow.culling — how the shadow pass decides which chunks to walk
     public enum Culling {
-        /** Cull against the shadow frustum only. */
+        // Cull against the shadow frustum only
         ON,
-        /** No culling: every chunk in range is drawn. */
+        // No culling at all: every chunk in range is drawn
         OFF,
-        /**
-         * Umbra's {@code AdvancedShadowCullingFrustum}: keeps geometry between the light and the view frustum that a
-         * plain shadow-frustum test would drop (which is what makes off-screen casters still cast).
-         */
+        // Iris's AdvancedShadowCullingFrustum: keeps the geometry BETWEEN the light and the view frustum that a
+        // plain shadow-frustum test would drop — which is exactly what makes an off-screen object still cast a
+        // shadow into the visible scene
         REVERSED
     }
 
@@ -90,7 +83,8 @@ public final class ShadowContentSettings {
         return this.entities;
     }
 
-    /** True when any block entity should draw: either all of them, or only the light-emitting ones. */
+    // True when the shadow pass has any block entity to draw at all — either all of them, or just the
+    // light-emitting subset. Lets the caller skip the whole block-entity walk when neither applies
     public boolean shouldRenderAnyBlockEntities() {
         return this.blockEntities || this.lightBlockEntities;
     }

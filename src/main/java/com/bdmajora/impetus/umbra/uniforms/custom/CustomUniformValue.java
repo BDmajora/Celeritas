@@ -1,13 +1,12 @@
 package com.bdmajora.impetus.umbra.uniforms.custom;
 
-/**
- * A custom-uniform value: a small vector of 1–4 float components. Scalars, booleans (0/1), and integers are all
- * width-1 values; vec2/vec3/vec4 use widths 2/3/4. Arithmetic broadcasts a width-1 operand across a wider one,
- * matching GLSL scalar-vector semantics closely enough for the expressions shader packs use in custom uniforms.
- *
- * <p>This is an original, compact implementation for Impetus — it is intentionally not a port of the full
- * expression library upstream Umbra bundles, but covers the value shapes real packs use.
- */
+// A custom-uniform value: a small vector of 1 to 4 float components
+// Scalars, booleans (as 0/1) and integers are all width-1; vec2/vec3/vec4 are widths 2/3/4. One representation for
+// all of them, because the expression language has no type declarations to distinguish them by
+// Arithmetic broadcasts a width-1 operand across a wider one, which is GLSL's own scalar-vector rule and close
+// enough for the expressions packs actually write
+// An original compact implementation rather than a port of the full expression library Iris bundles — it covers the
+// value shapes real packs use and nothing more
 public final class CustomUniformValue {
     public final float[] components;
     public final int width;
@@ -40,7 +39,8 @@ public final class CustomUniformValue {
         return this.components[0] != 0.0f;
     }
 
-    /** Component-wise binary op with width-1 broadcasting; result width is the wider of the two. */
+    // Component-wise binary op with width-1 broadcasting; the result takes the wider of the two widths
+    // Two operands of differing widths where NEITHER is 1 is a pack error, not something to guess at
     public static CustomUniformValue combine(CustomUniformValue a, CustomUniformValue b, java.util.function.DoubleBinaryOperator op) {
         int width = Math.max(a.width, b.width);
         float[] out = new float[width];

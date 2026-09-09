@@ -12,7 +12,11 @@ import java.util.Map;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/** Program-level and per-logical-render-target blend directives from shaders.properties. */
+// A program's blend directives from shaders.properties: the program-level `blend.<program>` plus any
+// per-render-target `blend.<program>.<buffer>` overrides
+// Per-target overrides exist because a gbuffer program writes several colortexes at once and they mean different
+// things — the albedo target wants normal alpha blending while a normal or material target must be written
+// unblended, or the channels get averaged with whatever was underneath
 public final class ProgramBlendState {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
     private static final String[] LEGACY_TARGETS = {
@@ -39,11 +43,9 @@ public final class ProgramBlendState {
         return from(properties, programName, null);
     }
 
-    /**
-     * @param defaultBase the blend mode to fall back on when the pack declared no {@code blend.<program>}, or
-     *                    {@code null} for none. Umbra hangs these off
-     *                    {@link com.bdmajora.impetus.umbra.shaderpack.loading.ProgramId} and lets a pack directive win.
-     */
+    // defaultBase is the mode to fall back on when the pack declared no blend.<program> at all, or null for none
+    // Iris hangs those per-program defaults off ProgramId and lets an explicit pack directive win, which is the
+    // same precedence applied here
     public static ProgramBlendState from(ShaderProperties properties, String programName, BlendMode defaultBase) {
         boolean baseSpecified = false;
         BlendMode baseMode = null;
@@ -78,10 +80,10 @@ public final class ProgramBlendState {
         return this.baseSpecified || !this.perTargetModes.isEmpty();
     }
 
-    /**
-     * Applies the blend state for a program whose logical DRAWBUFFERS list is {@code drawBuffers}.
-     * Per-buffer OpenGL blend indices are output slots, so logical targets first map through the draw-buffer order.
-     */
+    // Applies the blend state for a program whose logical DRAWBUFFERS list is the one passed in
+    // The mapping matters: GL's per-buffer blend index is an OUTPUT SLOT, not a colortex number, so a directive
+    // naming colortex4 has to be translated through the draw-buffer order to find which slot that is. Using the
+    // colortex number directly would blend the wrong attachment
     public void apply(int[] drawBuffers) {
         if (!hasDirectives()) {
             return;

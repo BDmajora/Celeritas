@@ -11,58 +11,45 @@ import com.bdmajora.impetus.engine.impl.model.quad.properties.ModelQuadFlags;
 import com.bdmajora.impetus.engine.api.util.NormI8;
 import com.bdmajora.impetus.engine.impl.util.PositionUtil;
 
-/**
- * A light pipeline which produces smooth interpolated lighting and ambient occlusion for model quads. This
- * implementation makes a number of improvements over vanilla's own "smooth lighting" option. In no particular order:
- *
- * - Corner blocks are now selected from the correct set of neighbors above block faces (fixes MC-148689 and MC-12558)
- * - Shading issues caused by anisotropy are fixed by re-orientating quads to a consistent ordering (fixes MC-138211)
- * - Blocks next to emissive blocks are too bright (MC-260989)
- * - Synchronization issues between the main render thread's light engine and chunk build worker threads are corrected
- *   by copying light data alongside block states, fixing a number of inconsistencies in baked chunks (no open issue)
- *
- * This implementation also includes a significant number of optimizations:
- *
- * - Computed light data for a given block face is cached and re-used again when multiple quads exist for a given
- *   facing, making complex block models less expensive to render
- * - The light data cache encodes as much information as possible into integer words to improve cache locality and
- *   to eliminate the multiple array lookups that would otherwise be needed, significantly speeding up this section
- * - Block faces aligned to the block grid use a fast-path for mapping corner light values to vertices without expensive
- *   interpolation or blending, speeding up most block renders
- * - Some critical code paths have been re-written to hit the JVM's happy path, allowing it to perform auto-vectorization
- *   of the blend functions
- * - Information about a given model quad is cached to enable the light pipeline to make certain assumptions and skip
- *   unnecessary computation
- */
+// a light pipeline producing smooth interpolated lighting and ambient occlusion for model quads
+// this implementation makes a number of improvements over vanilla's own "smooth lighting" option, in no
+// particular order:
+//   corner blocks are now selected from the correct set of neighbours above block faces, fixing
+//   MC-148689 and MC-12558
+//   shading issues caused by anisotropy are fixed by re-orienting quads to a consistent ordering,
+//   fixing MC-138211
+//   blocks next to emissive blocks are too bright (MC-260989)
+//   synchronization issues between the main render thread's light engine and the chunk build worker
+//   threads are corrected by copying light data alongside block states, fixing a number of
+//   inconsistencies in baked chunks (no open issue)
+// it also includes a significant number of optimizations:
+//   computed light data for a given block face is cached and reused when several quads share a facing,
+//   making complex block models less expensive to render
+//   the light data cache encodes as much information as possible into integer words to improve cache
+//   locality and eliminate the multiple array lookups that would otherwise be needed
+//   block faces aligned to the block grid use a fast path for mapping corner light values to vertices,
+//   without expensive interpolation or blending
+//   some critical code paths have been rewritten to hit the JVM's happy path, letting it
+//   auto-vectorize the blend functions
+//   information about a given model quad is cached so the light pipeline can make certain assumptions
+//   and skip unnecessary computation
 public class SmoothLightPipeline implements LightPipeline {
-    /**
-     * The cache which light data will be accessed from.
-     */
+    // the cache the light data is read from
     private final LightDataAccess lightCache;
 
-    /**
-     * The cached face data for each side of a block, both inset and outset.
-     */
+    // the cached face data for each side of a block, both inset and outset
     private final AoFaceData[] cachedFaceData = new AoFaceData[6 * 2];
 
-    /**
-     * The position at which the cached face data was taken at.
-     */
+    // the position the cached face data was taken at
     private long cachedPos = Long.MIN_VALUE;
 
-    /**
-     * A temporary array for storing the intermediary results of weight data for non-aligned face blending.
-     */
+    // scratch array holding the intermediary weight data for non-aligned face blending
     private final float[] weights = new float[4];
 
-    /**
-     * Whether or not to even attempt to shade quads using their normals rather than light face.
-     */
+    // whether to even attempt to shade quads using their normals rather than their light face
     private final boolean useQuadNormalsForShading;
 
-    /**
-     * Used to retrieve the directional shading value for quads.
-     */
+    // supplies the directional shading value for quads
     private final DiffuseProvider diffuseProvider;
 
     private float lastAo, lastBl, lastSl;
@@ -119,21 +106,17 @@ public class SmoothLightPipeline implements LightPipeline {
         this.cachedPos = Long.MIN_VALUE;
     }
 
-    /**
-     * Quickly calculates the light data for a full grid-aligned quad. This represents the most common case (outward
-     * facing quads on a full-block model) and avoids interpolation between neighbors as each corner will only ever
-     * have two contributing sides.
-     * Flags: IS_ALIGNED, !IS_PARTIAL
-     */
+    // quickly calculates the light data for a full grid-aligned quad
+    // this is the most common case - outward facing quads on a full-block model - and avoids
+    // interpolation between neighbours, since each corner only ever has two contributing sides
+    // flags: IS_ALIGNED, !IS_PARTIAL
     private void applyAlignedFullFace(AoNeighborInfo neighborInfo, int x, int y, int z, ModelQuadFacing dir, QuadLightData out) {
         AoFaceData faceData = this.getCachedFaceData(x, y, z, dir, true);
         neighborInfo.mapCorners(faceData.lm, faceData.ao, out.lm, out.br);
     }
 
-    /**
-     * Calculates the light data for a grid-aligned quad that does not cover the entire block volume's face.
-     * Flags: IS_ALIGNED, IS_PARTIAL
-     */
+    // calculates the light data for a grid-aligned quad that does not cover the entire block volume's face
+    // flags: IS_ALIGNED, IS_PARTIAL
     private void applyAlignedPartialFace(AoNeighborInfo neighborInfo, ModelQuadView quad, int x, int y, int z, ModelQuadFacing dir, QuadLightData out) {
         for (int i = 0; i < 4; i++) {
             // Clamp the vertex positions to the block's boundaries to prevent weird errors in lighting
@@ -149,9 +132,7 @@ public class SmoothLightPipeline implements LightPipeline {
         }
     }
 
-    /**
-     * Flags: !IS_ALIGNED, !IS_PARALLEL
-     */
+    // flags: !IS_ALIGNED, !IS_PARALLEL
     private void applyNonParallelFace(AoNeighborInfo neighborInfo, ModelQuadView quad, int x, int y, int z, ModelQuadFacing dir,
                                       QuadLightData out, boolean applyAoDepthBlending) {
         for (int i = 0; i < 4; i++) {
@@ -300,9 +281,7 @@ public class SmoothLightPipeline implements LightPipeline {
         }
     }
 
-    /**
-     * Returns the cached data for a given facing or calculates it if it hasn't been cached.
-     */
+    // the cached data for a given facing, calculating it if it has not been cached yet
     private AoFaceData getCachedFaceData(int x, int y, int z, ModelQuadFacing face, boolean offset) {
         AoFaceData data = this.cachedFaceData[offset ? face.ordinal() : face.ordinal() + 6];
 
@@ -323,9 +302,7 @@ public class SmoothLightPipeline implements LightPipeline {
         }
     }
 
-    /**
-     * Clamps the given float to the range [0.0, 1.0].
-     */
+    // clamps the given float to the range [0.0, 1.0]
     private static float clamp(float v) {
         if (v < 0.0f) {
             return 0.0f;
@@ -336,9 +313,7 @@ public class SmoothLightPipeline implements LightPipeline {
         return v;
     }
 
-    /**
-     * Returns a texture coordinate on the light map texture for the given block and sky light values.
-     */
+    // the light map texture coordinate for the given block and sky light values
     private static int getLightMapCoord(float sl, float bl) {
         return (((int) sl & 0xFF) << 16) | ((int) bl & 0xFF);
     }

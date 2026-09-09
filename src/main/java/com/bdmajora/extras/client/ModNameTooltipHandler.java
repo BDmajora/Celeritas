@@ -16,18 +16,14 @@ import net.minecraftforge.fml.relauncher.SideOnly;
 import javax.annotation.Nullable;
 import java.util.List;
 
-/**
- * Appends the owning mod's display name to item tooltips, as mezz's ModNameTooltip does.
- *
- * <p>Runs off {@link ItemTooltipEvent}, which fires inside {@code ItemStack#getTooltip} — so it also
- * covers JEI/HEI ingredient tooltips, which gather their lines through the same call, with no
- * JEI-specific hook. {@link EventPriority#LOW} puts the line last, after every other mod has added
- * its own.
- */
+// appends the owning mod's display name to item tooltips, as mezz's ModNameTooltip does
+// runs off ItemTooltipEvent, which fires inside ItemStack#getTooltip, so it also covers JEI/HEI
+// ingredient tooltips - they gather their lines through the same call - with no JEI-specific hook
+// EventPriority#LOW puts the line last, after every other mod has added its own
 @Mod.EventBusSubscriber(Side.CLIENT)
 @SideOnly(Side.CLIENT)
 public final class ModNameTooltipHandler {
-    /** Blue italic — the conventional styling for this line. */
+    // Blue italic — the conventional styling for this line.
     private static final String FORMAT = TextFormatting.BLUE.toString() + TextFormatting.ITALIC;
 
     private ModNameTooltipHandler() {
@@ -68,12 +64,9 @@ public final class ModNameTooltipHandler {
         return container != null ? container.getName() : null;
     }
 
-    /**
-     * Whether the last line already is the mod name.
-     *
-     * <p>JEI reaches item tooltips through this same event and appends the mod name in its own
-     * overlay; this guard is what stops the two from stacking.
-     */
+    // whether the last line already is the mod name
+    // JEI reaches item tooltips through this same event and appends the mod name in its own overlay;
+    // this guard is what stops the two from stacking
     private static boolean alreadyPresent(List<String> tooltip, String modName) {
         if (tooltip.size() <= 1) {
             return false;

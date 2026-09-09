@@ -2,14 +2,16 @@ package com.bdmajora.impetus.umbra.shaderpack.materialmap;
 
 import java.util.Objects;
 
-/**
- * A {@code namespace:name} pair with the {@code minecraft} default — verbatim port of Umbra's {@code NamespacedId}.
- * Performs no validation; whatever converts these to registry lookups is responsible for that.
- */
+// A namespace:name pair, defaulting the namespace to `minecraft` when the pack wrote a bare name
+// Verbatim port of Iris's NamespacedId
+// Deliberately performs no validation: a pack's block.properties routinely names blocks from mods that are not
+// installed, and rejecting those here would fail the whole pack rather than skipping one line. Whatever resolves
+// these against the registry owns deciding what exists
 public final class NamespacedId {
     private final String namespace;
     private final String name;
 
+    // Splits on the FIRST colon only, so a name containing further colons keeps them
     public NamespacedId(String combined) {
         int colonIdx = combined.indexOf(':');
         if (colonIdx == -1) {
@@ -34,6 +36,7 @@ public final class NamespacedId {
         return this.name;
     }
 
+    // Both equals and hashCode are needed because these are map keys throughout the material mapping
     @Override
     public boolean equals(Object o) {
         if (this == o) {

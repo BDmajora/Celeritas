@@ -6,13 +6,10 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
-/**
- * Stops the piston structure resolver from cloning the facing array once per moved block.
- *
- * <p>{@code addBlockLine} walks the twelve-block push limit and asks for the facings at each step, so
- * a full slime-block contraption firing allocates one array per block it moves, per fire. Same
- * substitution as {@code piston_block}: the shared, never-mutated {@code EnumFacing.VALUES}.
- */
+// stops the piston structure resolver from cloning the facing array once per moved block
+// addBlockLine walks the twelve-block push limit and asks for the facings at each step, so a full
+// slime-block contraption firing allocates one array per block it moves, per fire
+// same substitution as piston_block: the shared, never-mutated EnumFacing.VALUES
 @Mixin(BlockPistonStructureHelper.class)
 public class BlockPistonStructureHelperMixin {
     @Redirect(

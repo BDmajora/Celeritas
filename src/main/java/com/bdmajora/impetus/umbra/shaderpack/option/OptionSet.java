@@ -6,13 +6,11 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * The complete, deduplicated set of configurable options discovered across a shader pack, split into boolean and
- * string options keyed by name. When duplicated options disagree, keep the first definition instead of deleting the
- * option entirely; several packs intentionally repeat an option across include paths, and dropping it leaves shader
- * preprocessor gates undefined. Ported from Umbra; guava maps replaced with unmodifiable {@link HashMap}s and
- * {@code Umbra.logger} with {@link Umbra#logger()}.
- */
+// Every configurable option found across a shader pack, deduplicated and split into boolean and string maps by name
+// Where Iris DROPS an option whose duplicate declarations disagree, this keeps the FIRST definition. Several packs
+// repeat an option across include paths on purpose, and dropping it leaves the preprocessor gates that reference it
+// undefined — which does not fail the compile, it silently takes the wrong branch
+// Ported from Iris; guava maps replaced with unmodifiable HashMaps
 public class OptionSet {
     private final Map<String, MergedBooleanOption> booleanOptions;
     private final Map<String, MergedStringOption> stringOptions;

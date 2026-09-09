@@ -3,25 +3,21 @@ package com.bdmajora.impetus.umbra.uniforms.custom;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * A compact recursive-descent parser for the custom-uniform expression language used by OptiFine/Umbra shader
- * packs (arithmetic, comparisons, boolean logic, ternary/if, a standard maths function set, and vec2/3/4
- * constructors). Original implementation for Impetus.
- *
- * <p>Grammar (loosely), lowest precedence first:
- * <pre>
- *   expr    := ternary
- *   ternary := or ( '?' expr ':' expr )?
- *   or      := and ( '||' and )*
- *   and     := equality ( '&amp;&amp;' equality )*
- *   equality:= comparison ( ('=='|'!=') comparison )*
- *   compare := additive ( ('&lt;'|'&gt;'|'&lt;='|'&gt;=') additive )*
- *   additive:= term ( ('+'|'-') term )*
- *   term    := unary ( ('*'|'/'|'%') unary )*
- *   unary   := ('-'|'!')* primary
- *   primary := number | ident | ident '(' args ')' | '(' expr ')'
- * </pre>
- */
+// A compact recursive-descent parser for the custom-uniform expression language OptiFine and Iris packs use:
+// arithmetic, comparisons, boolean logic, ternary and if, a standard maths function set, and vec2/3/4 constructors
+// Original implementation for Impetus rather than a port
+//
+// The grammar, lowest precedence first — each rule below calls the next one down, which is what encodes precedence
+//   expr     := ternary
+//   ternary  := or ( '?' expr ':' expr )?
+//   or       := and ( '||' and )*
+//   and      := equality ( '&&' equality )*
+//   equality := comparison ( ('=='|'!=') comparison )*
+//   compare  := additive ( ('<'|'>'|'<='|'>=') additive )*
+//   additive := term ( ('+'|'-') term )*
+//   term     := unary ( ('*'|'/'|'%') unary )*
+//   unary    := ('-'|'!')* primary
+//   primary  := number | ident | ident '(' args ')' | '(' expr ')'
 public final class ExpressionParser {
     public static final class ParseException extends RuntimeException {
         public ParseException(String message) {
@@ -31,7 +27,9 @@ public final class ExpressionParser {
 
     private final String source;
     private int pos;
-    /** Running count of {@code smooth()} calls, so each gets a stable persistent-state slot. */
+    // Running count of smooth() calls seen, handing each a distinct persistent-state slot
+    // Stable across a parse, and the slot is baked into the compiled expression — so one uniform's several smooth()
+    // calls keep separate histories instead of overwriting each other every frame
     private int smoothCallCount;
 
     private ExpressionParser(String source) {
@@ -512,10 +510,9 @@ public final class ExpressionParser {
 
     // --- lexer helpers ---
 
-    /**
-     * Maps a swizzle suffix ({@code y}, {@code xz}, {@code rgb}) to component indices, or {@code null} when the
-     * suffix is not a pure swizzle (e.g. matrix cell access like {@code m.0.1}, which stays unresolvable).
-     */
+    // Maps a swizzle suffix — y, xz, rgb — to component indices
+    // Null when the suffix is not a pure swizzle at all, e.g. matrix cell access like m.0.1, which this expression
+    // language cannot resolve and which the caller then reports rather than silently mis-reading as a swizzle
     private static int[] swizzleIndices(String suffix) {
         if (suffix.isEmpty() || suffix.length() > 4 || suffix.indexOf('.') >= 0) {
             return null;

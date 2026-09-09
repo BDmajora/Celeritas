@@ -18,22 +18,19 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 
-/**
- * A parsed {@code shaders.properties} file (OptiFine format).
- * <p>
- * 1.12.2 packs use the classic OptiFine directives. Rather than enumerate every possible key, this parser keeps the
- * full key/value map and layers typed accessors over the handful of directives the pipeline actually consumes
- * (shadow configuration, cloud mode, per-program blend modes, per-program enable toggles, custom textures). Unknown
- * keys are preserved verbatim so later phases can read them without re-parsing.
- * <p>
- * Umbra parity ({@code ShaderProperties} loads both a preprocessed and an original Properties object): the pipeline
- * directives are read from the <em>preprocessed</em> contents, so {@code #if MC_VERSION}/option-gated sections
- * resolve correctly — while the option-menu layout directives ({@code sliders}, {@code profile.*}, {@code screen*})
- * are read from the <em>original</em> contents, since the menu must show every option regardless of current values.
- * <p>
- * Parsing is deliberately a simple split-on-first-{@code =}: it avoids {@link java.util.Properties}' backslash-escape
- * surprises, which matter because GLSL-adjacent values occasionally contain {@code \}.
- */
+// A parsed shaders.properties file, in OptiFine's format
+// The parser keeps the FULL key/value map and layers typed accessors over the handful of directives the pipeline
+// actually consumes — shadow configuration, cloud mode, per-program blend modes and enable toggles, custom
+// textures. Unknown keys are preserved verbatim, so a later consumer can read one without re-parsing the file
+//
+// Two copies are parsed, matching Iris, and which one a directive comes from is load-bearing
+//   the pipeline directives come from the PREPROCESSED contents, so #if MC_VERSION and option-gated sections
+//   resolve to what will actually run
+//   the option-menu layout directives — sliders, profile.*, screen* — come from the ORIGINAL contents, because the
+//   menu has to present every option regardless of the values currently active
+//
+// Parsing is a deliberate split-on-first-=, not java.util.Properties, whose backslash-escape handling would mangle
+// the GLSL-adjacent values that occasionally contain one
 public final class ShaderProperties {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
     private static final List<String> LEGACY_RENDER_TARGETS =
@@ -53,39 +50,42 @@ public final class ShaderProperties {
     private final Map<String, Integer> subScreenColumnCount = new HashMap<>();
 
     // --- Custom texture directives (Umbra ShaderProperties parity) ---
-    /** {@code texture.noise = <path>} — replaces the generated noisetex. */
+    // texture.noise — the pack's own noise texture, replacing the generated noisetex
     private String noiseTexturePath = null;
-    /** {@code texture.<stage>.<sampler> = <path>} — per-stage sampler overrides, keyed by stage then sampler name. */
+    // texture.<stage>.<sampler> — per-stage sampler overrides, keyed by stage and then by sampler name
     private final Map<TextureStage, Map<String, String>> customTextures = new EnumMap<>(TextureStage.class);
-    /** {@code customTexture.<name> = <path>} — pack-defined named samplers, bound in every stage. */
+    // customTexture.<name> — pack-defined named samplers, bound in every stage rather than scoped to one
     private final Map<String, String> irisCustomTextures = new LinkedHashMap<>();
-    /**
-     * Raw {@code texture.<stage>.<sampler>} directives resolved to a minted {@code customtexN} sampler plus the
-     * type-checked rename that redirects the stage's programs to it (Umbra {@code customTexturePatching}).
-     */
+    // Raw texture.<stage>.<sampler> directives resolved into a minted customtexN sampler plus the type-checked
+    // rename that redirects that stage's programs onto it — Iris's customTexturePatching
+    // The type check is what keeps a 3D texture from being fed to a sampler2D of the same name; see
+    // CustomTexturePatch
     private final List<com.bdmajora.impetus.umbra.shaderpack.texture.CustomTexturePatch> customTexturePatches =
             new ArrayList<>();
-    /** Counter behind the minted {@code customtexN} names; Umbra's {@code customTexAmount}. */
+    // The counter behind the minted customtexN names, matching Iris's customTexAmount
     private int customTexAmount = 0;
-    /** {@code size.buffer.colortexN = <w> <h>} — explicit render-target sizes, absolute or screen-relative. */
+    // size.buffer.colortexN — explicit render-target sizes, either absolute texels or screen-relative fractions
     private final Map<Integer, float[]> bufferSizes = new LinkedHashMap<>();
-    /** Per axis, whether the {@link #bufferSizes} entry is a fraction of the render size rather than a texel count. */
+    // Per AXIS, whether the matching bufferSizes entry is a fraction of the render size rather than a texel count —
+    // per axis because `512 0.5` is a legal mix
     private final Map<Integer, boolean[]> bufferSizeRelative = new LinkedHashMap<>();
-    /** {@code image.<name> = ...} — writable custom images (imageStore), declaration order. */
+    // image.<name> — the writable custom images a pack reaches through imageStore, kept in DECLARATION ORDER since
+    // that is the order their image units are assigned in
     private final List<com.bdmajora.impetus.umbra.shaderpack.texture.CustomImageDefinition> irisCustomImages =
             new ArrayList<>();
-    /** {@code flip.<program>.<target> = true|false}, including {@code deferred_pre}/{@code composite_pre}. */
+    // flip.<program>.<target> — explicit ping-pong overrides, including the deferred_pre and composite_pre
+    // pseudo-programs that run before their respective chains
     private final Map<String, Map<Integer, Boolean>> explicitFlips = new LinkedHashMap<>();
-    /**
-     * {@code scale.<program> = <factor> [offsetX offsetY]} — Umbra's {@code viewportScaleOverrides}. A fullscreen pass
-     * so marked rasterises into a sub-rectangle of its targets instead of the whole buffer, which packs use to run
-     * expensive passes (SSAO, volumetrics) at reduced resolution without declaring a smaller buffer. Distinct from
-     * {@code size.buffer.colortexN}: that resizes the target itself, this only shrinks the viewport written into it.
-     * Values are {@code {scale, offsetX, offsetY}}.
-     */
+    // scale.<program> — Iris's viewportScaleOverrides. A fullscreen pass marked this way rasterises into a
+    // SUB-RECTANGLE of its targets instead of the whole buffer, which is how packs run expensive passes like SSAO
+    // and volumetrics at reduced resolution without declaring a smaller buffer
+    // Distinct from size.buffer.colortexN: that resizes the target itself, this only shrinks the viewport written
+    // into it, leaving the rest of the target holding whatever was there before
+    // Stored as {scale, offsetX, offsetY}
     private final Map<String, float[]> viewportScaleOverrides = new LinkedHashMap<>();
 
-    /** {@code uniform.<type>.<name>} / {@code variable.<type>.<name>} custom uniform expressions. */
+    // The uniform.<type>.<name> and variable.<type>.<name> custom expressions, accumulated into a builder because
+    // declaration order matters for their evaluation
     private final com.bdmajora.impetus.umbra.uniforms.custom.CustomUniforms.Builder customUniforms =
             new com.bdmajora.impetus.umbra.uniforms.custom.CustomUniforms.Builder();
 
@@ -105,17 +105,16 @@ public final class ShaderProperties {
                 Collections.emptyMap(), Collections.emptySet());
     }
 
-    /** Parses without conditional evaluation — every {@code #if}-guarded line is read, last one wins. */
+    // Parses with NO conditional evaluation: every #if-guarded line is read and the last one wins
+    // Only for callers that have no define set to resolve against; the pipeline always uses the two-argument form
     public static ShaderProperties parse(String contents) {
         Map<String, String> map = parseMap(contents);
         return new ShaderProperties(map, map, Collections.emptyMap(), Collections.emptySet());
     }
 
-    /**
-     * @param original     the file exactly as shipped (menu-layout directives come from here, Umbra parity).
-     * @param preprocessed the file with conditionals resolved for the active defines/option values (everything the
-     *                     pipeline consumes comes from here).
-     */
+    // original is the file exactly as shipped, and the menu-layout directives are read from it
+    // preprocessed is the same file with conditionals resolved against the active defines and option values, and
+    // everything the pipeline consumes is read from that
     public static ShaderProperties parse(String original, String preprocessed) {
         return parse(original, preprocessed, Collections.emptyMap(), Collections.emptySet());
     }
@@ -151,10 +150,8 @@ public final class ShaderProperties {
         return map;
     }
 
-    /**
-     * Parses {@code uniform.<type>.<name> = <expr>} and {@code variable.<type>.<name> = <expr>} directives into the
-     * custom-uniforms builder. Mirrors Umbra's ShaderProperties handling of the same keys.
-     */
+    // Parses the uniform.<type>.<name> and variable.<type>.<name> directives into the custom-uniforms builder,
+    // mirroring how Iris handles the same keys
     private void parseCustomUniformDirectives() {
         this.raw.forEach((key, value) -> {
             boolean isUniform = key.startsWith("uniform.");
@@ -175,21 +172,21 @@ public final class ShaderProperties {
         });
     }
 
-    /** {@return the collected custom uniform/variable declarations} */
+    // The collected custom uniform and variable declarations, still as a builder so the pipeline can finish them
     public com.bdmajora.impetus.umbra.uniforms.custom.CustomUniforms.Builder getCustomUniforms() {
         return this.customUniforms;
     }
 
-    /** {@return the raw preprocessed key→value directives (read-only view)} */
+    // The raw preprocessed key/value directives, as a read-only view — this is what the accessors below read from,
+    // and what a consumer uses for a key none of them cover
     public Map<String, String> getRaw() {
         return Collections.unmodifiableMap(this.raw);
     }
 
-    /**
-     * Parses the option-menu layout directives ({@code sliders}, {@code profile.*}, {@code screen}, {@code screen.*},
-     * {@code screen.columns}, {@code screen.*.columns}) from the ORIGINAL (non-preprocessed) contents — the menu must
-     * present every option regardless of the currently active values. Mirrors Umbra's ShaderProperties handling.
-     */
+    // Parses the option-menu layout directives — sliders, profile.*, screen, screen.*, and the column counts — from
+    // the ORIGINAL non-preprocessed contents
+    // From the original because the menu has to present every option regardless of which values are currently
+    // active: reading the preprocessed copy would hide exactly the options a user needs the menu to change
     private void parseMenuDirectives(Map<String, String> original) {
         original.forEach((key, value) -> {
             if (key.equals("sliders")) {
@@ -213,17 +210,13 @@ public final class ShaderProperties {
         });
     }
 
-    /**
-     * Parses the custom-texture directives, mirroring Umbra's {@code ShaderProperties} handling:
-     * <ul>
-     * <li>{@code texture.noise = <path>};</li>
-     * <li>{@code texture.<stage>.<sampler> = <path>} — the sampler segment may carry a {@code .N} suffix (OptiFine
-     * mip-level syntax); like Umbra, only the base name before the first {@code .} is kept;</li>
-     * <li>{@code customTexture.<name> = <path>} — Umbra-exclusive named samplers, available in every stage.</li>
-     * </ul>
-     * Multi-token values are Umbra raw-texture definitions ({@code <path> <type> <format> ...}) and are resolved when
-     * the shader pack loads its texture data.
-     */
+    // Parses the custom-texture directives, mirroring Iris
+    //   texture.noise — the replacement noisetex
+    //   texture.<stage>.<sampler> — where the sampler segment may carry a .N suffix, OptiFine's mip-level syntax;
+    //   as in Iris only the base name before the first . is kept
+    //   customTexture.<name> — Iris-exclusive named samplers, live in every stage
+    // A multi-token value is an Iris raw-texture definition, <path> <type> <format> ..., and is resolved later when
+    // the pack loads its texture data rather than here
     private void parseCustomTextureDirectives() {
         this.raw.forEach((key, value) -> {
             if (key.equals("texture.noise")) {
@@ -290,11 +283,9 @@ public final class ShaderProperties {
         });
     }
 
-    /**
-     * The texture target of a raw {@code texture.*} definition, from its token count — the same rule as Umbra's
-     * {@code ShaderProperties}: 6 tokens is 1D ({@code <path> <type> <format> <w> <pixelFormat> <pixelType>}), 7 is
-     * whatever {@code <type>} says (2D or rectangle), 8 is 3D. Anything else is malformed.
-     */
+    // The texture target of a raw texture.* definition, inferred from its TOKEN COUNT — the same rule Iris uses
+    // 6 tokens is 1D, being <path> <type> <format> <w> <pixelFormat> <pixelType>; 7 is whatever <type> itself says,
+    // 2D or rectangle; 8 is 3D. Anything else is malformed
     private static String rawTextureType(String[] parts) {
         switch (parts.length) {
             case 6:
@@ -308,11 +299,9 @@ public final class ShaderProperties {
         }
     }
 
-    /**
-     * {@code size.buffer.colortexN = <width> <height>}. Umbra treats a pair that parses as integers as an absolute
-     * texel count and anything else as a fraction of the render size, so {@code 512 512} is a fixed 512x512 buffer
-     * while {@code 0.5 0.5} is half-resolution.
-     */
+    // size.buffer.colortexN = <width> <height>
+    // Iris decides absolute-versus-relative by whether the token parses as an INTEGER, so `512 512` is a fixed
+    // 512x512 buffer while `0.5 0.5` is half resolution — and the decision is made per axis
     private void parseBufferSize(String key, String value) {
         String targetName = key.substring("size.buffer.".length()).trim();
         Integer index = colorTargetIndex(targetName);
@@ -348,10 +337,9 @@ public final class ShaderProperties {
         }
     }
 
-    /**
-     * Resolves an option macro used where a number is expected. Returns the token unchanged when it already looks
-     * numeric or when the pack defines no such option, in which case the caller's parse fails and warns.
-     */
+    // Resolves an option macro appearing where a number is expected, since packs size buffers by their own options
+    // Returns the token unchanged when it already looks numeric, or when the pack defines no such option — in which
+    // case the caller's own parse fails and warns, naming the directive
     private String resolveNumericMacro(String token) {
         if (token.isEmpty() || Character.isDigit(token.charAt(0)) || token.charAt(0) == '.'
                 || token.charAt(0) == '-') {
@@ -361,15 +349,13 @@ public final class ShaderProperties {
         return resolved == null ? token : resolved.trim();
     }
 
-    /**
-     * Explicit render-target sizes. The value is {@code {width, height}}, in texels when
-     * {@link #isBufferSizeRelative} is false and as a fraction of the render size when it is true.
-     */
+    // The explicit render-target sizes as {width, height} — texels or fractions depending on the per-axis relative
+    // flags, which have to be read alongside these
     public Map<Integer, float[]> getBufferSizes() {
         return Collections.unmodifiableMap(this.bufferSizes);
     }
 
-    /** @return {@code {xRelative, yRelative}} for the target, or {@code {false, false}} when it declares no size. */
+    // The {xRelative, yRelative} pair for one target, or {false, false} when it declares no size at all
     public boolean[] getBufferSizeRelative(int index) {
         boolean[] flags = this.bufferSizeRelative.get(index);
         return flags == null ? new boolean[]{false, false} : flags.clone();
@@ -397,11 +383,10 @@ public final class ShaderProperties {
                 .put(target, shouldFlip.get());
     }
 
-    /**
-     * {@code scale.<program> = <factor> [offsetX offsetY]}. Umbra parses the offsets as a pair, so a directive with
-     * exactly two tokens is malformed rather than "scale plus one offset" — reject it instead of guessing, matching
-     * Umbra's {@code ArrayIndexOutOfBoundsException} branch, which logs and drops the whole directive.
-     */
+    // scale.<program> = <factor> [offsetX offsetY]
+    // Iris parses the offsets as a PAIR, so a directive with exactly two tokens is malformed rather than meaning
+    // "scale plus one offset" — it is rejected here rather than guessed at, matching Iris's own
+    // ArrayIndexOutOfBoundsException branch, which logs and drops the whole directive
     private void parseViewportScale(String key, String value) {
         String program = key.substring("scale.".length());
         if (program.isEmpty()) {
@@ -423,9 +408,7 @@ public final class ShaderProperties {
         }
     }
 
-    /**
-     * {@return the {@code {scale, offsetX, offsetY}} override for a fullscreen pass, or {@code null} for none}
-     */
+    // The {scale, offsetX, offsetY} override for one fullscreen pass, or null when it has none
     public float[] getViewportScale(String programName) {
         return this.viewportScaleOverrides.get(programName);
     }
@@ -460,27 +443,30 @@ public final class ShaderProperties {
         }
     }
 
-    /** @return the raw, unmodifiable directive map in declaration order. */
+    // The raw directive map, unmodifiable and in declaration order
     public Map<String, String> asMap() {
         return Collections.unmodifiableMap(this.raw);
     }
 
-    /** Option names that should be rendered as sliders (cycling through allowed values) rather than click-to-cycle. */
+    // The options the pack wants rendered as sliders rather than click-to-cycle buttons — a presentation choice
+    // only, since both controls walk the same allowed-value list
     public List<String> getSliderOptions() {
         return Collections.unmodifiableList(this.sliderOptions);
     }
 
-    /** Declared profiles, in declaration order, each mapping to its list of option directives. */
+    // The declared profiles in declaration order, each mapping to its own list of option directives — order is what
+    // makes next/previous cycling through presets meaningful
     public Map<String, List<String>> getProfiles() {
         return Collections.unmodifiableMap(this.profiles);
     }
 
-    /** The main option screen's element layout, if the pack declares one. */
+    // The main option screen's element layout, empty when the pack declares none — in which case the screen is
+    // generated from the discovered options instead
     public Optional<List<String>> getMainScreenOptions() {
         return Optional.ofNullable(this.mainScreenOptions);
     }
 
-    /** Sub-screen layouts keyed by sub-screen name. */
+    // The sub-screen layouts, keyed by sub-screen name
     public Map<String, List<String>> getSubScreenOptions() {
         return Collections.unmodifiableMap(this.subScreenOptions);
     }
@@ -499,22 +485,22 @@ public final class ShaderProperties {
 
     // --- Typed pipeline-relevant accessors ---
 
-    /** {@code shadowMapResolution} — square shadow map size in texels, if specified. */
+    // shadowMapResolution — the square shadow map's edge length in texels, empty when unspecified
     public OptionalInt getShadowMapResolution() {
         return getInt("shadowMapResolution");
     }
 
-    /** {@code shadowDistance} — shadow render distance in blocks, if specified. */
+    // shadowDistance — how far the shadow map reaches, in blocks, empty when unspecified
     public OptionalInt getShadowDistance() {
         return getInt("shadowDistance");
     }
 
-    /** {@code shadow.enabled} — explicit shadow toggle, if specified. */
+    // shadow.enabled — the pack's explicit shadow toggle, empty when it states no preference
     public Optional<Boolean> getShadowEnabled() {
         return getBoolean("shadow.enabled");
     }
 
-    /** {@code clouds} = off | fast | fancy, if specified. */
+    // clouds = off | fast | fancy, empty when the pack leaves the player's own setting alone
     public Optional<String> getCloudMode() {
         return get("clouds").map(s -> s.toLowerCase(Locale.ROOT));
     }
@@ -523,147 +509,144 @@ public final class ShaderProperties {
     // OptiFine's shaders.properties lets a pack suppress vanilla world features it draws itself. Every one of these
     // is a plain true/false key; absent means "leave vanilla alone".
 
-    /** {@code sun} — draw the vanilla sun quad. Packs that render their own celestial bodies set this false. */
+    // sun — draw the vanilla sun quad. Packs that render their own celestial bodies set this false.
     public Optional<Boolean> getRenderSun() {
         return getBoolean("sun");
     }
 
-    /** {@code moon} — draw the vanilla moon quad. */
+    // moon — draw the vanilla moon quad.
     public Optional<Boolean> getRenderMoon() {
         return getBoolean("moon");
     }
 
-    /** {@code stars} — draw the vanilla star field (Umbra extension; OptiFine folds stars into the sky). */
+    // stars — draw the vanilla star field (Umbra extension; OptiFine folds stars into the sky).
     public Optional<Boolean> getRenderStars() {
         return getBoolean("stars");
     }
 
-    /** {@code sky} — draw the vanilla sky dome/void plane at all (Umbra extension). */
+    // sky — draw the vanilla sky dome/void plane at all (Umbra extension).
     public Optional<Boolean> getRenderSky() {
         return getBoolean("sky");
     }
 
-    /** {@code vignette} — draw vanilla's screen vignette overlay. */
+    // vignette — draw vanilla's screen vignette overlay.
     public Optional<Boolean> getRenderVignette() {
         return getBoolean("vignette");
     }
 
-    /** {@code underwaterOverlay} — draw vanilla's underwater texture overlay. */
+    // underwaterOverlay — draw vanilla's underwater texture overlay.
     public Optional<Boolean> getRenderUnderwaterOverlay() {
         return getBoolean("underwaterOverlay");
     }
 
-    /** {@code weather} — draw vanilla rain/snow particles (Umbra extension). */
+    // weather — draw vanilla rain/snow particles (Umbra extension).
     public Optional<Boolean> getRenderWeather() {
         return getBoolean("weather");
     }
 
-    /** {@code beacon.beam.depth} — whether the beacon beam writes depth. */
+    // beacon.beam.depth — whether the beacon beam writes depth.
     public Optional<Boolean> getBeaconBeamDepth() {
         return getBoolean("beacon.beam.depth");
     }
 
-    /** {@code rain.depth} — whether rain/snow writes depth. */
+    // rain.depth — whether rain/snow writes depth.
     public Optional<Boolean> getRainDepth() {
         return getBoolean("rain.depth");
     }
 
-    /** {@code separateAo} — feed vanilla's ambient occlusion as vertex colour separately from block light. */
+    // separateAo — feed vanilla's ambient occlusion as vertex colour separately from block light.
     public Optional<Boolean> getSeparateAo() {
         return getBoolean("separateAo");
     }
 
-    /** {@code oldLighting} — keep vanilla's fixed-function directional block shading. */
+    // oldLighting — keep vanilla's fixed-function directional block shading.
     public Optional<Boolean> getOldLighting() {
         return getBoolean("oldLighting");
     }
 
-    /** {@code oldHandLight} — use the legacy held-light behaviour instead of {@code heldBlockLightValue}. */
+    // oldHandLight — use the legacy held-light behaviour instead of heldBlockLightValue.
     public Optional<Boolean> getOldHandLight() {
         return getBoolean("oldHandLight");
     }
 
-    /** {@code dynamicHandLight} — let the held item emit light through the {@code heldBlockLightValue} uniform. */
+    // dynamicHandLight — let the held item emit light through the heldBlockLightValue uniform.
     public Optional<Boolean> getDynamicHandLight() {
         return getBoolean("dynamicHandLight");
     }
 
-    /** {@code frustum.culling} — allow vanilla frustum culling in the main pass. */
+    // frustum.culling — allow vanilla frustum culling in the main pass.
     public Optional<Boolean> getFrustumCulling() {
         return getBoolean("frustum.culling");
     }
 
-    /** {@code occlusion.culling} — allow vanilla occlusion culling in the main pass. */
+    // occlusion.culling — allow vanilla occlusion culling in the main pass.
     public Optional<Boolean> getOcclusionCulling() {
         return getBoolean("occlusion.culling");
     }
 
-    /** {@code backFace.solid|cutout|cutoutMipped|translucent} — per-terrain-layer back-face culling override. */
+    // backFace.solid|cutout|cutoutMipped|translucent — per-terrain-layer back-face culling override.
     public Optional<Boolean> getBackFaceCulling(String layer) {
         return getBoolean("backFace." + layer);
     }
 
     // ------------------------------------------------------------------ shadow pass content
 
-    /** {@code shadowTerrain} — draw terrain into the shadow map. */
+    // shadowTerrain — draw terrain into the shadow map.
     public Optional<Boolean> getShadowTerrain() {
         return getBoolean("shadowTerrain");
     }
 
-    /** {@code shadowTranslucent} — draw translucent terrain into the shadow map (colored/water shadows). */
+    // shadowTranslucent — draw translucent terrain into the shadow map (colored/water shadows).
     public Optional<Boolean> getShadowTranslucent() {
         return getBoolean("shadowTranslucent");
     }
 
-    /** {@code shadowEntities} — draw entities into the shadow map. */
+    // shadowEntities — draw entities into the shadow map.
     public Optional<Boolean> getShadowEntities() {
         return getBoolean("shadowEntities");
     }
 
-    /** {@code shadowBlockEntities} — draw block entities (TESRs) into the shadow map. */
+    // shadowBlockEntities — draw block entities (TESRs) into the shadow map.
     public Optional<Boolean> getShadowBlockEntities() {
         return getBoolean("shadowBlockEntities");
     }
 
-    /** {@code shadowLightBlockEntities} — draw only light-emitting block entities into the shadow map. */
+    // shadowLightBlockEntities — draw only light-emitting block entities into the shadow map.
     public Optional<Boolean> getShadowLightBlockEntities() {
         return getBoolean("shadowLightBlockEntities");
     }
 
-    /** {@code shadowPlayer} — draw the player model into the shadow map. */
+    // shadowPlayer — draw the player model into the shadow map.
     public Optional<Boolean> getShadowPlayer() {
         return getBoolean("shadowPlayer");
     }
 
-    /**
-     * {@code shadow.culling} = {@code on} | {@code off} | {@code reversed}. Both Photon and Complementary ask for
-     * {@code reversed}, which keeps geometry between the light and the camera that a normal frustum test would drop.
-     */
+    // shadow.culling = on | off | reversed
+    // both Photon and Complementary ask for reversed, which keeps geometry between the light and the
+    // camera that a normal frustum test would drop
     public Optional<String> getShadowCulling() {
         return get("shadow.culling").map(s -> s.toLowerCase(Locale.ROOT));
     }
 
     // ------------------------------------------------------------------ pipeline behaviour flags
 
-    /** {@code voxelizeLightBlocks} — submit light-emitting blocks to the shadow pass for voxelization. */
+    // voxelizeLightBlocks — submit light-emitting blocks to the shadow pass for voxelization.
     public Optional<Boolean> getVoxelizeLightBlocks() {
         return getBoolean("voxelizeLightBlocks");
     }
 
-    /** {@code separateEntityDraws} — draw entities in their own pass, after the deferred chain. */
+    // separateEntityDraws — draw entities in their own pass, after the deferred chain.
     public Optional<Boolean> getSeparateEntityDraws() {
         return getBoolean("separateEntityDraws");
     }
 
-    /**
-     * {@code particles.ordering} = {@code mixed} | {@code after} | {@code before}, falling back to OptiFine's older
-     * {@code particles.before.deferred} boolean.
-     * <p>
-     * Umbra honours both, with the newer directive winning when present ({@code ShaderProperties} only applies
-     * {@code particles.before.deferred} while the setting is still {@code UNSET}). The legacy spelling is not a dead
-     * letter here: MakeUp-UltraFast and E-LITE both declare {@code particles.before.deferred = true} and nothing else,
-     * so ignoring it left their particles drawing after the deferred chain instead of before it.
-     */
+    // particles.ordering = mixed | after | before, falling back to OptiFine's older
+    // particles.before.deferred boolean
+    // both are honoured, with the newer directive winning when present - particles.before.deferred is
+    // only applied while the setting is still UNSET
+    // the legacy spelling is not a dead letter here: MakeUp-UltraFast and E-LITE both declare
+    // particles.before.deferred = true and nothing else, so ignoring it left their particles drawing
+    // after the deferred chain instead of before it
     public Optional<String> getParticleOrdering() {
         Optional<String> ordering = get("particles.ordering").map(s -> s.toLowerCase(Locale.ROOT));
         if (ordering.isPresent()) {
@@ -674,87 +657,79 @@ public final class ShaderProperties {
                 : Optional.empty();
     }
 
-    /** {@code prepareBeforeShadow} — run the prepare family before the shadow map instead of after. */
+    // prepareBeforeShadow — run the prepare family before the shadow map instead of after.
     public Optional<Boolean> getPrepareBeforeShadow() {
         return getBoolean("prepareBeforeShadow");
     }
 
-    /** {@code allowConcurrentCompute} — skip the memory barrier between consecutive compute dispatches. */
+    // allowConcurrentCompute — skip the memory barrier between consecutive compute dispatches.
     public Optional<Boolean> getAllowConcurrentCompute() {
         return getBoolean("allowConcurrentCompute");
     }
 
-    /** {@code supportsColorCorrection} — the pack handles the output colour space itself. */
+    // supportsColorCorrection — the pack handles the output colour space itself.
     public Optional<Boolean> getSupportsColorCorrection() {
         return getBoolean("supportsColorCorrection");
     }
 
-    /**
-     * {@code breaksAnisotropy} — the pack is incompatible with anisotropic filtering on the block atlas. Parsed for
-     * parity only, and unused: this renderer never anisotropically filters the atlas (see BlockAtlasFiltering).
-     */
+    // breaksAnisotropy - the pack is incompatible with anisotropic filtering on the block atlas
+    // parsed for parity only and unused: this renderer never anisotropically filters the atlas, see
+    // BlockAtlasFiltering
     public Optional<Boolean> getBreaksAnisotropy() {
         return getBoolean("breaksAnisotropy");
     }
 
-    /** {@code skipAllRendering} — draw nothing but the composite chain (debug/benchmark packs). */
+    // skipAllRendering — draw nothing but the composite chain (debug/benchmark packs).
     public Optional<Boolean> getSkipAllRendering() {
         return getBoolean("skipAllRendering");
     }
 
-    /**
-     * {@code fallbackTex} — the texture index a pack nominates as the stand-in for a sampler it did not bind.
-     * Parsed and exposed for parity; Umbra likewise parses it and has no consumer, so nothing reads it here either.
-     */
+    // fallbackTex - the texture index a pack nominates as the stand-in for a sampler it did not bind
+    // parsed and exposed for parity; Umbra likewise parses it and has no consumer, so nothing reads it
+    // here either
     public OptionalInt getFallbackTex() {
         return getInt("fallbackTex");
     }
 
-    /**
-     * Per-program alpha test override, e.g. {@code alphaTest.gbuffers_water = GREATER 0.0001} or
-     * {@code alphaTest.gbuffers_terrain = off}.
-     */
+    // per-program alpha test override, e.g. alphaTest.gbuffers_water = GREATER 0.0001, or
+    // alphaTest.gbuffers_terrain = off
     public Optional<String> getAlphaTestOverride(String programName) {
         return get("alphaTest." + programName);
     }
 
-    /** {@code texture.noise} — pack path of the PNG that replaces the generated noisetex, if specified. */
+    // texture.noise — pack path of the PNG that replaces the generated noisetex, if specified.
     public Optional<String> getNoiseTexturePath() {
         return Optional.ofNullable(this.noiseTexturePath);
     }
 
-    /** {@code texture.<stage>.<sampler>} overrides: stage → (sampler name → pack path / resource location). */
+    // texture.<stage>.<sampler> overrides: stage → (sampler name → pack path / resource location).
     public Map<TextureStage, Map<String, String>> getCustomTextures() {
         return Collections.unmodifiableMap(this.customTextures);
     }
 
-    /** {@code customTexture.<name>} definitions: sampler name → pack path / resource location (all stages). */
+    // customTexture.<name> definitions: sampler name → pack path / resource location (all stages).
     public Map<String, String> getUmbraCustomTextures() {
         return Collections.unmodifiableMap(this.irisCustomTextures);
     }
 
-    /** Raw {@code texture.<stage>.<sampler>} directives as type-checked sampler renames (see the patch's javadoc). */
+    // Raw texture.<stage>.<sampler> directives as type-checked sampler renames (see the patch's javadoc).
     public List<com.bdmajora.impetus.umbra.shaderpack.texture.CustomTexturePatch> getCustomTexturePatches() {
         return Collections.unmodifiableList(this.customTexturePatches);
     }
 
-    /** {@code image.<name>} definitions in declaration order (Umbra custom writable images). */
+    // image.<name> definitions in declaration order (Umbra custom writable images).
     public List<com.bdmajora.impetus.umbra.shaderpack.texture.CustomImageDefinition> getUmbraCustomImages() {
         return Collections.unmodifiableList(this.irisCustomImages);
     }
 
-    /**
-     * Per-program blend override, e.g. {@code blend.composite2 = SRC_ALPHA ONE_MINUS_SRC_ALPHA} or {@code blend.water = off}.
-     *
-     * @param programName the program source name, e.g. {@code composite2}
-     */
+    // per-program blend override, e.g. blend.composite2 = SRC_ALPHA ONE_MINUS_SRC_ALPHA, or
+    // blend.water = off
+    // programName is the program source name, e.g. composite2
     public Optional<String> getBlendModeOverride(String programName) {
         return get("blend." + programName);
     }
 
-    /**
-     * Per-program enable toggle, e.g. {@code program.composite4.enabled = false}.
-     */
+    // per-program enable toggle, e.g. program.composite4.enabled = false
     public Optional<Boolean> getProgramEnabled(String programName) {
         if (isProfileDisabled(programName)) {
             return Optional.of(Boolean.FALSE);

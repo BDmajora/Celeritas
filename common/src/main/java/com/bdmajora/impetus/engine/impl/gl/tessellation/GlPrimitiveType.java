@@ -4,12 +4,9 @@ import com.bdmajora.impetus.lwjgl.GL11;
 import com.bdmajora.impetus.lwjgl.GL30;
 import com.bdmajora.impetus.lwjgl.GL32;
 import com.bdmajora.impetus.lwjgl.GL40;
-import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
 
-/**
- * An enumeration over the supported OpenGL primitive types.
- */
+// The primitive topologies the terrain renderer draws with, each carrying its GL enum
 public enum GlPrimitiveType {
     POINTS(GL11.GL_POINTS),
 

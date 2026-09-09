@@ -3,31 +3,31 @@ package com.bdmajora.impetus.umbra.terrain;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Moves non-constant global-variable initializers into the generated {@code main()}.
- * <p>
- * GLSL requires global initializers to be constant expressions; legacy packs freely write things like
- * {@code float comp = 1.0 - near/far/far;} at global scope (legal-in-practice under {@code #version 120}, where
- * drivers evaluate them per invocation). Under {@code #version 330} NVIDIA accepts them silently but may evaluate
- * before uniforms are loaded — zeros/NaNs that silently corrupt whole passes (this exact class made terrain render
- * nothing until the prologue matrices were converted to defines). Hoisting the assignment into {@code main()}
- * reproduces the 120 semantics exactly.
- * <p>
- * Line-based with brace-depth tracking: only depth-0, single-declarator initializers of simple types are touched, and
- * only when the initializer references an identifier that is not a literal/type-constructor (moving a genuinely
- * constant initializer would also be safe — the whitelist just minimizes churn). The initializer expression may span
- * several lines: BSL's {@code weatherCol = mix( ... )} is written across nine lines, and if only the single-line
- * neighbours ({@code weatherRain}, {@code weatherWeight}) are hoisted while {@code weatherCol}'s multi-line initializer
- * is left at global scope, it evaluates against still-zero inputs → {@code vec4(0)} → {@code lightCol}/{@code ambientCol}
- * collapse to black under rain (terrain goes near-black in weather). So the collector accumulates continuation lines up
- * to the statement-terminating {@code ;} at paren/bracket/brace nesting 0.
- * <p>
- * Top-level preprocessor conditionals are mirrored into the hoisted assignment stream. Packs such as Sildur's put
- * non-constant globals inside {@code #ifdef}/{@code #if} option gates; moving the assignments outside those gates makes
- * the generated {@code main()} reference declarations that the GLSL preprocessor removed.
- */
+// Moves non-constant global-variable initialisers into the generated main()
+//
+// GLSL requires a global initialiser to be a constant expression, but legacy packs freely write things like
+// `float comp = 1.0 - near/far/far;` at global scope. That is legal in practice under #version 120, where drivers
+// evaluate it per invocation. Under #version 330 NVIDIA accepts it silently but may evaluate it BEFORE the uniforms
+// are loaded, producing zeros and NaNs that quietly corrupt whole passes — this exact class of bug is what made
+// terrain render nothing until the prologue matrices were converted to defines
+// Hoisting the assignment into main() reproduces the 120 semantics exactly
+//
+// The transform is line-based with brace-depth tracking. Only depth-0, single-declarator initialisers of simple
+// types are touched, and only when the initialiser references an identifier that is not a literal or a type
+// constructor. Moving a genuinely constant initialiser would be safe too; the whitelist just keeps the churn down
+//
+// An initialiser expression may span several lines, and it must be collected whole. BSL writes
+// `weatherCol = mix( ... )` across nine lines, and hoisting only its single-line neighbours (weatherRain,
+// weatherWeight) while leaving weatherCol at global scope makes it evaluate against still-zero inputs, giving
+// vec4(0), which collapses lightCol and ambientCol to black — terrain goes near-black in rain. So the collector
+// accumulates continuation lines up to the statement-terminating ; at paren/bracket/brace nesting 0
+//
+// Top-level preprocessor conditionals are mirrored into the hoisted assignment stream. Packs such as Sildur's put
+// non-constant globals inside #ifdef option gates, and moving the assignments outside those gates would make the
+// generated main() reference declarations the GLSL preprocessor had already removed
 public final class GlslGlobalInitHoister {
-    /** Matches the START of a global initializer: indent, type, name, {@code =}, and the rest of the first line. */
+    // Matches only the START of a global initialiser — indent, type, name, =, and whatever follows on that first
+    // line. The rest is collected by hand, because a regex cannot balance the nesting a multi-line initialiser has
     private static final Pattern GLOBAL_INIT_START = Pattern.compile(
             "^(\\s*)(float|int|bool|vec[234]|ivec[234]|mat[234])\\s+(\\w+)\\s*=\\s*(.*)$");
     private static final Pattern TRAILING_AFTER_TERMINATOR = Pattern.compile("\\s*(?://.*)?");
@@ -35,7 +35,8 @@ public final class GlslGlobalInitHoister {
     private static final Pattern CONSTANT_CALLEES = Pattern.compile(
             "vec[234]|ivec[234]|mat[234]|float|int|bool|true|false");
 
-    /** The rewritten source (initializers stripped) plus the assignments to run at the top of {@code main()}. */
+    // The two halves the caller needs: the rewritten source with initialisers stripped down to bare declarations,
+    // and the assignment statements to splice in at the top of the generated main()
     public static final class Result {
         public final String body;
         public final String hoistedAssignments;
@@ -93,7 +94,8 @@ public final class GlslGlobalInitHoister {
         return new Result(body.toString(), hasHoistedAssignments ? hoisted.toString() : "");
     }
 
-    /** A collected initializer: its expression text (sans trailing {@code ;}) and the last source line it occupies. */
+    // One collected initialiser: the expression text without its trailing ;, and the index of the last source line
+    // it occupied — the caller needs that to know how many lines to consume
     private static final class Initializer {
         final String expression;
         final int endLine;
@@ -104,12 +106,11 @@ public final class GlslGlobalInitHoister {
         }
     }
 
-    /**
-     * Accumulates the initializer expression starting from {@code firstRemainder} (the text after {@code =} on
-     * {@code lines[startLine]}), continuing across lines until the statement-terminating {@code ;} at paren/bracket/brace
-     * nesting 0. Returns {@code null} if the statement never terminates, or if code other than a comment follows the
-     * terminator on its line (the caller then leaves the declaration untouched rather than dropping that trailing code).
-     */
+    // Accumulates the initialiser expression, starting from the text after the = on the first line and continuing
+    // across lines until the statement-terminating ; at paren/bracket/brace nesting 0
+    // Returns null in two cases, and both mean "leave this declaration alone": the statement never terminates, or
+    // real code follows the terminator on its line. The second matters because hoisting would otherwise drop that
+    // trailing code entirely
     private static Initializer collectInitializer(String[] lines, int startLine, String firstRemainder) {
         StringBuilder expression = new StringBuilder();
         int nesting = 0;

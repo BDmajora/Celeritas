@@ -4,32 +4,25 @@ import com.bdmajora.extras.Extras;
 import com.bdmajora.extras.ExtrasConfig;
 import net.minecraft.util.EnumParticleTypes;
 
-/**
- * The named particle switches, resolved by vanilla particle id.
- *
- * <p>Matching on id rather than on the {@link net.minecraft.client.particle.Particle} subclass is
- * what makes the finer OptiFine switches possible at all: several ids share a class.
- * {@code ParticleSuspendedTown} alone backs {@code SUSPENDED_DEPTH} (void), {@code TOWN_AURA} and
- * {@code VILLAGER_HAPPY}, so a class-keyed "void particles" switch would take the villager's happy
- * particles with it. The per-class toggles in {@link ParticleClassRegistry} stay class-keyed because
- * a modded particle has no id we can reason about.
- *
- * <p>The ids are read once into a lookup table: {@code EnumParticleTypes.getParticleID()} is a field
- * read, but this sits on the particle spawn path and the table keeps it to one array index.
- */
+// the named particle switches, resolved by vanilla particle id
+// matching on id rather than on the Particle subclass is what makes the finer OptiFine switches
+// possible at all, because several ids share a class: ParticleSuspendedTown alone backs
+// SUSPENDED_DEPTH (void), TOWN_AURA and VILLAGER_HAPPY, so a class-keyed "void particles" switch
+// would take the villager's happy particles with it
+// the per-class toggles in ParticleClassRegistry stay class-keyed because a modded particle has no id
+// we can reason about
+// the ids are read once into a lookup table: EnumParticleTypes.getParticleID() is a field read, but
+// this sits on the particle spawn path and the table keeps it to one array index
 public final class ParticleFilters {
-    /** Which switch governs each particle id; null means "no named switch". */
+    // Which switch governs each particle id; null means "no named switch".
     private static final Filter[] BY_ID = buildTable();
 
     private ParticleFilters() {
     }
 
-    /**
-     * Whether a particle with this vanilla id may spawn.
-     *
-     * <p>Unknown ids — every modded particle — are always allowed through; they are filtered later
-     * by class, if the user disabled them.
-     */
+    // whether a particle with this vanilla id may spawn
+    // unknown ids - every modded particle - are always allowed through; they are filtered later by
+    // class, if the user disabled them
     public static boolean isAllowed(int particleId) {
         ExtrasConfig options = Extras.options();
 
@@ -79,7 +72,7 @@ public final class ParticleFilters {
         }
     }
 
-    /** One named switch, as a function of the loaded options. */
+    // One named switch, as a function of the loaded options.
     private enum Filter {
         EXPLOSION {
             @Override

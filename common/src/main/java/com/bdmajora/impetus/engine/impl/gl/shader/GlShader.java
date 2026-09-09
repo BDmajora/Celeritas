@@ -7,9 +7,9 @@ import com.bdmajora.impetus.engine.impl.gl.GlObject;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-/**
- * A compiled OpenGL shader object.
- */
+// One compiled shader stage
+// Separate from the linked program because a single compiled stage is routinely attached to several programs, and
+// each owns its own lifetime
 public class GlShader extends GlObject {
     private static final Logger LOGGER = LogManager.getLogger(GlShader.class);
 

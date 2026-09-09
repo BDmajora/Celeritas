@@ -18,9 +18,8 @@ public class GlBufferArena {
     static final boolean CHECK_ASSERTIONS = false;
 
     private static final GlBufferUsage BUFFER_USAGE = GlBufferUsage.STATIC_DRAW;
-    /**
-     * When the arena needs to be grown, it will generally attempt to increase its size by (1 / RESIZE_FACTOR).
-     */
+    // Growth divisor: when the arena has to grow it adds roughly (current size / RESIZE_FACTOR), so 2 means it
+    // grows by half rather than doubling — cheaper in peak VRAM at the cost of more frequent resizes
     private static final int RESIZE_FACTOR = 2;
 
     private int resizeIncrement;

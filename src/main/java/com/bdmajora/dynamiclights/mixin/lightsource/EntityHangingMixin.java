@@ -10,14 +10,11 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Ticks the light of item frames and paintings.
- *
- * <p>{@code EntityHanging#onUpdate} does not call up to {@code Entity#onUpdate}, so the shared
- * {@code onEntityUpdate} hook never fires for these — a torch in an item frame would stay dark
- * without this. Luminance itself still comes from the base implementation, which routes through the
- * {@code EntityItemFrame} handler.
- */
+// Ticks the light of item frames and paintings
+// Needed because EntityHanging#onUpdate does not call up to Entity#onUpdate, so the shared onEntityUpdate hook
+// never fires for these — a torch sitting in an item frame would stay dark
+// Only the TICK is added here; the luminance still comes from the base implementation, which routes through the
+// EntityItemFrame handler
 @Mixin(EntityHanging.class)
 public abstract class EntityHangingMixin extends Entity implements DynamicLightSource {
     private EntityHangingMixin(World world) {

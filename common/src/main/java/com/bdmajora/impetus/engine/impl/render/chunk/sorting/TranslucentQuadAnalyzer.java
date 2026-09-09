@@ -11,11 +11,10 @@ import java.util.BitSet;
 public class TranslucentQuadAnalyzer {
     // X/Y/Z for each quad center
     private static final int EXPECTED_QUADS = 1000;
-    /**
-     * Cap on how many distinct (quantized) normals we track plane sets for. Real terrain overwhelmingly uses the
-     * six axis-aligned directions plus a few fluid-surface slopes; anything past this cap (pathological modded
-     * geometry) falls back to the coarse always-resort heuristic instead of paying unbounded memory here.
-     */
+    // cap on how many distinct (quantized) normals we track plane sets for
+    // real terrain overwhelmingly uses the six axis-aligned directions plus a few fluid-surface slopes,
+    // and anything past this cap - pathological modded geometry - falls back to the coarse
+    // always-resort heuristic instead of paying unbounded memory here
     private static final int MAX_TRACKED_NORMALS = 16;
     private final FloatArrayList quadCenters = new FloatArrayList(EXPECTED_QUADS * 3);
     private final FloatArrayList quadNormals = new FloatArrayList(EXPECTED_QUADS * 3);
@@ -60,17 +59,11 @@ public class TranslucentQuadAnalyzer {
     }
 
     public enum Level {
-        /**
-         * No sorting is required of the current section.
-         */
+        // no sorting is required of the current section
         NONE,
-        /**
-         * Sorting is required once during meshing.
-         */
+        // sorting is required once during meshing
         STATIC,
-        /**
-         * Sorting is required any time the camera moves.
-         */
+        // sorting is required any time the camera moves
         DYNAMIC;
 
         public static final Level[] VALUES = values();
@@ -86,11 +79,10 @@ public class TranslucentQuadAnalyzer {
         }
     }
 
-    /**
-     * @param triggerPlanes for {@link Level#DYNAMIC} states, the per-normal plane sets used for precise
-     *                      camera-crossing re-sort triggering; {@code null} when unavailable (too many distinct
-     *                      normals), in which case the caller must fall back to coarse movement-based triggering.
-     */
+    // triggerPlanes holds, for Level#DYNAMIC states, the per-normal plane sets used for precise
+    // camera-crossing re-sort triggering
+    // it is null when unavailable - too many distinct normals - in which case the caller must fall back
+    // to coarse movement-based triggering
     public record SortState(Level level, float[] centers, float[] normals, int centersLength, BitSet normalSigns, Vector3f sharedNormal, NormalPlanes[] triggerPlanes) {
         public static final SortState NONE = new SortState(Level.NONE, null, null, 0, null, null, null);
 

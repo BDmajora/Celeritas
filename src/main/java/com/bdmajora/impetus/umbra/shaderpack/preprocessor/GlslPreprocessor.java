@@ -149,7 +149,8 @@ public final class GlslPreprocessor {
         return out.toString();
     }
 
-    /** {@return whether the line ends inside a block comment, given whether it started inside one} */
+    // Whether the line ENDS inside a block comment, given whether it started inside one — carried across lines so
+    // a directive commented out by a multi-line block is not evaluated
     private static boolean advanceBlockComment(String line, boolean inBlockComment) {
         for (int i = 0; i < line.length() - 1; i++) {
             if (inBlockComment) {
@@ -218,38 +219,33 @@ public final class GlslPreprocessor {
         return line;
     }
 
-    /**
-     * Whether {@code expression} is something no preprocessor could accept, so folding it to {@code 0} is strictly
-     * better than forwarding it to the driver.
-     * <p>
-     * This is deliberately narrow. "Our evaluator could not parse it" is <em>not</em> grounds to drop a branch — the
-     * driver's preprocessor is the more capable one, and killing a live branch on a parser shortfall would be a far
-     * worse failure than the one being fixed. Unbalanced parentheses are the one signal that needs no judgement: no
-     * valid {@code #if} expression has them, so the driver is guaranteed to reject the directive as well, and
-     * rejecting it costs the entire program rather than one branch.
-     * <p>
-     * Real case: Pastel v1.200 ships {@code #if (in(biome, BIOME_SOUL_SAND_VALLEY)} in
-     * {@code lib/atmospherics/fog.glsl} — shaders.properties custom-uniform syntax pasted into GLSL, missing a
-     * paren, and sitting in the {@code #else} of an {@code #ifdef NETHER}, so the overworld build reaches it. NVIDIA
-     * answers {@code C0105: Syntax error in #if} and Pastel's whole {@code deferred1} pass — its lighting and fog —
-     * is dropped. The branch cannot have been intended to compile, so taking it as false is what the pack means.
-     */
-    /**
-     * Whether this directive is only the first line of a backslash-continued one, so the rest of its expression — and
-     * very likely the parentheses that balance it — is on the following lines.
-     * <p>
-     * This guard is what keeps {@link #isSyntacticallyInvalid} honest, and it is not theoretical: Photon has three of
-     * these ({@code gbuffers_all_solid.fsh:308}, {@code gbuffers_all_translucent.vsh:109},
-     * {@code include/vertex/utility.glsl:21}, e.g. {@code #elif ( \}). Judged one line at a time every one of them
-     * looks unbalanced, and folding them to {@code 0} would silently delete live branches from Photon's main gbuffer
-     * programs. A sweep of all 22 installed packs finds exactly these three continuations and one genuinely broken
-     * directive (Pastel's), which is the split this pair of checks has to reproduce.
-     */
+    // Whether this directive is only the FIRST line of a backslash-continued one, so the rest of its expression —
+    // and very likely the parentheses that balance it — is on the lines that follow
+    // This guard is what keeps isSyntacticallyInvalid below honest, and it is not theoretical: Photon has three of
+    // these, in gbuffers_all_solid.fsh:308, gbuffers_all_translucent.vsh:109 and include/vertex/utility.glsl:21,
+    // e.g. a bare `#elif ( \`
+    // Judged one line at a time every one of them looks unbalanced, and folding them to 0 would silently delete
+    // live branches from Photon's main gbuffer programs
+    // A sweep of all 22 installed packs finds exactly these three continuations and one genuinely broken directive
+    // (Pastel's), which is the split this pair of checks has to reproduce
     private static boolean isContinued(String expression) {
         String trimmed = expression.trim();
         return trimmed.endsWith("\\");
     }
 
+    // Whether the expression is something NO preprocessor could accept, making it strictly better to fold to 0 than
+    // to forward to the driver
+    // Deliberately narrow: "our evaluator could not parse it" is NOT grounds to drop a branch, because the driver's
+    // preprocessor is the more capable one and killing a live branch on a parser shortfall would be a worse failure
+    // than the one being fixed
+    // Unbalanced parentheses are the one signal needing no judgement — no valid #if expression has them, so the
+    // driver is guaranteed to reject the directive too, and that rejection costs the ENTIRE program rather than one
+    // branch
+    // Real case: Pastel v1.200 ships `#if (in(biome, BIOME_SOUL_SAND_VALLEY)` in lib/atmospherics/fog.glsl —
+    // shaders.properties custom-uniform syntax pasted into GLSL, missing a paren, sitting in the #else of an
+    // #ifdef NETHER so the overworld build reaches it. NVIDIA answers C0105 "Syntax error in #if" and Pastel's
+    // whole deferred1 pass, its lighting and fog, is dropped
+    // The branch cannot have been intended to compile, so taking it as false is what the pack means
     private static boolean isSyntacticallyInvalid(String expression) {
         int depth = 0;
         for (int i = 0; i < expression.length(); i++) {
@@ -272,7 +268,7 @@ public final class GlslPreprocessor {
         return true;
     }
 
-    /** Truncates at the first comment opener of either kind; a directive never carries meaning past one. */
+    // Truncates at the first comment opener of either kind — a directive never carries meaning past one
     private static String stripComment(String text) {
         int line = text.indexOf("//");
         int block = text.indexOf("/*");
@@ -280,7 +276,8 @@ public final class GlslPreprocessor {
         return comment < 0 ? text : text.substring(0, comment);
     }
 
-    /** Whether the expression contains a float literal once its macros are substituted, as the driver would see it. */
+    // Whether the expression contains a float literal ONCE ITS MACROS ARE SUBSTITUTED, i.e. as the driver would
+    // see it — a macro expanding to 0.5 makes an integer-looking conditional a float one
     private static boolean expandsToFloat(String expression, Map<String, String> defines, int depth) {
         if (FLOAT_LITERAL.matcher(expression).find()) {
             return true;
@@ -298,58 +295,56 @@ public final class GlslPreprocessor {
         return false;
     }
 
-    /**
-     * Seam for later phases: rewrite legacy fixed-function built-ins to explicit {@code in}/attribute names.
-     * Because Impetus renders chunks through VAOs, the fixed-function attribute slots are never populated, so a
-     * GLSL-150+ translation needs to map e.g. {@code gl_MultiTexCoord0 -> vec4(mc_midTexCoord, 0.0, 1.0)}.
-     * Not implemented in Phase 1; returns the input unchanged.
-     */
+    // Unimplemented seam: rewriting legacy fixed-function built-ins to explicit in/attribute names
+    // The need is real — chunks render through VAOs, so the fixed-function attribute slots are never populated, and
+    // a GLSL-150+ translation would have to map gl_MultiTexCoord0 onto vec4(mc_midTexCoord, 0.0, 1.0)
+    // In practice the terrain and fullscreen transformers each do their own version of this, so nothing calls it;
+    // it returns the input unchanged
     public static List<String> replaceLegacyBuiltins(List<String> lines, Map<String, String> attributeBindings) {
         // Intentionally a no-op for Phase 1. Kept as an explicit extension point.
         return lines;
     }
 
-    /** {@code #extension GL_FOO : enable}, in any legal spacing. Trailing {@code \r?} for the reason on VERSION_PATTERN. */
+    // #extension GL_FOO : enable, in any legal spacing
+    // The trailing \r? is for the same reason VERSION_PATTERN has one: pack files ship with CRLF line endings and
+    // the carriage return would otherwise defeat the end anchor
     private static final Pattern EXTENSION_PATTERN = Pattern.compile("^\\s*#\\s*extension\\s+.*\\r?$");
 
-    /**
-     * Every rewrite that must happen to pack GLSL between the transformers and {@code glShaderSource} — the ones that
-     * exist because packs are authored against NVIDIA and this port also has to satisfy Mesa. Both are no-ops unless
-     * the source actually trips the rule.
-     * <p>
-     * <b>Call this from every path that hands pack source to the driver.</b> There are two unrelated {@code GlShader}
-     * classes — {@code umbra.gl.shader.GlShader} and the engine's {@code engine.impl.gl.shader.GlShader} — and the
-     * terrain/shadow override uses the engine one while every other Umbra path uses the Umbra one. Hanging these calls
-     * off the Umbra constructor and calling it "the only point every path passes through" was wrong by exactly that one
-     * path, which happens to be the one that compiles {@code gbuffers_terrain}/{@code shadow}: the misplaced-{@code
-     * #extension} fix shipped in {@code 0323d2aaa} therefore never ran on the programs whose logs motivated it, and
-     * the reports kept coming in unchanged. Bundling them here gives the two call sites one name to share.
-     */
+    // Every rewrite that must happen to pack GLSL between the transformers and glShaderSource — the ones that exist
+    // because packs are authored against NVIDIA while this port also has to satisfy Mesa
+    // All of them are no-ops unless the source actually trips the rule, so this is safe to call unconditionally
+    //
+    // Call this from EVERY path that hands pack source to the driver. There are two unrelated GlShader classes here
+    // — umbra.gl.shader.GlShader and the engine's engine.impl.gl.shader.GlShader — and the terrain/shadow override
+    // uses the engine one while every other Umbra path uses the Umbra one
+    // Hanging these calls off the Umbra constructor and calling it "the only point every path passes through" was
+    // wrong by exactly that one path, which happens to be the one compiling gbuffers_terrain and shadow. The
+    // misplaced-#extension fix shipped in 0323d2aaa therefore never ran on the programs whose logs motivated it,
+    // and the reports kept coming in unchanged
+    // Bundling the rewrites here gives the two call sites one name to share
     public static String finalizeForDriver(String name, String source) {
         return rewriteIntegerSamplerLookups(name, hoistExtensionDirectives(source));
     }
 
-    /**
-     * Moves every {@code #extension} directive up to just below {@code #version}, which is where GLSL requires them.
-     * <p>
-     * The spec forbids an {@code #extension} directive after any non-preprocessor token. NVIDIA ignores that and
-     * honours them anywhere; <b>Mesa enforces it</b>. Packs are overwhelmingly authored against NVIDIA, so they put
-     * the directive at the top of the <em>include</em> that needs it and never notice — Complementary's
-     * {@code lib/materials/materialMethods/worldSpaceRef.glsl} opens with
-     * {@code #extension GL_ARB_shader_image_load_store : enable}, and once {@code #include} flattening has run, that
-     * line sits in the middle of the program far below real declarations.
-     * <p>
-     * Umbra solves the same problem in {@code JcppProcessor}, which marks {@code #version}/{@code #extension},
-     * collects them during preprocessing and re-emits them at the top; its comment names the exact motivation —
-     * "for shader packs written on lenient drivers that allow #extension directives to be placed anywhere to work on
-     * strict drivers like Mesa".
-     * <p>
-     * Only rewrites when a directive genuinely appears after real code, so already-well-formed packs reach the driver
-     * byte-identical. Directives are de-duplicated, keep their relative order, and leave a blank line behind so
-     * driver error messages still point at the right line. Hoisting one out of an {@code #if} guard is safe in
-     * practice because the behaviour is virtually always {@code : enable}, which is defined to warn-and-continue when
-     * the extension is unavailable rather than fail.
-     */
+    // Moves every #extension directive up to just below #version, which is where GLSL requires them
+    //
+    // The spec forbids an #extension after any non-preprocessor token. NVIDIA ignores that and honours them
+    // anywhere; MESA ENFORCES IT. Packs are overwhelmingly authored against NVIDIA, so they put the directive at
+    // the top of the INCLUDE that needs it and never notice
+    // Complementary's lib/materials/materialMethods/worldSpaceRef.glsl opens with
+    // `#extension GL_ARB_shader_image_load_store : enable`, and once #include flattening has run that line sits in
+    // the middle of the program, far below real declarations
+    //
+    // Iris solves the same problem in JcppProcessor, marking #version and #extension, collecting them during
+    // preprocessing and re-emitting them at the top — its own comment names the identical motivation, packs written
+    // on lenient drivers needing to work on strict ones like Mesa
+    //
+    // Only rewrites when a directive genuinely appears after real code, so an already-well-formed pack reaches the
+    // driver byte-identical
+    // Directives are de-duplicated, keep their relative order, and leave a blank line behind so driver error
+    // messages still point at the right line numbers
+    // Hoisting one out of an #if guard is safe in practice because the behaviour is virtually always `: enable`,
+    // which is defined to warn and continue when the extension is unavailable rather than fail
     public static String hoistExtensionDirectives(String source) {
         if (source == null || !source.contains("#extension")) {
             return source;
@@ -394,11 +389,9 @@ public final class GlslPreprocessor {
         return String.join("\n", kept);
     }
 
-    /**
-     * The compatibility-profile texture lookups and the core built-in that replaces each. Every entry is matched with
-     * a mandatory {@code (} immediately after the name, so {@code texture2D} never matches inside {@code texture2DLod}
-     * and the map order carries no meaning.
-     */
+    // The compatibility-profile texture lookups and the core built-in replacing each
+    // Every entry is matched with a mandatory ( immediately after the name, so texture2D can never match inside
+    // texture2DLod — which is what makes the map's iteration order irrelevant here
     private static final Map<String, String> LEGACY_TEXTURE_LOOKUPS;
 
     static {
@@ -420,43 +413,38 @@ public final class GlslPreprocessor {
         LEGACY_TEXTURE_LOOKUPS = Collections.unmodifiableMap(lookups);
     }
 
-    /**
-     * An integer sampler type followed by whatever it declares, up to the {@code ;} or {@code )} that ends it.
-     * <p>
-     * Deliberately not anchored to {@code uniform} at the start of a line. A pack that wraps its image reads in a
-     * helper — {@code uint readVoxel(usampler3D s, vec3 p) { return texture2D(s, p).r; }} — declares the sampler as a
-     * <em>function parameter</em>, and the call needing the rewrite is inside that function. Anchoring would see the
-     * uniform and miss the parameter, i.e. miss the very call site the driver rejects.
-     */
+    // An integer sampler type followed by whatever it declares, up to the ; or ) that ends it
+    // Deliberately NOT anchored to `uniform` at the start of a line. A pack that wraps its image reads in a helper —
+    // `uint readVoxel(usampler3D s, vec3 p) { return texture2D(s, p).r; }` — declares the sampler as a FUNCTION
+    // PARAMETER, and the call needing the rewrite is inside that function
+    // Anchoring would find the uniform and miss the parameter, i.e. miss the very call site the driver rejects
     private static final Pattern INTEGER_SAMPLER_DECLARATION =
             Pattern.compile("\\b[ui]sampler[A-Za-z0-9]*[ \\t]+([^;)\\n]+)");
 
-    /**
-     * Points the legacy {@code texture2D}-family lookups at their core equivalents, but only where the sampler being
-     * read is one the source itself declares as an <em>integer</em> sampler ({@code usampler*}/{@code isampler*}).
-     * <p>
-     * The compatibility profile keeps {@code texture2D} alive, which is why the modern-pack paths deliberately leave
-     * pack bodies alone rather than performing Umbra's blanket rename — but it keeps it alive <b>only for float
-     * samplers</b>. There is no {@code texture2D(usampler2D, vec2)} overload in any GLSL version. NVIDIA's compiler
-     * resolves the call anyway; <b>Mesa rejects it</b>, exactly as it rejects a misplaced {@code #extension} (see
-     * {@link #hoistExtensionDirectives}). Packs are authored against NVIDIA and never see it.
-     * <p>
-     * Complementary Unbound reads its colored-lighting voxel and puddle images with {@code texture2D}, so on Mesa
-     * {@code gbuffers_terrain_solid}/{@code _cutout_mip} failed to compile the moment colored lighting was switched on
-     * ({@code error: no matching function for call to `texture2D(usampler2D, vec2)'}). Terrain then silently fell back
-     * to Impetus's own chunk shader, which runs none of the pack's vertex stage — so leaves and grass stopped waving
-     * while the rest of the frame still looked shaded, and nothing in the log named waving at all.
-     * <p>
-     * Umbra reaches the same end state from the other direction: it compiles every pack at {@code #version 330 core},
-     * where the legacy names do not exist, so {@code CommonTransformer} renames all of them unconditionally and the
-     * generic {@code texture()} overload resolves for integer samplers as a side effect. Restricting the rename to
-     * integer samplers is what makes it safe to apply here, where the legacy names are still live and a pack may still
-     * own an identifier called {@code texture}.
-     * <p>
-     * Deliberately keyed off the declaration rather than the call site, and deliberately whitespace-tolerant only
-     * within a line: the sampler must be the <em>entire</em> first argument, so {@code texture2D(f(voxel_sampler), uv)}
-     * is left alone, and no rewrite can shift a line number out from under a driver error message.
-     */
+    // Points the legacy texture2D-family lookups at their core equivalents, but ONLY where the sampler being read
+    // is one this source itself declares as an integer sampler — usampler* or isampler*
+    //
+    // The compatibility profile keeps texture2D alive, which is exactly why the modern-pack paths leave pack bodies
+    // alone rather than doing Iris's blanket rename. But it keeps it alive only FOR FLOAT SAMPLERS: there is no
+    // texture2D(usampler2D, vec2) overload in any GLSL version
+    // NVIDIA's compiler resolves the call anyway; Mesa rejects it, exactly as it rejects a misplaced #extension.
+    // Packs are authored against NVIDIA and never see it
+    //
+    // Complementary Unbound reads its coloured-lighting voxel and puddle images with texture2D, so on Mesa
+    // gbuffers_terrain_solid and _cutout_mip failed to compile the moment coloured lighting was switched on, with
+    // "no matching function for call to texture2D(usampler2D, vec2)"
+    // Terrain then fell back to Impetus's own chunk shader, which runs none of the pack's vertex stage — so leaves
+    // and grass stopped waving while the rest of the frame still looked shaded, and nothing in the log named waving
+    //
+    // Iris reaches the same end state from the other direction: it compiles every pack at #version 330 core where
+    // the legacy names do not exist, so CommonTransformer renames all of them unconditionally and the generic
+    // texture() overload resolves for integer samplers as a side effect
+    // Restricting the rename to integer samplers is what makes it safe HERE, where the legacy names are still live
+    // and a pack may still own an identifier called `texture`
+    //
+    // Keyed off the DECLARATION rather than the call site, and whitespace-tolerant only within a line: the sampler
+    // must be the entire first argument, so texture2D(f(voxel_sampler), uv) is left alone, and no rewrite can shift
+    // a line number out from under a driver error message
     public static String rewriteIntegerSamplerLookups(String name, String source) {
         if (source == null || !source.contains("sampler")) {
             return source;
@@ -497,7 +485,8 @@ public final class GlslPreprocessor {
         return result;
     }
 
-    /** {@return every identifier the source declares as a {@code usampler*}/{@code isampler*}} */
+    // Every identifier this source declares as a usampler* or isampler*, whether as a uniform or as a function
+    // parameter
     private static Set<String> integerSamplerNames(String source) {
         Set<String> names = new LinkedHashSet<>();
         Matcher declaration = INTEGER_SAMPLER_DECLARATION.matcher(source);
@@ -521,13 +510,15 @@ public final class GlslPreprocessor {
         return names;
     }
 
-    /** Whether {@code declarator} is just {@code identifier}, optionally with an array subscript after it. */
+    // Whether the declarator is just that identifier, optionally with an array subscript — anything more means the
+    // match caught something other than a plain declaration
     private static boolean isBareDeclarator(String declarator, String identifier) {
         String remainder = declarator.substring(identifier.length()).trim();
         return remainder.isEmpty() || (remainder.startsWith("[") && remainder.endsWith("]"));
     }
 
-    /** {@code "shadowVoxels[2]"} -> {@code "shadowVoxels"}; anything not starting with an identifier yields "". */
+    // Strips an array subscript: "shadowVoxels[2]" gives "shadowVoxels". Anything not starting with an identifier
+    // at all yields the empty string, which the caller treats as no match
     private static String identifierPrefix(String declarator) {
         int end = 0;
         while (end < declarator.length()
@@ -537,12 +528,10 @@ public final class GlslPreprocessor {
         return declarator.substring(0, end);
     }
 
-    /**
-     * {@return the index of the first line carrying a real GLSL token, or -1 if the source is all directives}
-     * <p>
-     * Skips blank lines, {@code //} comments, {@code #} directives and block comments — the only things GLSL permits
-     * to precede an {@code #extension}.
-     */
+    // The index of the first line carrying a real GLSL token, or -1 when the source is nothing but directives —
+    // which is the point a hoisted #extension has to land before
+    // Skips blank lines, // comments, # directives and block comments, since those are the only things GLSL permits
+    // to precede an #extension
     private static int indexOfFirstNonPreprocessorLine(String[] lines) {
         boolean inBlockComment = false;
         for (int i = 0; i < lines.length; i++) {
@@ -573,7 +562,8 @@ public final class GlslPreprocessor {
         return -1;
     }
 
-    /** Convenience: a stable, insertion-ordered map suitable for {@link #injectDefines}. */
+    // A stable, INSERTION-ORDERED map for the define set — order matters because the defines are emitted into the
+    // shader in map order, and a define referencing an earlier one has to come after it
     public static Map<String, String> newDefineMap() {
         return new LinkedHashMap<>();
     }

@@ -1,22 +1,18 @@
 package com.bdmajora.impetus.umbra.shaderpack.texture;
 
-/**
- * One {@code texture.<stage>.<sampler>} raw-texture directive resolved the Umbra way: instead of hijacking the sampler
- * unit of {@code <sampler>} for the whole stage, the pack's raw texture gets a freshly minted sampler name
- * ({@code customtex0}, {@code customtex1}, ...) and programs of {@code stage} that declare {@code <sampler>} with a
- * <em>matching sampler type</em> have that identifier renamed to it.
- * <p>
- * The type check is what makes Photon work: it declares {@code texture.deferred.colortex6 = ... TEXTURE_3D ...}, but
- * {@code colortex6} is a {@code sampler3D} worley-noise lookup in {@code deferred}/{@code deferred1} and a plain
- * {@code sampler2D} ambient-lighting buffer in {@code deferred3}/{@code deferred4}. Overriding the unit stage-wide
- * feeds the 3D texture to the 2D samplers, which then read black.
- *
- * @see com.bdmajora.impetus.umbra.shaderpack.texture.CustomTextureTransformer
- */
+// One `texture.<stage>.<sampler>` raw-texture directive, resolved the Iris way
+// Rather than hijacking the sampler unit of <sampler> for the whole stage, the pack's raw texture is given a
+// freshly minted sampler name (customtex0, customtex1, ...) and only those programs in <stage> that declare
+// <sampler> with a MATCHING sampler type get that identifier renamed to the new one
+// The type check is what makes Photon render. It declares texture.deferred.colortex6 = ... TEXTURE_3D ..., but
+// colortex6 is a sampler3D worley-noise lookup in deferred/deferred1 and a plain sampler2D ambient-lighting buffer
+// in deferred3/deferred4. Overriding the unit across the whole stage feeds the 3D texture to the 2D samplers,
+// which then read black
+// See CustomTextureTransformer for the rename itself
 public final class CustomTexturePatch {
     private final String samplerName;
     private final TextureStage stage;
-    /** The declared raw target, e.g. {@code TEXTURE_3D}. */
+    // The declared raw target, e.g. TEXTURE_3D — this is the half the transformer type-checks against
     private final String textureType;
     private final String newSamplerName;
 

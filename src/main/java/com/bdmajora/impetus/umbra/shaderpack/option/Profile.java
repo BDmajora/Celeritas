@@ -8,10 +8,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * A named preset ("profile") from {@code shaders.properties}: a bundle of option values plus a list of programs it
- * disables. Ported from Umbra; guava collections replaced with unmodifiable Java collections.
- */
+// A named preset from shaders.properties: a bundle of option values plus the programs the preset switches off
+// Packs ship these as the Low/Medium/High/Ultra presets the config screen offers as one control
+// The disabled-program list matters as much as the values: a preset turns effects off by dropping whole passes,
+// not just by setting their options to zero
+// Ported from Iris; guava collections replaced with unmodifiable Java ones
 public final class Profile {
     public final String name;
     public final int precedence; // Used for prioritizing during matching

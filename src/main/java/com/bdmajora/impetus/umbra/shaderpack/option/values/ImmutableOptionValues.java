@@ -8,10 +8,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * An immutable snapshot of option values. Ported from Umbra; guava {@code ImmutableMap} replaced with unmodifiable
- * {@link HashMap}s.
- */
+// A frozen snapshot of the pack's option values, taken once the user's choices have been resolved
+// Immutable because it is read from the shader compile path, which must see one consistent set of values for every
+// program in a pack — a mutable view could change between two programs of the same build
+// Ported from Iris; guava ImmutableMap replaced with unmodifiable HashMaps
 public class ImmutableOptionValues implements OptionValues {
     private final OptionSet options;
     private final Map<String, Boolean> booleanValues;

@@ -13,14 +13,12 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
-/**
- * Registry of driver/environment issues detected on the current machine. Other engine code consults
- * {@link #isActive(Issue)} to steer around known-broken driver paths.
- * <p>
- * Unlike upstream renderers that patch the process environment through native APIs, Impetus deliberately
- * limits itself to in-process behavior changes plus loud, actionable diagnostics: the legacy LWJGL2/Java 8
- * targets leave no portable way to mutate the native environment before the driver loads.
- */
+// registry of driver/environment issues detected on the current machine
+// other engine code consults isActive(Issue) to steer around known-broken driver paths
+// unlike upstream renderers that patch the process environment through native APIs, Impetus
+// deliberately limits itself to in-process behaviour changes plus loud, actionable diagnostics: the
+// legacy LWJGL2/Java 8 targets leave no portable way to mutate the native environment before the
+// driver loads
 public final class Workarounds {
     private static final Logger LOGGER = LogManager.getLogger("Impetus-Workarounds");
 
@@ -30,21 +28,16 @@ public final class Workarounds {
     }
 
     public enum Issue {
-        /**
-         * The NVIDIA "Threaded Optimization" feature is known to corrupt state when a second thread issues GL
-         * commands. Detection-only: surfaced as a warning telling the user to disable it in the driver control
-         * panel if they see crashes.
-         */
+        // NVIDIA's "Threaded Optimization" is known to corrupt state when a second thread issues GL
+        // commands; detection-only, surfaced as a warning telling the user to disable it in the driver
+        // control panel if they see crashes
         NVIDIA_THREADED_OPTIMIZATIONS,
-        /**
-         * Requesting a KHR_no_error context is unsafe on this driver (older Intel Windows drivers crash or
-         * render incorrectly). Consumers must not request no-error contexts while this is active.
-         */
+        // requesting a KHR_no_error context is unsafe on this driver - older Intel Windows drivers
+        // crash or render incorrectly - so consumers must not request no-error contexts while active
         NO_ERROR_CONTEXT_UNSAFE,
-        /**
-         * A frame-hooking overlay (e.g. RivaTuner Statistics Server) was detected. These inject into the GL
-         * frame path and are a common source of otherwise-unexplainable crashes with modified renderers.
-         */
+        // a frame-hooking overlay (e.g. RivaTuner Statistics Server) was detected; these inject into
+        // the GL frame path and are a common source of otherwise-unexplainable crashes with modified
+        // renderers
         FRAME_HOOK_OVERLAY_PRESENT
     }
 
@@ -68,9 +61,7 @@ public final class Workarounds {
         }
     }
 
-    /**
-     * Marks an issue discovered after {@link #init} completed (e.g. the asynchronous overlay scan).
-     */
+    // marks an issue discovered after init() completed, e.g. by the asynchronous overlay scan
     public static void markActive(Issue issue) {
         Set<Issue> current;
         Set<Issue> updated;

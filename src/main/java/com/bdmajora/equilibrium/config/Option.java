@@ -8,28 +8,22 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-/**
- * One node of the option tree — a single {@code mixin.*} rule.
- *
- * <p>Ported from Lithium's {@code Option} unchanged in behaviour. An option carries three
- * independent notions of "who set this": the built-in default, a user override from
- * {@code config/equilibrium.properties}, and an override contributed by another mod. They are kept
- * apart so the log can say why a mixin was skipped, which is the first thing anyone needs when a
- * patch does not apply.
- */
+// one node of the option tree: a single mixin.* rule
+// ported from Lithium's Option unchanged in behaviour
+// an option carries three independent notions of "who set this" - the built-in default, a user
+// override from config/equilibrium.properties, and an override contributed by another mod
+// they are kept apart so the log can say why a mixin was skipped, which is the first thing anyone
+// needs when a patch does not apply
 public class Option {
     private final String name;
 
-    /**
-     * Options this one requires, and the value each must hold.
-     *
-     * <p>{@code Object2BooleanLinkedOpenHashMap} rather than a plain map because the iteration order
-     * decides which unmet dependency gets reported first, and a stable report is worth more than the
-     * handful of bytes a linked map costs — there are at most a couple of hundred options.
-     */
+    // options this one requires, and the value each must hold
+    // Object2BooleanLinkedOpenHashMap rather than a plain map because the iteration order decides
+    // which unmet dependency gets reported first, and a stable report is worth more than the handful
+    // of bytes a linked map costs - there are at most a couple of hundred options
     private Object2BooleanLinkedOpenHashMap<Option> dependencies;
 
-    /** Mods that have overridden this option, or null if none have. */
+    // Mods that have overridden this option, or null if none have.
     private Set<String> modDefined = null;
 
     private boolean enabled;
@@ -60,13 +54,9 @@ public class Option {
         return this.enabled;
     }
 
-    /**
-     * Whether this option and every option above it in the package tree are enabled.
-     *
-     * <p>Disabling {@code mixin.world} has to disable {@code mixin.world.explosions} even though the
-     * latter is still nominally {@code true}, otherwise a user turning off a whole category would
-     * leave its children applied.
-     */
+    // whether this option and every option above it in the package tree are enabled
+    // disabling mixin.world has to disable mixin.world.explosions even though the latter is still
+    // nominally true, otherwise a user turning off a whole category would leave its children applied
     public boolean isEnabledRecursive(EquilibriumConfig config) {
         return this.enabled && (config.getParent(this) == null || config.getParent(this).isEnabledRecursive(config));
     }

@@ -11,23 +11,18 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Per-world scratch data. Currently one thing: how many entities in this world are inventories.
- *
- * <p>Maintained from {@code onEntityAdded} and {@code onEntityRemoved}, which every entity passes
- * through when it joins or leaves a world — chunk load and unload included, and both
- * {@code WorldServer} and {@code WorldClient} call up to these when they override them.
- *
- * <p>The count is guarded by a flag on the entity rather than trusted to the symmetry of those two
- * calls, because they are not symmetric: {@code World.loadEntities} skips {@code onEntityAdded} when
- * Forge's join event is cancelled, while {@code World.unloadEntities} queues everything for
- * {@code onEntityRemoved} regardless. Without the flag a cancelled join would leave the count one
- * lower than the truth, and a count that reads zero while a chest minecart exists would make hoppers
- * quietly stop seeing it. See {@link CountedInventoryEntity}.
- *
- * <p>With the flag, the only reachable error is counting too many, which costs nothing but the
- * vanilla entity query the count exists to skip.
- */
+// per-world scratch data, currently one thing: how many entities in this world are inventories
+// maintained from onEntityAdded and onEntityRemoved, which every entity passes through when it joins
+// or leaves a world - chunk load and unload included, and both WorldServer and WorldClient call up
+// to these when they override them
+// the count is guarded by a flag on the entity rather than trusted to the symmetry of those two
+// calls, because they are not symmetric: World.loadEntities skips onEntityAdded when Forge's join
+// event is cancelled, while World.unloadEntities queues everything for onEntityRemoved regardless
+// without the flag a cancelled join would leave the count one lower than the truth, and a count that
+// reads zero while a chest minecart exists would make hoppers quietly stop seeing it - see
+// CountedInventoryEntity
+// with the flag, the only reachable error is counting too many, which costs nothing but the vanilla
+// entity query the count exists to skip
 @Mixin(World.class)
 public abstract class WorldMixin implements InventoryEntityTracker {
     @Unique

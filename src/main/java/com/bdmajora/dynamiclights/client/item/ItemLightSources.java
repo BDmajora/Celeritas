@@ -21,13 +21,11 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * The loaded item light source definitions, rebuilt on every resource reload.
- *
- * <p>Two maps: definitions loaded from resource packs, and definitions registered in code through
- * {@link #registerItemLightSource}. Code registrations win, because a mod that declares its own item
- * is more authoritative than a pack guessing at it, and they survive reloads.
- */
+// the loaded item light source definitions, rebuilt on every resource reload
+// two maps: definitions loaded from resource packs, and definitions registered in code through
+// registerItemLightSource
+// code registrations win, because a mod that declares its own item is more authoritative than a pack
+// guessing at it, and they survive reloads
 public final class ItemLightSources {
     private static final String NAMESPACE = "impetus";
     private static final String DIRECTORY = "dynamiclights/item/";
@@ -39,7 +37,7 @@ public final class ItemLightSources {
     private ItemLightSources() {
     }
 
-    /** Hooks the resource manager so {@link #load} runs on every pack reload. */
+    // Hooks the resource manager so #load runs on every pack reload.
     public static void registerReloadListener() {
         IResourceManager manager = Minecraft.getMinecraft().getResourceManager();
 
@@ -52,14 +50,11 @@ public final class ItemLightSources {
         }
     }
 
-    /**
-     * Rereads every item light source definition.
-     *
-     * <p>1.12.2's resource manager cannot list a directory, so the set of files is named by an index
-     * resource. Every pack's copy of that index is read and merged, which is what lets a resource pack
-     * add light sources for items this mod has never heard of rather than only override the ones it
-     * already ships.
-     */
+    // rereads every item light source definition
+    // 1.12.2's resource manager cannot list a directory, so the set of files is named by an index
+    // resource
+    // every pack's copy of that index is read and merged, which is what lets a resource pack add light
+    // sources for items this mod has never heard of rather than only override the ones it already ships
     public static void load(IResourceManager resourceManager) {
         LOADED.clear();
 
@@ -120,12 +115,9 @@ public final class ItemLightSources {
         }
     }
 
-    /**
-     * Registers an item light source in code.
-     *
-     * <p>The API counterpart of shipping a JSON file. Survives resource reloads and takes precedence
-     * over anything a pack declares for the same item.
-     */
+    // registers an item light source in code
+    // the API counterpart of shipping a JSON file: survives resource reloads and takes precedence over
+    // anything a pack declares for the same item
     public static void registerItemLightSource(ItemLightSource data) {
         ItemLightSource existing = REGISTERED.get(data.item());
 
@@ -139,13 +131,10 @@ public final class ItemLightSources {
         LOADED.remove(data.item());
     }
 
-    /**
-     * The luminance of a stack.
-     *
-     * <p>Anything that places a block falls back to that block's own light value, so glowstone, sea
-     * lanterns, end rods and every modded lamp glow when held without needing a definition. Only items
-     * that are <em>not</em> blocks — a blaze rod, a lava bucket — need one.
-     */
+    // the luminance of a stack
+    // anything that places a block falls back to that block's own light value, so glowstone, sea
+    // lanterns, end rods and every modded lamp glow when held without needing a definition
+    // only items that are *not* blocks - a blaze rod, a lava bucket - need one
     public static int getLuminance(ItemStack stack, boolean submergedInWater) {
         if (stack.isEmpty()) {
             return 0;

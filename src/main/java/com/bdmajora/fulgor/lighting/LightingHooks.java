@@ -9,13 +9,10 @@ import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
 
-/**
- * The chunk-level lighting operations, kept out of the mixins that call them.
- *
- * <p>Everything here is about the seam between chunks. Vanilla treats a missing neighbour as a reason
- * to skip work; Fulgor treats it as a reason to record work, and this is where the recording and the
- * later replay live.
- */
+// the chunk-level lighting operations, kept out of the mixins that call them
+// everything here is about the seam between chunks: vanilla treats a missing neighbour as a reason to
+// skip work, Fulgor treats it as a reason to record work, and this is where the recording and the
+// later replay live
 public final class LightingHooks {
     private static final EnumSkyBlock[] LIGHT_TYPES = EnumSkyBlock.values();
     private static final EnumFacing.AxisDirection[] AXIS_DIRECTIONS = EnumFacing.AxisDirection.values();
@@ -23,15 +20,13 @@ public final class LightingHooks {
     private LightingHooks() {
     }
 
-    /**
-     * Reschedules skylight for a column whose heightmap just moved.
-     *
-     * <p>The interesting part is the second half. Where the column passes through a section that does
-     * not exist, skylight has to be re-checked in the four horizontally adjacent columns as well —
-     * light travels sideways through the empty space. If an adjacent column belongs to a chunk that is
-     * not loaded, the check is recorded against the boundary instead of being dropped, and
-     * {@link #scheduleRelightChecksForChunkBoundaries} replays it once that chunk arrives.
-     */
+    // reschedules skylight for a column whose heightmap just moved
+    // the interesting part is the second half: where the column passes through a section that does not
+    // exist, skylight has to be re-checked in the four horizontally adjacent columns as well, because
+    // light travels sideways through the empty space
+    // if an adjacent column belongs to a chunk that is not loaded, the check is recorded against the
+    // boundary instead of being dropped, and scheduleRelightChecksForChunkBoundaries replays it once
+    // that chunk arrives
     public static void relightSkylightColumn(World world, Chunk chunk, int x, int z, int height1, int height2) {
         int yMin = Math.min(height1, height2);
         int yMax = Math.max(height1, height2) - 1;
@@ -102,14 +97,11 @@ public final class LightingHooks {
         }
     }
 
-    /**
-     * Replays everything this chunk and its new neighbours owe each other.
-     *
-     * <p>Called from {@code Chunk.onLoad}, which is the moment a boundary that was previously
-     * impossible to cross may have become crossable. Each of the four neighbours is handled in both
-     * directions, plus the diagonal case: a check in the neighbour may have been abandoned earlier
-     * precisely because <i>this</i> chunk was the missing corner.
-     */
+    // replays everything this chunk and its new neighbours owe each other
+    // called from Chunk.onLoad, the moment a boundary that was previously impossible to cross may have
+    // become crossable
+    // each of the four neighbours is handled in both directions, plus the diagonal case: a check in the
+    // neighbour may have been abandoned earlier precisely because *this* chunk was the missing corner
     public static void scheduleRelightChecksForChunkBoundaries(World world, Chunk chunk) {
         for (EnumFacing dir : EnumFacing.HORIZONTALS) {
             int xOffset = dir.getXOffset();
@@ -161,13 +153,10 @@ public final class LightingHooks {
         // outChunk is not marked dirty: nothing was removed from it, only copied.
     }
 
-    /**
-     * Replays one half of one edge, if its flags say anything is outstanding and everything needed is
-     * present.
-     *
-     * @param neighbor the chunk across the edge; looked up if null
-     * @param diagonal the chunk diagonally across the corner this half sits on; looked up if null
-     */
+    // replays one half of one edge, if its flags say anything is outstanding and everything needed is
+    // present
+    // neighbor is the chunk across the edge and diagonal the chunk diagonally across the corner this
+    // half sits on; either is looked up if null
     private static void scheduleRelightChecksForBoundary(World world, Chunk chunk, Chunk neighbor, Chunk diagonal,
                                                          EnumSkyBlock lightType, int xOffset, int zOffset,
                                                          EnumFacing.AxisDirection axisDir) {
@@ -246,17 +235,13 @@ public final class LightingHooks {
         }
     }
 
-    /**
-     * Seeds a chunk's block light by scheduling every light-emitting block in it.
-     *
-     * <p>Vanilla does this from {@code Chunk.checkLight} as an immediate relight of all 65536 columns.
-     * Here it is 65536 cheap luminance reads and a handful of scheduled updates, which the engine then
-     * resolves in one batch.
-     *
-     * <p>Deliberately does nothing unless the full 3×3 neighbourhood is loaded: light seeded against
-     * missing neighbours is exactly the wrong light, and the chunk stays uninitialised so a later
-     * attempt can do it properly.
-     */
+    // seeds a chunk's block light by scheduling every light-emitting block in it
+    // vanilla does this from Chunk.checkLight as an immediate relight of all 65536 columns; here it is
+    // 65536 cheap luminance reads and a handful of scheduled updates, which the engine then resolves in
+    // one batch
+    // deliberately does nothing unless the full 3x3 neighbourhood is loaded: light seeded against
+    // missing neighbours is exactly the wrong light, so the chunk stays uninitialised and a later
+    // attempt can do it properly
     public static void initChunkLighting(World world, Chunk chunk) {
         int xBase = chunk.x << 4;
         int zBase = chunk.z << 4;
@@ -302,13 +287,10 @@ public final class LightingHooks {
         }
     }
 
-    /**
-     * The replacement for {@code Chunk.checkLight}'s per-column relight.
-     *
-     * <p>A chunk is only marked light-populated once it and all eight neighbours have been seeded,
-     * which is what stops the light at a chunk border from being finalised against a neighbour that
-     * has not been lit yet — the cause of the border seams during world generation.
-     */
+    // the replacement for Chunk.checkLight's per-column relight
+    // a chunk is only marked light-populated once it and all eight neighbours have been seeded, which
+    // is what stops the light at a chunk border from being finalised against a neighbour that has not
+    // been lit yet - the cause of the border seams during world generation
     public static void checkChunkLighting(World world, Chunk chunk) {
         if (!((ChunkLightingData) chunk).fulgor$isLightInitialized()) {
             initChunkLighting(world, chunk);
@@ -331,13 +313,10 @@ public final class LightingHooks {
         chunk.setLightPopulated(true);
     }
 
-    /**
-     * Fills a newly created section's skylight from the heightmap.
-     *
-     * <p>Stands in for {@code Chunk.generateSkylightMap}, which rebuilds the entire column stack of the
-     * chunk. Only the new section can possibly need filling, and only the columns whose terrain height
-     * is at or below it — everything else either already has its value or is still in shadow.
-     */
+    // fills a newly created section's skylight from the heightmap
+    // stands in for Chunk.generateSkylightMap, which rebuilds the entire column stack of the chunk
+    // only the new section can possibly need filling, and only the columns whose terrain height is at
+    // or below it - everything else either already has its value or is still in shadow
     public static void initSkylightForSection(World world, Chunk chunk, ExtendedBlockStorage section) {
         if (!world.provider.hasSkyLight()) {
             return;

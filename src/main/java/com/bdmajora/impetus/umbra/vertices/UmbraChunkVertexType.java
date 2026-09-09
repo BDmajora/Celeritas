@@ -7,19 +7,21 @@ import com.bdmajora.impetus.engine.impl.render.chunk.vertex.format.ChunkVertexTy
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * The terrain vertex format used while a shader pack is active: byte-identical to
- * {@code VanillaLikeChunkVertex} (float position, byte color, float UV, packed light/draw-params — the layout
- * {@code ImpetusTerrainTransformer}'s prologue decodes) with the OptiFine per-vertex attributes appended:
- * the true face normal ({@code gl_Normal}), {@code at_tangent}, {@code mc_midTexCoord} (centre of the quad's
- * texture region in atlas UV — the mean of its four vertex UVs, NOT the sprite centre),
- * and {@code mc_Entity}. The entity attribute follows the shader-facing OptiFine/Umbra shape:
- * {@code (block id, render type, metadata, 1)}. With a pack {@code block.properties}, the block id is the pack's
- * mapped id; without one it is the raw 1.12.2 block id. The extra data comes straight off
- * {@link ChunkVertexEncoder.Vertex}'s Umbra fields, which the meshing pipeline populates when shaders are on.
- * Only selected by {@code ImpetusWorldRenderer.chooseVertexType} while a pack is loaded, so the wider stride
- * costs nothing otherwise.
- */
+// The terrain vertex format used while a shader pack is active
+// The leading part is byte-identical to VanillaLikeChunkVertex — float position, byte colour, float UV, packed
+// light and draw params — which is exactly the layout ImpetusTerrainTransformer's generated prologue decodes
+// Appended after it are the OptiFine per-vertex attributes packs expect
+//   the true face normal, which the shader sees as gl_Normal
+//   at_tangent
+//   mc_midTexCoord, the centre of the QUAD's texture region in atlas UV, i.e. the mean of its four vertex UVs and
+//   deliberately NOT the sprite centre — the two only agree for full-sprite quads
+//   mc_Entity, in the shader-facing shape (block id, render type, metadata, 1)
+// The block id is the pack's block.properties id when the pack maps that state, and the raw 1.12.2 block id
+// otherwise
+// All of it comes straight off ChunkVertexEncoder.Vertex's shader fields, which the mesher only bothers filling
+// while shaders are on
+// ImpetusWorldRenderer.chooseVertexType only selects this format while a pack is loaded, so the wider stride and
+// the extra per-vertex bandwidth cost nothing when there is no pack
 public class UmbraChunkVertexType implements ChunkVertexType {
     public static final UmbraChunkVertexType INSTANCE = new UmbraChunkVertexType();
 

@@ -6,15 +6,10 @@ import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 import java.nio.ShortBuffer;
 
-/**
- * Thread-local stack allocator abstraction. Use with try-with-resources:
- * <pre>{@code
- * try (MemoryStack stack = LWJGL.stackPush()) {
- *     IntBuffer buf = stack.mallocInt(1);
- *     // use buf...
- * } // automatically freed here
- * }</pre>
- */
+// A thread-local stack allocator, for the short-lived native buffers GL calls need
+// Always use it through try-with-resources — LWJGL.stackPush() opens a frame and close() pops it, so a buffer
+// allocated inside is freed automatically when the block ends
+// Anything allocated here must NOT outlive the block: the memory is reused by the next frame on that thread
 public abstract class MemoryStack implements AutoCloseable {
 
     public static MemoryStack stackPush() {

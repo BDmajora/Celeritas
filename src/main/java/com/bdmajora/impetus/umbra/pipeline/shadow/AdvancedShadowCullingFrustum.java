@@ -5,30 +5,30 @@ import org.joml.Matrix4fc;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
-/**
- * A shadow frustum fitted to the player's view, from the shadow light's point of view. Port of Umbra's
- * {@code shadows.frustum.advanced.AdvancedShadowCullingFrustum}.
- * <p>
- * The idea: if you are looking at the sun, geometry behind you cannot cast a shadow onto anything you can see. So the
- * frustum keeps the <em>back</em> planes of the view frustum (those whose normal points roughly toward the light),
- * then extrudes <em>edge</em> planes along the light vector to close the volume. Anything outside that volume can be
- * skipped.
- * <p>
- * Note this deliberately does not hold for sun-bounce GI, and it is view-direction dependent — see
- * {@link ShadowFrustums} for when it is safe to use.
- * <p>
- * Derived from L. Spiro's algorithm, as Umbra's version is; the plane-intersection step follows the same
- * "Line of intersection between two planes" derivation (Graphics Gems 1, p. 305).
- */
+// A shadow frustum fitted to the player's view, seen from the shadow light. Port of Iris's
+// shadows.frustum.advanced.AdvancedShadowCullingFrustum
+//
+// The idea: if you are looking toward the sun, geometry behind you cannot cast a shadow onto anything you can see.
+// So the frustum keeps the BACK planes of the view frustum — those whose normal points roughly toward the light —
+// then extrudes EDGE planes along the light vector to close the volume. Anything outside it can be skipped
+//
+// Two caveats. It deliberately does not hold for sun-bounce GI, where geometry behind the camera does contribute.
+// And it is view-DIRECTION dependent, so the set of drawn sections changes as the player turns — see ShadowFrustums
+// for when that is safe and when it is not
+//
+// Derived from L. Spiro's algorithm, as Iris's version is; the plane-intersection step follows the same "line of
+// intersection between two planes" derivation from Graphics Gems 1, p. 305
 public class AdvancedShadowCullingFrustum implements Frustum {
     private static final int MAX_CLIPPING_PLANES = 13;
-    /** Matches JOML's {@code FrustumIntersection} constants, which this port does not otherwise depend on. */
+    // Values chosen to match JOML's FrustumIntersection constants, so ported code reads the same — this port does
+    // not otherwise depend on that class
     public static final int OUTSIDE = -1;
     public static final int INSIDE = -2;
     public static final int INTERSECT = -3;
 
     protected final ShadowBoxCuller boxCuller;
-    /** Each plane as {@code (a, b, c, -d)}; see {@link BaseClippingPlanes}. */
+    // Each plane stored as (a, b, c, -d), the same packing BaseClippingPlanes produces, so testing a point is one
+    // dot product against (x, y, z, 1)
     private final float[][] planes = new float[MAX_CLIPPING_PLANES][4];
     private final Vector3f shadowLightVectorFromOrigin;
     private int planeCount;
@@ -51,10 +51,10 @@ public class AdvancedShadowCullingFrustum implements Frustum {
         this.planeCount += 1;
     }
 
-    /**
-     * Adds the view frustum's back planes as seen from the shadow light. A plane is a "back" plane when its normal
-     * points in the same general direction as the vector from the origin to the light (dot product >= 0).
-     */
+    // Adds the view frustum's back planes as seen from the shadow light
+    // "Back" means the plane's normal points in the same general direction as the vector from the origin toward the
+    // light, i.e. the dot product is >= 0 — those are the planes light travels through on its way to the scene
+    // Returns which planes were kept, because the edge extrusion below needs to know where back meets front
     private boolean[] addBackPlanes(BaseClippingPlanes baseClippingPlanes) {
         Vector4f[] planes = baseClippingPlanes.getPlanes();
         boolean[] isBack = new boolean[planes.length];
@@ -77,7 +77,9 @@ public class AdvancedShadowCullingFrustum implements Frustum {
         return isBack;
     }
 
-    /** Closes the volume by extruding a plane along the light vector wherever a back plane meets a front plane. */
+    // Closes the volume by extruding a new plane along the light vector wherever a back plane meets a front plane
+    // Without this the kept back planes form an open volume that extends forever away from the light, so nothing
+    // would ever be culled
     private void addEdgePlanes(BaseClippingPlanes baseClippingPlanes, boolean[] isBack) {
         Vector4f[] planes = baseClippingPlanes.getPlanes();
 
@@ -144,9 +146,9 @@ public class AdvancedShadowCullingFrustum implements Frustum {
         addPlane(new float[]{edgePlaneNormal.x(), edgePlaneNormal.y(), edgePlaneNormal.z(), w});
     }
 
-    /**
-     * @return {@link #OUTSIDE}, {@link #INSIDE} or {@link #INTERSECT} for the given camera-relative box.
-     */
+    // Classifies a CAMERA-RELATIVE box against the volume as OUTSIDE, INSIDE or INTERSECT
+    // Three-way rather than a boolean because SafeZoneCullingFrustum needs to distinguish fully-inside from
+    // straddling, and the engine's own test only needs "not outside"
     protected int checkCornerVisibility(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
         boolean inside = true;
 

@@ -3,7 +3,6 @@ package com.bdmajora.impetus.engine.impl.render.chunk;
 import lombok.Getter;
 import lombok.Setter;
 import com.bdmajora.impetus.engine.impl.render.chunk.data.BuiltRenderSectionData;
-import com.bdmajora.impetus.engine.impl.render.chunk.lists.RenderVisualsService;
 import com.bdmajora.impetus.engine.impl.render.chunk.occlusion.VisibilityEncoding;
 import com.bdmajora.impetus.engine.impl.render.chunk.region.RenderRegion;
 import com.bdmajora.impetus.engine.impl.render.chunk.terrain.TerrainRenderPass;
@@ -16,10 +15,8 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 
-/**
- * The render state object for a chunk section. This contains all the graphics state for each render pass along with
- * data about the render in the chunk visibility graph.
- */
+// the render state object for a chunk section: all the graphics state for each render pass, plus the
+// data about the render in the chunk visibility graph
 public class RenderSection extends AbstractSection {
     // Render Region State
     private final RenderRegion region;
@@ -39,11 +36,9 @@ public class RenderSection extends AbstractSection {
     @Getter
     private int visualsServiceFlags;
 
-    /**
-     * A mapping from translucent render passes to the sort state for that particular pass (which contains data needed
-     * to perform a resort of the geometry as the camera moves). Will be empty for sections without any translucent
-     * render passes.
-     */
+    // maps each translucent render pass to that pass's sort state, which carries the data needed to
+    // re-sort the geometry as the camera moves
+    // empty for sections without any translucent render passes
     @Getter
     @NotNull
     private Map<TerrainRenderPass, TranslucentQuadAnalyzer.SortState> translucencySortStates = Collections.emptyMap();
@@ -80,11 +75,9 @@ public class RenderSection extends AbstractSection {
     // Used by the translucency sorter, to determine when a section needs sorting again
     public double lastCameraX, lastCameraY, lastCameraZ;
 
-    /**
-     * Set when the camera crossed one of this section's translucent geometry planes (see
-     * {@code TranslucencyTriggerIndex}); cleared when the resulting sort task is scheduled. Only meaningful for
-     * sections requiring dynamic translucency sorting.
-     */
+    // set when the camera crossed one of this section's translucent geometry planes (see
+    // TranslucencyTriggerIndex), cleared when the resulting sort task is scheduled
+    // only meaningful for sections requiring dynamic translucency sorting
     public boolean pendingTriggeredSort;
 
     public RenderSection(RenderRegion region, int chunkX, int chunkY, int chunkZ) {
@@ -96,11 +89,9 @@ public class RenderSection extends AbstractSection {
         this.updateCachedContextDataFlags();
     }
 
-    /**
-     * Deletes all data attached to this render and drops any pending tasks. This should be used when the render falls
-     * out of view or otherwise needs to be destroyed. After the render has been destroyed, the object can no longer
-     * be used.
-     */
+    // deletes all data attached to this render and drops any pending tasks
+    // used when the render falls out of view or otherwise needs destroying; the object cannot be used
+    // afterwards
     public void delete() {
         if (this.buildCancellationToken != null) {
             this.buildCancellationToken.setCancelled();
@@ -182,12 +173,8 @@ public class RenderSection extends AbstractSection {
         this.pendingUpdateType = type;
     }
 
-    /**
-     * Request a type of chunk update for this render section. This may "upgrade" an existing pending update for the
-     * section.
-     * @param type the chunk update
-     * @return true if the section's chunk update type has changed
-     */
+    // requests a type of chunk update for this section, which may "upgrade" an existing pending update
+    // returns true if the section's chunk update type actually changed
     public boolean requestUpdate(ChunkUpdateType type) {
         type = ChunkUpdateType.getPromotionUpdateType(this.pendingUpdateType, type);
 

@@ -19,15 +19,11 @@ import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Orchestrates the platform-compatibility startup sequence:
- * <ol>
- *     <li>{@link GlContextInfo#capture()} is done by the caller on the render thread (cheap, needs the context);</li>
- *     <li>everything else — OS adapter probe, workaround selection, overlay scan — runs on a daemon thread so
- *     process spawns and file reads never lengthen startup.</li>
- * </ol>
- * All failures degrade to "no diagnostics" — this layer must never be able to break launch.
- */
+// orchestrates the platform-compatibility startup sequence
+// GlContextInfo#capture() is done by the caller on the render thread - it is cheap and needs the context
+// everything else (OS adapter probe, workaround selection, overlay scan) runs on a daemon thread so
+// process spawns and file reads never lengthen startup
+// all failures degrade to "no diagnostics"; this layer must never be able to break launch
 public final class StartupChecks {
     private static final Logger LOGGER = LogManager.getLogger("Impetus");
     private static final AtomicBoolean CRASH_DIALOG_INSTALLED = new AtomicBoolean(false);
@@ -197,11 +193,9 @@ public final class StartupChecks {
         }
     }
 
-    /**
-     * Detects frame-hooking overlay software that injects into the GL presentation path. Impetus replaces
-     * enough of the render loop that these are a leading cause of "crashes only on my machine" reports, so
-     * being loud about them up front short-circuits a lot of debugging.
-     */
+    // detects frame-hooking overlay software that injects into the GL presentation path
+    // Impetus replaces enough of the render loop that these are a leading cause of "crashes only on
+    // my machine" reports, so being loud about them up front short-circuits a lot of debugging
     private static void scanForFrameHookOverlays() {
         if (OsKind.current() != OsKind.WINDOWS) {
             return;

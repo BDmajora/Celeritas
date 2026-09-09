@@ -8,15 +8,11 @@ import org.spongepowered.asm.mixin.Unique;
 
 import javax.annotation.Nullable;
 
-/**
- * One reference per entity: the world that currently counts it as an inventory entity, if any.
- *
- * <p>See {@link CountedInventoryEntity} for why the count cannot be trusted without it. The field is
- * null for the overwhelming majority of entities, which are not inventories and are never counted.
- *
- * <p>It holds a world the entity is already holding through {@code Entity.world}, so it keeps nothing
- * alive that was not already reachable.
- */
+// one reference per entity: the world that currently counts it as an inventory entity, if any
+// see CountedInventoryEntity for why the count cannot be trusted without it
+// the field is null for the overwhelming majority of entities, which are not inventories and are
+// never counted, and it holds a world the entity is already holding through Entity.world, so it
+// keeps nothing alive that was not already reachable
 @Mixin(Entity.class)
 public abstract class EntityMixin implements CountedInventoryEntity {
     @Unique

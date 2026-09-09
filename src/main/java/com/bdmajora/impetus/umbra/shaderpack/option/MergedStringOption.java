@@ -4,11 +4,10 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-/**
- * A string option deduplicated across all the locations it appears in. Merging fails (returns {@code null}) if the
- * default values disagree. Ported from Umbra; guava {@code ImmutableSet} replaced with an unmodifiable
- * {@link LinkedHashSet}.
- */
+// The string-valued counterpart of MergedBooleanOption: one option deduplicated across every declaration site,
+// carrying the set of locations so the writer can patch all of them
+// Merge fails the same way, returning null when the defaults disagree and the option is therefore ambiguous
+// Ported from Iris; guava ImmutableSet replaced with an unmodifiable LinkedHashSet to keep declaration order
 public class MergedStringOption {
     private final StringOption option;
     private final Set<OptionLocation> locations;

@@ -7,11 +7,11 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * One block match from a {@code block.<id>} line: a block identifier plus optional blockstate property predicates
- * (e.g. {@code double_plant:half=lower}). Port of Umbra's {@code BlockEntry}; predicates act as a filter — properties
- * the entry does not name match any value.
- */
+// One block match from a `block.<id>` line: a block identifier plus optional blockstate property predicates,
+// e.g. `double_plant:half=lower`
+// Predicates are a FILTER, not a full specification: any property the entry does not name matches any value, so
+// `double_plant:half=lower` matches every lower half regardless of which plant variant it is
+// Port of Iris's BlockEntry
 public final class BlockEntry implements Entry {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -23,11 +23,11 @@ public final class BlockEntry implements Entry {
         this.propertyPredicates = propertyPredicates;
     }
 
-    /**
-     * Parses one entry token. Must not be empty. Follows Umbra's {@code BlockEntry.parse} exactly:
-     * {@code name}, {@code namespace:name}, {@code name:key=value:...}, {@code namespace:name:key=value:...},
-     * and the {@code %}-prefixed forms of all of the above produce a {@link TagEntry} instead.
-     */
+    // Parses one entry token, following Iris's BlockEntry.parse exactly
+    // Accepted forms: `name`, `namespace:name`, `name:key=value:...` and `namespace:name:key=value:...`
+    // The same forms prefixed with % are tag references and produce a TagEntry instead, which is why the return
+    // type is the Entry interface rather than BlockEntry
+    // The token must not be empty; the caller splits on whitespace and skips blanks before getting here
     public static Entry parse(String entry) {
         if (entry.isEmpty()) {
             throw new IllegalArgumentException("Called BlockEntry::parse with an empty string");

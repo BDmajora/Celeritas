@@ -4,10 +4,9 @@ import com.bdmajora.impetus.engine.impl.compat.environment.GlContextInfo;
 
 import java.util.Locale;
 
-/**
- * Graphics hardware/driver vendor classification. Two independent identification paths are supported:
- * PCI vendor ids (from the OS-level probe, before/without a GL context) and GL context strings.
- */
+// Graphics hardware and driver vendor classification
+// Two independent identification paths feed it, and they run at different times: PCI vendor ids from the OS-level
+// probe, which works before any GL context exists, and the GL context strings once one does
 public enum GraphicsVendor {
     NVIDIA,
     AMD,

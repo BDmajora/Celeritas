@@ -14,19 +14,15 @@ import java.util.function.IntSupplier;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * The images one program uses, each on a unit allocated for that program alone (Umbra {@code gl/program/ProgramImages}).
- * <p>
- * This is the per-program half of Umbra's allocation model. A unit is consumed only when the program genuinely
- * declares the uniform — {@code glGetUniformLocation != -1} — so a program that never mentions
- * {@code floodfill_img} spends nothing on it. The older scheme in
- * {@link com.bdmajora.impetus.umbra.pipeline.CustomImageManager} assigned one fixed global unit per declared image and
- * bound all of them for every program, which works but scales with the pack's declarations rather than with what any
- * individual program needs.
- * <p>
- * The {@code glUniform1i} calls that point each sampler-style image uniform at its unit are deferred to the first
- * {@link #update()} because they require the program to be bound, which it is not at build time.
- */
+// The images one program uses, each on an image unit allocated for that program alone
+// This is the per-program half of Iris's allocation model. A unit is consumed only when the program genuinely
+// declares the uniform — glGetUniformLocation != -1 — so a program that never mentions floodfill_img spends
+// nothing on it
+// The older scheme in CustomImageManager assigns one fixed GLOBAL unit per declared image and binds all of them
+// for every program. That works, but it scales with the pack's declaration count rather than with what any one
+// program needs, and runs out of units on drivers with a small GL_MAX_IMAGE_UNITS
+// The glUniform1i calls that point each image uniform at its unit are deferred to the first update() rather than
+// issued at build time, because glUniform1i writes into the CURRENTLY bound program and nothing is bound then
 public class ProgramImages {
     private final List<ImageBinding> imageBindings;
     private List<Uniform1iCall> initializer;
@@ -40,7 +36,8 @@ public class ProgramImages {
         return new Builder(program);
     }
 
-    /** Call with this program bound. Assigns the unit uniforms once, then rebinds every image. */
+    // Must be called with this program bound. Issues the deferred unit assignments on the first call only, then
+    // rebinds every image — the rebind is per call because a render-target image's texture changes on a flip
     public void update() {
         if (this.initializer != null) {
             for (Uniform1iCall call : this.initializer) {
@@ -58,7 +55,7 @@ public class ProgramImages {
         return this.imageBindings.size();
     }
 
-    /** A deferred {@code glUniform1i(location, value)}, issued on the first {@link #update()}. */
+    // One deferred glUniform1i(location, value), issued on the first update()
     @Desugar
     private record Uniform1iCall(int location, int value) {
     }

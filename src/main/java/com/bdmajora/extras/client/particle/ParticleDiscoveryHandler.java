@@ -10,17 +10,15 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 
-/**
- * Runs particle discovery off the options screen and off the per-particle path.
- *
- * <p>1.12.2 recreates {@code Minecraft.effectRenderer} per world load, and that is the moment every
- * vanilla and most mod factories are registered. Keying the scan off the instance rather than a
- * world-load event makes it independent of load ordering while still running exactly once per world.
- */
+// runs particle discovery off the options screen and off the per-particle path
+// 1.12.2 recreates Minecraft.effectRenderer per world load, and that is the moment every vanilla and
+// most mod factories are registered
+// keying the scan off the instance rather than a world-load event makes it independent of load
+// ordering while still running exactly once per world
 @Mod.EventBusSubscriber(Side.CLIENT)
 @SideOnly(Side.CLIENT)
 public final class ParticleDiscoveryHandler {
-    /** The last instance scanned; a different one means a new world was loaded. */
+    // The last instance scanned; a different one means a new world was loaded.
     private static ParticleManager lastScanned;
 
     private ParticleDiscoveryHandler() {
@@ -44,10 +42,8 @@ public final class ParticleDiscoveryHandler {
         flushIfDirty(registry);
     }
 
-    /**
-     * Persists what the session accumulated: classes only ever seen at spawn time, and the user's
-     * per-class toggles, neither of which goes through a scan.
-     */
+    // persists what the session accumulated: classes only ever seen at spawn time, and the user's
+    // per-class toggles, neither of which goes through a scan
     @SubscribeEvent
     public static void onWorldUnload(WorldEvent.Unload event) {
         if (event.getWorld() == null || !event.getWorld().isRemote) {

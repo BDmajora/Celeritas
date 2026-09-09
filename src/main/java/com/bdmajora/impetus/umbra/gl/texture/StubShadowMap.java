@@ -9,11 +9,11 @@ import java.nio.ByteBuffer;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * A 1×1 depth texture holding depth 1.0, bound to the {@code shadowtex0}/{@code shadowtex1} units while there is no
- * real shadow pass. The pipeline binds raw or compare sampler objects over it per program, so raw depth reads and
- * {@code shadow2D} reads can both see OptiFine's no-shadow-map "fully lit" behavior.
- */
+// A 1x1 depth texture holding depth 1.0, bound to shadowtex0/shadowtex1 whenever there is no real shadow pass
+// 1.0 is the depth-clear value, i.e. "nothing was ever drawn here", which every pack reads as fully lit — the same
+// thing OptiFine shows when a pack declares no shadow program
+// The pipeline layers raw or compare sampler objects over it per program, so both a raw depth fetch and a shadow2D
+// compare land on that same fully-lit answer
 public class StubShadowMap extends GlResource {
     public StubShadowMap() {
         setHandle(LWJGL.glGenTextures());

@@ -47,12 +47,11 @@ public class TileEntityRendererDispatcherIdMixin {
         impetus$pushIdToGpu();
     }
 
-    /**
-     * Sends the id change to the bound program. Setting it only on {@link CapturedRenderingState} leaves it in Java —
-     * the uniform is uploaded when a phase is bound, and one phase covers every block entity in the frame, so the
-     * batch would render with whichever one's id happened to be current at phase entry. See
-     * {@link UmbraRenderingPipeline#refreshDynamicUniforms()}.
-     */
+    // sends the id change to the bound program
+    // setting it only on CapturedRenderingState leaves it in Java: the uniform is uploaded when a
+    // phase is bound, and one phase covers every block entity in the frame, so the batch would render
+    // with whichever one's id happened to be current at phase entry
+    // see UmbraRenderingPipeline#refreshDynamicUniforms()
     @Unique
     private static void impetus$pushIdToGpu() {
         UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();

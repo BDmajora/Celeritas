@@ -16,11 +16,12 @@ import java.awt.Desktop;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Modern Sodium/Umbra-style shader-pack selection screen: a scrollable list with an enable/disable toggle at the top and
- * each available pack below, over the shared Impetus GUI framework. Selecting a pack + Apply loads it and reloads the
- * chunk renderers (switching terrain onto the pack's shader); "Shader Pack Settings" opens {@link ShaderPackConfigScreen}.
- */
+// The shader-pack picker, drawn in the Sodium/Iris style on the shared Impetus GUI framework
+// A scrollable list: an enable/disable toggle at the top, then every pack found in shaderpacks/
+// Selection alone changes nothing — Apply is what loads the pack AND reloads the chunk renderers, because the
+// terrain vertex format itself changes when a pack becomes active and every existing chunk mesh is built for the
+// old one
+// The Shader Pack Settings button hands off to ShaderPackConfigScreen for the loaded pack's own options
 public class ShaderPackSelectScreen extends GuiScreen {
     private static final int LIST_TOP = 44;
     private static final int ROW_HEIGHT = 22;

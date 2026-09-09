@@ -9,16 +9,11 @@ import com.bdmajora.impetus.engine.impl.gl.shader.ShaderParser;
 import com.bdmajora.impetus.engine.impl.gl.shader.ShaderType;
 
 public class ShaderLoader {
-    /**
-     * Creates an OpenGL shader from GLSL sources. The GLSL source file should be made available on the classpath at the
-     * path of `/assets/{namespace}/shaders/{path}`. User defines can be used to declare variables in the shader source
-     * after the version header, allowing for conditional compilation with macro code.
-     *
-     * @param type The type of shader to create
-     * @param name The identifier used to locate the shader source file
-     * @param constants A list of constants for shader specialization
-     * @return An OpenGL shader object compiled with the given user defines
-     */
+    // Compiles one of the engine's own GLSL shaders off the classpath, from /assets/{namespace}/shaders/{path}
+    // constants are specialisation defines, injected immediately AFTER the version header — which is where they
+    // have to go, since GLSL requires #version to be the first real token
+    // Specialising this way means one source file compiles to several variants rather than the engine shipping a
+    // file per combination
     public static GlShader loadShader(ShaderType type, String name, ShaderConstants constants) {
         return new GlShader(type, name, ShaderParser.parseShader(getShaderSource(name), ShaderLoader::getShaderSource, constants));
     }

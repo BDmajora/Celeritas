@@ -24,26 +24,27 @@ import com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline;
 import java.util.EnumMap;
 import java.util.Map;
 
-/**
- * {@link ChunkShaderInterface} for a shader-pack terrain program (the transformed {@code gbuffers_terrain}). It feeds
- * Impetus's per-draw state — {@code u_ModelViewMatrix}/{@code u_ProjectionMatrix}/{@code u_RegionOffset} and the
- * block/lightmap sampler units — and binds AUSM's gbuffer framebuffer so terrain is written into the pipeline's
- * gbuffer instead of the main framebuffer.
- */
+// The ChunkShaderInterface for a shader-pack terrain program, i.e. the transformed gbuffers_terrain
+// Two jobs. It feeds the engine's own per-draw state — u_ModelViewMatrix, u_ProjectionMatrix, u_RegionOffset and
+// the block and lightmap sampler units — which the pack's shader never declares but the generated prologue does
+// And it binds the pipeline's gbuffer framebuffer, so terrain lands in the gbuffer for the deferred chain to
+// consume rather than straight into the main framebuffer
 public class UmbraTerrainShaderInterface implements ChunkShaderInterface {
     private final GlUniformMatrix4f uModelViewMatrix;
     private final GlUniformMatrix4f uProjectionMatrix;
     private final GlUniformFloat3v uRegionOffset;
     private final Map<ChunkShaderTextureSlot, GlUniformInt> uTextures = new EnumMap<>(ChunkShaderTextureSlot.class);
-    /** The program's sanitized {@code DRAWBUFFERS} mask, applied to the gbuffer FBO whenever this program binds. */
+    // The program's sanitised DRAWBUFFERS mask, re-applied to the gbuffer FBO on every bind — sanitised because a
+    // pack can name a buffer this driver does not have, and an out-of-range slot makes the whole draw fail
     private final int[] drawBuffers;
     private final ProgramBlendState blendState;
     private final ProgramAlphaTest alphaTest;
-    /**
-     * The pack's OptiFine uniform set ({@code gbufferModelView(Inverse)}, {@code cameraPosition}, time…), uploaded on
-     * every bind. Without these the pack's world-space round-trip (through {@code gbufferModelViewInverse}) multiplies
-     * by zero matrices and every vertex collapses to the origin. Attached after link by the program override.
-     */
+    // The pack's OptiFine uniform set — gbufferModelView and its inverse, cameraPosition, the time counters —
+    // uploaded on every bind
+    // Not optional: a pack's world-space round trip goes through gbufferModelViewInverse, and without these the
+    // multiply is against an all-zero matrix, so every terrain vertex collapses to the origin and the world
+    // disappears
+    // Attached after link by the program override, which is why it is not final
     private ProgramUniforms uniforms;
 
     private GlPrimitiveType primitiveType = GlPrimitiveType.TRIANGLES;

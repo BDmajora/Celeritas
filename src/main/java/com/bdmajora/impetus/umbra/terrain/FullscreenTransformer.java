@@ -4,14 +4,13 @@ import com.bdmajora.impetus.umbra.gl.program.DrawBuffers;
 
 import java.util.regex.Pattern;
 
-/**
- * Transforms a GLSL-120 full-screen shader-pack program ({@code composite}/{@code deferred}/{@code final}) to
- * {@code #version 330 core} for Impetus. Full-screen passes are trivial in the vertex stage (they just pass the
- * fullscreen quad's position/texcoord through), so this injects an {@code a_Position}/{@code a_TexCoord} attribute
- * pair, aliases the {@code gl_*} built-ins to them (with an ortho model-view-projection so {@code ftransform()} /
- * {@code gl_ModelViewProjectionMatrix * gl_Vertex} map the {@code [0,1]} quad to NDC {@code [-1,1]}), and promotes
- * fragment outputs. The pack's {@code colortexN}/{@code depthtexN} samplers are left as-is (bound by the pipeline).
- */
+// Rewrites a GLSL-120 full-screen pack program — composite, deferred or final — to #version 330 core
+// Full-screen passes are trivial in the vertex stage: all they do is pass the quad's position and texcoord through.
+// So this injects an a_Position/a_TexCoord attribute pair, aliases the gl_* built-ins onto them, and promotes the
+// fragment outputs
+// The aliasing includes an ortho model-view-projection, so a pack writing ftransform() or
+// gl_ModelViewProjectionMatrix * gl_Vertex still maps the [0,1] quad onto NDC [-1,1] and lands where it expects
+// The pack's own colortexN and depthtexN samplers are left completely alone — the pipeline binds those
 public final class FullscreenTransformer {
     private static final Pattern VERSION = Pattern.compile("^\\s*#version[^\\n]*\\n", Pattern.MULTILINE);
 
@@ -57,10 +56,9 @@ public final class FullscreenTransformer {
             ""
     ) + "\n";
 
-    /**
-     * The generated vertex main is APPENDED after the pack body (not part of the prologue): the hoisted global
-     * initializers it runs reference pack globals/uniforms that must already be declared above it.
-     */
+    // The generated vertex main is APPENDED after the pack body rather than being part of the prologue
+    // It has to be: the hoisted global initialisers it runs reference the pack's own globals and uniforms, which
+    // must already be declared above the point where they are assigned
     private static String vertexMain(String hoistedAssignments) {
         return "\nvoid main() {\n"
                 + "    iris_Vertex = a_Position;\n"
@@ -70,11 +68,9 @@ public final class FullscreenTransformer {
                 + "}\n";
     }
 
-    /**
-     * The array length is queried from the driver rather than hardcoded — see
-     * {@link DrawBuffers#fragmentOutputArraySize()}. A fixed 16 demands 16 contiguous fragment-output locations,
-     * which exceeds {@code GL_MAX_DRAW_BUFFERS} and fails to link on Mesa.
-     */
+    // The fragment output array's length is queried from the driver rather than hardcoded
+    // A fixed 16 demands 16 contiguous fragment-output locations, which exceeds GL_MAX_DRAW_BUFFERS on plenty of
+    // drivers and fails to link outright on Mesa
     private static String fragmentPrologue() {
         return String.join("\n",
             "#version 330 core",
@@ -154,16 +150,15 @@ public final class FullscreenTransformer {
         return VERSION.matcher(source).replaceFirst("");
     }
 
-    /** Renames every {@code void main()} — flattened sources may hold several in mutually exclusive #ifdef branches. */
+    // Renames EVERY void main(), not just the first: a flattened source routinely holds several of them in
+    // mutually exclusive #ifdef branches, and leaving any one named main collides with the generated one
     private static String renameMain(String source) {
         return source.replaceAll("\\bvoid\\s+main\\s*\\(\\s*(void)?\\s*\\)", "void irisMain()");
     }
 
-    /**
-     * {@code varying} → {@code out}/{@code in}, keeping any qualifier in front of it ({@code flat}, {@code centroid},
-     * {@code invariant}, ...). Anchoring at {@code ^\s*varying} would skip {@code flat varying}, which is then a hard
-     * error at 330 core (C7560/C7561) — see {@code ImpetusTerrainTransformer.convertVaryings} for the full story.
-     */
+    // varying becomes out or in, KEEPING whatever qualifier sits in front of it — flat, centroid, invariant
+    // Anchoring the match at ^\s*varying skips `flat varying` entirely, and a surviving `varying` at 330 core is a
+    // hard compile error (C7560/C7561). See ImpetusTerrainTransformer.convertVaryings for the full story
     private static String convertVaryings(String source, String direction) {
         return source.replaceAll(
                 "(?m)^(\\s*)((?:(?:invariant|flat|smooth|noperspective|centroid)\\s+)*)varying\\b",
@@ -189,12 +184,12 @@ public final class FullscreenTransformer {
         return source;
     }
 
-    /**
-     * Some GLSL 120 OptiFine-era packs project a view-space direction as {@code vec4(dir, 1.0) * gbufferProjection}.
-     * With our normal column-major matrix uploads that treats the perspective matrix as transposed, sending effects
-     * such as Sildur's godray source far off-screen. Normalize those projection products to the GLSL column-vector
-     * form while leaving model-view and inverse math alone.
-     */
+    // Some GLSL 120 OptiFine-era packs project a view-space direction as vec4(dir, 1.0) * gbufferProjection — the
+    // row-vector form
+    // With the column-major matrices this port uploads, that multiplication reads the perspective matrix as if it
+    // were transposed, which sends effects like Sildur's godray source far off screen
+    // Rewritten to the GLSL column-vector form. Model-view and inverse maths are deliberately left alone: those are
+    // often row-vector on purpose, and "fixing" them would break packs that are already correct
     private static String rewriteLegacyProjectionProducts(String source) {
         return source.replaceAll(
                 "\\bvec4\\s*\\(([^;\\n]+)\\)\\s*\\*\\s*\\b(gbufferProjection|gbufferPreviousProjection|shadowProjection)\\b",

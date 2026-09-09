@@ -3,27 +3,21 @@ package com.bdmajora.impetus.umbra.pipeline.shadow;
 import org.joml.Matrix4fc;
 import org.joml.Vector3f;
 
-/**
- * {@link AdvancedShadowCullingFrustum} with a guaranteed "safe zone" — Umbra's
- * {@code shadows.frustum.advanced.SafeZoneCullingFrustum}, selected by {@code shadow.culling = reversed}.
- * <p>
- * Two boxes bound the test:
- * <ul>
- * <li>the <b>distance</b> box ({@code shadowDistance}) is a hard outer bound — outside it, nothing is drawn;</li>
- * <li>the <b>safe zone</b> box ({@code voxelDistance}) is an inner region where everything is drawn
- * <em>unconditionally</em>, bypassing the view-dependent frustum test entirely.</li>
- * </ul>
- * That inner box is exactly what makes this mode safe for packs that voxelize in the shadow pass: within it, the
- * drawn section set depends only on camera position, so a pack's floodfill sees a stable voxel field as the player
- * turns. Outside it, the advanced test applies and saves the work.
- */
+// AdvancedShadowCullingFrustum with a guaranteed "safe zone" — Iris's
+// shadows.frustum.advanced.SafeZoneCullingFrustum, selected by shadow.culling = reversed
+// Two boxes bound the test. The distance box (shadowDistance) is a hard outer bound: outside it nothing is drawn
+// at all. The safe zone box (voxelDistance) is an inner region where everything is drawn UNCONDITIONALLY, skipping
+// the view-dependent frustum test
+// That inner box is what makes this mode usable for packs that voxelize in the shadow pass: inside it the drawn
+// section set depends only on camera position, so a pack's floodfill sees a stable voxel field as the player
+// turns. Outside it the advanced test applies and saves the work
 public final class SafeZoneCullingFrustum extends AdvancedShadowCullingFrustum {
     private final ShadowBoxCuller distanceCuller;
 
-    /**
-     * @param voxelCuller    the inner safe zone; anything inside is always drawn
-     * @param distanceCuller the outer bound; anything outside is always culled
-     */
+    // voxelCuller is the inner safe zone: anything inside it is always drawn
+    // distanceCuller is the outer bound: anything outside it is always culled
+    // A pack that declares no voxelDistance gets a zero-size safe zone, which degrades to plain advanced culling
+    // rather than to an error
     public SafeZoneCullingFrustum(Matrix4fc modelViewProjection, Vector3f shadowLightVectorFromOrigin,
                                   ShadowBoxCuller voxelCuller, ShadowBoxCuller distanceCuller) {
         super(modelViewProjection, shadowLightVectorFromOrigin, voxelCuller);

@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyArgs;
 import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
 
-/** Lights particles by the dynamic light where they are, so smoke over a held torch is lit. */
+// Lights particles by the dynamic light where they are, so smoke over a held torch is lit.
 @Mixin(Particle.class)
 public abstract class ParticleMixin {
     @ModifyArgs(

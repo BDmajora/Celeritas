@@ -7,26 +7,18 @@ import java.util.HashMap;
 import java.util.Map;
 
 public interface ChunkVertexType {
-    /**
-     * @return The scale to be applied to vertex coordinates
-     */
+    // the scale applied to vertex coordinates
     float getPositionScale();
 
-    /**
-     * @return The translation to be applied to vertex coordinates
-     */
+    // the translation applied to vertex coordinates
     float getPositionOffset();
 
-    /**
-     * @return The scale to be applied to texture coordinates
-     */
+    // the scale applied to texture coordinates
     float getTextureScale();
 
     GlVertexFormat getVertexFormat();
 
-    /**
-     * {@return a newly constructed instance of a vertex encoder for the given vertex type}
-     */
+    // a newly constructed vertex encoder for this vertex type
     ChunkVertexEncoder createEncoder();
 
     @MustBeInvokedByOverriders

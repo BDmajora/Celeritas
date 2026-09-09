@@ -34,39 +34,34 @@ import java.util.function.IntSupplier;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * Owns the GL textures behind the pack's custom-texture directives and the per-stage sampler-unit overrides that make
- * programs read them — the port of Umbra's {@code CustomTextureManager}, adapted to this pipeline's fixed-texture-unit
- * architecture.
- * <p>
- * Umbra intercepts each program's sampler <em>bindings</em> ({@code CustomTextureSamplerInterceptor}); here every
- * sampler name has a fixed unit instead, so each directive gets a dedicated unit above the pipeline's reserved range,
- * the texture is bound there for the whole frame ({@link #bindAll}), and a program belonging to the directive's stage
- * has its sampler uniform pointed at the custom unit instead of the standard one ({@link #getOverrides}).
- * <p>
- * Directive semantics match Umbra:
- * <ul>
- * <li>{@code texture.<stage>.<sampler>} overrides that sampler (and every alias of the same unit, e.g.
- * {@code gaux4}/{@code colortex7}) during the given stage only;</li>
- * <li>{@code customTexture.<name>} defines a named sampler available in every stage;</li>
- * <li>{@code texture.noise} replaces the generated noisetex (see {@link #getNoiseTextureId});</li>
- * <li>a PNG uses the pack's bytes with mcmeta filtering; a {@code namespace:path} location resolves through the
- * TextureManager at bind time (so resource reloads are safe); {@code minecraft:dynamic/lightmap_1} resolves to the
- * live lightmap.</li>
- * </ul>
- */
+// Owns the GL textures behind the pack's custom-texture directives, plus the per-stage sampler-unit overrides that
+// make programs actually read them
+// Port of Iris's CustomTextureManager, adapted to this pipeline's fixed-texture-unit architecture
+//
+// The architectural difference: Iris intercepts each program's sampler BINDINGS through
+// CustomTextureSamplerInterceptor, whereas here every sampler name has a fixed unit. So each directive gets a
+// dedicated unit above the pipeline's reserved range, the texture is bound there for the whole frame, and a
+// program belonging to that directive's stage has its sampler uniform pointed at the custom unit rather than the
+// standard one
+//
+// Directive semantics match Iris
+//   texture.<stage>.<sampler> overrides that sampler — and every alias of the same unit, e.g. gaux4 and colortex7 —
+//   during that stage only
+//   customTexture.<name> defines a named sampler available in every stage
+//   texture.noise replaces the generated noisetex
+//   a PNG uses the pack's own bytes with its mcmeta filtering; a namespace:path location resolves through the
+//   TextureManager at bind time, so resource reloads are safe; and minecraft:dynamic/lightmap_1 resolves to the
+//   live lightmap
 public class CustomTextureManager {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
-    /** A sampler-unit override: programs of the stage point sampler uniforms at {@code unit}. */
+    // One sampler-unit override: programs belonging to the stage point that sampler's uniform at this unit
     public static final class Override {
-        /** The dedicated texture unit the custom texture is bound to. */
+        // The dedicated texture unit the custom texture is bound to for the whole frame
         public final int unit;
-        /**
-         * The colortex index this override shadows, or {@code -1} when the overridden sampler is not a color target.
-         * Used for Umbra's flip deactivation: once a composite pass has written (flipped) that buffer, later passes
-         * read the pass chain's content, not the custom texture.
-         */
+        // The colortex index this override shadows, or -1 when the overridden sampler is not a colour target at all
+        // Needed for Iris's flip deactivation: once a composite pass has written — flipped — that buffer, later
+        // passes must read the pass chain's own content rather than the custom texture that was standing in for it
         public final int colorTarget;
 
         Override(int unit, int colorTarget) {
@@ -75,7 +70,9 @@ public class CustomTextureManager {
         }
     }
 
-    /** One dedicated unit and the texture to bind on it (resolved per frame — resource textures can be recreated). */
+    // One dedicated unit and the texture to bind on it
+    // The texture is resolved per frame rather than captured once, because a resource texture can be recreated by a
+    // resource reload and the old GL id would then point at nothing
     private static final class Binding {
         final int unit;
         final int target;
@@ -102,24 +99,22 @@ public class CustomTextureManager {
     private final List<Binding> bindings = new ArrayList<>();
     private final List<PngTexture> ownedTextures = new ArrayList<>();
     private final List<Integer> ownedRawTextures = new ArrayList<>();
-    /** The custom noisetex, or {@code null} to keep the generated noise texture. */
+    // The pack's own noisetex, or null to keep the generated one
     private final PngTexture noiseTexture;
 
     private final int firstUnit;
     private final int lastUnit;
     private int nextUnit;
 
-    /** Cached {@code EntityRenderer.lightmapTexture} field, found by type so it works under both MCP and SRG names. */
+    // Cached EntityRenderer.lightmapTexture field, located by TYPE rather than by name so the lookup works under
+    // both MCP and SRG mappings
     private static Field lightmapTextureField;
 
-    /**
-     * @param pack         the pack whose resolved custom-texture data to upload.
-     * @param samplerUnitsByStage the pipeline's standard sampler-name -> unit table for each stage, used to expand a
-     *                            directive's sampler name to every alias of the same unit.
-     * @param colorTargetsByName sampler name -> logical colortex index, used for Umbra override deactivation.
-     * @param firstUnit    first dedicated texture unit available for custom textures.
-     * @param lastUnit     last usable texture unit (inclusive); directives beyond it are skipped with an error.
-     */
+    // samplerUnitsByStage is the pipeline's standard sampler-name to unit table per stage, used to expand a
+    // directive's sampler name out to every ALIAS sharing that unit — so overriding gaux4 also overrides colortex7
+    // colorTargetsByName maps sampler name to logical colortex index, which is what drives the flip deactivation
+    // firstUnit and lastUnit bound the dedicated range; lastUnit is inclusive, and a directive that would fall past
+    // it is skipped with an error rather than silently wrapping onto a unit someone else owns
     public CustomTextureManager(ShaderPack pack, Map<TextureStage, Map<String, Integer>> samplerUnitsByStage,
                                 Map<String, Integer> colorTargetsByName, int firstUnit, int lastUnit) {
         this.firstUnit = firstUnit;
@@ -207,12 +202,14 @@ public class CustomTextureManager {
         return this.nextUnit++;
     }
 
-    /** First texture unit still free after all custom-texture directives have been assigned. */
+    // The first texture unit still free once every custom-texture directive has been assigned
     public int getNextAvailableUnit() {
         return this.nextUnit;
     }
 
-    /** Turns texture data into a per-frame texture-id supplier, creating/owning a GL texture for PNG data. */
+    // Turns parsed texture data into a per-frame texture-id supplier
+    // PNG data becomes a GL texture this class creates and owns; a resource location becomes a supplier that
+    // re-resolves each frame and owns nothing
     private TextureRef createTexture(String name, CustomTextureData data) {
         if (data instanceof CustomTextureData.PngData) {
             try {
@@ -330,11 +327,10 @@ public class CustomTextureManager {
         }
     }
 
-    /**
-     * Resolves a {@code namespace:path} texture through the TextureManager, re-queried every frame like Umbra does
-     * (the texture object can be replaced on resource reloads). 1.12.2 registers its atlases without the {@code .png}
-     * extension modern packs write ({@code textures/atlas/blocks.png}), so that spelling is retried without it.
-     */
+    // Resolves a namespace:path texture through the TextureManager, re-queried every frame as Iris does, because a
+    // resource reload replaces the texture object underneath
+    // 1.12.2 registers its atlases WITHOUT the .png extension modern packs write, so a path like
+    // textures/atlas/blocks.png is retried with the extension stripped rather than reported missing
     private static int resolveResource(String namespace, String location) {
         ITextureObject texture = Minecraft.getMinecraft().getTextureManager()
                 .getTexture(new ResourceLocation(namespace, location));
@@ -345,10 +341,9 @@ public class CustomTextureManager {
         return texture != null ? texture.getGlTextureId() : TextureUtil.MISSING_TEXTURE.getGlTextureId();
     }
 
-    /**
-     * The live lightmap texture ({@code EntityRenderer.lightmapTexture}), found reflectively by field type — the
-     * class has exactly one {@link DynamicTexture} field, and a type scan works under both MCP and SRG names.
-     */
+    // The live lightmap texture, i.e. EntityRenderer.lightmapTexture
+    // Found reflectively by FIELD TYPE rather than name: the class has exactly one DynamicTexture field, so a type
+    // scan is unambiguous and works identically under MCP and SRG mappings
     private static int resolveLightmap() {
         try {
             if (lightmapTextureField == null) {
@@ -372,14 +367,15 @@ public class CustomTextureManager {
         return TextureUtil.MISSING_TEXTURE.getGlTextureId();
     }
 
-    /** Sampler-unit overrides for one stage: sampler name (directive name + unit aliases) → override. */
+    // The sampler-unit overrides for one stage, keyed by sampler name — the directive's own name plus every alias
+    // sharing that unit
     public Map<String, Override> getOverrides(TextureStage stage) {
         return this.overrides.containsKey(stage)
                 ? Collections.unmodifiableMap(this.overrides.get(stage))
                 : Collections.emptyMap();
     }
 
-    /** The pack's {@code texture.noise} GL id, or {@code -1} to use the generated noise texture. */
+    // The pack's texture.noise GL id, or -1 meaning "use the generated noise texture"
     public int getNoiseTextureId() {
         return this.noiseTexture != null ? this.noiseTexture.getTextureId() : -1;
     }
@@ -388,10 +384,10 @@ public class CustomTextureManager {
         return this.bindings.isEmpty();
     }
 
-    /**
-     * Binds every custom texture on its dedicated unit for the frame. All units are above the vanilla-tracked range,
-     * so raw binds are correct (GlStateManager's 8-slot cache cannot address them). Leaves unit 0 active.
-     */
+    // Binds every custom texture on its dedicated unit for the frame
+    // Raw binds are correct here specifically because every one of these units sits above GlStateManager's 8-slot
+    // cache, which cannot address them and therefore cannot be desynced by them
+    // Leaves unit 0 active, so nothing downstream inherits a moved selector
     public void bindAll() {
         for (Binding binding : this.bindings) {
             GlTextureUnits.selectScratch(binding.unit);
@@ -400,7 +396,7 @@ public class CustomTextureManager {
         GlTextureUnits.resetToUnit0();
     }
 
-    /** Unbinds the custom-texture units (frame teardown, mirrors the pipeline's other unit restores). */
+    // Unbinds the custom-texture units at frame teardown, mirroring the pipeline's other unit restores
     public void unbindAll() {
         for (Binding binding : this.bindings) {
             GlTextureUnits.selectScratch(binding.unit);

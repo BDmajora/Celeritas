@@ -11,16 +11,13 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-/**
- * Every setting the Dynamic Lights page owns, persisted to {@code config/impetus-dynamiclights.cfg}.
- *
- * <p>Built the same way as {@code ExtrasConfig}: booleans go in a declarative table so load and save
- * cannot drift apart, and enums are stored by ordinal. <b>Enum constant order is part of the on-disk
- * format</b> — appending is safe, reordering silently changes what a saved config means.
- *
- * <p>The per-type light source toggles are not fields here; they live in {@link LightSourceSettings},
- * which this class only persists.
- */
+// every setting the Dynamic Lights page owns, persisted to config/impetus-dynamiclights.cfg
+// built the same way as ExtrasConfig: booleans go in a declarative table so load and save cannot
+// drift apart, and enums are stored by ordinal
+// enum constant order is therefore part of the on-disk format - appending is safe, reordering
+// silently changes what a saved config means
+// the per-type light source toggles are not fields here; they live in LightSourceSettings, which this
+// class only persists
 public final class DynamicLightsConfig {
     private static final String CAT_GENERAL = "general";
     private static final String CAT_SOURCES = "light_sources";
@@ -55,13 +52,10 @@ public final class DynamicLightsConfig {
 
     private Configuration config;
 
-    /**
-     * Reads {@code file}, adding any keys it does not yet contain.
-     *
-     * <p>A read failure yields a fresh defaults instance that is deliberately <em>not</em> written
-     * back: overwriting a config we failed to parse would destroy the user's settings along with
-     * whatever confused us.
-     */
+    // reads the file, adding any keys it does not yet contain
+    // a read failure yields a fresh defaults instance that is deliberately *not* written back:
+    // overwriting a config we failed to parse would destroy the user's settings along with whatever
+    // confused us
     public static DynamicLightsConfig load(File file) {
         DynamicLightsConfig options = new DynamicLightsConfig();
         Configuration config = new Configuration(file);
@@ -99,7 +93,7 @@ public final class DynamicLightsConfig {
                 new String[0], "Block entity types the user has switched off"));
     }
 
-    /** Flushes every setting back to disk. */
+    // Flushes every setting back to disk.
     public void writeChanges() {
         if (config == null) {
             return;
@@ -132,7 +126,7 @@ public final class DynamicLightsConfig {
         return new BooleanProperty(category, key, defaultValue, comment, setter, getter);
     }
 
-    /** Something with a lang key; lets the option page build cycling controls generically. */
+    // Something with a lang key; lets the option page build cycling controls generically.
     public interface Localized {
         String translationKey();
 
@@ -141,7 +135,7 @@ public final class DynamicLightsConfig {
         }
     }
 
-    /** A boolean config entry bound to its in-memory field, so load and save cannot drift apart. */
+    // A boolean config entry bound to its in-memory field, so load and save cannot drift apart.
     @Desugar
     private record BooleanProperty(String category, String key, boolean defaultValue, String comment,
                                    Consumer<Boolean> setter, Supplier<Boolean> getter) {

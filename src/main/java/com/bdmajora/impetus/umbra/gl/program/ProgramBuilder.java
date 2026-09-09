@@ -10,14 +10,11 @@ import java.util.List;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * Assembles a {@link GlProgram} from compiled {@link GlShader} stages: create the program object, attach the stages,
- * bind the OptiFine vertex-attribute slots ({@code mc_Entity}=10, {@code mc_midTexCoord}=11, {@code at_tangent}=12),
- * link, validate, then detach the stages.
- * <p>
- * This is the abstraction-layer equivalent of OptiFine's {@code Shaders.setupProgram}. Attribute binding must happen
- * before linking, which is why it is part of the builder rather than {@link GlProgram}.
- */
+// Assembles a GlProgram from compiled GlShader stages: create the program object, attach the stages, bind the
+// OptiFine vertex-attribute slots (mc_Entity 10, mc_midTexCoord 11, at_tangent 12), link, validate, detach
+// The abstraction-layer equivalent of OptiFine's Shaders.setupProgram
+// It is a builder rather than methods on GlProgram because attribute binding has to happen BEFORE linking, so
+// there is a window where the program object exists but is not yet a usable GlProgram
 public class ProgramBuilder {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -44,23 +41,23 @@ public class ProgramBuilder {
         return this;
     }
 
-    /** Binds a vertex attribute name to a fixed location. Must be called before {@link #link()}. */
+    // Binds a vertex attribute name to a fixed location. Before link() — glBindAttribLocation only takes effect at
+    // the next link, so calling it afterwards silently does nothing
     public ProgramBuilder bindAttributeLocation(int index, CharSequence attributeName) {
         LWJGL.glBindAttribLocation(this.program, index, attributeName);
         return this;
     }
 
-    /** Binds a fragment output to a draw buffer index (GL3.0+). Must be called before {@link #link()}. */
+    // Binds a fragment output to a draw buffer index (GL 3.0+). Before link(), for the same reason
     public ProgramBuilder bindFragmentDataLocation(int colorNumber, CharSequence outputName) {
         LWJGL.glBindFragDataLocation(this.program, colorNumber, outputName);
         return this;
     }
 
-    /**
-     * Links and validates the program. On success the attached stages are detached (the caller still owns them and is
-     * expected to {@link GlShader#destroy()} them). On failure the program object is deleted and a
-     * {@link ProgramCreationException} is thrown.
-     */
+    // Links and validates
+    // On success the stages are DETACHED but not deleted — the caller still owns them and is expected to destroy
+    // them, since one compiled stage is often attached to several programs
+    // On failure the program object is deleted before throwing, so a rejected link leaks nothing
     public GlProgram link() {
         LWJGL.glLinkProgram(this.program);
 

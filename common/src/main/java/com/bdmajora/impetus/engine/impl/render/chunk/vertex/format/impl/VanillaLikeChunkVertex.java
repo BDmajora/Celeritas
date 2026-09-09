@@ -7,10 +7,9 @@ import com.bdmajora.impetus.engine.impl.render.chunk.vertex.format.ChunkVertexEn
 import com.bdmajora.impetus.engine.impl.render.chunk.vertex.format.ChunkVertexType;
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * This vertex format is less performant and uses more VRAM than {@link CompactChunkVertex}, but should be completely
- * compatible with mods & resource packs that need high precision for models.
- */
+// The wide terrain vertex format: slower and heavier on VRAM than CompactChunkVertex, but it keeps full precision
+// CompactChunkVertex quantises positions and UVs, which is invisible on vanilla models and visible on modded ones
+// that place geometry at fine sub-block offsets — this format exists for those
 public class VanillaLikeChunkVertex implements ChunkVertexType {
     public static final int STRIDE = 28;
 

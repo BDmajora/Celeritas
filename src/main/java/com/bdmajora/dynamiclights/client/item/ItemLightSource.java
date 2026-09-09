@@ -17,12 +17,9 @@ import net.minecraftforge.fml.common.registry.ForgeRegistries;
 
 import java.util.Optional;
 
-/**
- * How brightly one item glows when held, worn or dropped.
- *
- * <p>Declared in data rather than code — {@code assets/impetus/dynamiclights/item/*.json} — so a
- * resource pack can add light sources for modded items without touching the mod.
- */
+// how brightly one item glows when held, worn or dropped
+// declared in data rather than code - assets/impetus/dynamiclights/item/*.json - so a resource pack
+// can add light sources for modded items without touching the mod
 public abstract class ItemLightSource {
     private final ResourceLocation id;
     private final Item item;
@@ -46,7 +43,7 @@ public abstract class ItemLightSource {
         return this.waterSensitive;
     }
 
-    /** The luminance of this stack, or zero if it is water-sensitive and currently submerged. */
+    // The luminance of this stack, or zero if it is water-sensitive and currently submerged.
     public int getLuminance(ItemStack stack, boolean submergedInWater) {
         if (this.waterSensitive() && DynamicLights.options().waterSensitiveCheck && submergedInWater) {
             return 0;
@@ -62,12 +59,9 @@ public abstract class ItemLightSource {
                 + ", water_sensitive=" + this.waterSensitive + '}';
     }
 
-    /**
-     * Parses one light source definition.
-     *
-     * <p>{@code luminance} is either a number, the literal {@code "block"} (use the block this item
-     * places), or a block id (mimic that block's light value).
-     */
+    // parses one light source definition
+    // luminance is either a number, the literal "block" (use the block this item places), or a block
+    // id (mimic that block's light value)
     public static Optional<ItemLightSource> fromJson(ResourceLocation id, JsonObject json) {
         if (!json.has("item") || !json.has("luminance")) {
             DynamicLights.LOGGER.warn("Item light source \"{}\" is missing a required field", id);
@@ -124,7 +118,7 @@ public abstract class ItemLightSource {
         return Optional.empty();
     }
 
-    /** A fixed luminance, regardless of the stack. */
+    // A fixed luminance, regardless of the stack.
     public static class StaticItemLightSource extends ItemLightSource {
         private final int luminance;
 
@@ -139,7 +133,7 @@ public abstract class ItemLightSource {
         }
     }
 
-    /** Mirrors a block's light value, so a redstone torch item is as bright as a placed one. */
+    // Mirrors a block's light value, so a redstone torch item is as bright as a placed one.
     public static class BlockItemLightSource extends ItemLightSource {
         private final IBlockState mimic;
 
@@ -153,12 +147,9 @@ public abstract class ItemLightSource {
             return getLuminance(stack, this.mimic);
         }
 
-        /**
-         * The light value of {@code state}, with any {@code BlockStateTag} on the stack applied first.
-         *
-         * <p>That tag is how a stack can carry a non-default block state — a lit versus unlit redstone
-         * torch, for instance — so ignoring it would report the wrong brightness for those stacks.
-         */
+        // the light value of state, with any BlockStateTag on the stack applied first
+        // that tag is how a stack can carry a non-default block state - a lit versus unlit redstone
+        // torch, for instance - so ignoring it would report the wrong brightness for those stacks
         public static int getLuminance(ItemStack stack, IBlockState state) {
             NBTTagCompound nbt = stack.getTagCompound();
 

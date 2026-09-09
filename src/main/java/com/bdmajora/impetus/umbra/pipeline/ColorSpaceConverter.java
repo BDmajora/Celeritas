@@ -14,15 +14,13 @@ import java.util.Locale;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * Final-presentation colorspace conversion (Umbra parity): converts the finished sRGB frame to a wide-gamut
- * target (DCI-P3 / Display-P3 / Rec.2020 / Adobe RGB) for users on monitors configured for those spaces.
- *
- * <p>Runs as the very last step of the shader frame: the backbuffer color is copied into a scratch texture,
- * then a fullscreen quad re-renders it through a conversion shader (sRGB EOTF decode → 3×3 primaries transform
- * → target OETF encode). The matrices are standard colorimetry data (Rec.709→XYZ→target, D65). Zero cost when
- * the target is SRGB — the pass simply doesn't run.
- */
+// Final-presentation colourspace conversion, matching Iris: takes the finished sRGB frame and converts it to a
+// wide-gamut target (DCI-P3, Display-P3, Rec.2020 or Adobe RGB) for users whose monitor is configured for one
+// The very last step of the shader frame. The backbuffer colour is copied into a scratch texture, then a
+// fullscreen quad re-renders it through a conversion shader: sRGB EOTF decode, a 3x3 primaries transform, then the
+// target's OETF encode
+// The matrices are standard colorimetry, Rec.709 to XYZ to target at D65 — nothing tuned or approximated
+// Costs nothing when the target is sRGB, because the pass simply does not run
 public final class ColorSpaceConverter {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -41,7 +39,8 @@ public final class ColorSpaceConverter {
         }
     }
 
-    /** The user-selected output colorspace; read by the pipeline each frame. */
+    // The user's selected output colourspace, read by the pipeline every frame so a change takes effect at once
+    // Static because the options screen sets it and the pipeline reads it, with no shared instance between them
     private static ColorSpace current = ColorSpace.SRGB;
 
     private GlProgram program;
@@ -62,10 +61,9 @@ public final class ColorSpaceConverter {
         return current != ColorSpace.SRGB && !this.broken;
     }
 
-    /**
-     * Converts the currently bound draw framebuffer's color in place. Caller must have the presentation
-     * framebuffer bound for both read and draw, with blending/depth disabled (composite-chain end state).
-     */
+    // Converts the currently bound draw framebuffer's colour in place
+    // Requires the presentation framebuffer bound for BOTH read and draw, with blending and depth already off —
+    // which is exactly the state the composite chain ends in, so this adds no state changes of its own
     public void run(int width, int height, FullscreenQuadRenderer quad) {
         if (!isActive() || width <= 0 || height <= 0) {
             return;
@@ -171,10 +169,9 @@ public final class ColorSpaceConverter {
             "    gl_Position = vec4(a_Position * 2.0 - 1.0, 0.0, 1.0);\n" +
             "}\n";
 
-    /**
-     * Standard colorimetry: linear Rec.709/sRGB → XYZ (D65) → target primaries, then the target's transfer
-     * function. Matrices are the widely published CIE data for each space.
-     */
+    // Builds the conversion shader for one target space
+    // The chain is linear Rec.709/sRGB into XYZ at D65, then out to the target's primaries, then the target's own
+    // transfer function. Every matrix here is the published CIE data for that space, not a fitted approximation
     private static String fragmentSource(ColorSpace space) {
         String matrix;
         String encode;

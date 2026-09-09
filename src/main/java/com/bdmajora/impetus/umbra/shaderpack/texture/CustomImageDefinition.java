@@ -3,12 +3,12 @@ package com.bdmajora.impetus.umbra.shaderpack.texture;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-/**
- * A parsed {@code image.<name> = <samplerName> <format> <internalFormat> <pixelType> <clear> <relative> <sizeX>
- * <sizeY> [<sizeZ>]} directive — Umbra's custom writable images (imageStore/imageLoad), used by packs for
- * voxelization (Complementary's colored lighting). Minecraft/GL-free; {@code pipeline.CustomImageManager} resolves
- * the format strings and owns the GL objects.
- */
+// One parsed `image.<name>` directive, whose value is
+//   <samplerName> <format> <internalFormat> <pixelType> <clear> <relative> <sizeX> <sizeY> [<sizeZ>]
+// These are Iris's custom WRITABLE images, reached from a shader through imageStore and imageLoad — packs use them
+// for voxelization, which is how Complementary's coloured lighting works
+// Free of Minecraft and GL: this is parsing only, and CustomImageManager resolves the format strings and owns the
+// actual GL objects
 public final class CustomImageDefinition {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -17,14 +17,17 @@ public final class CustomImageDefinition {
     public final String format;
     public final String internalFormat;
     public final String pixelType;
-    /** Whether the image is cleared to zero at the start of every frame. */
+    // Whether the image is zeroed at the start of every frame. A pack that accumulates across frames declares this
+    // false, and clearing it anyway would wipe its history every frame
     public final boolean clear;
-    /** True when the sizes are viewport-relative multipliers, held in {@link #relativeX}/{@link #relativeY}. */
+    // True when the declared sizes are viewport-relative multipliers rather than absolute texels, in which case
+    // the real dimensions come from relativeX/relativeY times the render size
     public final boolean relative;
-    /** Fixed dimensions; for a relative image these are 0 and the manager derives them from the render size. */
+    // Fixed dimensions in texels. For a relative image these are 0 and the manager derives the real size instead
     public final int sizeX;
     public final int sizeY;
-    /** 0 for a 2D image. A relative image is always 2D (Umbra's {@code GlImage.Relative}). */
+    // 0 for a 2D image. A relative image is always 2D, matching Iris's GlImage.Relative — there is no meaningful
+    // viewport-relative depth
     public final int sizeZ;
     public final float relativeX;
     public final float relativeY;
@@ -46,17 +49,14 @@ public final class CustomImageDefinition {
         this.relativeY = relativeY;
     }
 
-    /**
-     * Parses one directive value, returning {@code null} (with a log line) when malformed.
-     * <p>
-     * Dropping a directive is never harmless, which is why the log line spells the consequence out. The image is not
-     * created, so its sampler uniform is never assigned a texture unit and keeps GLSL's default of <b>0</b> — shared
-     * with whatever the pipeline binds there. If that is a different sampler type (it usually is: unit 0 holds a
-     * {@code sampler2D} and these images are typically {@code usampler2D}/{@code usampler3D}), the GL spec makes the
-     * whole program invalid and <em>every</em> draw using it fails with {@code GL_INVALID_OPERATION}. NVIDIA ignores
-     * that rule and Mesa enforces it, so the visible result is a pass that works on one machine and dies on another,
-     * reported as a bare {@code GL error 0x502} that names nothing.
-     */
+    // Parses one directive value, returning null with a log line when it is malformed
+    // Dropping a directive here is never harmless, which is why the log line spells out the consequence
+    // The image is not created, so its sampler uniform is never assigned a texture unit and keeps GLSL's default of
+    // 0 — shared with whatever the pipeline binds there. That is usually a DIFFERENT sampler type, since unit 0
+    // holds a sampler2D while these images are typically usampler2D or usampler3D
+    // Under the GL spec two sampler types on one unit makes the whole program invalid, and every draw using it
+    // fails with GL_INVALID_OPERATION. NVIDIA ignores that rule and Mesa enforces it, so the visible symptom is a
+    // pass that works on one machine and dies on another, reported as a bare GL error 0x502 that names nothing
     public static CustomImageDefinition parse(String name, String value) {
         String[] parts = value.trim().split("\\s+");
         if (parts.length < 8 || parts.length > 9) {
@@ -81,10 +81,9 @@ public final class CustomImageDefinition {
         }
     }
 
-    /**
-     * Names the sampler that is about to be left unbound, not just the directive that failed. The sampler name is the
-     * first field, so it survives every malformed form this method rejects except an empty value.
-     */
+    // Names the SAMPLER that is about to be left unbound, not just the directive that failed — the sampler name is
+    // what the resulting GL error will not tell you
+    // Recoverable from parts[0] in every malformed form this method rejects except a completely empty value
     private static void warnMalformed(String name, String value, String[] parts) {
         String samplerName = parts.length > 0 && !parts[0].isEmpty() ? parts[0] : "(unknown)";
         LOGGER.error("[Umbra] Malformed image directive image.{} = {} — the image is NOT created and sampler '{}' is "

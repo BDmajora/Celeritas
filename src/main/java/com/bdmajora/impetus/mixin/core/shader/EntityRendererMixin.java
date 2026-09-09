@@ -25,34 +25,30 @@ import com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline;
 import com.bdmajora.impetus.umbra.shaderpack.loading.ProgramId;
 import com.bdmajora.impetus.umbra.uniforms.CapturedRenderingState;
 
-/**
- * Drives the Umbra frame pipeline from vanilla's world render, the way modern Umbra hooks {@code LevelRenderer}:
- * <ul>
- * <li>{@code renderWorld} HEAD — build the pipeline if a pack was (re)loaded, then bind the gbuffer so the whole world
- * pass (vanilla's fog-colored clear included) renders into the shader render targets;</li>
- * <li>inside {@code renderWorldPass}, right after {@code setupCameraTransform}/{@code ActiveRenderInfo.updateRenderInfo}
- * (located via the {@code "frustum"} profiler ldc, a pure-vanilla anchor) — capture the frame's camera matrices and fog
- * color for the uniform providers;</li>
- * <li>{@code renderWorld} RETURN — run the composite/final chain and hand the finished image to Minecraft's
- * framebuffer.</li>
- * </ul>
- * Every hook is a no-op when no shader pack is active.
- */
+// drives the Umbra frame pipeline from vanilla's world render, the way modern Umbra hooks LevelRenderer:
+//   renderWorld HEAD - build the pipeline if a pack was (re)loaded, then bind the gbuffer so the whole
+//   world pass, vanilla's fog-coloured clear included, renders into the shader render targets
+//   inside renderWorldPass, right after setupCameraTransform / ActiveRenderInfo.updateRenderInfo -
+//   located via the "frustum" profiler ldc, a pure-vanilla anchor - capture the frame's camera matrices
+//   and fog colour for the uniform providers
+//   renderWorld RETURN - run the composite/final chain and hand the finished image to Minecraft's
+//   framebuffer
+// every hook is a no-op when no shader pack is active
 @Mixin(EntityRenderer.class)
 public class EntityRendererMixin {
     private static final String PROFILER_END_START =
             "Lnet/minecraft/profiler/Profiler;endStartSection(Ljava/lang/String;)V";
 
-    /**
-     * OptiFine's {@code configHandDepthMul} (Shaders.java default {@code 0.125}). Applied to the projection matrix as
-     * {@code glScale(1, 1, HAND_DEPTH_MUL)} before {@code gluPerspective}, exactly like OptiFine's
-     * {@code Shaders.applyHandDepth()}. Vanilla-without-shaders clears the depth buffer <em>before</em> drawing the
-     * first-person hand, so the hand can never clip; the shader path instead draws the hand into the gbuffer (with the
-     * world's depth already present) <em>before</em> the composite chain and depth clear, so it must compress the
-     * hand's clip-space depth into a sliver at the near plane. Without this the hand depth-tests against real terrain —
-     * clipping into close geometry and, worse, getting shaded by the composite pass at that bogus (deep, shadowed,
-     * fogged) depth, which is why the held item renders as a flat dark blob instead of reacting to the pack lighting.
-     */
+    // OptiFine's configHandDepthMul (Shaders.java default 0.125)
+    // applied to the projection matrix as glScale(1, 1, HAND_DEPTH_MUL) before gluPerspective, exactly
+    // like OptiFine's Shaders.applyHandDepth()
+    // vanilla-without-shaders clears the depth buffer *before* drawing the first-person hand, so the
+    // hand can never clip; the shader path instead draws the hand into the gbuffer, with the world's
+    // depth already present, *before* the composite chain and depth clear, so it must compress the
+    // hand's clip-space depth into a sliver at the near plane
+    // without this the hand depth-tests against real terrain - clipping into close geometry and, worse,
+    // getting shaded by the composite pass at that bogus (deep, shadowed, fogged) depth, which is why
+    // the held item renders as a flat dark blob instead of reacting to the pack lighting
     private static final float HAND_DEPTH_MUL = 0.125f;
 
     @Shadow
@@ -98,14 +94,12 @@ public class EntityRendererMixin {
     public void disableLightmap() {
     }
 
-    /**
-     * OptiFine parity: its {@code EntityRenderer.enableLightmap()}/{@code disableLightmap()} both end with
-     * {@code if (Config.isShaders()) Shaders.enableLightmap()/disableLightmap()}, which swap
-     * {@code gbuffers_textured} and {@code gbuffers_textured_lit}. Vanilla only flips texture unit 1; without
-     * telling the pipeline, geometry drawn while that unit is disabled keeps running the lit program, samples white
-     * from the dead unit and renders fullbright. See {@code UmbraRenderingPipeline#setLightmapEnabled} for why items
-     * in particular are affected.
-     */
+    // OptiFine parity: its EntityRenderer.enableLightmap()/disableLightmap() both end with
+    // if (Config.isShaders()) Shaders.enableLightmap()/disableLightmap(), which swap gbuffers_textured
+    // and gbuffers_textured_lit
+    // vanilla only flips texture unit 1; without telling the pipeline, geometry drawn while that unit is
+    // disabled keeps running the lit program, samples white from the dead unit and renders fullbright
+    // see UmbraRenderingPipeline#setLightmapEnabled for why items in particular are affected
     @Inject(method = "enableLightmap", at = @At("RETURN"))
     private void impetus$onEnableLightmap(CallbackInfo ci) {
         UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
@@ -129,11 +123,9 @@ public class EntityRendererMixin {
         }
     }
 
-    /**
-     * Same, for a phase whose {@code renderStage} its {@link ProgramId} cannot imply. {@code gbuffers_textured_lit}
-     * carries both particles and translucent entities here, so the stage has to come from the call site that knows
-     * which one it is rather than from a guess in the pipeline.
-     */
+    // same, for a phase whose renderStage its ProgramId cannot imply
+    // gbuffers_textured_lit carries both particles and translucent entities here, so the stage has to
+    // come from the call site that knows which one it is rather than from a guess in the pipeline
     private static void impetus$setPhase(ProgramId phase, int renderStage) {
         UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {
@@ -173,41 +165,36 @@ public class EntityRendererMixin {
 
     // --- Cloud ordering -------------------------------------------------------------------------------------------
 
-    /**
-     * Moves the cloud draw to where Umbra has it: after the deferred chain, not before terrain.
-     * <p>
-     * 1.12 renders clouds at one of two call sites depending on the camera's altitude — before terrain when below
-     * {@code y=128} ({@code renderWorldPass} line 1361), after translucents when above it ({@code "aboveClouds"}).
-     * Modern Minecraft has no such split: the clouds pass is scheduled after the main pass, so it always runs after
-     * translucent terrain, which is after Umbra takes the {@code depthtex1} snapshot in {@code beginTranslucents}.
-     * <p>
-     * Packs depend on that. Clouds write depth, so on 1.12's early call site they land in {@code depthtex1}, and any
-     * pack that identifies untouched sky as "{@code depthtex1} is still 1.0" then classifies cloud pixels as opaque
-     * world geometry. Body Camera's {@code composite} does exactly this: its pass-through branch is
-     * {@code Depthv2 == 1 && normal == 0}, and a cloud that misses it falls through to
-     * {@code Albedo * (LightmapColor + ShadowColor)} — with no lightmap ever written by {@code gbuffers_clouds}, that
-     * is black. Under Umbra the same pack is correct, because there the clouds are simply not in that snapshot.
-     * <p>
-     * Rather than re-implement the draw at a new site, both altitude tests are moved below the world: the early one
-     * ({@code < 128}) then never fires and the late one ({@code >= 128}) always does, so vanilla itself issues the
-     * clouds from the "aboveClouds" site with its own cloud projection, fog setup and matrix handling intact.
-     * <p>
-     * Only while a pipeline is active. Vanilla draws translucent terrain with {@code depthMask(false)}, so clouds
-     * issued after it would fail to depth-test against water and paint over it; the pipeline turns depth writes back
-     * on for translucents ({@code beginTranslucents}, so shader water reaches {@code depthtex0}), which is precisely
-     * what makes the late slot safe.
-     *
-     * <h4>Cloud Translucency</h4>
-     * The Extras option rides on the same constant, because it is asking the same question. Which of the two slots
-     * runs decides whether translucent terrain is drawn over the clouds or the clouds over it — which is what "are
-     * clouds translucent" means here. So ALWAYS forces the late slot, NEVER the early one, and DEFAULT substitutes
-     * the altitude clouds are actually drawn at (vanilla's literal 128 is wrong the moment the cloud height option
-     * moves them, which it does by default).
-     * <p>
-     * Two {@code @ModifyConstant} handlers cannot share a constant — Mixin skips the second and, with
-     * {@code required}, fails the load — so the two concerns are resolved here in priority order rather than in
-     * separate mixins. Umbra wins: its slot choice is correctness, the Extras one is preference.
-     */
+    // moves the cloud draw to where Umbra has it: after the deferred chain, not before terrain
+    // 1.12 renders clouds at one of two call sites depending on the camera's altitude - before terrain
+    // when below y=128 (renderWorldPass line 1361), after translucents when above it ("aboveClouds")
+    // modern Minecraft has no such split: the clouds pass is scheduled after the main pass, so it always
+    // runs after translucent terrain, which is after Umbra takes the depthtex1 snapshot in
+    // beginTranslucents
+    // packs depend on that - clouds write depth, so on 1.12's early call site they land in depthtex1,
+    // and any pack that identifies untouched sky as "depthtex1 is still 1.0" then classifies cloud
+    // pixels as opaque world geometry
+    // Body Camera's composite does exactly this: its pass-through branch is Depthv2 == 1 && normal == 0,
+    // and a cloud that misses it falls through to Albedo * (LightmapColor + ShadowColor) - with no
+    // lightmap ever written by gbuffers_clouds, that is black
+    // under Umbra the same pack is correct, because there the clouds are simply not in that snapshot
+    // rather than re-implement the draw at a new site, both altitude tests are moved below the world:
+    // the early one (< 128) then never fires and the late one (>= 128) always does, so vanilla itself
+    // issues the clouds from the "aboveClouds" site with its own cloud projection, fog setup and matrix
+    // handling intact
+    // only while a pipeline is active: vanilla draws translucent terrain with depthMask(false), so
+    // clouds issued after it would fail to depth-test against water and paint over it, and it is the
+    // pipeline turning depth writes back on for translucents (beginTranslucents, so shader water reaches
+    // depthtex0) that makes the late slot safe
+    // the Extras cloud-translucency option rides on the same constant, because it is asking the same
+    // question: which of the two slots runs decides whether translucent terrain is drawn over the clouds
+    // or the clouds over it, which is what "are clouds translucent" means here
+    // so ALWAYS forces the late slot, NEVER the early one, and DEFAULT substitutes the altitude clouds
+    // are actually drawn at - vanilla's literal 128 is wrong the moment the cloud height option moves
+    // them, which it does by default
+    // two @ModifyConstant handlers cannot share a constant - Mixin skips the second and, with required,
+    // fails the load - so the two concerns are resolved here in priority order rather than in separate
+    // mixins, and Umbra wins: its slot choice is correctness, the Extras one is preference
     @ModifyConstant(method = "renderWorldPass", constant = {
             // The two occurrences are the only 128.0D in the method, and are the two halves of the same altitude
             // split: `< 128` guards the early draw, `>= 128` the late one. Both move together.
@@ -228,18 +215,17 @@ public class EntityRendererMixin {
         }
     }
 
-    /**
-     * Terrain draws next: reset to the plain fixed-function mask (and program 0) so that if the Impetus terrain
-     * override is unavailable, the default terrain shader writes only colortex0 instead of smearing through the last
-     * sky program's DRAWBUFFERS. When the override works, its ChunkShaderInterface immediately sets the pack's mask.
-     */
+    // terrain draws next: reset to the plain fixed-function mask (and program 0) so that if the Impetus
+    // terrain override is unavailable, the default terrain shader writes only colortex0 instead of
+    // smearing through the last sky program's DRAWBUFFERS
+    // when the override works, its ChunkShaderInterface immediately sets the pack's mask
     @Inject(method = "renderWorldPass",
             at = @At(value = "INVOKE_STRING", target = PROFILER_END_START, args = "ldc=terrain"))
     private void impetus$phaseTerrain(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
         impetus$setPhase(null);
     }
 
-    /** Matches both "entities" sections (the main one and the post-translucent leftovers). */
+    // Matches both "entities" sections (the main one and the post-translucent leftovers).
     @Inject(method = "renderWorldPass",
             at = @At(value = "INVOKE_STRING", target = PROFILER_END_START, args = "ldc=entities"))
     private void impetus$phaseEntities(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
@@ -262,16 +248,15 @@ public class EntityRendererMixin {
         impetus$setPhase(ProgramId.Particles);
     }
 
-    /**
-     * {@code particles.ordering}. 1.12.2's {@code renderWorldPass} already draws particles after the "translucent"
-     * anchor, which is where the deferred chain runs — so the vanilla order is Umbra's {@code after}, and that is also
-     * Umbra's default for a pack with a deferred chain. Only {@code before} needs anything done: the vanilla draw is
-     * suppressed here and re-issued ahead of the deferred chain.
-     * <p>
-     * {@code mixed} would need the opaque and translucent particles split across the deferred chain, but 1.12.2
-     * emits them from a single {@code renderParticles} call with no such distinction, so it resolves to
-     * {@code after} — the closest available ordering, and the one vanilla already gives.
-     */
+    // particles.ordering
+    // 1.12.2's renderWorldPass already draws particles after the "translucent" anchor, which is where
+    // the deferred chain runs - so the vanilla order is Umbra's "after", and that is also Umbra's
+    // default for a pack with a deferred chain
+    // only "before" needs anything done: the vanilla draw is suppressed here and re-issued ahead of the
+    // deferred chain
+    // "mixed" would need the opaque and translucent particles split across the deferred chain, but
+    // 1.12.2 emits them from a single renderParticles call with no such distinction, so it resolves to
+    // "after" - the closest available ordering, and the one vanilla already gives
     @Redirect(method = "renderWorldPass",
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/client/particle/ParticleManager;renderParticles"
@@ -312,14 +297,13 @@ public class EntityRendererMixin {
 
     private boolean impetus$shaderHandRendered;
 
-    /**
-     * OptiFine's world order around translucents ({@code EntityRenderer.renderWorldPass}):
-     * {@code ShadersRender.renderHand0} (solid first-person hand via {@code gbuffers_hand}) → {@code Shaders.preWater()}
-     * (depth snapshot + deferred) → translucent terrain. Umbra does the same ({@code HandRenderer.renderSolid} before
-     * {@code beginTranslucents}). The solid hand MUST render before the deferred chain: deferred packs (Complementary)
-     * only write gbuffer data in {@code gbuffers_hand} and do all lighting in {@code deferred*} — a hand drawn later
-     * never gets lit and leaks raw buffer data through the composites.
-     */
+    // OptiFine's world order around translucents, in EntityRenderer.renderWorldPass:
+    // ShadersRender.renderHand0 (solid first-person hand via gbuffers_hand) -> Shaders.preWater()
+    // (depth snapshot + deferred) -> translucent terrain
+    // Umbra does the same, with HandRenderer.renderSolid before beginTranslucents
+    // the solid hand MUST render before the deferred chain: deferred packs (Complementary) only write
+    // gbuffer data in gbuffers_hand and do all lighting in deferred*, so a hand drawn later never gets
+    // lit and leaks raw buffer data through the composites
     @Inject(method = "renderWorldPass",
             at = @At(value = "INVOKE_STRING", target = PROFILER_END_START, args = "ldc=translucent"))
     private void impetus$beginTranslucents(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
@@ -351,10 +335,9 @@ public class EntityRendererMixin {
         }
     }
 
-    /**
-     * The composite/final chain runs at the {@code "hand"} anchor, BEFORE vanilla's {@code clear(256)} wipes the depth
-     * buffer — OptiFine's {@code Shaders.renderCompositeFinal()} position. The hand itself already rendered pre-deferred.
-     */
+    // the composite/final chain runs at the "hand" anchor, BEFORE vanilla's clear(256) wipes the depth
+    // buffer - OptiFine's Shaders.renderCompositeFinal() position
+    // the hand itself already rendered pre-deferred
     @Inject(method = "renderWorldPass",
             at = @At(value = "INVOKE_STRING", target = PROFILER_END_START, args = "ldc=hand"))
     private void impetus$compositeBeforeHand(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
@@ -391,11 +374,10 @@ public class EntityRendererMixin {
         }
     }
 
-    /**
-     * The world's projection and modelview must survive this call untouched — translucent terrain renders next with
-     * them. OptiFine's {@code Shaders.beginHand()}/{@code endHand()} push/pop both matrices around the hand for the
-     * same reason.
-     */
+    // the world's projection and modelview must survive this call untouched, because translucent
+    // terrain renders next with them
+    // OptiFine's Shaders.beginHand()/endHand() push and pop both matrices around the hand for the same
+    // reason
     private void impetus$renderFirstPersonItemForShader(float partialTicks, int pass, boolean fireForgeHook) {
         if (this.debugView) {
             return;

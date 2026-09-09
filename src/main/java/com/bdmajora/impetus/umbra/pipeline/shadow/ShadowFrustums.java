@@ -6,35 +6,28 @@ import com.bdmajora.impetus.umbra.uniforms.CapturedRenderingState;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
-/**
- * Picks the shadow pass's section filter, following Umbra's {@code ShadowRenderer.createShadowFrustum} decision tree.
- * <p>
- * The important subtlety is the interaction with voxelization. Umbra falls back to distance-only culling when
- * {@code packCullingState == DEFAULT && packHasVoxelization}, because the advanced frustum is view-direction
- * dependent and an unstable section set makes a pack's floodfill chase a moving voxel field. A pack that explicitly
- * asks for {@code shadow.culling = reversed} instead gets {@link SafeZoneCullingFrustum}, whose inner
- * {@code voxelDistance} box is drawn unconditionally — that is the pack telling us where its voxelization needs
- * stability, so the advanced test can safely apply outside it.
- */
+// Picks the shadow pass's section filter, following Iris's ShadowRenderer.createShadowFrustum decision tree
+// The subtlety that matters is voxelization. Iris falls back to distance-only culling whenever the pack stated no
+// preference AND voxelizes, because the advanced frustum is view-DIRECTION dependent and an unstable section set
+// makes a pack's floodfill chase a moving voxel field
+// A pack that explicitly asks for shadow.culling = reversed gets SafeZoneCullingFrustum instead, whose inner
+// voxelDistance box is drawn unconditionally — that request is the pack telling us exactly where its voxelization
+// needs stability, so the advanced test can safely apply everywhere outside it
 public final class ShadowFrustums {
 
-    /**
-     * Accepts every section. Umbra returns its {@code NonCullingFrustum} in exactly two cases: the pack turned
-     * culling off, and a distance-only pass whose distance already covers the render distance. Every other branch
-     * returns a real frustum, dropping at most its box culler.
-     */
+    // Accepts every section. Iris returns its NonCullingFrustum in exactly two cases — the pack turned culling off,
+    // and a distance-only pass whose distance already covers the render distance so the box would exclude nothing
+    // Every other branch returns a real frustum, at most dropping its box culler
     public static final Frustum NON_CULLING = (minX, minY, minZ, maxX, maxY, maxZ) -> true;
 
     private ShadowFrustums() {
     }
 
-    /**
-     * @param shadowDistance  the pack's {@code shadowDistance}, in blocks
-     * @param voxelDistance   the pack's {@code voxelDistance}, or 0 when it declares none
-     * @param packVoxelizes   true when the pack's shadow pass voxelizes (geometry stage or custom images present)
-     * @param renderDistance  the player's render distance, in blocks
-     * @param sunPathRotation for deriving the shadow light vector
-     */
+    // shadowDistance and voxelDistance are the pack's own directives in blocks, voxelDistance being 0 when it
+    // declares none
+    // packVoxelizes is inferred rather than declared: true when the shadow pass has a geometry stage or custom
+    // images, which is what voxelizing packs use
+    // renderDistance is the player's setting in blocks, and sunPathRotation feeds the shadow light vector
     public static Frustum create(ShadowContentSettings.Culling culling, float shadowDistance, float voxelDistance,
                                  boolean packVoxelizes, int renderDistance, float sunPathRotation) {
         // Culling explicitly off: draw it all.
@@ -83,10 +76,9 @@ public final class ShadowFrustums {
         return new AdvancedShadowCullingFrustum(projView, lightVector, new ShadowBoxCuller(shadowDistance));
     }
 
-    /**
-     * The normalized vector from the origin toward the shadow light, which is what decides the "back" planes.
-     * Derived the same way {@code CelestialUniforms.getShadowLightPositionInWorldSpace} does.
-     */
+    // The normalised vector from the origin toward the shadow light, which is what decides the frustum's "back"
+    // planes — the ones that keep casters behind the camera in the shadow map
+    // Derived the same way CelestialUniforms.getShadowLightPositionInWorldSpace does
     @SuppressWarnings("unused") // sunPathRotation is already baked into CelestialUniforms' static state
     private static Vector3f shadowLightVectorFromOrigin(float sunPathRotation) {
         Vector3f vector = com.bdmajora.impetus.umbra.uniforms.CelestialUniforms

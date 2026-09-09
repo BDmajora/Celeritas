@@ -15,28 +15,23 @@ import org.spongepowered.asm.mixin.Overwrite;
 import javax.annotation.Nullable;
 import java.util.List;
 
-/**
- * Reads the blocks around a moving entity through a chunk section cursor.
- *
- * <p>This is the method behind every entity's movement, and it is called several times per entity per
- * tick — once to gather what the entity might hit, and again for each axis it is pushed along. For a
- * player it inspects a 4×5×4 region; for a minecart travelling fast, more. Vanilla resolves a chunk
- * from the provider for each of those positions individually.
- *
- * <p>The loop nests x, then z, then y, so consecutive reads run <em>down a column</em> — sixteen of
- * them share a chunk section. Holding the section between reads turns the inner loop's chunk lookup
- * into an array index. That is the whole change: the iteration order, the bounds, the world border
- * handling and both Forge collision hooks are exactly as vanilla wrote them.
- *
- * <p>The cursor is created in non-loading mode, matching vanilla: the column is tested with
- * {@code isBlockLoaded} before anything inside it is read, so an entity walking towards ungenerated
- * terrain treats it as empty rather than generating it. Getting this backwards would let a fast-moving
- * entity generate chunks ahead of itself.
- *
- * <p>Vanilla's pooled mutable block position is kept for the same reason vanilla has it: the position
- * is handed to {@code addCollisionBoxToList}, and some blocks read it. Reusing one is both cheaper and
- * closer to vanilla than allocating.
- */
+// reads the blocks around a moving entity through a chunk section cursor
+// this is the method behind every entity's movement, called several times per entity per tick - once
+// to gather what the entity might hit, and again for each axis it is pushed along
+// for a player it inspects a 4x5x4 region, for a fast minecart more, and vanilla resolves a chunk
+// from the provider for each of those positions individually
+// the loop nests x, then z, then y, so consecutive reads run *down a column* and sixteen of them
+// share a chunk section; holding the section between reads turns the inner loop's chunk lookup into
+// an array index
+// that is the whole change: the iteration order, the bounds, the world border handling and both
+// Forge collision hooks are exactly as vanilla wrote them
+// the cursor is created in non-loading mode, matching vanilla: the column is tested with
+// isBlockLoaded before anything inside it is read, so an entity walking towards ungenerated terrain
+// treats it as empty rather than generating it - getting this backwards would let a fast-moving
+// entity generate chunks ahead of itself
+// vanilla's pooled mutable block position is kept for the same reason vanilla has it: the position is
+// handed to addCollisionBoxToList and some blocks read it, so reusing one is both cheaper and closer
+// to vanilla than allocating
 @Mixin(World.class)
 public abstract class WorldMixin {
     /**

@@ -11,33 +11,30 @@ import java.nio.FloatBuffer;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * Replays the block selection box <em>after</em> the composite/final chain, for packs that ship no
- * {@code gbuffers_line}.
- * <p>
- * <b>Why this is a deliberate 1.12.2 deviation from Umbra and OptiFine.</b> Both of those draw the outline inside the
- * world pass, into the gbuffer. That works on modern packs because they ship a {@code gbuffers_line} written for it.
- * A pre-deferred pack has none, so OptiFine's fallback chain drops the box into {@code gbuffers_basic} — and
- * <b>colortex0 is albedo, not the finished image</b>. Whatever lands there (the pack's program, or vanilla
- * fixed-function) is multiplied by the scene lighting in the composite chain afterwards. Next to a torch that light
- * is warm, so vanilla's 40% black line comes back out as a dark red line that shifts with view angle, because the
- * lighting does.
- * <p>
- * That is not fixable by changing <em>what</em> is written pre-composite — the colour, the blend mode, the draw-buffer
- * mask and the bound program were each tried and none of them moved it, because every one of them still wrote into
- * albedo. The only thing that reproduces vanilla's appearance is darkening the <em>finished</em> image, which means
- * drawing after {@link UmbraRenderingPipeline#finishWorldRendering()}.
- * <p>
- * The composite passes clobber the projection and modelview matrices (the post-composite hand path rebuilds its own
- * from scratch), so the world matrices are captured at the original draw site and restored here rather than assumed
- * to survive.
- */
+// Replays the block selection box AFTER the composite/final chain, for packs that ship no gbuffers_line
+//
+// A deliberate 1.12.2 deviation from both Iris and OptiFine, which draw the outline inside the world pass straight
+// into the gbuffer. That works on modern packs because they ship a gbuffers_line written for exactly that
+// A pre-deferred pack has none, so OptiFine's fallback chain drops the box into gbuffers_basic — and colortex0 is
+// ALBEDO, not the finished image. Whatever lands there, the pack's program or vanilla fixed-function, is then
+// multiplied by the scene lighting in the composite chain. Next to a torch that light is warm, so vanilla's 40%
+// black line comes back out as a dark red line that shifts as the view angle changes, because the lighting does
+//
+// Not fixable by changing WHAT is written pre-composite. The colour, the blend mode, the draw-buffer mask and the
+// bound program were each tried and none of them moved it, because every one still wrote into albedo. The only
+// thing that reproduces vanilla's appearance is darkening the FINISHED image, which means drawing after
+// finishWorldRendering()
+//
+// The composite passes clobber the projection and modelview matrices — the post-composite hand path rebuilds its
+// own from scratch — so the world matrices are captured at the original draw site and restored here rather than
+// assumed to have survived
 public final class DeferredBlockOutline {
     private static final FloatBuffer PROJECTION = BufferUtils.createFloatBuffer(16);
     private static final FloatBuffer MODELVIEW = BufferUtils.createFloatBuffer(16);
 
     private static boolean pending;
-    /** Guards the replay's own call to {@code drawSelectionBox} so the capture hook lets it through. */
+    // Set while the replay below is calling vanilla's own drawSelectionBox, so the capture hook lets that one
+    // through instead of cancelling and re-capturing it into an infinite loop
     private static boolean replaying;
 
     private static EntityPlayer player;
@@ -47,15 +44,14 @@ public final class DeferredBlockOutline {
     private DeferredBlockOutline() {
     }
 
-    /** {@return true while the replay below is driving vanilla's own {@code drawSelectionBox}} */
+    // Read by the capture hook to tell our own replay apart from vanilla's original call
     public static boolean isReplaying() {
         return replaying;
     }
 
-    /**
-     * Records the pending outline and the exact world matrices it would have been drawn with. Called from the
-     * cancelled {@code drawSelectionBox}, where the matrices are still the world camera's.
-     */
+    // Records the pending outline and the exact matrices it would have been drawn with
+    // Called from the CANCELLED drawSelectionBox, which is the only point where the projection and modelview are
+    // still the world camera's — by the time the replay runs the composite chain has overwritten both
     public static void capture(EntityPlayer capturedPlayer, RayTraceResult capturedTarget, float capturedPartialTicks) {
         PROJECTION.clear();
         MODELVIEW.clear();
@@ -70,17 +66,18 @@ public final class DeferredBlockOutline {
         pending = true;
     }
 
-    /** Drops a captured outline without drawing it (the frame ended early, or the pipeline went away). */
+    // Drops a captured outline without drawing it, for when the frame ended early or the pipeline went away
+    // Without this a stale capture would be replayed into the next frame, drawing a box around a block the player
+    // is no longer looking at
     public static void discard() {
         pending = false;
         player = null;
         target = null;
     }
 
-    /**
-     * Draws the captured outline into the finished image. Must run after the final pass, while Minecraft's own
-     * framebuffer (and its world depth) is bound.
-     */
+    // Draws the captured outline into the finished image
+    // Must run after the final pass, with Minecraft's own framebuffer bound — and its world depth, since the box
+    // is depth-tested so its far edges stay hidden behind the block exactly as vanilla draws them
     public static void drawIfPending() {
         if (!pending) {
             return;

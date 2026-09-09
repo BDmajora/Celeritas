@@ -11,15 +11,14 @@ import java.util.Map;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * An Umbra-owned framebuffer object used by the shader pipeline (gbuffer, shadow, composite, and final passes). This is
- * deliberately <em>not</em> {@code net.minecraft.client.renderer.Framebuffer} — vanilla's wrapper only supports a
- * single color + depth attachment, while shader packs need multiple logical color attachments with independent
- * draw-buffer masks. Logical colortex indices may be packed onto different physical attachment points.
- * <p>
- * All operations go through the LWJGL abstraction. Because the abstraction exposes no DSA entry points, attachment and
- * draw/read-buffer changes bind this FBO to {@code GL_FRAMEBUFFER} as a side effect.
- */
+// A framebuffer object owned by the shader pipeline: the gbuffer, the shadow FBO, and the composite and final
+// pass targets
+// Deliberately NOT net.minecraft.client.renderer.Framebuffer — vanilla's wrapper supports exactly one colour
+// attachment plus depth, while a pack needs many logical colour attachments with independent draw-buffer masks
+// Logical colortex indices are not the same as physical attachment points: several colortexes get packed onto
+// whichever attachment slots are free, which is why the mapping is stored rather than assumed
+// Every call goes through the LWJGL abstraction, which exposes no DSA entry points — so attaching a texture or
+// changing the draw/read buffers binds this FBO to GL_FRAMEBUFFER as a side effect. Callers have to expect that
 public class UmbraFramebuffer extends GlResource {
     private final Map<Integer, Integer> colorAttachments = new HashMap<>();
     private final Map<Integer, Integer> logicalAttachmentPoints = new HashMap<>();
@@ -79,17 +78,14 @@ public class UmbraFramebuffer extends GlResource {
         this.hasDepthAttachment = true;
     }
 
-    /**
-     * Restricts the FBO's <em>live</em> color attachments to exactly {@code keepLogical}; every other color target
-     * previously added is physically detached ({@code glFramebufferTexture2D(..., 0)}), while those in the set are
-     * (re)attached from the stored texture map.
-     * <p>
-     * This mirrors Umbra, which builds each gbuffer program a framebuffer holding only the buffers that program writes.
-     * A gbuffer program that <em>samples</em> a colortex it does not write — e.g. {@code gbuffers_terrain} reading
-     * {@code gaux4} (=colortex7) as the atmosphere/fog color — must NOT have that texture attached, or the driver hits
-     * a rendering feedback loop and returns garbage (here: the in-progress colortex1, which is why distant terrain fog
-     * blended toward the ~50 clamp and blew the horizon white). Detaching the unwritten targets makes the read clean.
-     */
+    // Narrows the FBO's LIVE colour attachments to exactly the given logical set: everything else previously added
+    // is physically detached, and everything in the set is re-attached from the stored texture map
+    // This mirrors Iris, which gives each gbuffer program a framebuffer holding only the buffers that program
+    // writes, and it is a correctness requirement rather than tidiness
+    // A gbuffer program that SAMPLES a colortex it does not write — gbuffers_terrain reading gaux4, i.e. colortex7,
+    // as the atmosphere and fog colour — must not have that texture attached at the same time, or the driver hits a
+    // rendering feedback loop and the read returns garbage. Here it returned the in-progress colortex1, which is
+    // why distant terrain fog blended toward the ~50 clamp and blew the horizon white
     public void retainColorAttachments(java.util.Set<Integer> keepLogical) {
         bind();
         for (Map.Entry<Integer, Integer> entry : this.colorAttachments.entrySet()) {
@@ -109,10 +105,10 @@ public class UmbraFramebuffer extends GlResource {
         LWJGL.glDrawBuffers(GL11.GL_NONE);
     }
 
-    /**
-     * Sets the draw-buffer mask from color attachment indices. A negative entry disables that output slot with
-     * {@code GL_NONE}, preserving the shader's dense slot numbering when an optional target is unavailable.
-     */
+    // Sets the draw-buffer mask from colour attachment indices
+    // A negative entry writes GL_NONE for that slot rather than being skipped, which keeps the shader's slot
+    // numbering DENSE when an optional target turns out to be unavailable — dropping the entry instead would
+    // renumber every slot after it and send each gl_FragData write to the wrong attachment
     public void drawBuffers(int[] colorIndices) {
         if (colorIndices == null) {
             colorIndices = new int[0];

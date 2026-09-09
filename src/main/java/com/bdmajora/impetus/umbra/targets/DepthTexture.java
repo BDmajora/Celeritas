@@ -8,10 +8,10 @@ import java.nio.ByteBuffer;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * A depth texture used as a sampler ({@code depthtex0/1/2}, {@code shadowtex0/1}). OptiFine keeps copies of the scene
- * depth at different points in the frame (before translucents, before hand, …); each copy is one of these.
- */
+// A depth texture that programs sample: depthtex0/1/2 and shadowtex0/1
+// There are several because OptiFine snapshots the scene depth at different points in the frame and packs rely on
+// the differences — depthtex0 is everything, depthtex1 excludes translucents, depthtex2 also excludes the hand.
+// Subtracting one from another is how packs detect water surfaces and hand-occluded pixels
 public class DepthTexture extends GlResource {
     private static final ByteBuffer NULL_BUFFER = null;
 

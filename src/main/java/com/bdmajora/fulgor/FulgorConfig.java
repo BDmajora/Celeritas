@@ -50,7 +50,7 @@ public final class FulgorConfig {
     public int maxScheduledUpdates;
     // Inherited from Phosphor; always another mod's bug and the engine survives it either way, but loud by default
     public boolean warnOnIllegalThreadAccess;
-    /** Adds a Fulgor line to the F3 debug overlay. */
+    // Adds a Fulgor line to the F3 debug overlay.
     public boolean showDebugOverlay;
 
     private FulgorConfig(Properties props) {

@@ -6,11 +6,12 @@ import org.joml.Vector3d;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
-/**
- * A singleton snapshot of per-frame render state captured from the vanilla render loop, for uniforms that cannot be
- * derived from world state alone: camera matrices/position, partial ticks, render stage, alpha-test threshold, and the
- * entity or block-entity currently being submitted.
- */
+// A singleton snapshot of per-frame render state captured out of the vanilla render loop
+// It exists for the uniforms that cannot be derived from world state at all: the camera matrices and position,
+// partial ticks, the render stage, the alpha-test threshold, and which entity or block entity is being submitted
+// right now
+// A singleton rather than pipeline state because the mixins that capture these are scattered across the render
+// loop and have no pipeline reference to write into
 public final class CapturedRenderingState {
     public static final CapturedRenderingState INSTANCE = new CapturedRenderingState();
 
@@ -25,7 +26,8 @@ public final class CapturedRenderingState {
     private final Vector4f entityColor = new Vector4f(0.0f, 0.0f, 0.0f, 0.0f);
 
     private float tickDelta;
-    /** Umbra {@code renderStage} uniform value: the current WorldRenderingPhase ordinal (MC_RENDER_STAGE_*). */
+    // The renderStage uniform: the current WorldRenderingPhase ordinal, matching the MC_RENDER_STAGE_* macros
+    // Packs switch on it to tell terrain from entities from the hand within one gbuffer program
     private int renderStage;
     private float currentAlphaTest;
     private int currentRenderedBlockEntity = -1;
@@ -100,12 +102,11 @@ public final class CapturedRenderingState {
         this.colorModulator.set(red, green, blue, alpha);
     }
 
-    /**
-     * OptiFine's {@code entityColor}: {@code rgb} is the tint and {@code a} the blend factor, so shaders finish the
-     * overlay with {@code mix(color.rgb, entityColor.rgb, entityColor.a)}. Vanilla paints the hurt flash and the
-     * creeper charge-up with fixed-function texture combiners, which a bound program ignores entirely, so the tint
-     * has to travel as a uniform instead.
-     */
+    // OptiFine's entityColor: rgb is the tint, a is the blend factor, so a pack finishes the overlay itself with
+    // mix(color.rgb, entityColor.rgb, entityColor.a)
+    // It has to travel as a uniform because vanilla paints the hurt flash and the creeper charge-up with
+    // fixed-function texture combiners, which a bound shader program ignores entirely — without this the red flash
+    // and the white creeper simply never appear under shaders
     public Vector4f getEntityColor() {
         return this.entityColor;
     }

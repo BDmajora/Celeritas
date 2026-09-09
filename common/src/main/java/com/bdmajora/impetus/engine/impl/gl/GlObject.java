@@ -1,11 +1,9 @@
 package com.bdmajora.impetus.engine.impl.gl;
 
-/**
- * An abstract object used to represent objects in OpenGL code safely. This class hides the direct handle to a OpenGL
- * object, requiring that it first be checked by all callers to prevent null pointer de-referencing. However, this will
- * not stop code from cloning the handle and trying to use it after it has been deleted and as such should not be
- * relied on too heavily.
- */
+// Base class for the engine's GL objects, hiding the raw handle behind an accessor that checks validity first
+// The check catches the common mistake — using an object after it was deleted — but it is not a guarantee: nothing
+// stops a caller copying the int handle out and using that afterwards, so this is a guard rail rather than a
+// safety property to lean on
 public abstract class GlObject {
     private static final int INVALID_HANDLE = 0;
 

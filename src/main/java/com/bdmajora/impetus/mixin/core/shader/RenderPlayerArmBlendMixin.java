@@ -7,12 +7,12 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
-/** Disables blending for shader-pack hand passes. */
+// Disables blending for shader-pack hand passes.
 @Mixin(RenderPlayer.class)
 public class RenderPlayerArmBlendMixin {
-    /** Solid hand render stage id. */
+    // Solid hand render stage id.
     private static final int HAND_SOLID = 16;
-    /** Translucent hand render stage id. */
+    // Translucent hand render stage id.
     private static final int HAND_TRANSLUCENT = 23;
 
     @Redirect(

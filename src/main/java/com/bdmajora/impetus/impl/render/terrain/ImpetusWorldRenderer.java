@@ -22,23 +22,17 @@ import com.bdmajora.impetus.mixin.core.terrain.ActiveRenderInfoAccessor;
 
 import java.util.*;
 
-/**
- * Provides an extension to vanilla's {@link net.minecraft.client.renderer.RenderGlobal}.
- */
+// extends vanilla's RenderGlobal with the Impetus terrain renderer's own draw and visibility entry points
 public class ImpetusWorldRenderer extends SimpleWorldRenderer<WorldClient, VintageRenderSectionManager, BlockRenderLayer, TileEntity, ImpetusWorldRenderer.TileEntityRenderContext>  {
     @Desugar
     public record TileEntityRenderContext(Map<Integer, DestroyBlockProgress> damagedBlocks, float partialTicks) {}
 
-    /**
-     * @return The ImpetusWorldRenderer based on the current dimension
-     */
+    // the ImpetusWorldRenderer for the current dimension
     public static ImpetusWorldRenderer instance() {
         return SimpleWorldRenderer.Provider.getWorldRenderer(Minecraft.getMinecraft().renderGlobal);
     }
 
-    /**
-     * @return The ImpetusWorldRenderer based on the current dimension, or null if none is attached
-     */
+    // the ImpetusWorldRenderer for the current dimension, or null if none is attached
     public static ImpetusWorldRenderer instanceNullable() {
         return SimpleWorldRenderer.Provider.getWorldRendererNullable(Minecraft.getMinecraft().renderGlobal);
     }
@@ -73,9 +67,7 @@ public class ImpetusWorldRenderer extends SimpleWorldRenderer<WorldClient, Vinta
         return VintageRenderSectionManager.create(chooseVertexType(), this.world, this.getEffectiveRenderDistance(), commandList);
     }
 
-    /**
-     * Performs a render pass for the given {@link BlockRenderLayer} and draws all visible chunks for it.
-     */
+    // performs a render pass for the given BlockRenderLayer, drawing every visible chunk for it
     public void drawChunkLayer(BlockRenderLayer renderLayer, double x, double y, double z) {
         // Umbra renderStage uniform: packs gate voxelization on MC_RENDER_STAGE_TERRAIN_* (ordinals 8/9/10/17).
         int stage;
@@ -141,10 +133,7 @@ public class ImpetusWorldRenderer extends SimpleWorldRenderer<WorldClient, Vinta
         return count;
     }
 
-    /**
-     * Returns whether or not the entity intersects with any visible chunks in the graph.
-     * @return True if the entity is visible, otherwise false
-     */
+    // whether the entity intersects any visible chunk in the graph
     public boolean isEntityVisible(Entity entity) {
         if (!ImpetusVintage.options().performance.useEntityCulling || this.renderSectionManager.isInShadowPass()) {
             return true;

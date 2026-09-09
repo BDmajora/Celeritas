@@ -3,25 +3,17 @@ package com.bdmajora.impetus.engine.impl.render.chunk.compile.tasks;
 import com.bdmajora.impetus.engine.impl.render.chunk.compile.ChunkBuildContext;
 import com.bdmajora.impetus.engine.impl.util.task.CancellationToken;
 
-/**
- * Build tasks are immutable jobs (with optional prioritization) which contain all the necessary state to perform
- * chunk mesh updates or quad sorting off the main thread.
- *
- * When a task is constructed on the main thread, it should copy all the state it requires in order to complete the task
- * without further synchronization. The task will then be scheduled for async execution on a thread pool.
- *
- * After the task completes, it returns a "build result" which contains any computed data that needs to be handled
- * on the main thread.
- */
+// build tasks are immutable jobs, with optional prioritisation, carrying all the state needed to
+// perform chunk mesh updates or quad sorting off the main thread
+// when a task is constructed on the main thread it copies everything it needs to complete without
+// further synchronisation, and is then scheduled for async execution on a thread pool
+// once it completes it returns a build result holding any computed data that has to be handled back
+// on the main thread
 public abstract class ChunkBuilderTask<OUTPUT> {
-    /**
-     * Executes the given build task asynchronously from the calling thread. The implementation should be careful not
-     * to access or modify global mutable state.
-     *
-     * @param context            The context to use for building this chunk
-     * @param cancellationToken The cancellation source which can be used to query if the task is cancelled
-     * @return The build result of this task, containing any data which needs to be uploaded on the main-thread, or null
-     *         if the task was cancelled.
-     */
+    // executes the build task asynchronously from the calling thread; implementations must be careful
+    // not to access or modify global mutable state
+    // context is the build context to use, cancellationToken is queried to find out whether the task
+    // has been cancelled
+    // returns the build result - whatever data needs uploading on the main thread - or null if cancelled
     public abstract OUTPUT execute(ChunkBuildContext context, CancellationToken cancellationToken);
 }

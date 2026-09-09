@@ -3,24 +3,22 @@ package com.bdmajora.impetus.umbra.terrain;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Shader-stage normalization for <em>modern</em> shader packs (Complementary, BSL, …) — the ones written as
- * {@code #version 130+} single-source files that are compiled as both stages, selected by {@code #define VERTEX_SHADER}
- * / {@code #define FRAGMENT_SHADER} in the {@code .vsh}/{@code .fsh} entry points and gated with
- * {@code #ifdef VERTEX_SHADER}/{@code FRAGMENT_SHADER}.
- * <p>
- * Unlike {@link FullscreenTransformer} (which rewrites GLSL-120 Chocapic packs into 330-core, renaming {@code main},
- * converting {@code varying}, hoisting globals — surgery that <b>corrupts</b> a 5000-line modern source), this path
- * does almost nothing: Minecraft 1.12.2 runs on a GL <em>compatibility</em> context, so the driver's own preprocessor
- * already evaluates the stage {@code #ifdef}s and the option {@code #if} gates, and the legacy built-ins
- * ({@code gl_FragCoord}, {@code gl_FragData}, {@code gl_Vertex}, {@code ftransform}, …) the pack relies on are all
- * available. We only normalise the {@code #version} line up to {@code 330 compatibility} (a superset of 130 that keeps
- * every legacy feature while allowing the modern intrinsics — {@code texelFetch}, {@code textureLod}, … — these packs
- * also use), and leave the (already include-flattened) body exactly as the pack author wrote it.
- * <p>
- * The draw-buffer routing and fragment output locations are handled outside this class so every terrain and fullscreen
- * path uses the same Umbra-style target mapping.
- */
+// Stage normalisation for MODERN packs — Complementary, BSL and the rest written as #version 130+ single-source
+// files compiled as both stages, selected by #define VERTEX_SHADER / FRAGMENT_SHADER in the .vsh/.fsh entry points
+// and gated with matching #ifdefs
+//
+// This path deliberately does almost nothing, unlike FullscreenTransformer, which rewrites GLSL-120 Chocapic packs
+// into 330-core by renaming main, converting varying and hoisting globals — surgery that CORRUPTS a 5000-line
+// modern source
+// It can do nothing because 1.12.2 runs on a GL COMPATIBILITY context: the driver's own preprocessor already
+// evaluates the stage #ifdefs and the option #if gates, and every legacy built-in the pack relies on —
+// gl_FragCoord, gl_FragData, gl_Vertex, ftransform — is available
+// So the only change is normalising the #version up to 330 compatibility, a superset of 130 that keeps every
+// legacy feature while allowing the modern intrinsics (texelFetch, textureLod) these packs also use. The
+// already-include-flattened body is left exactly as the author wrote it
+//
+// Draw-buffer routing and fragment output locations are handled outside this class, so every terrain and
+// fullscreen path shares one Iris-style target mapping
 public final class ModernPackTransformer {
     private static final Pattern VERSION = Pattern.compile("(?m)^\\s*#version\\s+(\\d+)(?:\\s+\\w+)?\\s*$");
     private static final Pattern UINT_DECLARATION = Pattern.compile(
@@ -36,10 +34,10 @@ public final class ModernPackTransformer {
     private ModernPackTransformer() {
     }
 
-    /**
-     * @return {@code true} if {@code source} declares {@code #version 130} or higher — the marker that separates modern
-     * single-source packs from the GLSL-120 Chocapic family that {@link FullscreenTransformer} handles.
-     */
+    // True when the source declares #version 130 or higher — the marker separating modern single-source packs from
+    // the GLSL-120 Chocapic family FullscreenTransformer handles
+    // Note this is a version check, not a feature check, and a 130-declaring pack can still use compatibility-profile
+    // built-ins for real — see the fog rewrite below for what that cost once
     public static boolean isModernSource(String source) {
         if (source == null) {
             return false;
@@ -48,11 +46,9 @@ public final class ModernPackTransformer {
         return matcher.find() && Integer.parseInt(matcher.group(1)) >= 130;
     }
 
-    /**
-     * Normalise the {@code #version} to {@code 330 compatibility} and otherwise return the source untouched. The stage
-     * is already selected by the {@code #define VERTEX_SHADER}/{@code FRAGMENT_SHADER} that the {@code .vsh}/{@code .fsh}
-     * entry point carries, so nothing stage-specific is needed here.
-     */
+    // Normalises the #version and returns the source otherwise untouched
+    // Nothing stage-specific happens here because the stage is already selected by the
+    // #define VERTEX_SHADER / FRAGMENT_SHADER the .vsh/.fsh entry point carries
     public static String transform(String source) {
         String body = VERSION.matcher(source).replaceAll("");
         body = rewriteFogParameters(body);
@@ -60,11 +56,9 @@ public final class ModernPackTransformer {
         return "#version " + targetVersion(source) + " compatibility\n" + stripLeadingBlankLines(body);
     }
 
-    /**
-     * The compatibility version to compile at: at least 330 (the lift this transformer performs), never lower than
-     * the pack's own declaration (Complementary's shadow stub declares 400), and 430 when the source uses image
-     * load/store (colored-lighting voxelization) or compute-adjacent features that 330 lacks.
-     */
+    // The compatibility version to compile at: at least 330, never BELOW the pack's own declaration —
+    // Complementary's shadow stub declares 400 — and 430 when the source uses image load/store for
+    // coloured-lighting voxelization, or other compute-adjacent features 330 simply lacks
     private static int targetVersion(String source) {
         int version = 330;
         java.util.regex.Matcher declared = VERSION.matcher(source);
@@ -94,26 +88,24 @@ public final class ModernPackTransformer {
         return source.substring(start);
     }
 
-    /**
-     * Substitutes the {@code gl_Fog.*} built-ins. {@code gl_Fog.color} maps to the live {@code iris_FogColor} uniform
-     * (the one {@link FullscreenTransformer} and {@link ImpetusTerrainTransformer} already use); the scalars keep the
-     * constant stand-ins they have always had.
-     * <p>
-     * {@code gl_Fog.color} used to be replaced with {@code vec4(0.0)}, on the assumption that only genuinely modern
-     * (1.17+) packs reach this transformer, where any {@code gl_Fog} reference sits in a dead branch. That assumption
-     * is wrong: {@link #isModernSource} keys off {@code #version >= 130}, and plenty of 1.12.2-era packs declare 130
-     * while still using the compatibility-profile fog built-ins for real. Body Camera Shader v1.6.1 guards its cloud
-     * distance-fade with {@code if (gl_Fog.color.rgb != vec3(0.0))}, which the substitution turned into
-     * {@code if (vec4(0.0).rgb != vec3(0.0))} — always false. Its clouds then never faded and rendered as one opaque
-     * slab out to the cloud limit. A constant is especially dangerous for the colour because packs use it as a
-     * <em>predicate</em>, not just a value.
-     * <p>
-     * The scalars used to be left as constants too. They are now mapped as well, for Umbra parity — see
-     * {@link FogParameters}. That visibly changes packs which read them in live code: Complementary and Spooklementary
-     * both compute {@code float fog = (lViewPos * 3.0 - gl_Fog.start) * gl_Fog.scale;}, which was
-     * {@code (lViewPos * 3.0 - 0.0) * 1.0} — an unbounded value rather than the 0..1 linear fog factor the expression
-     * is meant to produce — and is now the real {@code (dist - start) / (end - start)}. Verify those two in game.
-     */
+    // Substitutes the gl_Fog.* built-ins with the live uniforms, sharing FogParameters with the other two
+    // transformers so all three cannot drift apart
+    //
+    // gl_Fog.color used to be replaced with vec4(0.0), on the assumption that only genuinely modern 1.17+ packs
+    // reach this transformer and any gl_Fog reference in one sits in a dead branch
+    // That assumption is wrong. isModernSource keys off #version >= 130, and plenty of 1.12.2-era packs declare 130
+    // while still using the compatibility-profile fog built-ins for real
+    // Body Camera Shader v1.6.1 guards its cloud distance-fade with `if (gl_Fog.color.rgb != vec3(0.0))`, which the
+    // substitution turned into `if (vec4(0.0).rgb != vec3(0.0))` — always false. Its clouds then never faded and
+    // rendered as one opaque slab out to the cloud limit
+    // A constant is especially dangerous for the colour precisely because packs use it as a PREDICATE, not just a
+    // value
+    //
+    // The scalars were constants too and are now mapped as well, for Iris parity. That visibly changes packs which
+    // read them in live code: Complementary and Spooklementary both compute
+    // `float fog = (lViewPos * 3.0 - gl_Fog.start) * gl_Fog.scale;`, which was `(lViewPos * 3.0 - 0.0) * 1.0` — an
+    // unbounded value rather than the 0..1 linear fog factor the expression is meant to produce — and is now the
+    // real (dist - start) / (end - start)
     private static String rewriteFogParameters(String source) {
         if (!source.contains("gl_Fog")) {
             return source;
@@ -136,7 +128,7 @@ public final class ModernPackTransformer {
         return declarations.length() == 0 ? source : injectAfterPreamble(source, declarations.toString());
     }
 
-    /** {@code "uniform vec4 iris_FogColor;"} -> {@code "iris_FogColor"}. */
+    // Pulls the identifier out of a declaration string: "uniform vec4 iris_FogColor;" gives "iris_FogColor"
     private static String identifierOf(String declaration) {
         String trimmed = declaration.trim();
         int end = trimmed.lastIndexOf(';');
@@ -144,34 +136,32 @@ public final class ModernPackTransformer {
         return trimmed.substring(start + 1, end);
     }
 
-    /** The real attribute that feeds {@code gl_MultiTexCoord0} on the full-screen quad. */
+    // The real named attribute that feeds gl_MultiTexCoord0 on the full-screen quad, since the built-in cannot be
+    // relied on there — see bindFullscreenTexCoord below
     public static final String FULLSCREEN_TEXCOORD_ATTRIBUTE = "iris_QuadTexCoord";
 
     private static final Pattern MULTI_TEX_COORD_0 =
             Pattern.compile("(?<![A-Za-z0-9_])gl_MultiTexCoord0(?![A-Za-z0-9_])");
 
-    /**
-     * Rewrites {@code gl_MultiTexCoord0} in a full-screen-pass vertex shader to read a real vertex attribute.
-     * <p>
-     * Composite/deferred/final sources are {@code #version <n> compatibility} and address the quad through the
-     * fixed-function built-ins, e.g. Complementary's
-     * {@code texCoord = (gl_TextureMatrix[0] * gl_MultiTexCoord0).xy;}. Feeding that built-in by writing generic
-     * vertex attribute 8 only works on NVIDIA: the generic-to-conventional aliasing table (8 -&gt;
-     * {@code gl_MultiTexCoord0}) comes from {@code NV_vertex_program}. <b>GL guarantees aliasing for attribute 0
-     * ({@code gl_Vertex}) and nothing else</b>, and Mesa implements exactly that. On Mesa the built-in therefore kept
-     * its default {@code (0,0,0,1)}, every vertex of the quad got {@code texCoord = (0,0)}, and every composite pass
-     * sampled a single corner texel across the whole screen — a uniform image whose colour changed as that one texel
-     * did. It compiled, linked and drew without a single GL error, which is why nothing in the logs pointed at it.
-     * <p>
-     * Umbra never depends on the aliasing: it binds a real named vertex format and substitutes the built-in
-     * ({@code CompositeTransformer}: {@code gl_MultiTexCoord0} -&gt; {@code vec4(UV0, 0.0, 1.0)} plus an injected
-     * {@code in vec2 UV0;}). This does the same. Substitution rather than {@code #define} is deliberate — GLSL
-     * reserves macro names beginning with {@code gl_}, so defining over the built-in is itself illegal on a strict
-     * compiler.
-     * <p>
-     * Only the full-screen path needs this. Gbuffer programs get {@code gl_MultiTexCoord0} from Minecraft's own
-     * fixed-function texture-coordinate arrays, which are the conventional attribute and work everywhere.
-     */
+    // Rewrites gl_MultiTexCoord0 in a full-screen-pass vertex shader to read a real named vertex attribute
+    //
+    // Composite, deferred and final sources are `#version <n> compatibility` and address the quad through the
+    // fixed-function built-ins — Complementary writes `texCoord = (gl_TextureMatrix[0] * gl_MultiTexCoord0).xy;`
+    // Feeding that built-in by writing generic vertex attribute 8 only works on NVIDIA, because the
+    // generic-to-conventional aliasing table that maps 8 to gl_MultiTexCoord0 comes from NV_vertex_program
+    // GL guarantees aliasing for attribute 0 (gl_Vertex) and NOTHING ELSE, and Mesa implements exactly that
+    // So on Mesa the built-in kept its default (0,0,0,1), every vertex of the quad got texCoord = (0,0), and every
+    // composite pass sampled one corner texel across the whole screen — a uniform image whose colour changed as
+    // that single texel did
+    // It compiled, linked and drew without a single GL error, which is why nothing in the logs pointed at it
+    //
+    // Iris never relies on the aliasing: it binds a real named vertex format and substitutes the built-in, mapping
+    // gl_MultiTexCoord0 to vec4(UV0, 0.0, 1.0) plus an injected `in vec2 UV0;`. This does the same
+    // Substitution rather than a #define is deliberate — GLSL reserves macro names beginning with gl_, so defining
+    // over the built-in is itself illegal on a strict compiler
+    //
+    // Only the full-screen path needs this. Gbuffer programs get gl_MultiTexCoord0 from Minecraft's own
+    // fixed-function texture-coordinate arrays, which ARE the conventional attribute and work everywhere
     public static String bindFullscreenTexCoord(String vertexSource) {
         if (vertexSource == null || !vertexSource.contains("gl_MultiTexCoord0")) {
             return vertexSource;
@@ -181,11 +171,10 @@ public final class ModernPackTransformer {
         return injectAfterPreamble(rewritten, "in vec2 " + FULLSCREEN_TEXCOORD_ATTRIBUTE + ";");
     }
 
-    /**
-     * Inserts {@code declarations} immediately before the first line carrying a non-preprocessor token, skipping blank
-     * lines, comments and {@code #} directives. GLSL requires every {@code #extension} to precede any real token, so
-     * prepending to the top of the body would break the packs that use them.
-     */
+    // Inserts declarations immediately before the first line carrying a real (non-preprocessor) token, skipping
+    // blanks, comments and # directives
+    // Not simply prepended, because GLSL requires every #extension to precede any real token — putting a
+    // declaration above them breaks every pack that uses one
     private static String injectAfterPreamble(String source, String declarations) {
         String[] lines = source.split("\n", -1);
         boolean inBlockComment = false;

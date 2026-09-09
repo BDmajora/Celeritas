@@ -6,10 +6,10 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
-/** Clamps full-bright lightmap values while shaders are active. */
+// Clamps full-bright lightmap values while shaders are active.
 @Mixin(OpenGlHelper.class)
 public class OpenGlHelperLightmapClampMixin {
-    /** Brightest valid lightmap coordinate. */
+    // Brightest valid lightmap coordinate.
     private static final float MAX_LIGHTMAP_COORD = 240.0f;
 
     @ModifyVariable(method = "setLightmapTextureCoords(IFF)V", at = @At("HEAD"), argsOnly = true, ordinal = 0,

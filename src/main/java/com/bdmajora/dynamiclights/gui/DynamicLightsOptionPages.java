@@ -23,18 +23,13 @@ import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 
-/**
- * The Dynamic Lights page.
- *
- * <p>Upstream ships the master switches on one screen and the per-type toggles behind a button that
- * opens a second one. Everything is groups on a single page here, matching how the Extras tab handles
- * its per-particle-class toggles, because the options screen's search bar makes a long page navigable
- * in a way a nested screen is not.
- *
- * <p>Sub-options are gated with {@code setEnabledPredicate} rather than hidden, so switching the mode
- * to Off greys out what it governs instead of making controls appear and disappear as the page is
- * used.
- */
+// the Dynamic Lights page
+// upstream ships the master switches on one screen and the per-type toggles behind a button that
+// opens a second one; everything is groups on a single page here, matching how the Extras tab handles
+// its per-particle-class toggles, because the options screen's search bar makes a long page navigable
+// in a way a nested screen is not
+// sub-options are gated with setEnabledPredicate rather than hidden, so switching the mode to Off
+// greys out what it governs instead of making controls appear and disappear as the page is used
 public final class DynamicLightsOptionPages {
     private static final String MOD_ID = "impetus";
     private static final String LANG = "impetus.options.dynamiclights.";
@@ -118,13 +113,11 @@ public final class DynamicLightsOptionPages {
     // Per-type toggles
     // ------------------------------------------------------------------------------------------
 
-    /**
-     * One toggle per registered entity and block entity type, grouped by the mod that owns it.
-     *
-     * <p>Read straight from the registries — unlike the Extras particle toggles, no discovery is
-     * needed, because 1.12.2 does register both of these by name. Wrapped in a guard all the same: a
-     * mod with a malformed registry entry should cost its own group, not the whole tab.
-     */
+    // one toggle per registered entity and block entity type, grouped by the mod that owns it
+    // read straight from the registries - unlike the Extras particle toggles no discovery is needed,
+    // because 1.12.2 does register both of these by name
+    // wrapped in a guard all the same: a mod with a malformed registry entry should cost its own
+    // group, not the whole tab
     private static void addTypeGroups(List<OptionGroup> groups, BooleanSupplier enabled) {
         try {
             addTypeGroups(groups, "entity", LightSourceSettings.listEntityTypes(), enabled,
@@ -195,7 +188,7 @@ public final class DynamicLightsOptionPages {
         }
     }
 
-    /** {@code LightSourceSettings::setEntityTypeEnabled} and friends, as a target type. */
+    // LightSourceSettings::setEntityTypeEnabled and friends, as a target type.
     @FunctionalInterface
     private interface TypeSetter {
         void set(LightSourceSettings settings, String id, boolean enabled);

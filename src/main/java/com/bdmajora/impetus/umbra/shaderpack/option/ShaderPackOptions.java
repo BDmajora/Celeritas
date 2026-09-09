@@ -10,20 +10,15 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Discovers, merges, and applies shader-pack options across every source file in the pack.
- * <p>
- * Adapted from Umbra's {@code ShaderPackOptions}. Umbra operates on an {@code IncludeGraph} (options are discovered on
- * per-file un-flattened source, then applied lazily as include-time line transforms, scoped to each weakly-connected
- * include component). Impetus instead flattens includes textually <em>after</em> option application, so this class
- * works directly on the raw source map and produces a map of <em>edited</em> sources that the
- * {@code IncludeProcessor} then flattens.
- * <p>
- * Boolean {@code #define} options are only confirmed as configurable if the define name is referenced by an
- * {@code #ifdef}/{@code #ifndef} somewhere in the pack. Lacking an include graph, we take the union of boolean-define
- * references across the whole pack rather than per-connected-component. This is a safe over-approximation (it can only
- * expose more boolean options, never corrupt source), consistent with OptiFine's permissive behavior.
- */
+// Discovers, merges and applies the pack's configurable options across every source file it ships
+// Adapted from Iris's ShaderPackOptions, but the pipeline order differs. Iris works on an IncludeGraph: options are
+// discovered on per-file un-flattened source and applied lazily as include-time line transforms, scoped to each
+// weakly-connected include component. Impetus flattens includes textually AFTER option application, so this works
+// directly on the raw source map and hands IncludeProcessor a map of already-EDITED sources to flatten
+// One consequence of having no include graph: a boolean #define option is only confirmed configurable when its name
+// is referenced by an #ifdef or #ifndef somewhere, and the reference set is taken across the WHOLE pack rather than
+// per connected component. That is a safe over-approximation — it can expose an extra boolean option that nothing
+// in that component reads, but it can never corrupt source — and it matches OptiFine's permissive behaviour
 public class ShaderPackOptions {
     private final OptionSet optionSet;
     private final OptionValues optionValues;
@@ -63,7 +58,8 @@ public class ShaderPackOptions {
         return optionValues;
     }
 
-    /** The pack's source files with option edits (define toggles, const/value rewrites) already applied. */
+    // The pack's sources with every option edit already applied: define toggles flipped, const and value
+    // assignments rewritten. This is what the include flattener consumes
     public Map<AbsolutePackPath, String> getEditedSources() {
         return editedSources;
     }

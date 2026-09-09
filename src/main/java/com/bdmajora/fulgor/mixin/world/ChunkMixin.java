@@ -23,17 +23,12 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
- * Where the chunk stops calculating light itself and starts asking the engine.
- *
- * <p>Four vanilla methods are replaced outright. Three of them ({@code getLightFor},
- * {@code checkLight}, {@code recheckGaps}) are replaced because their vanilla bodies would fight the
- * engine for the same data; the fourth ({@code relightBlock}) because vanilla's version silently drops
- * the cross-chunk half of its job.
- *
- * <p>{@code @Overwrite} is used rather than a cancelling inject in exactly the cases where leaving the
- * vanilla body reachable would be a bug rather than dead weight.
- */
+// where the chunk stops calculating light itself and starts asking the engine
+// four vanilla methods are replaced outright: three of them - getLightFor, checkLight, recheckGaps -
+// because their vanilla bodies would fight the engine for the same data, and the fourth, relightBlock,
+// because vanilla's version silently drops the cross-chunk half of its job
+// @Overwrite is used rather than a cancelling inject in exactly the cases where leaving the vanilla
+// body reachable would be a bug rather than dead weight
 @Mixin(Chunk.class)
 public abstract class ChunkMixin implements ChunkLightingData, LightingEngineProvider {
     @Unique
@@ -96,45 +91,34 @@ public abstract class ChunkMixin implements ChunkLightingData, LightingEnginePro
     @Unique
     private boolean fulgor$lightInitialized;
 
-    /**
-     * Caches the world's engine on the chunk.
-     *
-     * <p>{@code getLightFor} is one of the most-called methods in the game and every call needs the
-     * engine; going through the world each time would add an interface dispatch and a field read to
-     * all of them.
-     */
+    // caches the world's engine on the chunk
+    // getLightFor is one of the most-called methods in the game and every call needs the engine, so
+    // going through the world each time would add an interface dispatch and a field read to all of them
     @Inject(method = "<init>(Lnet/minecraft/world/World;II)V", at = @At("RETURN"))
     private void fulgor$captureLightingEngine(World world, int x, int z, CallbackInfo ci) {
         this.fulgor$lightingEngine = ((LightingEngineProvider) world).fulgor$getLightingEngine();
     }
 
-    /**
-     * {@code getLightSubtracted} reads both light types at once and is the entity/rendering path's way
-     * in, so it flushes both queues rather than going through {@code getLightFor} twice.
-     */
+    // getLightSubtracted reads both light types at once and is the entity/rendering path's way in, so
+    // it flushes both queues rather than going through getLightFor twice
     @Inject(method = "getLightSubtracted", at = @At("HEAD"))
     private void fulgor$flushBeforeLightSubtracted(BlockPos pos, int amount, CallbackInfoReturnable<Integer> cir) {
         this.fulgor$lightingEngine.processLightUpdates();
     }
 
-    /**
-     * Replays the boundary checks this chunk and its neighbours owe each other.
-     *
-     * <p>Loading a chunk is the only event that can make a previously impossible boundary crossing
-     * possible, which is why the replay hangs off here rather than off a tick.
-     */
+    // replays the boundary checks this chunk and its neighbours owe each other
+    // loading a chunk is the only event that can make a previously impossible boundary crossing
+    // possible, which is why the replay hangs off here rather than off a tick
     @Inject(method = "onLoad", at = @At("RETURN"))
     private void fulgor$replayBoundaryChecks(CallbackInfo ci) {
         LightingHooks.scheduleRelightChecksForChunkBoundaries(this.world, (Chunk) (Object) this);
     }
 
-    /**
-     * {@code setLightFor} rebuilds the whole chunk's skylight map when it has to create a section.
-     *
-     * <p>The engine calls {@code setLightFor} for every position it writes, so leaving that in place
-     * would mean a full-column rebuild in the middle of a propagation pass — both ruinously slow and
-     * liable to overwrite what the pass just decided. Only the new section needs seeding.
-     */
+    // setLightFor rebuilds the whole chunk's skylight map when it has to create a section
+    // the engine calls setLightFor for every position it writes, so leaving that in place would mean a
+    // full-column rebuild in the middle of a propagation pass - both ruinously slow and liable to
+    // overwrite what the pass just decided
+    // only the new section needs seeding
     @Redirect(
             method = "setLightFor",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/chunk/Chunk;generateSkylightMap()V"),
@@ -143,11 +127,13 @@ public abstract class ChunkMixin implements ChunkLightingData, LightingEnginePro
         LightingHooks.initSkylightForSection(this.world, (Chunk) (Object) this, this.storageArrays[pos.getY() >> 4]);
     }
 
+    // vanilla relights the column but drops the part of the job that crosses into a neighbour that is
+    // not loaded, which is where world-generation skylight seams come from
+    // this version hands the column to LightingHooks#relightSkylightColumn instead, which records what
+    // it cannot do now so it can be done on load
+    // @author / @reason are Mixin's required metadata on an @Overwrite, not documentation
     /**
-     * @reason Vanilla relights the column but drops the part of the job that crosses into a neighbour
-     * that is not loaded, which is where world-generation skylight seams come from. This version hands
-     * the column to {@link LightingHooks#relightSkylightColumn} instead, which records what it cannot
-     * do now so it can be done on load.
+     * @reason Record cross-chunk relighting that cannot be done yet, instead of dropping it
      * @author Angeline (Phosphor), Luna Mira Lage (Alfheim)
      */
     @Overwrite
@@ -174,10 +160,13 @@ public abstract class ChunkMixin implements ChunkLightingData, LightingEnginePro
         }
     }
 
+    // the single point where deferral becomes visible: anything reading light gets whatever is pending
+    // resolved first
+    // only the requested type is flushed, since the two propagate independently and a block-light read
+    // has no reason to pay for pending skylight
+    // @author / @reason are Mixin's required metadata on an @Overwrite, not documentation
     /**
-     * @reason The single point where deferral becomes visible: anything reading light gets whatever is
-     * pending resolved first. Only the requested type is flushed, since the two propagate independently
-     * and a block-light read has no reason to pay for pending skylight.
+     * @reason Flush the pending queue for the requested light type before reading
      * @author Angeline (Phosphor)
      */
     @Overwrite
@@ -187,10 +176,13 @@ public abstract class ChunkMixin implements ChunkLightingData, LightingEnginePro
         return this.fulgor$getCachedLightFor(lightType, pos);
     }
 
+    // vanilla walks all 256 columns and relights each one immediately, against whatever neighbours
+    // happen to exist
+    // this seeds the emitting blocks into the engine instead and defers declaring the chunk lit until
+    // its whole neighbourhood is lit too
+    // @author / @reason are Mixin's required metadata on an @Overwrite, not documentation
     /**
-     * @reason Vanilla walks all 256 columns and relights each one immediately, against whatever
-     * neighbours happen to exist. This seeds the emitting blocks into the engine instead and defers
-     * declaring the chunk lit until its whole neighbourhood is lit too.
+     * @reason Seed the engine instead of relighting every column immediately
      * @author Angeline (Phosphor)
      */
     @Overwrite
@@ -200,10 +192,12 @@ public abstract class ChunkMixin implements ChunkLightingData, LightingEnginePro
         LightingHooks.checkChunkLighting(this.world, (Chunk) (Object) this);
     }
 
+    // functionally vanilla, but the 1024 chunk-provider lookups it performs are replaced by one 5x5
+    // snapshot; the vanilla body cannot simply be redirected because the lookups are spread across
+    // four private helpers
+    // @author / @reason are Mixin's required metadata on an @Overwrite, not documentation
     /**
-     * @reason Functionally vanilla, but the 1024 chunk-provider lookups it performs are replaced by one
-     * 5×5 snapshot. The vanilla body cannot simply be redirected because the lookups are spread across
-     * four private helpers.
+     * @reason Snapshot the neighbourhood once instead of 1024 provider lookups
      * @author Angeline (Phosphor)
      */
     @Overwrite

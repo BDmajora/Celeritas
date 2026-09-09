@@ -6,43 +6,26 @@ import com.bdmajora.impetus.engine.impl.model.quad.ModelQuadView;
 import com.bdmajora.impetus.engine.api.util.ColorABGR;
 
 public class ModelQuadFlags {
-    /**
-     * Indicates that the quad does not fully cover the given face for the model.
-     */
+    // the quad does not fully cover the given face for the model
     public static final int IS_PARTIAL = 0b001;
 
-    /**
-     * Indicates that the quad is parallel to its light face.
-     */
+    // the quad is parallel to its light face
     public static final int IS_PARALLEL = 0b010;
 
-    /**
-     * Indicates that the quad is aligned to the block grid.
-     * This flag is only set if {@link #IS_PARALLEL} is set.
-     */
+    // the quad is aligned to the block grid; only set when IS_PARALLEL is also set
     public static final int IS_ALIGNED = 0b100;
 
-    /**
-     * Indicates that the quad should be shaded using vanilla's getShade logic and the light face, rather than
-     * the normals of each vertex.
-     */
+    // the quad should be shaded using vanilla's getShade logic and the light face, rather than the
+    // normals of each vertex
     public static final int IS_VANILLA_SHADED = 0b1000;
-    /**
-     * Indicates that the particle sprite on this quad can be trusted to be the only sprite it shows.
-     */
+    // the particle sprite on this quad can be trusted to be the only sprite it shows
     public static final int IS_TRUSTED_SPRITE = (1 << 4);
-    /**
-     * Indicates that this quad can use a more optimal terrain render pass based on its sprite.
-     */
+    // this quad can use a more optimal terrain render pass based on its sprite
     public static final int IS_PASS_OPTIMIZABLE = (1 << 5);
-    /**
-     * Indicates that the flags are populated for the quad.
-     */
+    // the flags are populated for the quad
     public static final int IS_POPULATED = (1 << 31);
 
-    /**
-     * @return True if the bit-flag of {@link ModelQuadFlags} contains the given flag
-     */
+    // true if the bit-flag set contains the given flag
     public static boolean contains(int flags, int mask) {
         return (flags & mask) != 0;
     }
@@ -51,32 +34,18 @@ public class ModelQuadFlags {
         return getQuadFlags(quad, face, 0);
     }
 
-    /**
-     * Checks whether a quad's vertex ordering matches Minecraft's canonical baked order
-     * for the given face.
-     * <p>
-     * Minecraft allows four different permutations of a quad's vertices that will
-     * render identically. However, the baked model pipeline (e.g. ambient occlusion,
-     * lighting interpolation, and back-face culling) assumes a specific ordering
-     * that is hardcoded in the model baking logic. This method verifies
-     * that a quad's vertices are listed in that exact canonical order.
-     * <p>
-     * The canonical order is:
-     * <ul>
-     *   <li>Vertices are arranged counter-clockwise (CCW) as seen from outside the block face.</li>
-     *   <li>Each face (±X, ±Y, ±Z) starts at a specific corner and proceeds CCW around the face.</li>
-     *   <li>For example, the -Y face (DOWN) starts at {@code (minX, minY, maxZ)} and proceeds
-     *       through {@code (minX, minY, minZ)}, {@code (maxX, minY, minZ)}, {@code (maxX, minY, maxZ)}.</li>
-     * </ul>
-     * <p>
-     * This method avoids allocations by comparing directly against the expected coordinates
-     * for each vertex index based on the given {@code face} and bounding box.
-     *
-     * @param face the face direction of the quad; determines which axis is fixed and
-     *             which two axes form the quad plane
-     * @return {@code true} if the quad's vertices match Minecraft's canonical baked order
-     *         for the given face, {@code false} otherwise
-     */
+    // checks whether a quad's vertex ordering matches Minecraft's canonical baked order for the face
+    // Minecraft allows four different permutations of a quad's vertices that render identically, but
+    // the baked model pipeline - ambient occlusion, lighting interpolation, back-face culling - assumes
+    // one specific ordering hardcoded in the model baking logic, and this verifies the quad uses it
+    // the canonical order is:
+    //   vertices arranged counter-clockwise as seen from outside the block face
+    //   each face (+/-X, +/-Y, +/-Z) starts at a specific corner and proceeds CCW around the face
+    //   for example the -Y face (DOWN) starts at (minX, minY, maxZ) and proceeds through
+    //   (minX, minY, minZ), (maxX, minY, minZ), (maxX, minY, maxZ)
+    // allocations are avoided by comparing directly against the expected coordinates for each vertex
+    // index, derived from the given face and bounding box
+    // face determines which axis is fixed and which two axes form the quad plane
     private static boolean canonicalVertexOrder(ModelQuadView quad, ModelQuadFacing face, float minX, float minY, float minZ,
                                                 float maxX, float maxY, float maxZ) {
         return switch (face) {
@@ -108,10 +77,8 @@ public class ModelQuadFlags {
         };
     }
 
-    /**
-     * Calculates the properties of the given quad. This data is used later by the light pipeline in order to make
-     * certain optimizations.
-     */
+    // calculates the properties of the given quad; this data is used later by the light pipeline to
+    // make certain optimizations
     public static int getQuadFlags(ModelQuadView quad, ModelQuadFacing face, int existingFlags) {
         float minX = 32.0F;
         float minY = 32.0F;

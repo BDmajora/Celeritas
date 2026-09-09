@@ -11,22 +11,18 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 
-/**
- * The Dynamic Lights subsystem: LambDynLights' light-emitting entities and items, ported to Impetus
- * on 1.12.2.
- *
- * <p>A held torch, a dropped glowstone block or a burning creeper lights the world around it. None of
- * that is real block light — the engine tracks the sources itself, folds their contribution into the
- * lightmap at every place light is read, and schedules a chunk rebuild when a source moves far enough
- * to matter. Nothing is written back to the world, so the effect is purely client-side.
- *
- * <p>Sources: <a href="https://github.com/LambdAurora/LambDynamicLights">LambDynLights</a> by way of
- * <a href="https://github.com/Txni/SodiumDynamicLights">SodiumDynamicLights</a> for the engine, and
- * Celeritas Dynamic Lights for most of the 1.12.2 injection points.
- *
- * <p>Like {@code Extras}, none of the mixins here are gated at coremod time: they read
- * {@link #options()} at call time, so the mode switch takes effect the moment it changes.
- */
+// the Dynamic Lights subsystem: LambDynLights' light-emitting entities and items, ported to Impetus on
+// 1.12.2
+// a held torch, a dropped glowstone block or a burning creeper lights the world around it, but none of
+// that is real block light - the engine tracks the sources itself, folds their contribution into the
+// lightmap at every place light is read, and schedules a chunk rebuild when a source moves far enough
+// to matter
+// nothing is written back to the world, so the effect is purely client-side
+// sources: LambDynLights (https://github.com/LambdAurora/LambDynamicLights) by way of
+// SodiumDynamicLights (https://github.com/Txni/SodiumDynamicLights) for the engine, and Celeritas
+// Dynamic Lights for most of the 1.12.2 injection points
+// like Extras, none of the mixins here are gated at coremod time: they read options() at call time, so
+// the mode switch takes effect the moment it changes
 public final class DynamicLights {
     public static final Logger LOGGER = LogManager.getLogger("Impetus/DynamicLights");
 
@@ -37,13 +33,11 @@ public final class DynamicLights {
     private DynamicLights() {
     }
 
-    /**
-     * The live options, loading them on first use.
-     *
-     * <p>Called from mixin bodies on the client, render and chunk-builder threads, so the first call
-     * has to be safe from wherever it happens to land. {@link com.bdmajora.impetus.ImpetusVintage}
-     * warms it during construction, which in practice is always well before any of those bodies run.
-     */
+    // the live options, loading them on first use
+    // called from mixin bodies on the client, render and chunk-builder threads, so the first call has
+    // to be safe from wherever it happens to land
+    // ImpetusVintage warms it during construction, which in practice is always well before any of
+    // those bodies run
     public static DynamicLightsConfig options() {
         DynamicLightsConfig loaded = config;
         if (loaded == null) {
@@ -58,33 +52,30 @@ public final class DynamicLights {
         return loaded;
     }
 
-    /** The tracked light sources and the lightmap maths over them. */
+    // The tracked light sources and the lightmap maths over them.
     public static DynamicLightsEngine engine() {
         return DynamicLightsEngine.get();
     }
 
-    /** Loads the config now rather than on the first mixin that asks for it. */
+    // Loads the config now rather than on the first mixin that asks for it.
     public static void initialize() {
         options();
     }
 
-    /**
-     * Registers the default light handlers and the item light source reload listener.
-     *
-     * <p>Deliberately not done alongside {@link #initialize()} during construction.
-     * {@code SimpleReloadableResourceManager#registerReloadListener} invokes the listener
-     * <em>immediately</em>, and at construction time Forge's registry events have not fired yet — so
-     * every {@code ForgeRegistries.ITEMS} lookup would come back null, every definition would be
-     * dropped as "item not installed", and a held torch would silently fail to light anything.
-     * Initialization is the first point where the item registry is populated.
-     */
+    // registers the default light handlers and the item light source reload listener
+    // deliberately not done alongside initialize() during construction:
+    // SimpleReloadableResourceManager#registerReloadListener invokes the listener *immediately*, and
+    // at construction time Forge's registry events have not fired yet - so every ForgeRegistries.ITEMS
+    // lookup would come back null, every definition would be dropped as "item not installed", and a
+    // held torch would silently fail to light anything
+    // client init is the first point where the item registry is populated
     public static void onClientInit() {
         DynamicLightHandlers.registerDefaultHandlers();
         ItemLightSources.registerReloadListener();
         MinecraftForge.EVENT_BUS.register(TileEntityLightTicker.instance());
     }
 
-    /** Persists the current options. Safe to call before {@link #initialize()}. */
+    // Persists the current options. Safe to call before #initialize().
     public static void save() {
         options().writeChanges();
     }

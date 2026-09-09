@@ -12,25 +12,24 @@ import com.bdmajora.impetus.umbra.gl.program.ProgramUniforms;
 import com.bdmajora.impetus.umbra.gl.uniform.UniformCollector;
 import com.bdmajora.impetus.umbra.gl.uniform.UniformUpdateFrequency;
 
-/**
- * The sun/moon timing uniforms. Only the scalar angles are provided here because they are a pure function of the
- * world's celestial angle (a faithful transcription of OptiFine's {@code Shaders.setCamera}):
- * <pre>
- *   celestialAngle = world.getCelestialAngle(partialTicks)
- *   sunAngle       = celestialAngle &lt; 0.75 ? celestialAngle + 0.25 : celestialAngle - 0.75
- *   shadowAngle    = sunAngle &lt;= 0.5 ? sunAngle : sunAngle - 0.5
- * </pre>
- * <p>
- * The directional uniforms ({@code sunPosition}, {@code moonPosition}, {@code upPosition}, {@code shadowLightPosition})
- * are derived from the captured {@code gbufferModelView} plus vanilla's celestial rotation (the modern-Umbra approach),
- * so they only carry real values once the {@code EntityRenderer} mixin has captured the frame's matrices.
- */
+// The sun and moon uniforms
+//
+// The scalar angles are a pure function of the world's celestial angle, transcribed from OptiFine's
+// Shaders.setCamera
+//   celestialAngle = world.getCelestialAngle(partialTicks)
+//   sunAngle       = celestialAngle < 0.75 ? celestialAngle + 0.25 : celestialAngle - 0.75
+//   shadowAngle    = sunAngle <= 0.5 ? sunAngle : sunAngle - 0.5
+//
+// The directional ones — sunPosition, moonPosition, upPosition, shadowLightPosition — are derived from the
+// captured gbufferModelView plus vanilla's celestial rotation, which is the modern-Iris approach
+// That means they only carry real values once the EntityRenderer mixin has captured the frame's matrices; before
+// that they are whatever the previous frame left
 public final class CelestialUniforms {
-    /**
-     * The pack's {@code sunPathRotation} (degrees), tilting the sun/moon's daily arc off the vertical. Applied to the
-     * celestial positions here <em>and</em> to the shadow model-view in {@link com.bdmajora.impetus.umbra.pipeline.UmbraShadowRenderer}
-     * so the shadows stay aligned with the lit side. Set once when a pack is loaded; 0 (untilted) until then.
-     */
+    // The pack's sunPathRotation in degrees, tilting the sun and moon's daily arc off the vertical
+    // Applied in two places that must agree: the celestial positions here, AND the shadow model-view in
+    // UmbraShadowRenderer. Applying it to only one leaves the shadows pointing away from the lit side
+    // Set once per pack load, 0 (untilted) until then
+    // volatile because the pack load writes it and the render thread reads it
     private static volatile float sunPathRotation = 0.0f;
 
     private CelestialUniforms() {
@@ -56,13 +55,11 @@ public final class CelestialUniforms {
                 .uniform3f(UniformUpdateFrequency.PER_FRAME, "upPosition", CelestialUniforms::getUpPosition);
     }
 
-    /**
-     * Eye-space sun direction, computed the way modern Umbra does it: apply vanilla's celestial rotation
-     * ({@code rotate(-90, Y)} then {@code rotate(celestialAngle * 360, X)}, exactly what {@code RenderGlobal.renderSky}
-     * pushes onto the modelview) to the captured {@code gbufferModelView}, then transform the sky-local sun vector
-     * {@code (0, 100, 0)}. OptiFine instead reads the matrix back mid-sky-render ({@code postCelestialRotate}); the
-     * math is identical but this needs no sky hook.
-     */
+    // Eye-space sun direction, computed the modern-Iris way: take the captured gbufferModelView, apply vanilla's
+    // celestial rotation to it — rotate(-90, Y) then rotate(celestialAngle * 360, X), exactly what
+    // RenderGlobal.renderSky pushes onto the modelview — then transform the sky-local sun vector (0, 100, 0)
+    // OptiFine gets the same answer by reading the matrix back mid-sky-render in postCelestialRotate. The maths is
+    // identical; doing it this way needs no hook inside the sky rendering at all
     public static Vector3f getSunPosition() {
         return getCelestialPosition(100.0f);
     }
@@ -71,16 +68,15 @@ public final class CelestialUniforms {
         return getCelestialPosition(-100.0f);
     }
 
-    /** The shadow-casting light: the sun while it is up ({@code sunAngle <= 0.5}), the moon at night. */
+    // The light that actually casts shadows: the sun while it is up (sunAngle <= 0.5), the moon after that
     private static Vector3f getShadowLightPosition() {
         return getSunAngle() <= 0.5f ? getSunPosition() : getMoonPosition();
     }
 
-    /**
-     * The shadow light direction in <em>world</em> space (Umbra's {@code getShadowLightPositionInWorldSpace}). Same
-     * construction as {@link #getCelestialPosition} but without {@code gbufferModelView}, because the shadow frustum
-     * reasons about world-space plane normals rather than eye space.
-     */
+    // The shadow light direction in WORLD space, matching Iris's getShadowLightPositionInWorldSpace
+    // Same construction as the eye-space version but with gbufferModelView left out, because the shadow frustum
+    // reasons about world-space plane normals — feeding it an eye-space vector would rotate the culling volume with
+    // the camera
     public static Vector3f getShadowLightPositionInWorldSpace() {
         Vector4f position = new Vector4f(0.0f, getSunAngle() <= 0.5f ? 100.0f : -100.0f, 0.0f, 0.0f);
         Matrix4f celestial = new Matrix4f();
@@ -103,7 +99,8 @@ public final class CelestialUniforms {
         return new Vector3f(position.x, position.y, position.z);
     }
 
-    /** Eye-space world-up, i.e. {@code gbufferModelView * (0, 100, 0, 0)} — OptiFine's {@code setUpPosition}. */
+    // Eye-space world-up: gbufferModelView * (0, 100, 0, 0), OptiFine's setUpPosition
+    // w = 0 makes it a direction rather than a point, so the matrix's translation is ignored
     public static Vector3f getUpPosition() {
         Vector4f up = new Vector4f(0.0f, 100.0f, 0.0f, 0.0f);
         new Matrix4f(CapturedRenderingState.INSTANCE.getGbufferModelView()).transform(up);

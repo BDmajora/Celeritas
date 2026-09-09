@@ -1,34 +1,21 @@
 package com.bdmajora.impetus.engine.impl.render.chunk;
 
-/**
- * Represents the type of chunk update task.
- */
+// the type of chunk update task
 public enum ChunkUpdateType {
-    /**
-     * Chunk is being built for the first time.
-     *
-     * <p>The maximum queue size is somewhat arbritarily chosen. It needs to be large enough to keep a reasonably sized
-     * worker pool saturated with initial builds during world load, while bounding the per-frame snapshot burst on
-     * the render thread.</p>
-     */
+    // chunk is being built for the first time
+    // the maximum queue size is somewhat arbitrarily chosen: large enough to keep a reasonably sized
+    // worker pool saturated with initial builds during world load, while bounding the per-frame
+    // snapshot burst on the render thread
     INITIAL_BUILD,
-    /**
-     * Chunk geometry is being sorted based on camera position change.
-     */
+    // chunk geometry is being sorted because the camera position changed
     SORT,
-    /**
-     * Like {@link ChunkUpdateType#SORT}, but will block the main thread if the camera is near enough to guarantee
-     * the sort results are reflected quickly.
-     */
+    // like SORT, but blocks the main thread if the camera is near enough to guarantee the sort results
+    // are reflected quickly
     IMPORTANT_SORT,
-    /**
-     * Chunk data has changed and remeshing is required.
-     */
+    // chunk data has changed and remeshing is required
     REBUILD,
-    /**
-     * Like {@link ChunkUpdateType#REBUILD}, but will block the main thread if the camera is near enough to guarantee
-     * the rebuild is seen quickly.
-     */
+    // like REBUILD, but blocks the main thread if the camera is near enough to guarantee the rebuild is
+    // seen quickly
     IMPORTANT_REBUILD;
 
     @Deprecated
@@ -52,16 +39,12 @@ public enum ChunkUpdateType {
         return null;
     }
 
-    /**
-     * {@return true if the task is "important" and should block the main thread if the camera is near enough}
-     */
+    // true if the task is "important" and should block the main thread when the camera is near enough
     public boolean isImportant() {
         return this == IMPORTANT_REBUILD || this == IMPORTANT_SORT;
     }
 
-    /**
-     * {@return true if the task only sorts rather than performing a full chunk rebuild}
-     */
+    // true if the task only sorts, rather than performing a full chunk rebuild
     public boolean isSort() {
         return this == SORT || this == IMPORTANT_SORT;
     }

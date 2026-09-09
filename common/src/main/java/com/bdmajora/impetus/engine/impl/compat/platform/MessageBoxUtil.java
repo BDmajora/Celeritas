@@ -3,12 +3,12 @@ package com.bdmajora.impetus.engine.impl.compat.platform;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-/**
- * Shows a blocking warning dialog for problems severe enough that a log line would be missed (e.g. a driver
- * known to crash on launch). Uses Swing rather than native message boxes: it is available on every platform
- * and Java version Impetus targets, and this path only runs during startup, before the GL loop is
- * latency-sensitive. Falls back to logging in headless environments.
- */
+// A blocking warning dialog, for problems severe enough that a log line would simply be missed — a driver known
+// to crash on launch, for instance
+// Swing rather than a native message box: Swing is present on every platform and Java version this targets, and
+// this path only runs during startup, well before the GL loop is latency-sensitive
+// Falls back to logging in a headless environment rather than throwing, since a CI or server run must not be
+// stopped by a dialog nobody can dismiss
 public final class MessageBoxUtil {
     private static final Logger LOGGER = LogManager.getLogger("Impetus");
 

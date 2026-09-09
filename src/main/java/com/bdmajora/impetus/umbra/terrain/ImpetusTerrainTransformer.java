@@ -150,7 +150,8 @@ public final class ImpetusTerrainTransformer {
         return snippet == null ? "" : snippet;
     }
 
-    /** Fragment prologue: promote GLSL 120 fragment built-ins to 330 core outputs/keywords. */
+    // Fragment prologue: promotes the GLSL 120 fragment built-ins a legacy pack uses to their 330-core equivalents,
+    // and declares the outputs and uniforms the generated code below references
     private static final String FRAGMENT_PROLOGUE = String.join("\n",
             "#version 330 core",
             "// ---- Impetus/Umbra terrain bridge (generated) ----",
@@ -217,16 +218,16 @@ public final class ImpetusTerrainTransformer {
 
     // ------------------------------------------------------------------ modern (#version 130+) terrain
 
-    /**
-     * The same Impetus vertex bridge, but for modern single-source dual-stage packs (Complementary). We keep the
-     * attribute decode, the {@code gl_*}→Impetus {@code #define}s and the generated {@code main}, but drop every
-     * transform that assumes GLSL-120 Chocapic structure: no {@code varying} conversion (the pack flips {@code in}/
-     * {@code out} itself with {@code #ifdef VERTEX_SHADER}), no global hoisting, and crucially <b>no</b>
-     * {@code texture}→{@code gtexture} rename — modern packs call the {@code texture()} built-in everywhere, so that
-     * rename is what corrupted them. The {@code #ifdef VERTEX_SHADER}/{@code FRAGMENT_SHADER} guards and option gates are
-     * left for the driver's own preprocessor (compatibility profile). {@code renameMain} still applies: it renames both
-     * stages' {@code void main()} to {@code irisMain}, and only the active one survives the driver's {@code #ifdef}.
-     */
+    // The same vertex bridge, but for modern single-source dual-stage packs like Complementary
+    // Kept: the attribute decode, the gl_* -> Impetus defines, and the generated main
+    // Dropped: every transform that assumes GLSL-120 Chocapic structure — no varying conversion, because the pack
+    // already flips in/out itself behind #ifdef VERTEX_SHADER; no global hoisting; and crucially NO
+    // texture -> gtexture rename, since modern packs call the texture() built-in everywhere and that rename is
+    // exactly what corrupted them
+    // The stage guards and option gates are left to the driver's own preprocessor, which the compatibility profile
+    // provides
+    // renameMain still runs: it renames BOTH stages' void main() to irisMain, and only the active one survives the
+    // driver's #ifdef anyway
     public static String transformVertexShaderModern(String source) {
         String body = stripVersion(source);
         body = renameMain(body);
@@ -270,11 +271,10 @@ public final class ImpetusTerrainTransformer {
 
     private static final Pattern DECLARED_VERSION = Pattern.compile("#version\\s+(\\d+)");
 
-    /**
-     * The compatibility version for a modern pack: never below the 330 the prologue needs, never below the pack's own
-     * declaration (photon declares 400 and relies on 400 semantics like implicit int→uint conversion), and 430 when
-     * the source uses image load/store (colored-lighting voxelization).
-     */
+    // The compatibility version to compile a modern pack at
+    // Never below 330, which the prologue itself needs; never below the pack's OWN declaration, since Photon
+    // declares 400 and relies on 400 semantics such as implicit int-to-uint conversion; and 430 when the source
+    // uses image load/store for coloured-lighting voxelization
     private static String compatFor(String prologue, String packBody) {
         int version = 330;
         Matcher declared = DECLARED_VERSION.matcher(packBody);
@@ -296,14 +296,13 @@ public final class ImpetusTerrainTransformer {
                     + "(?:attribute|in)\\s+(?:(?:lowp|mediump|highp)\\s+)?(\\w+)\\s+"
                     + "(mc_Entity|mc_midTexCoord|at_tangent|at_midBlock)\\s*;");
 
-    /**
-     * The OptiFine attribute defines, adapted to the type each attribute is DECLARED with in the pack source (the
-     * declarations themselves are deleted by {@code dropAttributeStorageQualifier}). OptiFine-era packs declare
-     * {@code attribute vec4 mc_midTexCoord;} while Umbra-native packs use the modern Umbra types ({@code vec2
-     * mc_midTexCoord}, {@code vec3 mc_Entity}, {@code vec3 at_midBlock}) — pointing a vec2-typed usage at our vec4
-     * global is a hard compile error, so the define has to match the pack's own view of the type. Mirrors Umbra's
-     * SodiumTransformer.replaceMidTexCoord/replaceMCEntity dimension adaptation.
-     */
+    // The OptiFine attribute defines, adapted to the type each attribute is DECLARED with in this pack's source —
+    // the declarations themselves having been deleted by dropAttributeStorageQualifier
+    // The adaptation is necessary because the two eras disagree: OptiFine-era packs declare
+    // `attribute vec4 mc_midTexCoord;` while Iris-native packs use the modern types, vec2 mc_midTexCoord, vec3
+    // mc_Entity, vec3 at_midBlock
+    // Pointing a vec2-typed usage at a vec4 global is a hard compile error, so the define has to match the pack's
+    // own view of the type. Mirrors Iris's SodiumTransformer dimension adaptation
     private static String attributeAdapterDefines(String packSource) {
         java.util.Map<String, String> declaredTypes = new java.util.HashMap<>();
         Matcher decl = SPECIAL_ATTRIBUTE_DECL.matcher(packSource);
@@ -316,7 +315,8 @@ public final class ImpetusTerrainTransformer {
                 + "#define at_midBlock " + adaptTo(declaredTypes.get("at_midBlock"), "iris_MidBlock") + "\n";
     }
 
-    /** Narrows the vec4 bridge global to the pack's declared attribute type (absent declaration keeps vec4). */
+    // Narrows the vec4 bridge global to whatever type the pack declared, by swizzling — an absent declaration
+    // leaves it as vec4, which is the OptiFine-era default
     private static String adaptTo(String declaredType, String vec4Global) {
         if (declaredType == null) {
             return vec4Global;
@@ -343,41 +343,35 @@ public final class ImpetusTerrainTransformer {
         return VERSION.matcher(source).replaceFirst("");
     }
 
-    /**
-     * Rename the pack's {@code void main()} to {@code irisMain} so the generated {@code main} can wrap it. Must rename
-     * every occurrence: include-flattened sources can contain several {@code main} definitions in mutually exclusive
-     * {@code #ifdef} branches, and this rewrite runs before preprocessing.
-     */
+    // Renames the pack's void main() to irisMain so the generated main can wrap it
+    // EVERY occurrence, not just the first: an include-flattened source can hold several main definitions in
+    // mutually exclusive #ifdef branches, and this rewrite runs before any preprocessing, so all of them are still
+    // textually present
     private static String renameMain(String source) {
         return source.replaceAll("\\bvoid\\s+main\\s*\\(\\s*(void)?\\s*\\)", "void irisMain()");
     }
 
-    /**
-     * {@code varying} → {@code out} (vertex) or {@code in} (fragment), preserving any qualifier in front of it.
-     * <p>
-     * The qualifier prefix is NOT optional to handle. GLSL 120 permits {@code invariant}/{@code centroid} before
-     * {@code varying}, and packs additionally write {@code flat varying} — illegal by the letter of GLSL 120, but
-     * NVIDIA's compatibility compiler accepts it, so packs ship it. Anchoring this pattern at {@code ^\s*varying}
-     * silently skips every one of those lines, and the surviving {@code flat varying} is a hard error once the stage
-     * is lifted to 330 core: {@code C7560: OpenGL does not allow 'flat' with 'varying'} plus
-     * {@code C7561: OpenGL requires 'in/out' with 'flat'}. That killed miniature-shader's gbuffers_terrain (its
-     * {@code flat varying float lightSourceLevel}), so terrain silently fell back to the Impetus default program and
-     * the whole world rendered vanilla while every other stage used the pack.
-     * <p>
-     * GLSL 330 keeps the same qualifier order ({@code invariant} then interpolation then storage), so emitting the
-     * captured prefix verbatim in front of {@code in}/{@code out} is correct: {@code flat varying} → {@code flat out}.
-     */
+    // varying becomes out in the vertex stage and in in the fragment stage, PRESERVING any qualifier in front of it
+    // Handling that prefix is not optional. GLSL 120 permits invariant and centroid before varying, and packs also
+    // write `flat varying` — illegal by the letter of GLSL 120, but NVIDIA's compatibility compiler accepts it, so
+    // packs ship it
+    // Anchoring this pattern at ^\s*varying silently skips every one of those lines, and a surviving `flat varying`
+    // is a hard error once the stage is lifted to 330 core: C7560 "does not allow 'flat' with 'varying'" plus
+    // C7561 "requires 'in/out' with 'flat'"
+    // That killed miniature-shader's gbuffers_terrain over its `flat varying float lightSourceLevel`, so terrain
+    // fell back to the Impetus default program and the whole world rendered vanilla while every other stage used
+    // the pack
+    // GLSL 330 keeps the same qualifier order — invariant, then interpolation, then storage — so emitting the
+    // captured prefix verbatim in front of in/out is correct: `flat varying` becomes `flat out`
     private static String convertVaryings(String source, String direction) {
         return source.replaceAll(
                 "(?m)^(\\s*)((?:(?:invariant|flat|smooth|noperspective|centroid)\\s+)*)varying\\b",
                 "$1$2" + direction);
     }
 
-    /**
-     * The pack declares OptiFine's extra attributes ({@code attribute vec2 mc_Entity;} etc.) which we do not yet feed;
-     * strip the {@code attribute} storage qualifier so those become plain (default-zero) globals rather than illegal
-     * 330-core attribute declarations. (Feeding real mc_Entity/mc_midTexCoord/at_tangent is a later pass.)
-     */
+    // Strips the `attribute` storage qualifier off the pack's OptiFine extra-attribute declarations
+    // Two things it achieves: `attribute` is not a legal 330-core keyword at all, and removing it turns the
+    // declaration into a plain global that attributeAdapterDefines can then alias onto the real bridge value
     private static String dropAttributeStorageQualifier(String source) {
         // mc_Entity / mc_midTexCoord / at_tangent are now REAL attributes fed by UmbraChunkVertexType; the prologue
         // #defines those names onto its own inputs, so the pack's declarations must be deleted outright (the define
@@ -393,7 +387,8 @@ public final class ImpetusTerrainTransformer {
         return source.replaceAll("(?m)^(\\s*)attribute\\s+", "$1");
     }
 
-    /** Keyword modernizations common to both stages for 330 core. */
+    // The keyword modernisations both stages need for 330 core — the ones that are pure renames with no
+    // stage-specific handling
     private static String modernizeCommon(String source) {
         source = rewriteFogParameters(source);
         source = ModernPackTransformer.rewriteUnsignedStrictness(source);

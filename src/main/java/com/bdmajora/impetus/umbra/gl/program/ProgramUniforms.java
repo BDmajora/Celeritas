@@ -31,22 +31,18 @@ import java.util.function.Supplier;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * The set of uniforms bound to one GL program, plus the per-frame upload driver.
- * <p>
- * Built with {@link Builder}, which resolves each uniform's location at build time and silently drops uniforms the
- * program does not actually declare (OptiFine packs reference far more uniforms than any single program uses).
- * {@link #update()} mirrors Umbra' cadence: {@code DYNAMIC} uniforms upload on every bind, {@code ONCE} uniforms upload
- * on first use, {@code PER_TICK} only when the world tick changes, and {@code PER_FRAME} only when {@code frameCounter}
- * changes. This matters for previous-frame suppliers, which intentionally advance when their per-frame uniform is
- * sampled.
- */
+// Every uniform bound to one GL program, plus the driver that uploads them
+// Built through Builder, which resolves each uniform's location at build time and silently DROPS the ones this
+// program does not declare — necessary because a pack references far more uniforms than any single program uses,
+// so most registrations legitimately resolve to nothing
+// update() follows Iris's cadence: DYNAMIC uploads on every bind, ONCE on first use only, PER_TICK when the world
+// tick changes, PER_FRAME when frameCounter changes
+// The cadence is not just an optimisation — the previous-frame suppliers ADVANCE when their per-frame uniform is
+// sampled, so uploading them more often than once a frame would roll the history forward several times
 public class ProgramUniforms {
-    /**
-     * Uniforms that change per rendered object rather than per phase, and so are re-uploaded by
-     * {@code UmbraRenderingPipeline#refreshDynamicUniforms} from the per-object hooks. Deliberately tiny: see
-     * {@link #updatePerObject()} for why this cannot just be the whole {@code DYNAMIC} set.
-     */
+    // The uniforms that change per rendered OBJECT rather than per phase, re-uploaded from the per-object hooks
+    // Deliberately tiny, and not simply the whole DYNAMIC set — see updatePerObject below for why that distinction
+    // is a performance cliff rather than a preference
     private static final java.util.Set<String> PER_OBJECT_UNIFORMS = new java.util.HashSet<>(java.util.Arrays.asList(
             "entityId", "blockEntityId", "currentRenderedItemId", "entityColor"));
 
@@ -68,21 +64,21 @@ public class ProgramUniforms {
         this.perObject = perObject;
     }
 
-    /**
-     * Re-uploads only the handful of uniforms that vary per rendered object.
-     * <p>
-     * The per-object hooks originally called {@link #update()}, which walks the whole {@code DYNAMIC} list. That is
-     * ruinous here, and not for the reason it looks: {@link IntUniform} caches its last value and skips the upload
-     * when nothing changed, but {@link MatrixUniform} and {@link Matrix3Uniform} have <em>no</em> such check — they
-     * invoke the supplier and call {@code glUniformMatrix*fv} unconditionally. Six matrix uniforms are registered
-     * {@code DYNAMIC}, and five of their suppliers read the live fixed-function modelview, which means a direct
-     * {@code ByteBuffer} allocation plus a {@code glGetFloat(GL_MODELVIEW_MATRIX)} pipeline query <em>each</em>. At
-     * two calls per object across items, entities and block entities, a scene with a few thousand of them turns into
-     * tens of thousands of stalling GL queries and native allocations per frame.
-     * <p>
-     * Those matrices genuinely are per-draw state and still need to be right, but the phase-level {@link #update()}
-     * already covers them for the batch; only the ids and the hurt-flash colour actually differ object to object.
-     */
+    // Re-uploads only the handful of uniforms that genuinely vary per rendered object
+    //
+    // The per-object hooks originally called update(), which walks the entire DYNAMIC list. That is ruinous here,
+    // and not for the obvious reason: IntUniform caches its last value and skips the upload when nothing changed,
+    // but MatrixUniform and Matrix3Uniform have NO such check — they invoke the supplier and call
+    // glUniformMatrix*fv unconditionally
+    // Six matrix uniforms are registered DYNAMIC, and five of their suppliers read the LIVE fixed-function
+    // modelview, which costs a direct ByteBuffer allocation plus a glGetFloat(GL_MODELVIEW_MATRIX) pipeline query
+    // EACH
+    // At two calls per object across items, entities and block entities, a scene with a few thousand of them
+    // becomes tens of thousands of stalling GL queries and native allocations every frame
+    //
+    // Those matrices are genuinely per-draw state and still have to be right, but the phase-level update() already
+    // covers them for the whole batch. Only the material ids and the hurt-flash colour actually differ from one
+    // object to the next
     public void updatePerObject() {
         updateStage(this.perObject);
     }
@@ -149,7 +145,8 @@ public class ProgramUniforms {
         private static final int GL_UNSIGNED_INT_SAMPLER_2D_T = 0x8DD2;
         private static final int GL_UNSIGNED_INT_SAMPLER_3D_T = 0x8DD3;
 
-        /** The GL type family a builder setter uploads with; compared against the program's declared type. */
+        // The GL type family a builder setter uploads with, compared against what the program actually declared —
+        // see declaredTypes below for what a mismatch costs
         private enum ProvidedType {
             FLOAT, INT, VEC2, VEC2I, VEC3, VEC3I, VEC4, VEC4I, MAT3, MAT4
         }
@@ -179,14 +176,15 @@ public class ProgramUniforms {
 
         private final String name;
         private final int program;
-        /**
-         * Keyed by uniform name so a later registration <em>replaces</em> an earlier one instead of stacking a second
-         * provider on the same GL location. Program build sites call {@code CommonUniforms.addCommonUniforms} and then
-         * {@code ActiveCustomUniforms.assignTo}, so pack-declared custom uniforms win over built-ins of the same name —
-         * which is Umbra's rule (it has no built-in for names packs define themselves, e.g. Sildur's
-         * {@code uniform.int.framemod8 = fmod(frameCounter, 8)}). With a plain list both providers uploaded to the same
-         * location every frame and the winner depended on registration order. Insertion order is preserved.
-         */
+        // Keyed by uniform NAME so a later registration REPLACES an earlier one, rather than stacking a second
+        // provider onto the same GL location
+        // That ordering is meaningful: build sites call CommonUniforms.addCommonUniforms and then
+        // ActiveCustomUniforms.assignTo, so a pack-declared custom uniform wins over a built-in of the same name —
+        // which is Iris's rule, since it has no built-in for names packs define themselves, e.g. Sildur's
+        // uniform.int.framemod8 = fmod(frameCounter, 8)
+        // With a plain list both providers uploaded to the same location every frame and which one won depended on
+        // registration order
+        // Linked so insertion order is still preserved for the layout report
         private final java.util.LinkedHashMap<String, PendingUniform> pending = new java.util.LinkedHashMap<>();
 
         private Builder(String name, int program) {
@@ -292,7 +290,8 @@ public class ProgramUniforms {
             return this;
         }
 
-        /** The provider family a declared GL type needs, or {@code null} for types we cannot supply. Umbra parity. */
+        // The provider family a declared GL type needs, or null for types this port cannot supply at all —
+        // matching Iris's own mapping
         private static ProvidedType expectedType(int glType) {
             switch (glType) {
                 case GL_FLOAT_T:
@@ -329,13 +328,13 @@ public class ProgramUniforms {
             }
         }
 
-        /**
-         * Uploading through the wrong glUniform* family (e.g. glUniform1i to a {@code uniform float}) raises
-         * GL_INVALID_OPERATION on EVERY upload — the "1282 @ Post render" spam — because packs disagree about the
-         * declared types of OptiFine uniforms (int vs float worldTime/isEyeInWater/...). Umbra parity
-         * (ProgramUniforms.buildUniforms): read every active uniform's declared type and disable, with a log line,
-         * any uniform whose provider family doesn't match.
-         */
+        // Reads every ACTIVE uniform's declared type out of the linked program, so a provider whose family does not
+        // match can be disabled with a log line rather than left to fail
+        // Necessary because uploading through the wrong glUniform* family — glUniform1i into a `uniform float` —
+        // raises GL_INVALID_OPERATION on EVERY upload, which is the "1282 @ Post render" spam
+        // And it genuinely happens: packs disagree about the declared types of the OptiFine uniforms, with
+        // worldTime, isEyeInWater and others declared int by some and float by others
+        // Same approach as Iris's ProgramUniforms.buildUniforms
         private java.util.Map<String, ProvidedType> declaredTypes() {
             java.util.Map<String, ProvidedType> declared = new java.util.HashMap<>();
             int activeUniforms = LWJGL.glGetProgrami(this.program, GL_ACTIVE_UNIFORMS);

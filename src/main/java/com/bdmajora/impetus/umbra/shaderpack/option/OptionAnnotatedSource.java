@@ -16,16 +16,14 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Encapsulates the source of a single shader file plus the configurable options found within it.
- * <p>
- * This handles the first step of the shader-config process — discovering configurable options — as well as the final
- * step — editing shader source to apply modified option values. Each line is parsed in isolation, except for boolean
- * {@code #define} reference tracking (used to decide whether a boolean define is a configurable option).
- * <p>
- * Ported from Umbra. Guava collections are replaced with unmodifiable Java collections, fastutil {@code IntList} with
- * {@link List}{@code <Integer>}, and Umbra's {@code LineTransform} indirection is inlined into {@link #apply}.
- */
+// One shader file's source plus every configurable option found inside it
+// Handles both ends of the shader-config process: discovering the options at parse time, and editing the source
+// back to apply the user's chosen values
+// Every line is parsed in ISOLATION, with one exception — boolean #define reference tracking, which needs to know
+// whether the name is read by an #ifdef anywhere before it can call the define configurable rather than a plain
+// constant
+// Ported from Iris; guava collections replaced with unmodifiable Java ones, fastutil IntList with List<Integer>,
+// and Iris's LineTransform indirection inlined into apply
 public final class OptionAnnotatedSource {
     private final List<String> lines;
 
@@ -77,9 +75,8 @@ public final class OptionAnnotatedSource {
         this(Arrays.asList(source.split("\\R")));
     }
 
-    /**
-     * Parses the lines of a shader source file in order to locate valid options from it.
-     */
+    // Parses the file line by line, recording where every option lives so apply() can rewrite exactly those lines
+    // and leave everything else byte-identical
     public OptionAnnotatedSource(final List<String> lines) {
         this.lines = Collections.unmodifiableList(new ArrayList<>(lines));
 
@@ -383,11 +380,10 @@ public final class OptionAnnotatedSource {
         return builder.build();
     }
 
-    /**
-     * Applies the given option values to this source, returning the edited source. Boolean {@code #define} options are
-     * commented/uncommented, string {@code #define} options are rewritten, and {@code const} options are edited in
-     * place.
-     */
+    // Applies the given values and returns the edited source
+    // Three different edits, because packs declare options three ways: a boolean #define is commented or
+    // uncommented, a string #define has its value rewritten, and a const declaration is edited in place
+    // Only the recorded option lines are touched, so an unedited pack round-trips unchanged
     public String apply(OptionValues values) {
         StringBuilder source = new StringBuilder();
 

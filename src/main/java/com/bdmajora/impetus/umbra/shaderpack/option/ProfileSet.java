@@ -11,11 +11,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiConsumer;
 
-/**
- * The ordered set of profiles declared by a pack. Supports cycling (next/previous) and scanning (which profile matches
- * the current option values). Ported from Umbra; {@code Umbra.logger} replaced with {@link Umbra#logger()} and the spam
- * debug print dropped.
- */
+// The profiles a pack declares, in declaration order
+// Order is what makes next/previous cycling meaningful — a pack lists them worst-to-best, so cycling forward is
+// "raise the quality preset"
+// Also scans in the other direction: given the current option values, work out which profile (if any) they match,
+// so the screen can show "Profile: High" rather than "Custom" when the user happens to be on a preset exactly
+// Ported from Iris
 public class ProfileSet {
     private final LinkedHashMap<String, Profile> orderedProfiles; // The order that profiles should cycle through
     private final List<Profile> sortedProfiles; // The order that profiles should be scanned through

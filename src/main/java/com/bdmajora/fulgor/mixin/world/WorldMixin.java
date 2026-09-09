@@ -12,29 +12,23 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
- * Gives every world a lighting engine and routes {@code checkLightFor} into it.
- *
- * <p>This is the whole of the redirection. Vanilla's {@code checkLightFor} is a full propagation — it
- * walks outwards from the position, reading and rewriting neighbours until the light settles, and it
- * returns false when it ran out of its own iteration budget. Fulgor records the position and returns
- * true, and the propagation happens later, in bulk, from {@code LightingEngine}.
- *
- * <p>Cancelling at HEAD rather than {@code @Overwrite} deliberately: the vanilla body stays intact, so
- * another mod that injects into it still applies cleanly even though the code no longer runs.
- */
+// gives every world a lighting engine and routes checkLightFor into it
+// this is the whole of the redirection: vanilla's checkLightFor is a full propagation - it walks
+// outwards from the position, reading and rewriting neighbours until the light settles, and returns
+// false when it ran out of its own iteration budget
+// Fulgor records the position and returns true, and the propagation happens later, in bulk, from
+// LightingEngine
+// cancelling at HEAD rather than @Overwrite deliberately: the vanilla body stays intact, so another
+// mod that injects into it still applies cleanly even though the code no longer runs
 @Mixin(World.class)
 public abstract class WorldMixin implements LightingEngineProvider {
     @Unique
     private LightingEngine fulgor$lightingEngine;
 
-    /**
-     * Constructed with the world so the engine can capture the owning thread.
-     *
-     * <p>That thread identity is the only way to tell a legitimate call from another mod touching the
-     * world off-thread, and it is only knowable here — by the time the first light update arrives, the
-     * call could be coming from anywhere.
-     */
+    // constructed with the world so the engine can capture the owning thread
+    // that thread identity is the only way to tell a legitimate call from another mod touching the
+    // world off-thread, and it is only knowable here - by the time the first light update arrives, the
+    // call could be coming from anywhere
     @Inject(method = "<init>", at = @At("RETURN"))
     private void fulgor$createLightingEngine(CallbackInfo ci) {
         this.fulgor$lightingEngine = new LightingEngine((World) (Object) this);

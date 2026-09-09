@@ -5,7 +5,10 @@ import com.bdmajora.impetus.lwjgl.GL14;
 
 import java.util.Locale;
 
-/** OptiFine/Umbra blend mode tuple from shaders.properties. */
+// The blend factors a pack declares for one program via `blend.<program> = SRC DST` or the four-factor form
+// Four factors rather than two because GL can blend colour and alpha with separate functions, and packs use that:
+// a pass commonly blends RGB normally while writing alpha as ONE/ZERO so the alpha channel carries data instead of
+// coverage
 public final class BlendMode {
     private final int srcRgb;
     private final int dstRgb;
@@ -35,8 +38,11 @@ public final class BlendMode {
         return this.dstAlpha;
     }
 
+    // Accepts the two-factor and four-factor forms OptiFine defines; anything else is a malformed directive
+    // Throws rather than returning null, because the caller logs the message and drops just this one directive
     public static BlendMode parse(String value) {
         String[] parts = value.trim().split("\\s+");
+        // Two factors mean the same pair applies to both colour and alpha, which is GL's own glBlendFunc default
         if (parts.length == 2) {
             int src = function(parts[0]);
             int dst = function(parts[1]);
@@ -50,6 +56,8 @@ public final class BlendMode {
         throw new IllegalArgumentException("expected two or four blend factors, got " + parts.length);
     }
 
+    // Factor name to GL enum. Upper-cased through ROOT so a Turkish locale cannot map "i" to a dotted capital and
+    // make SRC_ALPHA stop matching
     private static int function(String name) {
         switch (name.trim().toUpperCase(Locale.ROOT)) {
             case "ZERO":

@@ -14,14 +14,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * The {@code beacon.beam.depth} shaders.properties toggle. Vanilla draws the beacon beam without depth writes, so it
- * never appears in {@code depthtex}. A pack that reconstructs world position from depth (for fog, volumetrics or
- * reflections) needs the beam there, and Complementary asks for it.
- */
+// the "beacon.beam.depth" shaders.properties toggle
+// vanilla draws the beacon beam without depth writes, so it never appears in depthtex; a pack that
+// reconstructs world position from depth - for fog, volumetrics or reflections - needs the beam
+// there, and Complementary asks for it
 @Mixin(TileEntityBeaconRenderer.class)
 public class BeaconBeamDepthMixin {
-    /** GL_DEPTH_WRITEMASK — captured so the restore puts back whatever vanilla had, rather than assuming. */
+    // GL_DEPTH_WRITEMASK — captured so the restore puts back whatever vanilla had, rather than assuming.
     private static final int GL_DEPTH_WRITEMASK = 0x0B72;
 
     @Unique
@@ -29,15 +28,13 @@ public class BeaconBeamDepthMixin {
     @Unique
     private boolean impetus$depthMaskOverridden;
 
-    /**
-     * Umbra parity: {@code mixin/shadows/MixinBeaconRenderer#umbra$noLightBeamInShadowPass} cancels the beam outright
-     * while the shadow pass is running. The beam is a tall unlit quad column with no meaningful occlusion — drawing
-     * it into the shadow map casts a full-height shadow pillar from every beacon in range, which is why Umbra drops
-     * it rather than letting it participate.
-     * <p>
-     * Cancelling at HEAD also keeps the depth-mask override below from running in a pass that has no depthtex for a
-     * pack to reconstruct from.
-     */
+    // Umbra parity: mixin/shadows/MixinBeaconRenderer#umbra$noLightBeamInShadowPass cancels the beam
+    // outright while the shadow pass is running
+    // the beam is a tall unlit quad column with no meaningful occlusion, so drawing it into the shadow
+    // map casts a full-height shadow pillar from every beacon in range - which is why Umbra drops it
+    // rather than letting it participate
+    // cancelling at HEAD also keeps the depth-mask override below from running in a pass that has no
+    // depthtex for a pack to reconstruct from
     @Inject(method = "render(Lnet/minecraft/tileentity/TileEntityBeacon;DDDFIF)V",
             at = @At("HEAD"), cancellable = true, require = 0)
     private void impetus$noBeamInShadowPass(TileEntityBeacon beacon, double x, double y, double z,

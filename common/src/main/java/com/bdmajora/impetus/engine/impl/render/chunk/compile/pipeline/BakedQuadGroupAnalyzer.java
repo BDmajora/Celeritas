@@ -10,11 +10,9 @@ import com.bdmajora.impetus.engine.impl.render.chunk.terrain.material.Material;
 import java.util.List;
 
 public class BakedQuadGroupAnalyzer {
-    /**
-     * Tracks whether the MC-138211 quad reorienting fix should be applied during emission of quad geometry.
-     * This fix must be disabled with certain modded models that use superimposed quads, as it can alter the triangulation
-     * of some layers but not others, resulting in Z-fighting.
-     */
+    // Whether the MC-138211 quad reorienting fix applies while emitting this group's geometry
+    // It has to be switchable rather than always on: some modded models stack superimposed quads, and reorienting
+    // can change the triangulation of one layer but not the one on top of it, which z-fights
     public static final int USE_REORIENTING = 0x1;
     public static final int USE_RENDER_PASS_OPTIMIZATION = 0x2;
     public static final int USE_ALL_THINGS = 0xFFFFFFFF;

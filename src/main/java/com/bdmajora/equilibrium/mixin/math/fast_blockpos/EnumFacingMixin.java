@@ -8,28 +8,22 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Hoists each direction's offsets into plain int fields.
- *
- * <p>Vanilla answers {@code getXOffset()} with {@code axis == Axis.X ? axisDirection.getOffset() : 0}
- * — a field load, a reference comparison, a branch and a virtual call, to produce one of three
- * constants that were fixed the moment the enum was constructed. It is called for every neighbour of
- * every block position anything ever offsets, which on this version is most of the server tick.
- *
- * <p>Lithium's version of this reads the offsets out of the direction's {@code Vec3i}, because on
- * modern versions that is where they live. Here they are computed rather than stored, so the saving
- * is larger.
- */
+// hoists each direction's offsets into plain int fields
+// vanilla answers getXOffset() with "axis == Axis.X ? axisDirection.getOffset() : 0" - a field load, a
+// reference comparison, a branch and a virtual call, to produce one of three constants that were
+// fixed the moment the enum was constructed
+// it is called for every neighbour of every block position anything ever offsets, which on this
+// version is most of the server tick
+// Lithium's version of this reads the offsets out of the direction's Vec3i, because on modern versions
+// that is where they live; here they are computed rather than stored, so the saving is larger
 @Mixin(EnumFacing.class)
 public class EnumFacingMixin {
     private int equilibrium$offsetX;
     private int equilibrium$offsetY;
     private int equilibrium$offsetZ;
 
-    /**
-     * Populated from the direction vector the constructor was handed, which already holds exactly
-     * these three values and is otherwise only read through {@code getDirectionVec}.
-     */
+    // populated from the direction vector the constructor was handed, which already holds exactly
+    // these three values and is otherwise only read through getDirectionVec
     @Inject(method = "<init>", at = @At("RETURN"))
     private void equilibrium$captureOffsets(String enumName, int ordinal, int index, int opposite,
                                             int horizontalIndex, String name,

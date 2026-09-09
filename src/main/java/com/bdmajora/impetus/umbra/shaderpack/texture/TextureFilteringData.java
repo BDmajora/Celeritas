@@ -1,10 +1,8 @@
 package com.bdmajora.impetus.umbra.shaderpack.texture;
 
-/**
- * The {@code blur}/{@code clamp} flags read from a custom texture's {@code .png.mcmeta} sidecar
- * ({@code {"texture": {"blur": true, "clamp": false}}}). Port of Umbra's {@code TextureFilteringData}.
- * Defaults are {@code false}/{@code false}: nearest filtering, repeat wrapping.
- */
+// The blur/clamp flags read from a custom texture's .png.mcmeta sidecar, i.e. {"texture":{"blur":..,"clamp":..}}
+// blur picks GL_LINEAR over GL_NEAREST; clamp picks GL_CLAMP_TO_EDGE over GL_REPEAT
+// Both default to false when the pack ships no sidecar, matching vanilla: nearest filtering, repeat wrapping
 public final class TextureFilteringData {
     private final boolean blur;
     private final boolean clamp;

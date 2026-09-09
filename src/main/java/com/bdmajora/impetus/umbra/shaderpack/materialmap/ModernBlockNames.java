@@ -6,41 +6,43 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Translates the flattened (1.13+) vanilla block names a modern pack writes in its {@code block.properties} into the
- * 1.12.2 registry names that mean the same thing.
- * <p>
- * Packs written for 1.16+ only — Photon is the reference case — wrap their whole ID map in
- * {@code #if MC_VERSION >= 11300} and leave the {@code #else} branch empty. Preprocessed honestly for 1.12.2 that
- * yields zero declared IDs, every block reaches the shader as {@code mc_Entity.x == 0}, and every material test in the
- * pack fails: water renders as an untagged translucent quad (no wave displacement, no water normals, no SSR, no water
- * fog), nothing waves, leaves get no subsurface scattering and no light source is emissive. {@link IdMap} therefore
- * falls back to the pack's 1.13+ branch and runs each entry through here.
- * <p>
- * Only <em>renames</em> live in the table. A name that survived the flattening unchanged ({@code glowstone},
- * {@code beacon}, {@code obsidian}, …) is returned as-is, and a name with no 1.12.2 counterpart ({@code sculk},
- * {@code froglight}, …) is returned unchanged too — {@code BlockMaterialMapping} already skips identifiers the
- * registry does not know, which is the correct outcome for both.
- * <p>
- * Blockstate predicates from the pack's entry are carried onto the translated name. That is what makes
- * {@code sunflower:half=lower} become {@code double_plant:half=lower}, and it is harmless where the flattening turned
- * a state into its own block ({@code redstone_lamp:lit=true} becomes {@code lit_redstone_lamp}, whose states simply do
- * not have a {@code lit} property, and predicates naming an absent property are ignored by design).
- */
+// Translates the flattened 1.13+ vanilla block names a modern pack writes in its block.properties into the 1.12.2
+// registry names that mean the same thing
+//
+// Why it is needed at all: packs written for 1.16+ only — Photon being the reference case — wrap their whole ID map
+// in `#if MC_VERSION >= 11300` and leave the #else branch empty
+// Preprocessed honestly for 1.12.2 that yields ZERO declared IDs, so every block reaches the shader as
+// mc_Entity.x == 0 and every material test in the pack fails: water renders as an untagged translucent quad with
+// no wave displacement, no water normals, no SSR and no water fog; nothing waves; leaves get no subsurface
+// scattering; no light source is emissive
+// So IdMap falls back to the pack's 1.13+ branch instead and runs every entry through here
+//
+// The table holds RENAMES only. A name the flattening left unchanged (glowstone, beacon, obsidian) comes back
+// as-is, and so does a name with no 1.12.2 counterpart at all (sculk, froglight) — BlockMaterialMapping already
+// skips identifiers the registry does not know, which is the right outcome for both
+//
+// Blockstate predicates from the pack's entry are carried onto the translated name, which is what turns
+// sunflower:half=lower into double_plant:half=lower
+// Harmless where the flattening turned a state into its own block: redstone_lamp:lit=true becomes
+// lit_redstone_lamp, whose states have no `lit` property, and a predicate naming an absent property is ignored by
+// design
 public final class ModernBlockNames {
-    /** Modern name → the 1.12.2 entry token(s) that cover it. Tokens may carry their own state predicates. */
+    // Modern name -> the 1.12.2 entry tokens covering it. An array because one flattened name can need several
+    // 1.12.2 entries, and the tokens may carry state predicates of their own
     private static final Map<String, String[]> RENAMES = new HashMap<>();
 
-    /** {@code light_gray} was {@code silver} in 1.12.2; every other dye colour kept its name. */
+    // light_gray was called silver in 1.12.2 — the only dye colour whose name changed
     private static final String LEGACY_LIGHT_GRAY = "silver";
 
-    /** Colour-suffixed families that 1.12.2 modelled as one block with a {@code color} property. */
+    // Colour-suffixed families 1.12.2 modelled as ONE block carrying a `color` property — so white_wool becomes
+    // wool:color=white rather than a block of its own
     private static final Map<String, String> COLORED_FAMILIES = new HashMap<>();
 
-    /** Colour-suffixed families that stayed one block per colour, so only the colour word needs fixing. */
+    // Colour-suffixed families that were already one block PER colour on 1.12.2, so only the colour word itself
+    // needs fixing — and in practice only light_gray does
     private static final String[] COLORED_BLOCK_SUFFIXES = {"_shulker_box", "_glazed_terracotta"};
 
-    /** The dye colours as they are spelled on 1.13+; {@code light_gray} is the only one 1.12.2 disagrees about. */
+    // The dye colours as 1.13+ spells them; light_gray is the only one 1.12.2 disagrees about
     private static final java.util.Set<String> COLORS = new java.util.HashSet<>(java.util.Arrays.asList(
             "white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray",
             "cyan", "purple", "blue", "brown", "green", "red", "black"));
@@ -139,7 +141,9 @@ public final class ModernBlockNames {
     private ModernBlockNames() {
     }
 
-    /** @return the 1.12.2 equivalents of {@code entry}, or the entry itself when its name needs no translation. */
+    // The 1.12.2 equivalents of one entry, or a single-element list holding the entry itself when its name needs
+    // no translation
+    // A list because one modern name can map onto several 1.12.2 blocks
     public static List<BlockEntry> translate(BlockEntry entry) {
         if (!"minecraft".equals(entry.getId().getNamespace())) {
             return Collections.singletonList(entry);
@@ -187,11 +191,9 @@ public final class ModernBlockNames {
         return null;
     }
 
-    /**
-     * @return the 1.12.2 dye-colour word of a {@code <color><suffix>} name, or null when {@code name} isn't one.
-     * The prefix must be an actual dye colour, otherwise {@code white_glazed_terracotta} would read as the
-     * "white_glazed" colour of the {@code _terracotta} family.
-     */
+    // The 1.12.2 dye-colour word of a <color><suffix> name, or null when the name is not one
+    // The prefix is checked against the actual colour set rather than just split off, because otherwise
+    // white_glazed_terracotta would read as the "white_glazed" colour of a _terracotta family
     private static String colorPrefix(String name, String suffix) {
         if (!name.endsWith(suffix) || name.length() == suffix.length()) {
             return null;

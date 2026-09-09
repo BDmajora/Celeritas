@@ -23,16 +23,15 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * Builds the shader pack's {@code gbuffers_terrain}/{@code gbuffers_water}, transformed to Impetus's vertex format
- * via {@link ImpetusTerrainTransformer} and wrapped in {@link UmbraTerrainShaderInterface}. Umbra-native: the pack
- * source comes from Impetus' own {@link ShaderPack}/{@link Umbra} model. Returned to {@code MixinShaderChunkRenderer};
- * on any failure returns {@code null} so Impetus's default terrain shader is used and rendering never crashes.
- * <p>
- * Deliberately <em>not</em> cached here: {@code ShaderChunkRenderer} caches the returned program per options in its
- * own map and <b>deletes it</b> when the renderer is torn down (pack switch, reload), so handing out a shared instance
- * would serve a deleted GL program after the first reload. One build per renderer instance is the correct lifecycle.
- */
+// Builds the pack's gbuffers_terrain and gbuffers_water, transformed onto Impetus's own vertex format by
+// ImpetusTerrainTransformer and wrapped in UmbraTerrainShaderInterface
+// The source comes from this port's own ShaderPack model, and the result is handed back to the chunk renderer
+// mixin. Any failure returns null, so the engine falls back to its default terrain shader and rendering continues
+// rather than crashing
+// Deliberately NOT cached here. ShaderChunkRenderer caches the returned program per options in its own map and
+// DELETES it when the renderer is torn down on a pack switch or reload — so handing out a shared instance would
+// serve an already-deleted GL program after the first reload. One build per renderer instance is the correct
+// lifecycle
 public final class UmbraTerrainProgramOverride {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/UmbraTerrain");
 
@@ -43,11 +42,12 @@ public final class UmbraTerrainProgramOverride {
         return Umbra.isShaderPackInUse();
     }
 
-    /**
-     * The pack's {@code shadow} programs, one per options variant. Unlike the gbuffer overrides these are OURS to
-     * manage (they are handed out during the shadow pass and never stored in Impetus's per-renderer map), so they
-     * are destroyed explicitly when the pipeline goes down. Failed builds cache {@code null} to avoid retry spam.
-     */
+    // The pack's shadow programs, one per options variant
+    // Cached here, unlike the gbuffer overrides, because these are OURS to manage: they are handed out during the
+    // shadow pass and never stored in the engine's per-renderer map, so nothing else would ever free them. The
+    // pipeline teardown destroys them explicitly
+    // A failed build caches null rather than being left absent, so a pack whose shadow program cannot compile is
+    // retried once and not once per frame
     private static final Map<ChunkShaderOptions, GlProgram<ChunkShaderInterface>> SHADOW_PROGRAMS = new HashMap<>();
 
     public static GlProgram<ChunkShaderInterface> getProgramOverride(ChunkShaderOptions options) {
@@ -73,18 +73,15 @@ public final class UmbraTerrainProgramOverride {
         return build(pack, options, programId);
     }
 
-    /**
-     * The pack's shadow terrain program for the shadow-map pass, or {@code null} (nothing drawn) if it won't build.
-     * <p>
-     * Split by chunk pass exactly as {@link #getProgramOverride} splits the camera pass, because Umbra and OptiFine
-     * both split the shadow pass the same way: Umbra has {@code ShadowWater}/{@code ShadowCutout}/{@code ShadowSolid}
-     * in its shadow ProgramGroup, and OptiFine ships {@code shadow_solid}/{@code shadow_cutout} at program indices
-     * 31/32. A pack declaring {@code shadow_solid} is telling the compiler it can drop the alpha test for the solid
-     * pass; previously that file was loaded and then never asked for.
-     * <p>
-     * Every one of these falls back to plain {@code shadow}, so a pack shipping only {@code shadow} resolves to the
-     * identical source it did before and nothing about its shadow map changes.
-     */
+    // The pack's shadow terrain program for the shadow-map pass, or null — meaning nothing is drawn — when it will
+    // not build
+    // Split by chunk pass exactly as the camera-pass override is, because both references split the shadow pass the
+    // same way: Iris has ShadowWater, ShadowCutout and ShadowSolid in its shadow ProgramGroup, and OptiFine ships
+    // shadow_solid and shadow_cutout at program indices 31 and 32
+    // That split is meaningful, not cosmetic: a pack declaring shadow_solid is telling the compiler it can drop the
+    // alpha test for the solid pass. Previously that file was loaded and then never asked for
+    // Every variant falls back to plain `shadow`, so a pack shipping only that file resolves to exactly the source
+    // it always did and nothing about its shadow map changes
     public static GlProgram<ChunkShaderInterface> getShadowProgramOverride(ChunkShaderOptions options) {
         ShaderPack pack = Umbra.getCurrentPack();
         if (pack == null) {
@@ -106,7 +103,8 @@ public final class UmbraTerrainProgramOverride {
         return program;
     }
 
-    /** Frees the shadow programs. Called from the pipeline teardown on the render thread. */
+    // Frees the cached shadow programs. Pipeline teardown only, and on the render thread — a GL delete off-thread
+    // has no context and leaks the program silently
     public static void destroyShadowPrograms() {
         for (GlProgram<ChunkShaderInterface> program : SHADOW_PROGRAMS.values()) {
             if (program != null) {

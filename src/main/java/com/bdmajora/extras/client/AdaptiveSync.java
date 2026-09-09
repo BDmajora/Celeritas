@@ -7,20 +7,16 @@ import org.lwjgl.opengl.Display;
 
 import java.lang.reflect.Method;
 
-/**
- * Adaptive VSync — swap interval -1, which honours VSync above the refresh rate and disengages below
- * it, so a dropped frame costs one frame rather than half the refresh period.
- *
- * <p>Sodium Extra and Celeritas Extra both implement this by mixing into the window's swap-interval
- * call. That is not available here: on stock Forge 1.12.2, {@code org.lwjgl.} is in LaunchWrapper's
- * class-loader exclusions, so a mixin targeting {@link Display} is never given the chance to apply
- * and would fail the config's {@code required} check. Applying it from the outside instead works on
- * both windowing backends and needs no mixin at all.
- *
- * <p>Everything GLFW is reached reflectively: the LWJGL3 classes exist only on Cleanroom-style
- * launchers, and {@code src/main} compiles against LWJGL2. On LWJGL2 there is no swap-interval API
- * at all, so {@link #isSupported()} is false and the option is not offered.
- */
+// adaptive VSync - swap interval -1, which honours VSync above the refresh rate and disengages below
+// it, so a dropped frame costs one frame rather than half the refresh period
+// Sodium Extra and Celeritas Extra both implement this by mixing into the window's swap-interval call,
+// which is not available here: on stock Forge 1.12.2 "org.lwjgl." is in LaunchWrapper's class-loader
+// exclusions, so a mixin targeting Display is never given the chance to apply and would fail the
+// config's required check
+// applying it from the outside instead works on both windowing backends and needs no mixin at all
+// everything GLFW is reached reflectively: the LWJGL3 classes exist only on Cleanroom-style launchers,
+// and src/main compiles against LWJGL2 - on LWJGL2 there is no swap-interval API at all, so
+// isSupported() is false and the option is not offered
 public final class AdaptiveSync {
     private static final String GLFW_CLASS = "org.lwjgl.glfw.GLFW";
 
@@ -30,12 +26,9 @@ public final class AdaptiveSync {
     private AdaptiveSync() {
     }
 
-    /**
-     * Whether the driver advertises tear control, i.e. whether a swap interval of -1 means anything.
-     *
-     * <p>Resolved once. A driver that gains the extension mid-session is not a case worth paying a
-     * lookup per frame for.
-     */
+    // whether the driver advertises tear control, i.e. whether a swap interval of -1 means anything
+    // resolved once: a driver that gains the extension mid-session is not a case worth paying a lookup
+    // per frame for
     public static boolean isSupported() {
         Boolean cached = supported;
         if (cached != null) {
@@ -63,7 +56,7 @@ public final class AdaptiveSync {
         return result;
     }
 
-    /** The mode currently in effect, derived from the vanilla VSync flag and the adaptive switch. */
+    // The mode currently in effect, derived from the vanilla VSync flag and the adaptive switch.
     public static ExtrasConfig.VerticalSync current() {
         ExtrasConfig options = Extras.options();
 
@@ -76,13 +69,10 @@ public final class AdaptiveSync {
                 : ExtrasConfig.VerticalSync.OFF;
     }
 
-    /**
-     * Applies a mode, updating the vanilla setting alongside it so the two never disagree.
-     *
-     * <p>ADAPTIVE turns vanilla VSync on first and then overrides the interval, because that is what
-     * "adaptive" degrades to when the driver ignores -1. Choosing it without driver support falls
-     * back to plain ON rather than silently doing nothing.
-     */
+    // applies a mode, updating the vanilla setting alongside it so the two never disagree
+    // ADAPTIVE turns vanilla VSync on first and then overrides the interval, because that is what
+    // "adaptive" degrades to when the driver ignores -1
+    // choosing it without driver support falls back to plain ON rather than silently doing nothing
     public static void apply(ExtrasConfig.VerticalSync mode) {
         ExtrasConfig options = Extras.options();
         Minecraft minecraft = Minecraft.getMinecraft();
@@ -101,12 +91,9 @@ public final class AdaptiveSync {
         minecraft.gameSettings.saveOptions();
     }
 
-    /**
-     * Re-asserts the adaptive interval.
-     *
-     * <p>Anything that calls {@code Display.setVSyncEnabled} — the vanilla video settings screen,
-     * Impetus' own VSync tickbox — resets the interval to 0 or 1 behind our back.
-     */
+    // re-asserts the adaptive interval
+    // anything that calls Display.setVSyncEnabled - the vanilla video settings screen, Impetus' own
+    // VSync tickbox - resets the interval to 0 or 1 behind our back
     public static void reapply() {
         if (Extras.options().extra.useAdaptiveSync && isSupported()) {
             setSwapInterval(-1);

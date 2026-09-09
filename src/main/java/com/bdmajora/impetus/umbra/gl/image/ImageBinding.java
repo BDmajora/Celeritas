@@ -6,16 +6,14 @@ import java.util.function.IntSupplier;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * One image uniform's binding for one program (Umbra {@code gl/image/ImageBinding}).
- * <p>
- * Re-resolved and re-bound at every program use rather than once per frame. Umbra does the same
- * ({@code ComputeProgram.use} -&gt; {@code images.update()}), and it matters here for the same reason it does there:
- * the texture behind a render-target image name changes when the buffer flips, and an unrelated draw between two
- * uses of this program may have rebound the unit.
- */
+// One image uniform's binding for one program
+// The texture id comes from a supplier rather than a stored int, and update() runs at every program use rather
+// than once per frame, for two reasons: the texture behind a render-target image name CHANGES when its buffer
+// flips, and an unrelated draw between two uses of this program may have rebound the unit underneath us
+// Iris re-binds at every use for exactly the same reasons
 public class ImageBinding {
     private final int imageUnit;
+    // Must match the image's declared format; a mismatch here is undefined behaviour rather than a GL error
     private final int internalFormat;
     private final IntSupplier textureID;
 

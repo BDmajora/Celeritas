@@ -36,13 +36,11 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
     private final TextureMapExtension textureAtlas;
     private final net.minecraft.client.renderer.BufferBuilder[] worldRenderers = new net.minecraft.client.renderer.BufferBuilder[LAYERS.length];
     private final boolean[] usedWorldRenderers = new boolean[LAYERS.length];
-    /**
-     * Per layer, the block attribution of the vanilla-sourced quads (fluids and other non-model renders) as runs of
-     * {@code (quadEndExclusive, mcEntityId, mcEntityRenderType, mcEntityMetadata, blockEmission, localX, localY, localZ)},
-     * recorded while a shader pack is active so {@code mc_Entity} and {@code at_midBlock} survive the vanilla
-     * BufferBuilder round-trip.
-     * See {@link #recordVanillaBlockAttribution}.
-     */
+    // per layer, the block attribution of the vanilla-sourced quads (fluids and other non-model
+    // renders), as runs of (quadEndExclusive, mcEntityId, mcEntityRenderType, mcEntityMetadata,
+    // blockEmission, localX, localY, localZ)
+    // recorded while a shader pack is active so mc_Entity and at_midBlock survive the vanilla
+    // BufferBuilder round-trip - see recordVanillaBlockAttribution
     private final it.unimi.dsi.fastutil.ints.IntArrayList[] vanillaBlockRuns =
             new it.unimi.dsi.fastutil.ints.IntArrayList[LAYERS.length];
     private static final int VANILLA_BLOCK_RUN_STRIDE = 8;
@@ -91,12 +89,11 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
         return builder;
     }
 
-    /**
-     * Records which block the vanilla-buffered quads emitted since the last call belong to, so
-     * {@link #copyBlockData} can fill {@code mc_Entity}, {@code at_midBlock}, and block emission for the
-     * vanilla-sourced path (fluids and other non-model renders). Call right after every {@code dispatcher.renderBlock}
-     * into {@link #getBufferForLayer}'s builder. No-op when no shader pack is active.
-     */
+    // records which block the vanilla-buffered quads emitted since the last call belong to, so
+    // copyBlockData can fill mc_Entity, at_midBlock and block emission for the vanilla-sourced path
+    // (fluids and other non-model renders)
+    // call right after every dispatcher.renderBlock into getBufferForLayer's builder
+    // no-op when no shader pack is active
     public void recordVanillaBlockAttribution(BlockRenderLayer layer, net.minecraft.block.state.IBlockState state, BlockPos pos) {
         if (!com.bdmajora.impetus.umbra.terrain.UmbraTerrainProgramOverride.areShadersActive()) {
             return;

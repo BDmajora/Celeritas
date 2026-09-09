@@ -17,12 +17,13 @@ import java.util.Map;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-/**
- * A {@link UniformCollector} that captures name→supplier pairs instead of uploading them, so custom uniform
- * expressions can read every built-in uniform value (rainStrength, eyeAltitude, sunPosition, frameTimeCounter, …)
- * through the exact same registrations the real programs use. Matrices are accepted but not resolvable — the
- * expression language works on 1-4 component vectors, which covers what packs actually reference.
- */
+// A UniformCollector that captures name -> supplier pairs instead of uploading anything
+// This is what lets a pack's custom uniform expressions read every built-in uniform — rainStrength, eyeAltitude,
+// sunPosition, frameTimeCounter and the rest — by going through the EXACT same registration calls the real
+// programs use. The alternative would be a second hand-maintained list that silently drifts out of step
+// Matrix registrations are accepted and then ignored: the expression language operates on 1-4 component vectors,
+// which covers everything packs actually reference, and rejecting them would mean the shared registration path
+// could not be shared
 public final class CustomUniformInputs implements UniformCollector {
     private final Map<String, Supplier<CustomUniformValue>> inputs = new HashMap<>();
 

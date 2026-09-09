@@ -4,13 +4,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * An absolute, normalized path within a shader pack's {@code shaders/} directory, always starting with {@code /}.
- * <p>
- * OptiFine {@code #include} directives may be relative (resolved against the including file's directory) or absolute
- * (a leading {@code /} resolves from the pack root). This class encapsulates that normalization, collapsing
- * {@code .} and {@code ..} segments, so include graphs can use it as a stable map key.
- */
+// An absolute, normalised path inside a shader pack's shaders/ directory, always starting with /
+// OptiFine #include directives come in two forms: relative, resolved against the including file's directory, and
+// absolute, where a leading / resolves from the pack root
+// Normalising both into one canonical form — with . and .. segments collapsed — is what lets the include graph use
+// these as map keys, so two paths that name the same file compare equal and a cycle is detectable
 public final class AbsolutePackPath {
     private final String path;
 
@@ -18,9 +16,7 @@ public final class AbsolutePackPath {
         this.path = path;
     }
 
-    /**
-     * Builds an absolute path from an already-absolute string (must start with {@code /}).
-     */
+    // Builds one from a string that is already absolute; the leading / is required, not optional
     public static AbsolutePackPath fromAbsolutePath(String path) {
         if (!path.startsWith("/")) {
             throw new IllegalArgumentException("Not an absolute path: " + path);
@@ -28,10 +24,9 @@ public final class AbsolutePackPath {
         return new AbsolutePackPath(normalize(path));
     }
 
-    /**
-     * Resolves an {@code #include} target against this path's parent directory, honoring OptiFine's relative vs
-     * absolute (leading {@code /}) rules.
-     */
+    // Resolves an #include target against this path's PARENT directory, not against this path itself — a file
+    // including "common.glsl" means the one beside it, not one beneath it
+    // A leading / on the target ignores all of that and resolves from the pack root instead
     public AbsolutePackPath resolve(String target) {
         if (target.startsWith("/")) {
             return fromAbsolutePath(target);

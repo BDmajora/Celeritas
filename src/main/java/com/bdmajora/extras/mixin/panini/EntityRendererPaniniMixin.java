@@ -10,15 +10,12 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Drives the Panini projection post-effect.
- *
- * <p>Two hooks. The first reads the effective field of view out of the world projection as it is
- * built — the FOV setting alone is not enough, because sprinting, speed effects and the nausea warp
- * all scale it, and Panini has to match what was actually rendered or the image swims. The second
- * runs the pass at exactly the point vanilla runs its own shader group: after the world and the
- * entity-outline composite, before the GUI, with the main framebuffer still bound.
- */
+// drives the Panini projection post-effect through two hooks
+// the first reads the effective field of view out of the world projection as it is built, because
+// the FOV setting alone is not enough - sprinting, speed effects and the nausea warp all scale it,
+// and Panini has to match what was actually rendered or the image swims
+// the second runs the pass at exactly the point vanilla runs its own shader group: after the world
+// and the entity-outline composite, before the GUI, with the main framebuffer still bound
 @Mixin(EntityRenderer.class)
 public class EntityRendererPaniniMixin {
     @WrapOperation(

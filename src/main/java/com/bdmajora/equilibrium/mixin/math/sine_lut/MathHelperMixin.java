@@ -11,20 +11,16 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Swaps vanilla's 256 KB sine table for {@link CompactSineLUT}'s 64 KB one.
- *
- * <p>The table is handed over at the end of {@code <clinit>} and then dropped. Dropping it is not an
- * afterthought — the whole point of the exercise is the cache footprint, and leaving a quarter of a
- * megabyte of dead floats resident would give back most of what the compaction won on a machine
- * whose L3 is already contested by a modded instance's live set.
- *
- * <p>{@code SIN_TABLE} is private in {@link MathHelper} and read by nothing but the two methods
- * overwritten here, so nulling it cannot be observed. The one way it could be is another mod
- * replacing {@code sin}/{@code cos} with an implementation that still reads the field, which is
- * exactly what BetterFps' math transformer does — {@code ModCompatibility} disables this whole option
- * when BetterFps is installed rather than racing it for the field.
- */
+// swaps vanilla's 256 KB sine table for CompactSineLUT's 64 KB one
+// the table is handed over at the end of <clinit> and then dropped, and dropping it is not an
+// afterthought: the whole point of the exercise is the cache footprint, and leaving a quarter of a
+// megabyte of dead floats resident would give back most of what the compaction won on a machine whose
+// L3 is already contested by a modded instance's live set
+// SIN_TABLE is private in MathHelper and read by nothing but the two methods overwritten here, so
+// nulling it cannot be observed
+// the one way it could be is another mod replacing sin/cos with an implementation that still reads
+// the field, which is exactly what BetterFps' math transformer does - ModCompatibility disables this
+// whole option when BetterFps is installed rather than racing it for the field
 @Mixin(MathHelper.class)
 public class MathHelperMixin {
     @Shadow

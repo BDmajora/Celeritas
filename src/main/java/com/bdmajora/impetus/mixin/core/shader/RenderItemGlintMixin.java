@@ -9,18 +9,14 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * The held/dropped-item half of the enchantment glint, the counterpart to {@link LayerArmorBaseGlintMixin}. OptiFine
- * brackets the same method ({@code func_191966_a} in its snapshot, {@code renderEffect} once MCP named it) with
- * {@code ShadersRender.renderEnchantedGlintBegin()} / {@code renderEnchantedGlintEnd()}.
- * <p>
- * OptiFine additionally gates on its own {@code renderItemGui} field, which vanilla does not have. No substitute is
- * needed: {@link UmbraRenderingPipeline#beginArmorGlint()} already no-ops unless world rendering is active, and GUI
- * inventory items draw outside that window.
- * <p>
- * Both names are listed with {@code require = 0} because which one resolves depends on the mapping snapshot; the
- * unmatched selector is simply skipped rather than failing the mixin.
- */
+// the held/dropped-item half of the enchantment glint, the counterpart to LayerArmorBaseGlintMixin
+// OptiFine brackets the same method (func_191966_a in its snapshot, renderEffect once MCP named it)
+// with ShadersRender.renderEnchantedGlintBegin() / renderEnchantedGlintEnd()
+// OptiFine additionally gates on its own renderItemGui field, which vanilla does not have; no
+// substitute is needed here because UmbraRenderingPipeline#beginArmorGlint() already no-ops unless
+// world rendering is active, and GUI inventory items draw outside that window
+// both names are listed with require = 0 because which one resolves depends on the mapping snapshot,
+// and the unmatched selector is simply skipped rather than failing the mixin
 @Mixin(RenderItem.class)
 public class RenderItemGlintMixin {
     @Inject(method = {"renderEffect", "func_191966_a"}, at = @At("HEAD"), require = 0)

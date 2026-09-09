@@ -2,10 +2,9 @@ package com.bdmajora.impetus.engine.impl.compat.environment;
 
 import java.util.Locale;
 
-/**
- * Coarse operating-system classification used by the platform-compatibility layer. Detection is string-based on
- * purpose — it must work identically on Java 8 (after downgrading) and modern JVMs, across every launcher.
- */
+// Coarse operating-system classification for the platform-compatibility layer
+// Detection is string-based on purpose: it has to behave identically on Java 8 after bytecode downgrading and on
+// modern JVMs, across every launcher, and the newer OS-detection APIs are not available on all of those
 public enum OsKind {
     WINDOWS,
     LINUX,

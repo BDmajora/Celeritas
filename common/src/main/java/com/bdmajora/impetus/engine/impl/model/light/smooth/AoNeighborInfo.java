@@ -2,10 +2,8 @@ package com.bdmajora.impetus.engine.impl.model.light.smooth;
 
 import com.bdmajora.impetus.engine.impl.model.quad.properties.ModelQuadFacing;
 
-/**
- * The neighbor information for each face of a block, used when performing smooth lighting in order to calculate
- * the occlusion of each corner.
- */
+// the neighbour information for each face of a block, used during smooth lighting to calculate the
+// occlusion of each corner
 @SuppressWarnings("UnnecessaryLocalVariable")
 enum AoNeighborInfo {
     POS_X(new ModelQuadFacing[] { ModelQuadFacing.NEG_Y, ModelQuadFacing.POS_Y, ModelQuadFacing.NEG_Z, ModelQuadFacing.POS_Z }, 0.6F) {
@@ -191,15 +189,11 @@ enum AoNeighborInfo {
 
 
     private static final AoNeighborInfo[] VALUES = AoNeighborInfo.values();
-    /**
-     * The direction of each corner block from this face, which can be retrieved by offsetting the position of the origin
-     * block by the direction vector.
-     */
+    // the direction of each corner block from this face, reached by offsetting the origin block's
+    // position by the direction vector
     public final ModelQuadFacing[] faces;
-    /**
-     * The constant brightness modifier for this face. This data exists to emulate the results of the OpenGL lighting
-     * model which gives a faux directional light appearance to blocks in the game. Not currently used.
-     */
+    // the constant brightness modifier for this face, emulating the OpenGL lighting model that gives
+    // blocks their faux directional-light appearance; not currently used
     public final float strength;
 
     AoNeighborInfo(ModelQuadFacing[] directions, float strength) {
@@ -207,9 +201,7 @@ enum AoNeighborInfo {
         this.strength = strength;
     }
 
-    /**
-     * @return Returns the {@link AoNeighborInfo} which corresponds with the specified direction
-     */
+    // the AoNeighborInfo corresponding to the given direction
     public static AoNeighborInfo get(ModelQuadFacing direction) {
         if (!direction.isDirection()) {
             throw new IllegalArgumentException();
@@ -217,36 +209,18 @@ enum AoNeighborInfo {
         return VALUES[direction.ordinal()];
     }
 
-    /**
-     * Calculates how much each corner contributes to the final "darkening" of the vertex at the specified position. The
-     * weight is a function of the distance from the vertex's position to the corner block's position.
-     *
-     * @param x The x-position of the vertex
-     * @param y The y-position of the vertex
-     * @param z The z-position of the vertex
-     * @param out The weight values for each corner
-     */
+    // calculates how much each corner contributes to the final "darkening" of the vertex at this
+    // position; the weight is a function of the distance from the vertex to the corner block
+    // x/y/z are the vertex position, out receives the weight for each corner
     public abstract void calculateCornerWeights(float x, float y, float z, float[] out);
 
-    /**
-     * Maps the light map and occlusion value arrays {@param lm0} and {@param ao0} from {@link AoFaceData} to the
-     * correct corners for this facing.
-     *
-     * @param lm0 The input light map texture coordinates array
-     * @param ao0 The input ambient occlusion color array
-     * @param lm1 The re-orientated output light map texture coordinates array
-     * @param ao1 The re-orientated output ambient occlusion color array
-     */
+    // maps the light map array lm0 and the occlusion array ao0 from AoFaceData onto the correct corners
+    // for this facing
+    // lm0/ao0 are the inputs, lm1/ao1 the re-oriented outputs
     public abstract void mapCorners(int[] lm0, float[] ao0, int[] lm1, float[] ao1);
 
-    /**
-     * Calculates the depth (or inset) of the vertex into this facing of the block. Used to determine
-     * how much shadow is contributed by the direct neighbors of a block.
-     *
-     * @param x The x-position of the vertex
-     * @param y The y-position of the vertex
-     * @param z The z-position of the vertex
-     * @return The depth of the vertex into this face
-     */
+    // the depth (or inset) of the vertex into this facing of the block, used to decide how much shadow
+    // is contributed by the block's direct neighbours
+    // x/y/z are the vertex position
     public abstract float getDepth(float x, float y, float z);
 }

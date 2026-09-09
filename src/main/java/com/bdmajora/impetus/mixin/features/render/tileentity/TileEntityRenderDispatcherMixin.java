@@ -10,11 +10,13 @@ import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(TileEntityRendererDispatcher.class)
 public class TileEntityRenderDispatcherMixin {
+    // lets some invalid tile entities still be rendered
+    // modern vanilla versions do this for all of them, but we cannot here: mods rely on their TESR
+    // not being invoked once the tile entity is invalid
+    // @author / @reason are Mixin's required metadata on an overwrite-class injector
     /**
      * @author embeddedt
-     * @reason Allow some invalid TEs to still be rendered. Modern vanilla
-     * versions do this for all TEs, but we cannot do that here as mods may rely on their TESR not being invoked
-     * when the TE is invalid.
+     * @reason allow some invalid TEs to still be rendered
      */
     @WrapOperation(method = "getRenderer(Lnet/minecraft/tileentity/TileEntity;)Lnet/minecraft/client/renderer/tileentity/TileEntitySpecialRenderer;", at = @At(value = "INVOKE", target = "Lnet/minecraft/tileentity/TileEntity;isInvalid()Z"))
     private boolean allowSomeInvalidTESRs(TileEntity te, Operation<Boolean> original) {

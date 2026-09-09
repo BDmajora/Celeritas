@@ -8,22 +8,18 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Options that other mods take out of our hands, and how to tell those mods are installed.
- *
- * <p>Lithium lets a mod ship a {@code lithium:options} block in its metadata and reads it out of the
- * loader's mod list. Nothing equivalent is available here: this runs during coremod setup, where FML
- * has not built a mod list and Forge's own classes are not safe to touch. What <em>is</em> available
- * is the class loader, and every mod that conflicts with something here is a coremod — it has to be,
- * because the things it does to the game are the same things we do.
- *
- * <p>So detection is by class presence, and the table below is the whole of it. Each entry names a
- * mod, a class that only exists when that mod does, and the options that mod makes unsafe. Being
- * conservative here is cheap: a disabled optimization costs frames, a mixin fighting another mod's
- * transformer over the same method costs the game.
- */
+// options that other mods take out of our hands, and how to tell those mods are installed
+// Lithium lets a mod ship a lithium:options block in its metadata and reads it out of the loader's mod
+// list; nothing equivalent is available here, because this runs during coremod setup where FML has not
+// built a mod list and Forge's own classes are not safe to touch
+// what *is* available is the class loader, and every mod that conflicts with something here is a
+// coremod - it has to be, because the things it does to the game are the same things we do
+// so detection is by class presence, and the table below is the whole of it: each entry names a mod, a
+// class that only exists when that mod does, and the options that mod makes unsafe
+// being conservative here is cheap - a disabled optimization costs frames, a mixin fighting another
+// mod's transformer over the same method costs the game
 public final class ModCompatibility {
-    /** One mod's claim on one option. */
+    // One mod's claim on one option.
     public static final class Override {
         private final String modId;
         private final String option;
@@ -114,11 +110,7 @@ public final class ModCompatibility {
         return Collections.unmodifiableList(new ArrayList<>(conflicts.values()));
     }
 
-    /**
-     * Resolves the overrides that apply to this instance.
-     *
-     * <p>Called once, from {@link EquilibriumConfig#load}.
-     */
+    // resolves the overrides that apply to this instance; called once, from EquilibriumConfig#load
     public static List<Override> detect() {
         List<Override> overrides = new ArrayList<>();
 
@@ -138,13 +130,10 @@ public final class ModCompatibility {
         return overrides;
     }
 
-    /**
-     * Deliberately does not initialise the class.
-     *
-     * <p>Same reasoning as {@code FulgorMixinPlugin}: this runs during coremod setup, where loading a
-     * foreign class early can change the order everything else loads in. Whether it exists is all
-     * that is being asked.
-     */
+    // deliberately does not initialise the class
+    // same reasoning as FulgorMixinPlugin: this runs during coremod setup, where loading a foreign
+    // class early can change the order everything else loads in
+    // whether it exists is all that is being asked
     private static boolean isClassPresent(String name) {
         try {
             Class.forName(name, false, ModCompatibility.class.getClassLoader());

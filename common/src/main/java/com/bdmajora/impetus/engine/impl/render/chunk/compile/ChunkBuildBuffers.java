@@ -19,11 +19,10 @@ import com.bdmajora.impetus.engine.impl.render.chunk.vertex.format.ChunkVertexEn
 import java.nio.ByteBuffer;
 import java.util.*;
 
-/**
- * A collection of temporary buffers for each worker thread which will be used to build chunk meshes for given render
- * passes. This makes a best-effort attempt to pick a suitable size for each scratch buffer, but will never try to
- * shrink a buffer.
- */
+// a collection of temporary buffers for each worker thread, used to build chunk meshes for the given
+// render passes
+// makes a best-effort attempt to pick a suitable size for each scratch buffer, but will never try to
+// shrink one
 public final class ChunkBuildBuffers {
     private static final ModelQuadFacing[] ONLY_UNASSIGNED = new ModelQuadFacing[] { ModelQuadFacing.UNASSIGNED };
     private final Reference2ReferenceOpenHashMap<TerrainRenderPass, BakedChunkModelBuilder> builders = new Reference2ReferenceOpenHashMap<>();
@@ -72,11 +71,9 @@ public final class ChunkBuildBuffers {
         return this.builders.keySet();
     }
 
-    /**
-     * Creates immutable baked chunk meshes from all non-empty scratch buffers. This is used after all blocks
-     * have been rendered to pass the finished meshes over to the graphics card. This function can be called multiple
-     * times to return multiple copies.
-     */
+    // creates immutable baked chunk meshes from all non-empty scratch buffers, used after every block
+    // has been rendered to pass the finished meshes over to the graphics card
+    // can be called multiple times to return multiple copies
     public BuiltSectionMeshParts createMesh(TerrainRenderPass pass, float camX, float camY, float camZ) {
         var builder = this.builders.get(pass);
 

@@ -54,10 +54,8 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 public abstract class RenderSectionManager {
-    /**
-     * When true, the section manager will continuously mark all sections as needing to be remeshed whenever the
-     * update queue empties.
-     */
+    // when true, the section manager continuously marks all sections as needing to be remeshed whenever
+    // the update queue empties
     protected static final boolean CONTINUOUSLY_REMESH_WORLD = false;
 
     private final ChunkBuilder builder;
@@ -78,22 +76,19 @@ public abstract class RenderSectionManager {
     protected @Nullable Vector3ic lastCameraPosition;
     protected Vector3d cameraPosition = new Vector3d();
 
-    /**
-     * Plane-crossing trigger index for translucency sorting: maps translucent geometry planes to the sections
-     * owning them, so camera movement schedules re-sorts only where draw order can actually have changed.
-     */
+    // plane-crossing trigger index for translucency sorting: maps translucent geometry planes to the
+    // sections owning them, so camera movement schedules re-sorts only where draw order can actually
+    // have changed
     private final TranslucencyTriggerIndex translucencyTriggerIndex = new TranslucencyTriggerIndex();
 
-    /**
-     * Dynamic sections without usable plane data (normal-count overflow); these keep the legacy coarse
-     * movement-based re-sort heuristic.
-     */
+    // dynamic sections without usable plane data (normal-count overflow); these keep the legacy coarse
+    // movement-based re-sort heuristic
     private final ReferenceOpenHashSet<RenderSection> coarseTriggeredSections = new ReferenceOpenHashSet<>();
 
-    /** Precise camera position of the previous trigger evaluation ({@code null} until the first frame). */
+    // Precise camera position of the previous trigger evaluation (null until the first frame).
     private @Nullable Vector3d lastTriggerCameraPosition;
 
-    /** Movement (squared) beyond which we skip plane tests and re-sort every dynamic section (teleports). */
+    // Movement (squared) beyond which we skip plane tests and re-sort every dynamic section (teleports).
     private static final double TELEPORT_DISTANCE_SQ = 16.0 * 16.0;
 
     @Getter
@@ -181,9 +176,7 @@ public abstract class RenderSectionManager {
         this.renderPassDrawTimers.values().forEach(TimerQueryManager::updateTime);
     }
 
-    /**
-     * Whether terrain is being rendered for shadows.
-     */
+    // whether terrain is being rendered for shadows
     public boolean isInShadowPass() {
         return false;
     }
@@ -314,10 +307,8 @@ public abstract class RenderSectionManager {
         }
     }
 
-    /**
-     * {@return true if the renderer should respect per-frame queue limits and not try to update as many chunks as
-     * possible per frame}
-     */
+    // true if the renderer should respect per-frame queue limits rather than trying to update as many
+    // chunks as possible per frame
     protected boolean shouldRespectUpdateTaskQueueSizeLimit() {
         return true;
     }
@@ -461,9 +452,7 @@ public abstract class RenderSectionManager {
         return false;
     }
 
-    /**
-     * Inject sections that requested a rebuild between graph updates into the appropriate rebuild lists.
-     */
+    // injects sections that requested a rebuild between graph updates into the appropriate rebuild lists
     private void promoteInterimRebuildList() {
         var rebuildLists = this.getCurrentRenderListManager().getRebuildLists().byUpdateType();
         for (var section : this.sectionsRequestingUpdate) {
@@ -620,10 +609,9 @@ public abstract class RenderSectionManager {
         this.updateTranslucencyTriggerRegistration(render, sortStates);
     }
 
-    /**
-     * (Re-)registers a section with the plane-crossing trigger index. Dynamic sections whose plane data
-     * overflowed (or predates this mechanism) fall back to the legacy movement heuristic instead.
-     */
+    // (re-)registers a section with the plane-crossing trigger index
+    // dynamic sections whose plane data overflowed, or predates this mechanism, fall back to the legacy
+    // movement heuristic instead
     private void updateTranslucencyTriggerRegistration(RenderSection render, Map<TerrainRenderPass, TranslucentQuadAnalyzer.SortState> sortStates) {
         NormalPlanes[] planes = null;
         boolean dynamic = false;
@@ -725,10 +713,9 @@ public abstract class RenderSectionManager {
         return results;
     }
 
-    /**
-     * {@return true if dispatch stopped because the collector's budget was exhausted while sections still
-     * remained in the queue, i.e. dispatch was budget-limited rather than work-limited for this update type}
-     */
+    // true if dispatch stopped because the collector's budget was exhausted while sections still
+    // remained in the queue - i.e. dispatch was budget-limited rather than work-limited for this
+    // update type
     private boolean submitRebuildTasks(ChunkJobCollector collector, ChunkUpdateType type) {
         var queue = this.getCurrentRenderListManager().getRebuildLists().byUpdateType().get(type);
 
@@ -925,10 +912,8 @@ public abstract class RenderSectionManager {
         return this.lastCameraPosition != null && section.getSquaredDistanceFromBlockCenter(this.lastCameraPosition.x(), this.lastCameraPosition.y(), this.lastCameraPosition.z()) < NEARBY_REBUILD_DISTANCE;
     }
 
-    /**
-     * {@return true if rebuilds of chunks near the player should block the main thread, reduces flickering but will
-     * potentially cause lag spikes}
-     */
+    // true if rebuilds of chunks near the player should block the main thread
+    // reduces flickering, but can cause lag spikes
     protected boolean allowImportantRebuilds() {
         return false;
     }

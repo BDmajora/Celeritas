@@ -53,7 +53,8 @@ public class UmbraShadowRenderer {
     private static final int GL_CULL_FACE = 0x0B44;
     private static final int GL_DEPTH_FUNC = 0x0B74;
 
-    /** True while the shadow pass is drawing; consulted by the matrix/program/draw-buffer seams. */
+    // True while the shadow pass is drawing. Consulted by the matrix, program and draw-buffer seams, which each
+    // need to answer differently for the shadow pass than for the camera pass
     private static boolean shadowPassActive;
 
     private final int resolution;
@@ -64,17 +65,21 @@ public class UmbraShadowRenderer {
     private final float intervalSize;
     private final Float shadowMapFov;
 
-    /** shadowtex0: everything, translucents included. */
+    // shadowtex0: every shadow caster, translucents included
     private final DepthTexture depthTexture;
-    /** shadowtex1: copied from shadowtex0 just before translucent shadow geometry draws. */
+    // shadowtex1: a copy of shadowtex0 taken just BEFORE translucent shadow geometry draws, so the difference
+    // between the two is exactly "what is occluded only by glass and water" — which is how packs tint light shafts
     private final DepthTexture depthTextureNoTranslucents;
-    /** What the pack allows this pass to draw ({@code shadowTerrain}, {@code shadowEntities}, ...). */
+    // What the pack permits this pass to draw: shadowTerrain, shadowEntities, shadowBlockEntities and friends
     private final ShadowContentSettings content;
-    /** {@code voxelDistance} — the safe-zone radius for {@code shadow.culling = reversed}; 0 when undeclared. */
+    // The pack's voxelDistance, i.e. the safe-zone radius used when shadow.culling = reversed; 0 when undeclared,
+    // which degenerates that mode to plain advanced culling
     private final float voxelDistance;
-    /** Whether the pack voxelizes in the shadow pass (geometry stage or custom images), per Umbra's detection. */
+    // Whether the pack voxelizes during the shadow pass, inferred the way Iris infers it — from the presence of a
+    // geometry stage or custom images rather than from a declaration
     private final boolean packVoxelizes;
-    /** {@code shadowDistance * shadowDistanceRenderMul} — the distance the shadow pass culls against. */
+    // shadowDistance * shadowDistanceRenderMul — the distance the pass culls against, which is deliberately not the
+    // same as the distance the projection covers
     private final float cullDistance;
     private final int colorTexture0;
     private final int colorTexture1;
@@ -83,33 +88,32 @@ public class UmbraShadowRenderer {
     private final boolean[] mipmapDepth;
     private final boolean[] nearestDepth;
     private final boolean separateHardwareSamplers;
-    /** Both shadowcolor attachments, for the frame-start clear. */
+    // Both shadowcolor attachments, for the frame-start clear — only 0 and 1 exist on this version
     private static final int[] CLEAR_MASK = {0, 1};
-    /**
-     * Texture unit for one-off raw work (creating/configuring the shadow textures, mipmap generation, depth copies).
-     * Chosen above {@link GlTextureUnits#CACHED_UNITS} and clear of every unit the pipeline assigns, so this work can
-     * never rewrite a slot GlStateManager is tracking. Always pair with {@link GlTextureUnits#releaseScratch()}.
-     */
+    // Texture unit for one-off raw work: creating and configuring the shadow textures, generating mipmaps, copying
+    // depth
+    // Chosen above GlTextureUnits.CACHED_UNITS and clear of every unit the pipeline assigns, so this work can never
+    // rewrite a slot GlStateManager is tracking
+    // Always pair a selectScratch on it with a releaseScratch
     private static final int TEXTURE_SETUP_UNIT = 31;
-    /** The pack's shadow DRAWBUFFERS mask (only shadowcolor0/1 exist), applied for the geometry draws. */
+    // The pack's shadow DRAWBUFFERS mask, applied for the geometry draws — sanitised down to shadowcolor0 and 1,
+    // which are the only two that exist
     private final int[] shadowDrawBuffers;
     private final Runnable shaderPackResourceRestorer;
-    /**
-     * The fixed-function flavor of the pack's {@code shadow} program, for entities/block entities (immediate-mode
-     * geometry — the Impetus-format terrain shadow program cannot consume it). {@code null} if it failed to compile;
-     * entity shadows are skipped then.
-     */
+    // The FIXED-FUNCTION flavour of the pack's shadow program, for entities and block entities
+    // A separate compile is necessary because those draw through immediate mode, and the Impetus-format terrain
+    // shadow program cannot consume that geometry at all
+    // Null when it failed to compile, in which case entity shadows are skipped rather than drawn wrong
     private final GbufferPrograms.Entry entityShadowProgram;
 
-    /**
-     * {@code shadow_block}'s flavor, for the block-entity loop. Umbra gives block entities their own shadow program
-     * ({@code ProgramId.ShadowBlock}) rather than reusing the entity one. When the pack ships neither, both ids
-     * resolve through the fallback chain to the same {@code shadow} source and this holds the very same compiled
-     * {@link GbufferPrograms.Entry} — see {@link #blockEntityProgramShared}, which stops teardown freeing it twice.
-     */
+    // shadow_block's flavour, for the block-entity loop. Iris gives block entities their own shadow program rather
+    // than reusing the entity one
+    // When the pack ships neither, both ids resolve through the fallback chain onto the same `shadow` source and
+    // this holds the very same compiled Entry object — which is what blockEntityProgramShared below exists to
+    // detect, so teardown does not free it twice
     private final GbufferPrograms.Entry blockEntityShadowProgram;
 
-    /** Whether {@link #blockEntityShadowProgram} is the same object as {@link #entityShadowProgram}. */
+    // Whether the two program fields hold the SAME object, which teardown checks before destroying either
     private final boolean blockEntityProgramShared;
 
     private final FloatBuffer matrixBuffer =
@@ -117,21 +121,20 @@ public class UmbraShadowRenderer {
 
     private int failureCount;
     private boolean failed;
-    /** Monotonic frame tag for the dedicated shadow render-list graph updates (independent of the main list's). */
+    // Monotonic frame tag for the shadow pass's own render-list graph updates, kept independent of the camera
+    // pass's counter so neither can satisfy the other's dirty check
     private int shadowListFrame;
     private boolean destroyed;
 
     private final Matrix4f shadowModelView = new Matrix4f();
     private final Matrix4f shadowProjection = new Matrix4f();
 
-    /**
-     * @param shadowSource      the pack's {@code shadow} program source (for the fixed-function entity flavor).
-     * @param samplerUnits      the standard sampler-unit table (with gbuffers-stage custom-texture overrides applied).
-     * @param hardwareFiltering       per-texture {@code shadowHardwareFiltering} flags: [0] = shadowtex0, [1] = shadowtex1.
-     * @param mipmapDepth             per-texture shadow depth mipmap flags.
-     * @param nearestDepth            per-texture shadow depth nearest-filter flags.
-     * @param separateHardwareSamplers whether hardware compare is exposed through {@code shadowtex*HW} aliases.
-     */
+    // shadowSource is the pack's shadow program source, compiled here into the fixed-function entity flavour
+    // samplerUnits is the standard sampler-unit table with the gbuffers-stage custom-texture overrides already
+    // applied, since the shadow pass belongs to that stage
+    // hardwareFiltering, mipmapDepth and nearestDepth are all PER TEXTURE, index 0 being shadowtex0 and index 1
+    // shadowtex1 — a pack routinely wants hardware compare on one and raw depth on the other
+    // separateHardwareSamplers says whether hardware compare is exposed through the shadowtex*HW aliases instead
     public UmbraShadowRenderer(int resolution, float shadowDistance, float nearPlane, float farPlane,
                               float intervalSize, Float shadowMapFov, float sunPathRotation,
                               ProgramSource shadowSource,
@@ -232,7 +235,8 @@ public class UmbraShadowRenderer {
         return nearest ? GL11.GL_NEAREST : GL11.GL_LINEAR;
     }
 
-    /** The internal format of shadowcolor0/1, needed to bind them through the image API (shadowcolorimgN). */
+    // The internal format of shadowcolor0 and 1, which glBindImageTexture needs in order to expose them as
+    // shadowcolorimgN
     public static final int SHADOW_COLOR_INTERNAL_FORMAT = GL11.GL_RGBA8;
 
     private static int createShadowColorTexture(int resolution) {
@@ -276,11 +280,11 @@ public class UmbraShadowRenderer {
         return this.resolution;
     }
 
-    /**
-     * Renders the shadow map for this frame. Called right after the camera matrices are captured (so the shadow angle
-     * and camera position are current) and before any world geometry draws into the gbuffer. The caller rebinds the
-     * gbuffer/viewport afterwards.
-     */
+    // Renders the shadow map for this frame
+    // Ordering is fixed: called right AFTER the camera matrices are captured, so the shadow angle and camera
+    // position are current, and BEFORE any world geometry draws into the gbuffer, so the deferred chain can sample
+    // a finished shadow map
+    // Leaves the shadow framebuffer and viewport bound; the caller rebinds the gbuffer afterwards
     public void render() {
         if (this.failed || this.destroyed) {
             return;
@@ -447,20 +451,11 @@ public class UmbraShadowRenderer {
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
     }
 
-    /**
-     * Renders entities and block entities into the shadow map the way OptiFine does: fixed-function geometry with the
-     * untransformed {@code shadow} program bound, the shadow matrices on the FF matrix stack, and the render origin at
-     * the camera (matching the grid-snapped shadow model-view). Culling is a simple horizontal box of the shadow
-     * frustum's half-extent — the OptiFine default (it has no per-entity shadow frustum either).
-     */
-    /**
-     * Binds one of the fixed-function shadow programs and refreshes its uniforms. The resource restorer runs on both
-     * sides of the bind because binding a program is what re-points the shader-pack sampler units, and the entity
-     * renderers in between will have rebound textures of their own.
-     * <p>
-     * A {@code null} entry means that program failed to compile; fall back to the entity one rather than leaving
-     * whatever was bound before, which would draw block entities under an unrelated program.
-     */
+    // Binds one of the fixed-function shadow programs and refreshes its uniforms
+    // The resource restorer runs on BOTH sides of the bind, because binding a program is what re-points the
+    // shader-pack sampler units, and the entity renderers running in between will have rebound textures of their own
+    // A null entry means that program failed to compile; falling back to the entity one is deliberate, since
+    // leaving whatever was bound before would draw block entities under an unrelated program
     private void bindShadowGeometryProgram(GbufferPrograms.Entry program) {
         GbufferPrograms.Entry target = program != null ? program : this.entityShadowProgram;
         if (target == null) {
@@ -472,6 +467,11 @@ public class UmbraShadowRenderer {
         target.getUniforms().update();
     }
 
+    // Renders entities and block entities into the shadow map the way OptiFine does: fixed-function geometry with
+    // the untransformed shadow program bound, the shadow matrices pushed onto the fixed-function matrix stack, and
+    // the render origin at the camera so it matches the grid-snapped shadow model-view
+    // Culling is a plain horizontal box of the shadow frustum's half-extent, which is OptiFine's default — it has
+    // no per-entity shadow frustum either
     private void renderEntityShadows(Minecraft mc, Vector3d camera) {
         if (this.entityShadowProgram == null) {
             return;
@@ -572,16 +572,13 @@ public class UmbraShadowRenderer {
         GlStateManager.multMatrix(this.matrixBuffer);
     }
 
-    /**
-     * The distortion functions the installed packs use. A pack applies its distortion twice — per vertex in
-     * {@code shadow.vsh} when rasterising, and per pixel in the composite lookup — so they cancel, and a probe that
-     * assumes the wrong one manufactures a mismatch that exists only inside the probe.
-     * <p>
-     * That is not hypothetical. This probe previously hardcoded {@code COMPLEMENTARY} with no indication that it had,
-     * and its output was read as evidence of a ~19-block shadow offset in {@code miniature} and Body Camera, both of
-     * which use {@code LOLIP_P}. The "offset" was the probe disagreeing with itself. Print every model and let the
-     * reader take the row matching the loaded pack.
-     */
+    // The distortion functions the installed packs use
+    // A pack applies its distortion TWICE — per vertex in shadow.vsh while rasterising, and per pixel in the
+    // composite lookup — so the two cancel, and anything assuming the wrong one manufactures a mismatch that exists
+    // nowhere but in the assumption
+    // Not hypothetical: this list previously had COMPLEMENTARY hardcoded with no indication that it had, and the
+    // result was read as evidence of a ~19-block shadow offset in miniature and Body Camera, both of which actually
+    // use LOLIP_P. The "offset" was the model disagreeing with itself
     private static final String[] SHADOW_DISTORTION_MODELS = {"COMPLEMENTARY", "LOLIP_P"};
 
     private static float fractionUntouched(float[] depth) {
@@ -594,11 +591,10 @@ public class UmbraShadowRenderer {
         return (float) cleared / depth.length;
     }
 
-    /**
-     * shadowcolor1 as interleaved RGBA. The red channel feeds the light shafts' tint branch through
-     * {@code pow2(rgb * 4.0)} (0.25 is neutral); the ALPHA channel carries the scene-aware light-shaft height,
-     * {@code color2.a = 0.25 + max0(positionYM * 0.05)}, which is what drives {@code vlFactor}.
-     */
+    // shadowcolor1 read back as interleaved RGBA
+    // Both halves matter and they mean different things: the red channel feeds the light shafts' tint branch
+    // through pow2(rgb * 4.0), where 0.25 is neutral, while the ALPHA channel carries the scene-aware light-shaft
+    // height as 0.25 + max0(positionYM * 0.05), which is what actually drives vlFactor
     private float[] readShadowColor1() {
         int texels = this.resolution * this.resolution;
         ByteBuffer pixels = ByteBuffer.allocateDirect(texels * 4 * 4).order(ByteOrder.nativeOrder());
@@ -615,8 +611,9 @@ public class UmbraShadowRenderer {
         return String.format("%.3f", 100.0 * count / total);
     }
 
-    /** Copies the shadow framebuffer's depth into {@code destination} (bound as this pass's FBO at call time). */
-
+    // Copies the shadow framebuffer's depth into the destination texture
+    // Requires the shadow FBO to be bound as this pass's framebuffer at call time, which is what makes the copy a
+    // framebuffer read rather than a texture-to-texture blit
     private void copyDepthTo(DepthTexture destination) {
         GlTextureUnits.selectScratch(TEXTURE_SETUP_UNIT);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, destination.getTextureId());
@@ -628,15 +625,15 @@ public class UmbraShadowRenderer {
         this.shaderPackResourceRestorer.run();
     }
 
-    /**
-     * The Umbra shadow camera, a verbatim port of {@code net.coderbot.umbra.shadow.ShadowMatrices}
-     * ({@code createModelViewMatrix} = {@code createBaselineModelViewMatrix} + {@code snapModelViewToGrid}) and
-     * {@code createOrthoMatrix}. Mojang {@code PoseStack.multiply}/{@code mulPose} post-multiply, matching JOML's
-     * {@code translate}/{@code rotate*}; {@code Vector3f.XP/ZP.rotationDegrees(d)} == {@code rotateX/Z(toRadians(d))}.
-     * The grid snap (offset by the fractional camera position, centred by half a cell) is what keeps shadow-map
-     * texels from swimming as the camera moves — the previous hand-rolled snap omitted the centring and had the wrong
-     * sign, which is what made the shadows flicker.
-     */
+    // The shadow camera, a verbatim port of Iris's ShadowMatrices — createModelViewMatrix, which is
+    // createBaselineModelViewMatrix followed by snapModelViewToGrid, plus createOrthoMatrix
+    // The port is direct because the operation order maps one-to-one: Mojang's PoseStack.multiply and mulPose
+    // post-multiply exactly as JOML's translate and rotate* do, and Vector3f.XP/ZP.rotationDegrees(d) is
+    // rotateX/rotateZ(toRadians(d))
+    // The GRID SNAP is the part that matters and the part that was wrong before. Offsetting by the fractional
+    // camera position and centring by half a cell is what keeps shadow-map texels from swimming as the camera
+    // moves; the previous hand-rolled snap omitted the centring and had the sign backwards, which is what made the
+    // shadows flicker
     private void computeMatrices() {
         if (this.shadowMapFov != null) {
             // ShadowMatrices.createPerspectiveMatrix(fov).

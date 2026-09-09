@@ -25,21 +25,19 @@ import java.util.Optional;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * The pack's fixed-function gbuffer programs — sky, entities, block damage, particles, weather, clouds, hand. These
- * vanilla sections still render through the classic fixed-function pipeline (immediate mode / client arrays), and on
- * our compatibility-profile context the pack's fixed-function inputs are still the contract
- * ({@code gl_Vertex}, {@code gl_ModelViewProjectionMatrix}, {@code gl_MultiTexCoord0}, …). GLSL-120 programs consume
- * that state natively; modern single-source packs are normalized by {@link ShaderProgramCompiler} but still bind
- * around the vanilla render section.
- * <p>
- * OptiFine's fallback chain is honored via {@link com.bdmajora.impetus.umbra.shaderpack.ProgramSet#get(ProgramId)}, and
- * phases resolving to the same source share one compiled program.
- */
+// The pack's fixed-function gbuffer programs: sky, entities, block damage, particles, weather, clouds, hand
+// Those vanilla sections still render through the classic fixed-function pipeline — immediate mode and client
+// arrays — and on a compatibility-profile context the pack's fixed-function inputs remain the contract: gl_Vertex,
+// gl_ModelViewProjectionMatrix, gl_MultiTexCoord0
+// GLSL-120 programs consume that state natively; modern single-source packs are normalised by
+// ShaderProgramCompiler but still bind around the same vanilla render section
+// OptiFine's fallback chain is honoured through ProgramSet.get, and phases that resolve to the SAME source share
+// one compiled program rather than compiling it once per phase
 public class GbufferPrograms {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
-    /** The phases driven from the vanilla render loop anchors in {@code EntityRendererMixin}. */
+    // The phases driven from the vanilla render-loop anchors in EntityRendererMixin — this list IS the set of
+    // points where a program gets bound, so a phase absent here is never selected however the pack declares it
     private static final ProgramId[] PHASES = {
             ProgramId.SkyBasic, ProgramId.SkyTextured, ProgramId.Entities, ProgramId.EntitiesTrans,
             ProgramId.SpiderEyes, ProgramId.DamagedBlock,
@@ -47,7 +45,8 @@ public class GbufferPrograms {
             ProgramId.HandWater, ProgramId.Line, ProgramId.ArmorGlint
     };
 
-    /** One compiled gbuffer program plus its uniform driver and (sanitized) DRAWBUFFERS mask. */
+    // One compiled gbuffer program with everything needed to bind it: its uniform driver, its sanitised DRAWBUFFERS
+    // mask, and its alpha-test override
     public static final class Entry {
         final UmbraProgram program;
         final ProgramUniforms uniforms;
@@ -82,7 +81,8 @@ public class GbufferPrograms {
             return this.blendState;
         }
 
-        /** The pack's {@code alphaTest.<program>} override, or an empty one when it declared none. */
+        // The pack's alphaTest.<program> override, or an empty one when it declared none — never null, so the
+        // bind path applies and restores unconditionally
         public ProgramAlphaTest getAlphaTest() {
             return this.alphaTest;
         }
@@ -96,13 +96,13 @@ public class GbufferPrograms {
 
     private final Map<ProgramId, Entry> byPhase = new EnumMap<>(ProgramId.class);
     private final List<Entry> ownedEntries = new ArrayList<>();
-    /** Phases the pack ships a file for, as opposed to ones that only resolved through the fallback chain. */
+    // Phases the pack ships an actual file for, as opposed to ones that only resolved through the fallback chain
+    // The distinction matters where a caller needs to know whether the pack MEANT to handle a phase
     private final java.util.Set<ProgramId> directPhases = java.util.EnumSet.noneOf(ProgramId.class);
 
-    /**
-     * @param samplerOverrides the pack's gbuffers-stage custom-texture units (sampler name → dedicated unit), applied
-     *                         over the standard table so e.g. {@code texture.gbuffers.gaux4} redirects that sampler.
-     */
+    // samplerOverrides holds the pack's gbuffers-stage custom-texture units as sampler name -> dedicated unit,
+    // layered over the standard table — so `texture.gbuffers.gaux4` redirects that one sampler while every other
+    // name keeps its usual unit
     GbufferPrograms(ShaderPack pack, Map<String, Integer> samplerUnits, Map<String, Integer> samplerOverrides) {
         Map<String, String> defines = pack.getEnvironmentDefines();
         // Fixed-function stages sample the bound atlas/lightmap on the vanilla units, plus OptiFine's aux slots.
@@ -156,7 +156,8 @@ public class GbufferPrograms {
         }
     }
 
-    /** Also used by {@link UmbraShadowRenderer} to compile the fixed-function flavor of the {@code shadow} program. */
+    // Package-visible because UmbraShadowRenderer compiles the fixed-function flavour of the shadow program through
+    // the same path — entity and block-entity shadows go through vanilla's renderers just as the camera pass does
     static Entry compile(ProgramSource source, Map<String, String> defines, Map<String, Integer> samplerUnits) {
         return compile(source, defines, samplerUnits, ProgramBlendState.empty(), ProgramAlphaTest.empty());
     }
@@ -190,20 +191,20 @@ public class GbufferPrograms {
         }
     }
 
-    /** @return the compiled program for a phase, or {@code null} when the pack has none (render fixed-function). */
+    // The compiled program for a phase, or null when the pack has none — null meaning "let vanilla's
+    // fixed-function path draw it", not an error
     public Entry get(ProgramId phase) {
         return this.byPhase.get(phase);
     }
 
-    /**
-     * {@return whether the pack ships a file for this phase itself, rather than the phase only resolving through
-     * OptiFine's fallback chain to some other program}
-     */
+    // Whether the pack ships a file for this phase ITSELF, rather than the phase only resolving through the
+    // fallback chain onto some other program's source
     public boolean hasDirect(ProgramId phase) {
         return this.directPhases.contains(phase);
     }
 
-    /** Every distinct compiled entry (for draw-buffer union / teardown). */
+    // Every DISTINCT compiled entry — distinct because several phases share one program, and both the draw-buffer
+    // union and teardown must visit each program once rather than once per phase
     public List<Entry> entries() {
         return this.ownedEntries;
     }

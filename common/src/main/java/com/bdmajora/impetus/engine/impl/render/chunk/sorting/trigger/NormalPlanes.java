@@ -1,19 +1,15 @@
 package com.bdmajora.impetus.engine.impl.render.chunk.sorting.trigger;
 
-/**
- * The set of geometry planes within one render section that share a (quantized) facing direction: a unit-ish
- * normal vector plus the sorted, deduplicated list of plane offsets {@code d = n · quadCenter} in
- * <em>section-local</em> coordinates.
- * <p>
- * The relative draw order of two translucent quads with the same normal can only change when the camera crosses
- * one of their planes, so these are exactly the surfaces the {@link TranslucencyTriggerIndex} needs to watch to
- * know when a section must be re-sorted.
- */
+// the set of geometry planes within one render section that share a (quantized) facing direction: a
+// unit-ish normal vector plus the sorted, deduplicated list of plane offsets d = n . quadCenter, in
+// *section-local* coordinates
+// the relative draw order of two translucent quads with the same normal can only change when the
+// camera crosses one of their planes, so these are exactly the surfaces TranslucencyTriggerIndex needs
+// to watch to know when a section must be re-sorted
 public record NormalPlanes(float nx, float ny, float nz, float[] distances) {
-    /**
-     * Quantization granularity for grouping nearly-parallel normals. 126 steps per axis keeps the grouping error
-     * well under the epsilon used when testing plane crossings, while collapsing float noise from the mesher.
-     */
+    // quantization granularity for grouping nearly-parallel normals
+    // 126 steps per axis keeps the grouping error well under the epsilon used when testing plane
+    // crossings, while collapsing float noise from the mesher
     private static final int QUANT_SCALE = 126;
 
     public float minDistance() {
@@ -24,9 +20,7 @@ public record NormalPlanes(float nx, float ny, float nz, float[] distances) {
         return this.distances[this.distances.length - 1];
     }
 
-    /**
-     * Packs a direction into a stable integer key. Inputs must be (approximately) unit length.
-     */
+    // packs a direction into a stable integer key; inputs must be (approximately) unit length
     public static int quantize(float x, float y, float z) {
         int qx = Math.round(x * QUANT_SCALE) + 128;
         int qy = Math.round(y * QUANT_SCALE) + 128;

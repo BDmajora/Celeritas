@@ -90,18 +90,16 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         return this.renderer;
     }
 
-    /**
-     * Set for the duration of {@code setWorldAndLoadRenderers}, which calls {@code loadRenderers} internally.
-     * <p>
-     * Without this, one world change tore the terrain renderer down twice: {@code loadRenderers} fired
-     * {@link #onReload} first — rebuilding the section manager for the world we are in the middle of leaving — and
-     * the trailing {@link #onWorldChanged} then destroyed that brand-new manager and built another for the incoming
-     * world. Every chunk mesh was discarded and every terrain program recompiled twice per transition. On a server
-     * that moves you between worlds routinely (MCParks park-hopping) that reads as terrain endlessly unloading.
-     * <p>
-     * The tell in the logs is that a plain config change, which calls {@code loadRenderers} on its own, logged a
-     * single {@code ChunkBuilder: Stopping worker threads}, while every world change logged them in pairs.
-     */
+    // set for the duration of setWorldAndLoadRenderers, which calls loadRenderers internally
+    // without this, one world change tore the terrain renderer down twice: loadRenderers fired
+    // onReload first, rebuilding the section manager for the world we are in the middle of leaving, and
+    // the trailing onWorldChanged then destroyed that brand-new manager and built another for the
+    // incoming world
+    // every chunk mesh was discarded and every terrain program recompiled twice per transition, and on
+    // a server that moves you between worlds routinely (MCParks park-hopping) that reads as terrain
+    // endlessly unloading
+    // the tell in the logs is that a plain config change, which calls loadRenderers on its own, logged
+    // a single "ChunkBuilder: Stopping worker threads", while every world change logged them in pairs
     @Unique
     private boolean impetus$changingWorld;
 
@@ -201,7 +199,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         }
     }
 
-    /** Same viewport, but with a frustum that accepts every section ({@code frustum.culling = false}). */
+    // Same viewport, but with a frustum that accepts every section (frustum.culling = false).
     @Unique
     private static com.bdmajora.impetus.engine.impl.render.viewport.Viewport unculledViewport(
             com.bdmajora.impetus.engine.impl.render.viewport.Viewport source) {
@@ -232,15 +230,12 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         return true;
     }
 
-    /**
-     * Takes over both cloud modes with {@link SodiumCloudRenderer}, which is upstream Sodium's face-culled cloud mesh
-     * rather than vanilla's draw-everything-and-hide-it-with-a-depth-prepass one. See that class for why the vanilla
-     * mesh cannot survive a shader pipeline.
-     * <p>
-     * The pack's {@code clouds} directive is not consulted here: {@code GameSettingsCloudsMixin} has already folded it
-     * into {@code shouldRenderClouds()}, so by this point the mode is the effective one and every other caller
-     * (notably {@code EntityRenderer#renderCloudsCheck}) agrees with it.
-     */
+    // takes over both cloud modes with SodiumCloudRenderer, which is upstream Sodium's face-culled
+    // cloud mesh rather than vanilla's draw-everything-and-hide-it-with-a-depth-prepass one
+    // see that class for why the vanilla mesh cannot survive a shader pipeline
+    // the pack's clouds directive is not consulted here: GameSettingsCloudsMixin has already folded it
+    // into shouldRenderClouds(), so by this point the mode is the effective one and every other caller
+    // - notably EntityRenderer#renderCloudsCheck - agrees with it
     @Inject(method = "renderClouds", at = @At("HEAD"), cancellable = true)
     private void impetus$renderCloudsSodium(float partialTicks, int pass, double x, double y, double z,
             CallbackInfo ci) {
@@ -279,12 +274,11 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         }
     }
 
-    /**
-     * The vanilla fallback still honours the cloud-height option. The cloud <em>distance</em> options are deliberately
-     * not applied to it: vanilla's fancy mesh emits its walls under hardcoded {@code l2 > -1} / {@code l2 <= 1} guards
-     * that are relative to its own {@code -3..4} tile range, so widening the range without widening those guards just
-     * multiplies the wall count. The Sodium path owns the distance slider instead, where culling makes it meaningful.
-     */
+    // the vanilla fallback still honours the cloud-height option
+    // the cloud *distance* options are deliberately not applied to it: vanilla's fancy mesh emits its
+    // walls under hardcoded l2 > -1 / l2 <= 1 guards that are relative to its own -3..4 tile range, so
+    // widening the range without widening those guards just multiplies the wall count
+    // the Sodium path owns the distance slider instead, where culling makes it meaningful
     @Redirect(method = "renderClouds", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/WorldProvider;getCloudHeight()F"))
     private float getConfiguredFastCloudHeight(WorldProvider provider) {
         return getConfiguredCloudHeight(provider);
@@ -299,14 +293,13 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         return ImpetusVintage.options().quality.cloudHeight;
     }
 
-    /**
-     * Cloud radius in cells. Clamped at the bottom to vanilla's own extent (8 tiles of 8 cells, so 32 either side of
-     * the camera) and at the top to the cloud projection's far plane — {@code renderCloudsCheck} builds it at
-     * {@code farPlaneDistance * 4}, and cells past that are clipped away anyway.
-     * <p>
-     * The distance the user asked for is in blocks, so it is divided by the <em>effective</em> cell size rather than
-     * by vanilla's 12: raising the cloud scale must make the cells bigger, not push the cloud layer further out.
-     */
+    // cloud radius in cells
+    // clamped at the bottom to vanilla's own extent (8 tiles of 8 cells, so 32 either side of the
+    // camera) and at the top to the cloud projection's far plane - renderCloudsCheck builds it at
+    // farPlaneDistance * 4, and cells past that are clipped away anyway
+    // the distance the user asked for is in blocks, so it is divided by the *effective* cell size
+    // rather than by vanilla's 12: raising the cloud scale must make the cells bigger, not push the
+    // cloud layer further out
     @Unique
     private int impetus$cloudRadiusCells(float cellSize) {
         int requested = Math.max(8, ImpetusVintage.options().quality.cloudDistance) * 16;

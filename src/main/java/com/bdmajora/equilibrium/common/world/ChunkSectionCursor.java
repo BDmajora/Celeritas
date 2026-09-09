@@ -7,43 +7,37 @@ import net.minecraft.world.WorldType;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
 
-/**
- * A cursor for reading many blocks from one region of the world.
- *
- * <p>Vanilla's {@code World#getBlockState} resolves a chunk and then a section for every single
- * position, which is the right shape for one-off reads and the wrong shape for the callers that
- * matter here: an explosion ray walks sixteen blocks in a line, a collision test walks a box, a
- * path-finder walks a neighbourhood. All of them stay inside one chunk section for long runs.
- *
- * <p>The cursor holds the chunk and the section it last touched and only re-resolves when the run
- * crosses a boundary. A cursor is a short-lived local — one per explosion, one per movement step —
- * and is never shared between threads, which is what lets it hold mutable state without any of the
- * validation {@link ChunkAccess} needs.
- *
- * <p>Two cases fall back to {@link World#getBlockState}: the debug world, whose blocks are computed
- * rather than stored, and any world whose {@link ChunkAccess} is missing because
- * {@code mixin.util.chunk_access} is off. Both are resolved once, in the constructor, rather than
- * tested per read.
- *
- * <p>Whether reading an unloaded chunk loads it is the caller's decision, made at construction. It
- * has to be: vanilla is not consistent about it. {@code World#getBlockState} loads whatever it
- * touches, so an explosion at the edge of the loaded area really does generate terrain, and a cursor
- * that quietly declined to would let blasts punch further than they should. But
- * {@code World#getCollisionBoxes} checks {@code isBlockLoaded} first and treats the outside as empty.
- * A cursor that picked one behaviour for both would break one of them.
- */
+// a cursor for reading many blocks from one region of the world
+// vanilla's World#getBlockState resolves a chunk and then a section for every single position, which
+// is the right shape for one-off reads and the wrong shape for the callers that matter here: an
+// explosion ray walks sixteen blocks in a line, a collision test walks a box, a path-finder walks a
+// neighbourhood - all of them stay inside one chunk section for long runs
+// the cursor holds the chunk and the section it last touched and only re-resolves when the run
+// crosses a boundary
+// a cursor is a short-lived local - one per explosion, one per movement step - and is never shared
+// between threads, which is what lets it hold mutable state without any of the validation ChunkAccess
+// needs
+// two cases fall back to World#getBlockState: the debug world, whose blocks are computed rather than
+// stored, and any world whose ChunkAccess is missing because mixin.util.chunk_access is off
+// both are resolved once, in the constructor, rather than tested per read
+// whether reading an unloaded chunk loads it is the caller's decision, made at construction, and it
+// has to be because vanilla is not consistent about it: World#getBlockState loads whatever it
+// touches, so an explosion at the edge of the loaded area really does generate terrain and a cursor
+// that quietly declined to would let blasts punch further than they should
+// but World#getCollisionBoxes checks isBlockLoaded first and treats the outside as empty, so a cursor
+// that picked one behaviour for both would break one of them
 public final class ChunkSectionCursor {
     private static final IBlockState AIR = Blocks.AIR.getDefaultState();
 
     private final World world;
 
-    /** Null when the world does not implement {@link ChunkAccess}, i.e. the option is off. */
+    // Null when the world does not implement ChunkAccess, i.e. the option is off.
     private final ChunkAccess access;
 
-    /** True in the debug world, where block states are generated on read and not held in sections. */
+    // True in the debug world, where block states are generated on read and not held in sections.
     private final boolean synthetic;
 
-    /** Whether a read outside the loaded area should load the chunk, as {@code getBlockState} does. */
+    // Whether a read outside the loaded area should load the chunk, as getBlockState does.
     private final boolean loadChunks;
 
     private Chunk chunk;
@@ -53,10 +47,8 @@ public final class ChunkSectionCursor {
     private ExtendedBlockStorage section;
     private int sectionY = Integer.MIN_VALUE;
 
-    /**
-     * @param loadChunks true to match {@code World#getBlockState}, false to treat unloaded chunks as
-     *                   air the way {@code World#getCollisionBoxes} does
-     */
+    // loadChunks true matches World#getBlockState, false treats unloaded chunks as air the way
+    // World#getCollisionBoxes does
     public ChunkSectionCursor(World world, boolean loadChunks) {
         this.world = world;
         this.access = world instanceof ChunkAccess ? (ChunkAccess) world : null;
@@ -64,7 +56,7 @@ public final class ChunkSectionCursor {
         this.loadChunks = loadChunks;
     }
 
-    /** The state at this position, or air if it is outside the world or in a chunk we cannot see. */
+    // The state at this position, or air if it is outside the world or in a chunk we cannot see.
     public IBlockState getBlockState(int x, int y, int z) {
         if (y < 0 || y > 255) {
             return AIR;

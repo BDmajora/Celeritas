@@ -6,12 +6,11 @@ import com.bdmajora.impetus.engine.impl.render.chunk.terrain.material.parameters
 
 import java.util.Objects;
 
-/**
- * A material provides the full configuration about how a geometry element should render. It corresponds to the vanilla
- * RenderType configured for a block. Material configuration is encoded alongside the rest of the vertex data, which
- * allows for multiple vanilla RenderTypes to be consolidated into a single terrain render pass on the CPU for greater
- * efficiency. The material configuration is recovered on the GPU within the render pass.
- */
+// a material is the full configuration for how a geometry element renders, corresponding to the
+// vanilla RenderType configured for a block
+// the configuration is encoded alongside the rest of the vertex data, which lets several vanilla
+// RenderTypes be consolidated into a single terrain render pass on the CPU, and is recovered on the
+// GPU inside that pass
 public final class Material {
     public final TerrainRenderPass pass;
     public final int packed;
@@ -19,12 +18,9 @@ public final class Material {
     public final AlphaCutoffParameter alphaCutoff;
     public final boolean mipped;
 
-    /**
-     * Constructs a new Material.
-     * @param pass the {@link TerrainRenderPass} to use for the base configuration
-     * @param alphaCutoff the alpha level below which fragments should be discarded
-     * @param mipped whether mipmapping should be enabled on geometry rendered with this material
-     */
+    // pass is the TerrainRenderPass supplying the base configuration, alphaCutoff is the alpha level
+    // below which fragments are discarded, and mipped says whether mipmapping is enabled on geometry
+    // rendered with this material
     public Material(TerrainRenderPass pass, AlphaCutoffParameter alphaCutoff, boolean mipped) {
         if (alphaCutoff != AlphaCutoffParameter.ZERO && !pass.supportsFragmentDiscard()) {
             throw new IllegalArgumentException("Pass does not support fragment discard");
@@ -37,9 +33,7 @@ public final class Material {
         this.mipped = mipped;
     }
 
-    /**
-     * {@return the packed representation of this Material to be encoded in vertex data}
-     */
+    // returns the packed representation of this material, to be encoded in vertex data
     public int bits() {
         return this.packed;
     }

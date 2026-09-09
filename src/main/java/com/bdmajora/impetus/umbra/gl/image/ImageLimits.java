@@ -2,17 +2,15 @@ package com.bdmajora.impetus.umbra.gl.image;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * The driver's {@code GL_MAX_IMAGE_UNITS}, queried once (Umbra {@code gl/image/ImageLimits}).
- * <p>
- * Image units are a namespace entirely separate from texture units: {@code glBindImageTexture} does not touch the
- * texture-unit selector, so none of the {@link com.bdmajora.impetus.umbra.gl.GlTextureUnits} cache-desync hazards
- * apply here. That is what makes per-program image allocation safe on 1.12.2 even though per-program *sampler*
- * allocation is not.
- */
+// The driver's GL_MAX_IMAGE_UNITS, queried once and cached
+// Image units are a namespace entirely separate from texture units: glBindImageTexture does not touch the
+// texture-unit selector, so none of GlTextureUnits' cache-desync hazards apply here. That is what makes
+// per-program image allocation safe on 1.12.2 even though per-program SAMPLER allocation is not
 public final class ImageLimits {
+    // Spelled as a literal because the generated GL constant classes do not carry it
     private static final int GL_MAX_IMAGE_UNITS = 0x8D57;
 
+    // Lazily built rather than a static initializer, because the query needs a live GL context
     private static ImageLimits instance;
 
     private final int maxImageUnits;
@@ -30,7 +28,7 @@ public final class ImageLimits {
         return instance;
     }
 
-    /** Discards the cached query, so a context recreation re-reads the limit. */
+    // Drops the cached query so a context recreation re-reads the limit, which can differ on a different GPU
     public static void reset() {
         instance = null;
     }

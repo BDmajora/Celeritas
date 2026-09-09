@@ -16,23 +16,17 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Brightens primed TNT as its fuse burns down.
- *
- * <p>In {@link ExplosiveLightingMode#FANCY} the ramp is quadratic in remaining fuse, so the glow is
- * barely there when it is lit and floods the area just before it goes off.
- */
+// brightens primed TNT as its fuse burns down
+// in ExplosiveLightingMode#FANCY the ramp is quadratic in remaining fuse, so the glow is barely there
+// when it is lit and floods the area just before it goes off
 @Mixin(EntityTNTPrimed.class)
 public abstract class EntityTNTPrimedMixin extends Entity implements DynamicLightSource {
     @Shadow
     public abstract int getFuse();
 
-    /**
-     * The fuse this TNT started with, so the ramp is a fraction of its own life.
-     *
-     * <p>Defaults to vanilla's 80 for TNT that arrives already primed — one spawned by a command, or
-     * one already burning when the chunk loaded — since those never run the constructor hook.
-     */
+    // the fuse this TNT started with, so the ramp is a fraction of its own life
+    // defaults to vanilla's 80 for TNT that arrives already primed - one spawned by a command, or one
+    // already burning when the chunk loaded - since those never run the constructor hook
     @Unique
     private int impetus$startFuse = 80;
 

@@ -12,14 +12,10 @@ import java.util.function.IntConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Parses the OptiFine {@code /* DRAWBUFFERS:0246 *&#47;} (and the newer Umbra {@code /* RENDERTARGETS: 0,2,4,6 *&#47;})
- * directive from a fragment shader, which declares the set of color attachments the program writes to.
- * <p>
- * {@code DRAWBUFFERS} uses one decimal digit per attachment ({@code 0-9}). {@code RENDERTARGETS} uses a
- * comma-separated decimal list and is the path for targets 10-15. When neither is present the program is assumed to
- * write only {@code colortex0}.
- */
+// Parses the directive a fragment shader uses to declare which colour attachments it writes
+// Two spellings: OptiFine's DRAWBUFFERS, one decimal digit per attachment and therefore limited to targets 0-9,
+// and Iris's newer RENDERTARGETS, a comma-separated list which is the only way to reach targets 10-15
+// A program declaring neither is assumed to write colortex0 alone
 public final class DrawBuffers {
     private static final Pattern DRAWBUFFERS = Pattern.compile("/\\*\\s*DRAWBUFFERS:([0-9]+)\\s*\\*/");
     private static final Pattern RENDERTARGETS = Pattern.compile("/\\*\\s*RENDERTARGETS:\\s*([0-9,\\s]+)\\*/");
@@ -33,7 +29,7 @@ public final class DrawBuffers {
             "^(\\s*#\\s*define\\s+)([A-Za-z_][A-Za-z0-9_]*)(\\b.*)$");
     private static final Pattern LAYOUT_LOCATION = Pattern.compile("\\blocation\\s*=\\s*(\\d+)\\b");
 
-    /** The default when a fragment shader declares no directive: write to colortex0 only. */
+    // The default for a shader with no directive. Shared, so every caller that keeps it must clone first
     public static final int[] DEFAULT = new int[]{0};
 
     private static final int GL_MAX_DRAW_BUFFERS = 0x8824;
@@ -42,23 +38,18 @@ public final class DrawBuffers {
     private DrawBuffers() {
     }
 
-    /**
-     * {@return the length to declare {@code out vec4 iris_FragData[N]} with}
-     * <p>
-     * An array fragment output occupies {@code N} <em>contiguous</em> output locations, so {@code N} may not exceed
-     * {@code GL_MAX_DRAW_BUFFERS} (8 on essentially all hardware). This was hardcoded to 16 — which NVIDIA silently
-     * tolerates because it only allocates the locations actually written, but Mesa enforces, failing the link with
-     * {@code insufficient contiguous locations available for fragment shader output 'iris_FragData'} and taking the
-     * whole terrain override down with it on Intel Arc.
-     * <p>
-     * Nothing is lost by clamping: {@code DRAWBUFFERS}/{@code RENDERTARGETS} indices are <em>dense output slots</em>
-     * (see {@link #rewriteFragmentOutputs}), so the highest slot a program can reference is one less than the number
-     * of attachments it declares, and no framebuffer can carry more than {@code GL_MAX_DRAW_BUFFERS} of those.
-     * <p>
-     * Umbra avoids the question entirely: it emits a separate {@code layout(location = i) out vec4 iris_FragDatai} for
-     * each index the shader actually uses, never an array. That needs per-index reference analysis, which this port's
-     * {@code #define gl_FragData iris_FragData} approach deliberately trades away — so it clamps instead.
-     */
+    // The length to declare `out vec4 iris_FragData[N]` with, queried from the driver rather than fixed
+    // An array fragment output occupies N CONTIGUOUS output locations, so N may not exceed GL_MAX_DRAW_BUFFERS,
+    // which is 8 on essentially all hardware
+    // This was hardcoded to 16. NVIDIA tolerates that silently because it only allocates the locations actually
+    // written, but Mesa enforces the rule and fails the link with "insufficient contiguous locations available for
+    // fragment shader output 'iris_FragData'", taking the whole terrain override down on Intel Arc
+    // Clamping loses nothing: DRAWBUFFERS and RENDERTARGETS indices are DENSE OUTPUT SLOTS, so the highest slot a
+    // program can reference is one less than the number of attachments it declares, and no framebuffer can carry
+    // more than GL_MAX_DRAW_BUFFERS of those anyway
+    // Iris sidesteps the question by emitting a separate layout(location = i) out vec4 per index the shader
+    // actually uses, never an array — that needs per-index reference analysis, which this port's
+    // `#define gl_FragData iris_FragData` approach deliberately trades away
     public static int fragmentOutputArraySize() {
         if (fragmentOutputArraySize < 0) {
             int reported = LWJGL.glGetInteger(GL_MAX_DRAW_BUFFERS);
@@ -68,13 +59,13 @@ public final class DrawBuffers {
         return fragmentOutputArraySize;
     }
 
-    /**
-     * Parses the directive from the source with its preprocessor conditionals evaluated first. Umbra extracts
-     * directives from preprocessed source, so option-gated variants (Complementary's deferred1 declares several
-     * DRAWBUFFERS/RENDERTARGETS variants across its colored-lighting gates) resolve to the active one. Raw-source
-     * {@link #parse} takes the first textual match, which desynchronizes the ping-pong flip accounting from what
-     * the GPU actually writes whenever the active variant is not the first.
-     */
+    // Parses the directive from source whose preprocessor conditionals have been evaluated first, which is what
+    // Iris does
+    // It matters because a pack can declare several DRAWBUFFERS/RENDERTARGETS variants behind option gates —
+    // Complementary's deferred1 does exactly that across its coloured-lighting gates
+    // The raw-source parse below takes the first TEXTUAL match, so whenever the active variant is not the first one
+    // the flip accounting desynchronises from what the GPU actually writes, and a gl_FragData write lands on an
+    // attachment nothing expected
     public static int[] parseActive(String fragmentSource) {
         return parseActive(fragmentSource, com.bdmajora.impetus.umbra.gl.shader.ShaderMacros.standard());
     }
@@ -139,12 +130,11 @@ public final class DrawBuffers {
         return result;
     }
 
-    /**
-     * Umbra packs shader-pack render targets into dense framebuffer color attachments before drawing. A directive such as
-     * {@code DRAWBUFFERS:03648} therefore means "shader output slot 0 writes colortex0, slot 1 writes colortex3, ...",
-     * not "leave holes until location 8". {@code gl_FragData[N]} and {@code layout(location = N)} already name those
-     * dense output slots, so this only normalizes {@code gl_FragColor} and implicit named outputs.
-     */
+    // Render targets are packed into DENSE framebuffer colour attachments before drawing, the same way Iris does it
+    // So a directive like DRAWBUFFERS:03648 means "output slot 0 writes colortex0, slot 1 writes colortex3, ..." —
+    // it does NOT mean leave holes up to location 8
+    // gl_FragData[N] and layout(location = N) already name those dense slots, so this pass only has to normalise
+    // gl_FragColor and the implicit named outputs
     public static String rewriteFragmentOutputs(String fragmentSource, int[] drawBuffers) {
         if (fragmentSource == null) {
             return fragmentSource;
@@ -173,15 +163,13 @@ public final class DrawBuffers {
         return String.join("\n", lines);
     }
 
-    /**
-     * Named fragment outputs are kept as real {@code out} declarations, exactly like Umbra: an explicit
-     * {@code layout(location = N)} already names the dense output slot (the Nth entry of the RENDERTARGETS list),
-     * so it passes through untouched; declarations without a layout get {@code layout(location = <declaration
-     * order>)} added in place. The old approach — replacing the declaration with
-     * {@code #define <name> gl_FragData[slot]} — corrupted any shader that reuses the output's name as a local
-     * variable or function parameter (photon's {@code result}/{@code fragment_color}), since the macro rewrites
-     * every occurrence.
-     */
+    // Named fragment outputs stay as real `out` declarations, exactly as Iris keeps them
+    // An explicit layout(location = N) already names the dense output slot — the Nth entry of the RENDERTARGETS
+    // list — so it passes through untouched; a declaration without a layout gets layout(location = <declaration
+    // order>) added in place
+    // The earlier approach replaced the declaration with `#define <name> gl_FragData[slot]`, which corrupts any
+    // shader reusing that output's name as a local or a function parameter — Photon's `result` and
+    // `fragment_color` — because a macro rewrites every occurrence rather than just the declaration
     private static String rewriteNamedFragmentOutputs(String source) {
         Matcher matcher = NAMED_FRAGMENT_OUTPUT.matcher(source);
         StringBuffer rewritten = new StringBuffer(source.length());
@@ -208,12 +196,11 @@ public final class DrawBuffers {
         return rewritten.toString();
     }
 
-    /**
-     * Preprocessed shader source can legitimately still contain multiple target directives when the pack layers
-     * nested option gates (Complementary's water/lava path does this for colored lighting and reflections). Umbra
-     * extracts directives from preprocessed source order, so use the last surviving directive instead of the first
-     * fallback directive that appears before the active optional writes.
-     */
+    // Even preprocessed source can legitimately still hold several target directives, when the pack layers nested
+    // option gates — Complementary's water/lava path does this for coloured lighting and reflections
+    // The LAST surviving directive is the right one: the earlier ones are the fallback declarations that appear
+    // before the active optional writes, so taking the first would describe a narrower attachment set than the
+    // program actually writes
     private static int[] parseLastDirective(String fragmentSource) {
         List<Directive> directives = directives(fragmentSource);
         if (directives.isEmpty()) {

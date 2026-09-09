@@ -35,9 +35,9 @@ import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 
-/**
- * LWJGL2 implementation of {@link LWJGLService}.
- */
+// The LWJGL2 backend of LWJGLService, selected by LWJGLServiceProvider when the game is running on LWJGL 2
+// A record because the capability decisions — which VAO, timer-query and vertex-attrib entry points this driver
+// actually has — are resolved once at creation and never change afterwards
 public record LWJGL2Service(
         VAOMode vaoMode,
         TimerQueryMode timerQueryMode,

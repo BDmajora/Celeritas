@@ -20,19 +20,14 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
- * Makes every entity a potential light source.
- *
- * <p>This is the base implementation: burning entities glow, and anything with a registered handler
- * glows by whatever that handler reports. Subclasses override {@link #impetus$dynamicLightTick()} to
- * add their own rules — held items for living entities, a fuse ramp for TNT — but the tracking,
- * chunk-rebuild and lightmap machinery all lives here.
- *
- * <p>Each subclass mixin keeps its own luminance field rather than sharing one: a {@code @Unique}
- * field cannot be shadowed across mixins onto different classes, so a shared field would be silently
- * written by one mixin and read by another. Every writer therefore also overrides
- * {@link #impetus$getLuminance()}.
- */
+// makes every entity a potential light source
+// this is the base implementation: burning entities glow, and anything with a registered handler glows
+// by whatever that handler reports
+// subclasses override impetus$dynamicLightTick() to add their own rules - held items for living
+// entities, a fuse ramp for TNT - but the tracking, chunk-rebuild and lightmap machinery all lives here
+// each subclass mixin keeps its own luminance field rather than sharing one: a @Unique field cannot be
+// shadowed across mixins onto different classes, so a shared field would be silently written by one
+// mixin and read by another, which is why every writer also overrides impetus$getLuminance()
 @Mixin(Entity.class)
 public abstract class EntityMixin implements DynamicLightSource {
     @Shadow
@@ -74,23 +69,17 @@ public abstract class EntityMixin implements DynamicLightSource {
     private double impetus$prevY;
     @Unique
     private double impetus$prevZ;
-    /**
-     * The chunk sections this entity is currently lighting, allocated on first use.
-     *
-     * <p>This mixin puts these fields on every entity in the world, and the overwhelming majority of
-     * them never emit light. Upstream allocates the set eagerly, which on a busy client is thousands
-     * of hash sets that only ever hold nothing.
-     */
+    // the chunk sections this entity is currently lighting, allocated on first use
+    // this mixin puts these fields on every entity in the world and the overwhelming majority of them
+    // never emit light, but upstream allocates the set eagerly - which on a busy client is thousands of
+    // hash sets that only ever hold nothing
     @Unique
     private LongOpenHashSet impetus$trackedLitChunkPos;
 
-    /**
-     * Recomputes luminance once per tick.
-     *
-     * <p>{@code onEntityUpdate} rather than {@code onUpdate} because it is the shared tail every
-     * entity's tick runs through — except for the handful that override {@code onUpdate} without
-     * calling up, which is why {@code EntityHanging} and {@code EntityMinecart} carry their own hooks.
-     */
+    // recomputes luminance once per tick
+    // onEntityUpdate rather than onUpdate because it is the shared tail every entity's tick runs
+    // through - except for the handful that override onUpdate without calling up, which is why
+    // EntityHanging and EntityMinecart carry their own hooks
     @Inject(method = "onEntityUpdate", at = @At("TAIL"))
     private void impetus$onTick(CallbackInfo ci) {
         if (!this.world.isRemote) {
@@ -106,7 +95,7 @@ public abstract class EntityMixin implements DynamicLightSource {
         DynamicLightsEngine.updateTracking(this);
     }
 
-    /** Lights the entity's own model by the brighter of its own glow and the light where it stands. */
+    // Lights the entity's own model by the brighter of its own glow and the light where it stands.
     @Inject(method = "getBrightnessForRender", at = @At("RETURN"), cancellable = true)
     private void impetus$brightnessForRender(CallbackInfoReturnable<Integer> cir) {
         if (!DynamicLights.options().mode.isEnabled()) {
@@ -133,7 +122,7 @@ public abstract class EntityMixin implements DynamicLightSource {
         return this.posX;
     }
 
-    /** Eye height, not feet: a held torch is at head level, and the falloff is measured from it. */
+    // Eye height, not feet: a held torch is at head level, and the falloff is measured from it.
     @Override
     public double impetus$getDynamicLightY() {
         return this.posY + this.getEyeHeight();
@@ -191,17 +180,13 @@ public abstract class EntityMixin implements DynamicLightSource {
         return true;
     }
 
-    /**
-     * Re-lights the chunks around this entity if it has moved or changed brightness.
-     *
-     * <p>The 0.1-block movement threshold is what keeps a standing-still player from re-meshing its
-     * own chunk every frame; below that the falloff shift is not visible anyway.
-     *
-     * <p>Eight sections are lit rather than one: the light reaches 7.75 blocks, so it can spill into
-     * the three neighbours the entity is closest to and the four diagonals between them. Which eight
-     * depends on where inside its own section the entity sits, which is what the direction walk below
-     * works out.
-     */
+    // re-lights the chunks around this entity if it has moved or changed brightness
+    // the 0.1-block movement threshold is what keeps a standing-still player from re-meshing its own
+    // chunk every frame; below that the falloff shift is not visible anyway
+    // eight sections are lit rather than one: the light reaches 7.75 blocks, so it can spill into the
+    // three neighbours the entity is closest to and the four diagonals between them
+    // which eight depends on where inside its own section the entity sits, which is what the direction
+    // walk below works out
     @Override
     public boolean impetus$updateDynamicLight(RenderGlobal renderer) {
         if (!this.impetus$shouldUpdateDynamicLight()) {

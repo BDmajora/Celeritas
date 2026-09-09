@@ -13,21 +13,15 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
- * Folds dynamic light into the terrain lightmap.
- *
- * <p>This is where dynamic lights actually reach the world. Impetus' chunk builder asks each block
- * state for its packed lightmap coordinate ({@code LightDataCache#compute}), caches the answer for
- * the section being compiled, and the smooth and flat light pipelines interpolate from there — so
- * raising the value here is what makes a held torch light the floor.
- *
- * <p>Runs on chunk-builder worker threads, which is why the engine's source set is behind a
- * read/write lock and why the empty-set case short-circuits before taking it.
- *
- * <p>The opaque-cube test mirrors what the light pipelines expect: brightening the interior of a
- * solid block does nothing useful and makes ambient occlusion disagree with the light it is shading.
- * Light-emitting blocks are exempt because they are read for their own glow.
- */
+// folds dynamic light into the terrain lightmap - this is where dynamic lights actually reach the world
+// Impetus' chunk builder asks each block state for its packed lightmap coordinate (LightDataCache#compute),
+// caches the answer for the section being compiled, and the smooth and flat light pipelines
+// interpolate from there, so raising the value here is what makes a held torch light the floor
+// runs on chunk-builder worker threads, which is why the engine's source set is behind a read/write
+// lock and why the empty-set case short-circuits before taking it
+// the opaque-cube test mirrors what the light pipelines expect: brightening the interior of a solid
+// block does nothing useful and makes ambient occlusion disagree with the light it is shading
+// light-emitting blocks are exempt because they are read for their own glow
 @SideOnly(Side.CLIENT)
 @Mixin(BlockStateContainer.StateImplementation.class)
 public abstract class StateImplementationMixin {

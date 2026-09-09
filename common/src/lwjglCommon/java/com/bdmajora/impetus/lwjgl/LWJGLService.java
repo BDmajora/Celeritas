@@ -5,9 +5,7 @@ import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 
-/**
- * LWJGL2/LWJGL3 abstraction.
- */
+// the LWJGL2/LWJGL3 abstraction: every GL entry point the engine needs, in whichever binding is present
 public interface LWJGLService {
 
     // ===================== CAPABILITIES =====================
@@ -26,10 +24,9 @@ public interface LWJGLService {
     void glBufferData(int target, long size, long data, int usage);
     void glBufferSubData(int target, long offset, ByteBuffer data);
     void glBufferStorage(int target, long size, int flags);
-    /**
-     * Server-side buffer fill (GL 4.3). Zeroing a buffer this way costs no client memory and no upload, which is what
-     * makes it usable on a buffer allocated with immutable storage and no client-write flags.
-     */
+    // server-side buffer fill (GL 4.3)
+    // zeroing a buffer this way costs no client memory and no upload, which is what makes it usable on
+    // a buffer allocated with immutable storage and no client-write flags
     void glClearBufferData(int target, int internalFormat, int format, int type, ByteBuffer data);
     ByteBuffer glMapBufferRange(int target, long offset, long length, int flags);
     long nglMapBuffer(int target, int access);
@@ -55,17 +52,12 @@ public interface LWJGLService {
     int glCreateShader(int type);
     void glShaderSource(int shader, CharSequence source);
 
-    /**
-     * Identical in function to {@link #glShaderSource(int, CharSequence)} but
-     * passes a null pointer for string length to force the driver to rely on the null
-     * terminator for string length. This is a workaround for an apparent flaw with some
-     * AMD drivers that don't receive or interpret the length correctly, resulting in
-     * an access violation when the driver tries to read past the string memory.
-     *
-     * <p>Hat tip to fewizz for the find and the fix.
-     *
-     * @see <a href="https://github.com/grondag/canvas/commit/820bf754092ccaf8d0c169620c2ff575722d7d96">Original Canvas commit</a>
-     */
+    // identical in function to glShaderSource(int, CharSequence), but passes a null pointer for the
+    // string length so the driver has to rely on the null terminator instead
+    // works around an apparent flaw in some AMD drivers that do not receive or interpret the length
+    // correctly, and then hit an access violation reading past the end of the string memory
+    // hat tip to fewizz for the find and the fix; original Canvas commit:
+    // https://github.com/grondag/canvas/commit/820bf754092ccaf8d0c169620c2ff575722d7d96
     void glShaderSourceSafe(int shader, CharSequence source);
     void glCompileShader(int shader);
     String glGetShaderInfoLog(int shader, int maxLength);
@@ -78,7 +70,7 @@ public interface LWJGLService {
     void glLinkProgram(int program);
     String glGetProgramInfoLog(int program, int maxLength);
     int glGetProgrami(int program, int pname);
-    /** Returns the active uniform's name at {@code index}; writes its size to {@code sizeType.get(0)} and GL type to {@code sizeType.get(1)}. */
+    // Returns the active uniform's name at index; writes its size to sizeType.get(0) and GL type to sizeType.get(1).
     String glGetActiveUniform(int program, int index, int maxLength, IntBuffer sizeType);
     void glUseProgram(int program);
     void glDeleteProgram(int program);

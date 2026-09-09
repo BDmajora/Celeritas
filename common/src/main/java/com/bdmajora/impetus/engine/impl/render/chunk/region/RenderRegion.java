@@ -59,9 +59,9 @@ public class RenderRegion {
     @Unmodifiable
     private List<DeviceResources> allDeviceResources = List.of();
 
-    /**
-     * Incremented each time the set of render passes in the region is changed.
-     */
+    // Bumped whenever the set of render passes present in this region changes
+    // A version counter rather than a dirty flag, so several consumers can each notice the change independently
+    // without racing to clear it
     @Getter
     private int passSetUpdateCount = 0;
 

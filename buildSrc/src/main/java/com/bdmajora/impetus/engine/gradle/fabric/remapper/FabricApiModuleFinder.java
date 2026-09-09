@@ -18,9 +18,7 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
-/**
- * Based on code from Fabric Loom, used under the terms of the MIT License.
- */
+// based on code from Fabric Loom, used under the terms of the MIT License
 public abstract class FabricApiModuleFinder {
     @Inject
     public abstract Project getProject();

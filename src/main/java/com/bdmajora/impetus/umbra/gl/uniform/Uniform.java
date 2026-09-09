@@ -1,12 +1,12 @@
 package com.bdmajora.impetus.umbra.gl.uniform;
 
-/**
- * A single shader uniform bound to a program location, with a value pulled from a supplier and uploaded on demand.
- * <p>
- * Each concrete subclass caches the last-uploaded value and only issues a {@code glUniform*} call when the value
- * actually changes (matching OptiFine's behaviour), which keeps redundant GL calls out of the hot path.
- */
+// One shader uniform bound to a program location, its value pulled from a supplier and uploaded on demand
+// Each concrete subclass caches the last-uploaded value and only issues a glUniform* call when the value actually
+// changed, matching OptiFine — which is what keeps redundant GL calls off the hot path, since update() runs for
+// every uniform of every program bind
 public abstract class Uniform {
+    // Resolved once at program build; -1 would mean the uniform was optimised out, and the builder drops those
+    // rather than constructing a Uniform that uploads into nowhere
     protected final int location;
 
     protected Uniform(int location) {
@@ -17,5 +17,7 @@ public abstract class Uniform {
         return this.location;
     }
 
+    // Re-reads the supplier and uploads if the value moved. Always into the CURRENTLY bound program, since
+    // glUniform* has no program argument on 1.12.2's GL level — the caller owns making sure the right one is bound
     public abstract void update();
 }

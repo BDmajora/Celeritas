@@ -15,14 +15,12 @@ import java.nio.ByteOrder;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * A GL texture created from a shader pack's PNG bytes — the 1.12.2 counterpart of Umbra's
- * {@code NativeImageBackedCustomTexture}. Filtering/wrapping follow the pack's {@code .mcmeta} flags exactly like
- * Umbra: images default to unblurred (NEAREST) and unclamped (REPEAT); {@code blur} switches to LINEAR and
- * {@code clamp} to CLAMP_TO_EDGE.
- * <p>
- * Decoding goes through {@link ImageIO} (what vanilla 1.12.2 itself uses for PNGs) into an RGBA upload.
- */
+// A GL texture built from a shader pack's PNG bytes — the 1.12.2 counterpart of Iris's
+// NativeImageBackedCustomTexture
+// Filtering and wrapping follow the pack's .mcmeta sidecar exactly as Iris does: default is NEAREST and REPEAT,
+// `blur` switches to LINEAR, `clamp` to CLAMP_TO_EDGE. Getting this wrong is visible — a clamped gradient that
+// repeats instead wraps its last row back onto its first
+// Decoding goes through ImageIO, which is what vanilla 1.12.2 itself uses for PNGs, into a straight RGBA upload
 public class PngTexture extends GlResource {
     private final int width;
     private final int height;

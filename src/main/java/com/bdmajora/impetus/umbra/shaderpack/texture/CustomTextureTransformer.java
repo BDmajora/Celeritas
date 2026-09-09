@@ -10,23 +10,20 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * The string-level counterpart of Umbra's {@code TextureTransformer}: renames a sampler identifier to the raw custom
- * texture's minted name, but only in programs that declare it with a sampler type matching the directive's declared
- * texture target.
- * <p>
- * Umbra does this over a parsed AST; here the declaration is found with a regex over a comment-stripped copy of the
- * source, and the rename is applied to the original text. That covers every form packs actually write —
- * {@code uniform sampler3D colortex6;} and comma lists like {@code uniform sampler2D colortex0, colortex1;} — and
- * silently declines to rename anything it cannot recognise, which is the safe direction: the sampler then keeps its
- * standard render-target unit, exactly as if the directive were absent.
- * <p>
- * The active pack's patch list is installed by the pipeline on load ({@link #setActivePatches}) because the gbuffers,
- * terrain and shadow compile paths reach the transform from static contexts that have no pack handle.
- */
+// The string-level counterpart of Iris's TextureTransformer: renames a sampler identifier to a raw custom
+// texture's minted name, but ONLY in programs that declare it with a sampler type matching the directive's target
+// Iris does this over a parsed AST. Here the declaration is found with a regex over a comment-stripped copy of the
+// source, and the rename is applied to the original text
+// That covers every form packs actually write — `uniform sampler3D colortex6;` and comma lists like
+// `uniform sampler2D colortex0, colortex1;` — and silently declines to rename anything it cannot recognise
+// Declining is the safe direction: the sampler then keeps its standard render-target unit, exactly as if the
+// directive were absent, rather than being pointed somewhere wrong
+// The active patch list is installed by the pipeline at load rather than passed in, because the gbuffers, terrain
+// and shadow compile paths all reach this from static contexts that have no pack handle to thread through
 public final class CustomTextureTransformer {
 
-    /** {@code uniform <type> <name>[, <name>...];} — the declaration form every pack uses for samplers. */
+    // uniform <type> <name>[, <name>...]; — the declaration form every pack uses for samplers, including the
+    // comma-list variant
     private static final Pattern UNIFORM_DECLARATION =
             Pattern.compile("(?m)^[\\t ]*uniform[\\t ]+(\\w+)[\\t ]+([^;{}()]+);");
 
@@ -35,7 +32,8 @@ public final class CustomTextureTransformer {
     private CustomTextureTransformer() {
     }
 
-    /** Installs the loaded pack's raw-custom-texture patches; pass an empty list when no pack is active. */
+    // Installs the loaded pack's raw-custom-texture patches. An empty list when no pack is active, which makes
+    // transform below a pass-through
     public static void setActivePatches(List<CustomTexturePatch> patches) {
         activePatches = patches == null ? Collections.<CustomTexturePatch>emptyList() : new ArrayList<>(patches);
     }
@@ -44,7 +42,9 @@ public final class CustomTextureTransformer {
         return activePatches;
     }
 
-    /** Applies every active patch for {@code stage} to one GLSL stage source. */
+    // Applies every active patch belonging to that stage to one GLSL stage source
+    // Filtered by stage because a directive is scoped to one — the same sampler name legitimately means different
+    // things in gbuffers and in deferred
     public static String transform(String programName, String source, TextureStage stage) {
         return transform(programName, source, stage, activePatches);
     }
@@ -75,10 +75,8 @@ public final class CustomTextureTransformer {
         return result;
     }
 
-    /**
-     * @return the GLSL type {@code samplerName} is declared as in this source, or null if it is not declared as a
-     * uniform here (in which case the program does not use the directive's sampler at all).
-     */
+    // The GLSL type that sampler is declared as in this source, or null when it is not declared here at all —
+    // which means this program simply does not use the directive's sampler and needs no rename
     private static String findSamplerDeclarationType(String source, String samplerName) {
         Matcher matcher = UNIFORM_DECLARATION.matcher(source);
         while (matcher.find()) {
@@ -101,7 +99,8 @@ public final class CustomTextureTransformer {
         return null;
     }
 
-    /** Umbra {@code TextureTransformer.isTypeValid}: the directive's target vs. the declared sampler type. */
+    // The type check itself, matching Iris's TextureTransformer.isTypeValid: the directive's declared target
+    // against the sampler type the program declared. This is the whole reason the transform is per-program
     private static boolean typeMatches(String textureType, String declaredType) {
         Set<String> accepted = acceptedSamplerTypes(textureType);
         return accepted.contains(declaredType.toLowerCase(Locale.ROOT));
@@ -131,7 +130,9 @@ public final class CustomTextureTransformer {
         return source.replaceAll("\\b" + Pattern.quote(from) + "\\b", Matcher.quoteReplacement(to));
     }
 
-    /** Blanks comments so a commented-out declaration cannot trigger a rename. Length is not preserved. */
+    // Blanks comments so a commented-out declaration cannot trigger a rename
+    // Length is deliberately NOT preserved, so the stripped copy is only ever used to DETECT a declaration — the
+    // rename itself is applied to the original text, where offsets still line up
     private static String stripComments(String source) {
         return source.replaceAll("(?s)/\\*.*?\\*/", " ").replaceAll("(?m)//.*$", "");
     }

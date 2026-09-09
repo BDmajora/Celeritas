@@ -12,9 +12,9 @@ import java.io.Closeable;
 
 public class TimerQueryManager implements Closeable {
     private static final int INVALID_ID = -1;
-    /**
-     * The number of frames the timer query manager should wait before reading the data from the GPU.
-     */
+    // How many frames to wait before reading a timer query back
+    // Reading one the same frame it was issued forces a full CPU/GPU sync, which is precisely the stall a profiler
+    // must not introduce — three frames is comfortably past any driver's queue depth
     private static final int QUERY_FRAME_LAG_COUNT = 3;
 
     private record InFlightQuery(int startTime, int endTime) {

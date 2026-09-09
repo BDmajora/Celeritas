@@ -9,14 +9,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * The set of programs declared by one "dimension" of a shader pack (1.12.2 packs nearly always have a single
- * world directory, {@code world0}). Holds the flattened {@link ProgramSource}s keyed by {@link ProgramId} and the
- * numbered families keyed by {@link ProgramArrayId}, plus the pack's {@link ShaderProperties}.
- * <p>
- * Lookups honor OptiFine's fallback chain: requesting {@code gbuffers_terrain} when the pack didn't supply it returns
- * {@code gbuffers_textured_lit}, then {@code gbuffers_textured}, then {@code gbuffers_basic}.
- */
+// Every program declared by one "dimension" of a pack — on 1.12.2 that is almost always the single world0 directory
+// Holds the flattened ProgramSources keyed by ProgramId, the numbered families keyed by ProgramArrayId, and the
+// pack's ShaderProperties
+// Lookups walk OptiFine's fallback chain rather than returning empty: asking for gbuffers_terrain from a pack that
+// never shipped one gives gbuffers_textured_lit, then gbuffers_textured, then gbuffers_basic. That chain is why a
+// pack with three shader files can still shade the whole world
 public final class ProgramSet {
     private final Map<ProgramId, ProgramSource> programs = new EnumMap<>(ProgramId.class);
     private final Map<ProgramArrayId, ProgramSource[]> programArrays = new EnumMap<>(ProgramArrayId.class);
@@ -38,9 +36,8 @@ public final class ProgramSet {
         return this.properties;
     }
 
-    /**
-     * Resolves a program by id, walking the OptiFine fallback chain when the requested program is absent or invalid.
-     */
+    // Resolves a program by id, walking the fallback chain when the requested one is absent OR invalid — an
+    // unparseable program falls back the same way a missing one does, so one bad file does not kill a whole phase
     public Optional<ProgramSource> get(ProgramId id) {
         ProgramId current = id;
         while (current != null) {
@@ -53,16 +50,15 @@ public final class ProgramSet {
         return Optional.empty();
     }
 
-    /** @return the directly-declared source for {@code id}, without walking the fallback chain. */
+    // The source declared for that id specifically, with no fallback — used where "did the pack actually ship
+    // this?" is the question, rather than "what should run for this phase?"
     public Optional<ProgramSource> getDirect(ProgramId id) {
         ProgramSource source = this.programs.get(id);
         return (source != null && source.isValid()) ? Optional.of(source) : Optional.empty();
     }
 
-    /**
-     * @return the program at {@code index} within a numbered family ({@code composite}, {@code deferred},
-     * {@code shadowcomp}), or empty if not present.
-     */
+    // The program at that index within a numbered family — composite, deferred, shadowcomp — or empty
+    // No fallback chain here: a missing composite3 means the chain stops, not that composite2 runs twice
     public Optional<ProgramSource> get(ProgramArrayId id, int index) {
         ProgramSource[] arr = this.programArrays.get(id);
         if (arr == null || index < 0 || index >= arr.length) {
@@ -76,10 +72,9 @@ public final class ProgramSet {
         return this.programArrays.get(id);
     }
 
-    /**
-     * @return every directly-declared (non-fallback) valid program, keyed by its source name (e.g.
-     * {@code gbuffers_terrain}, {@code composite2}). Used by the pipeline to compile the pack's programs.
-     */
+    // Every directly-declared valid program keyed by source name, e.g. gbuffers_terrain or composite2
+    // Non-fallback on purpose: this drives compilation, and compiling a fallback under its own name would build the
+    // same source several times over
     public Map<String, ProgramSource> collectDeclaredPrograms() {
         Map<String, ProgramSource> result = new java.util.LinkedHashMap<>();
         for (Map.Entry<ProgramId, ProgramSource> e : this.programs.entrySet()) {
@@ -101,7 +96,7 @@ public final class ProgramSet {
         return result;
     }
 
-    /** @return the directly-declared (non-fallback) program names, for diagnostics. */
+    // The directly-declared program names, for reporting what a pack actually ships
     public List<String> listDeclaredPrograms() {
         List<String> names = new ArrayList<>();
         for (Map.Entry<ProgramId, ProgramSource> e : this.programs.entrySet()) {

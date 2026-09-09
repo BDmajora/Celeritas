@@ -5,13 +5,11 @@ import com.bdmajora.impetus.engine.impl.render.chunk.RenderSection;
 import com.bdmajora.impetus.engine.impl.render.chunk.data.BuiltRenderSectionData;
 import com.bdmajora.impetus.engine.impl.render.chunk.terrain.TerrainRenderPass;
 import com.bdmajora.impetus.engine.impl.render.chunk.data.BuiltSectionMeshParts;
-import org.jetbrains.annotations.Nullable;
 
-/**
- * The result of a chunk rebuild task which contains any and all data that needs to be processed or uploaded on
- * the main thread. If a task is cancelled after finishing its work and not before the result is processed, the result
- * will instead be discarded.
- */
+// Everything a finished chunk rebuild produced that still has to be processed or uploaded on the main thread
+// A worker cannot upload its own result, so the output crosses the thread boundary as this object
+// A task cancelled after it finished but before its result was processed has that result DISCARDED rather than
+// uploaded — otherwise a section the player already left would be re-added to the draw lists
 public class ChunkBuildOutput extends ChunkTaskOutput {
     public final BuiltRenderSectionData info;
     public final Reference2ReferenceMap<TerrainRenderPass, BuiltSectionMeshParts> meshes;

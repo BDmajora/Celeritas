@@ -13,16 +13,13 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 
-/**
- * Lights the first-person hand and the item in it.
- *
- * <p>The held item is drawn after the world with its own lightmap coordinate, so it does not pick up
- * the light of the torch it <em>is</em>. Without this the world brightens but the player's own arm
- * stays dark, which reads as a bug rather than a stylistic choice.
- *
- * <p>The argument being modified is {@code getCombinedLight}'s minimum block light, not the light
- * itself — raising the floor is how vanilla already handles a held light source.
- */
+// Lights the first-person hand and whatever it is holding
+// The held item is drawn after the world with its own lightmap coordinate, so it never picks up the light of the
+// torch it IS. Without this the world brightens while the player's own arm stays dark, which reads as a bug rather
+// than a stylistic choice
+// What gets modified is getCombinedLight's MINIMUM BLOCK LIGHT argument, not the resulting light — raising that
+// floor is how vanilla already handles a held light source, so this follows the existing mechanism instead of
+// overriding the result
 @Mixin(ItemRenderer.class)
 public abstract class ItemRendererMixin {
     @Shadow

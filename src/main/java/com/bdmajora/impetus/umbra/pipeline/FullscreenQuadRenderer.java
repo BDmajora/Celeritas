@@ -9,23 +9,20 @@ import java.nio.FloatBuffer;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * Draws the full-screen quad for the composite/deferred/final passes. Owns a tiny VAO+VBO holding four vertices
- * ([0,1] position + texcoord, drawn as a triangle strip) — the modern replacement for the immediate-mode
- * {@code Tessellator} quad that OptiFine/AUSM used, which cannot work when a core-profile VAO is current.
- * <p>
- * Vertex layout matches the attribute slots {@link FullscreenTransformer}-generated programs are linked with:
- * {@code a_Position} at {@link #POSITION_SLOT}, {@code a_TexCoord} at {@link #TEXCOORD_SLOT}.
- */
+// Draws the full-screen quad every composite, deferred and final pass renders through
+// One tiny VAO and VBO holding four vertices — [0,1] position plus texcoord, drawn as a triangle strip
+// This replaces the immediate-mode Tessellator quad OptiFine used, which cannot work at all once a core-profile
+// VAO is current
+// The vertex layout matches the attribute slots FullscreenTransformer-generated programs are linked against:
+// a_Position at POSITION_SLOT, a_TexCoord at TEXCOORD_SLOT
 public class FullscreenQuadRenderer {
     public static final int POSITION_SLOT = 0;
     public static final int TEXCOORD_SLOT = 1;
-    /**
-     * Modern (#version 130+) packs address the fullscreen quad through the fixed-function built-ins {@code gl_Vertex}
-     * and {@code gl_MultiTexCoord0}. On the compatibility profile these alias generic attribute locations 0 and 8
-     * respectively, so {@code POSITION_SLOT} already feeds {@code gl_Vertex}; we additionally mirror the texcoord into
-     * slot 8 so {@code gl_MultiTexCoord0} is populated. (Harmless for the GLSL-120 path, which reads slot 1.)
-     */
+    // Modern (#version 130+) packs address the quad through the fixed-function built-ins gl_Vertex and
+    // gl_MultiTexCoord0 rather than named attributes
+    // On the compatibility profile those alias generic attribute locations 0 and 8, so POSITION_SLOT already feeds
+    // gl_Vertex for free; the texcoord is additionally mirrored into slot 8 so gl_MultiTexCoord0 is populated too
+    // Harmless on the GLSL-120 path, which reads its texcoord from slot 1 and ignores this
     public static final int MULTITEXCOORD0_SLOT = 8;
 
     private static final int STRIDE = 4 * Float.BYTES;
@@ -70,7 +67,8 @@ public class FullscreenQuadRenderer {
         LWJGL.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
     }
 
-    /** Draws the quad with whatever program/framebuffer/samplers are currently bound. Leaves VAO 0 bound. */
+    // Draws the quad against whatever program, framebuffer and samplers are already bound — this sets none of them
+    // Leaves VAO 0 bound on the way out, so vanilla's immediate-mode drawing afterwards is not fed our vertex arrays
     public void draw() {
         LWJGL.glBindVertexArray(this.vertexArray);
         LWJGL.glDrawArrays(GL11.GL_TRIANGLE_STRIP, 0, 4);

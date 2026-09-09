@@ -10,16 +10,13 @@ import org.spongepowered.asm.mixin.injection.At;
 
 import java.util.List;
 
-/**
- * Adds a tracked-source count to the F3 overlay.
- *
- * <p>Hooks the {@code call()} <em>call site</em> in {@code renderDebugInfoLeft} rather than injecting
- * at {@code call()}'s own RETURN. Extras' {@code steady_debug_hud} mixin caches that method's result
- * and serves a copy from a cancellable HEAD injection, which adds a second RETURN instruction to the
- * method — so a RETURN injector here would fire on both the real return and the cache-hit return,
- * and which of those happens depends on mixin application order. The call site exists exactly once
- * per frame regardless, so this stays correct whichever way the two mixins are ordered.
- */
+// Adds a tracked-source count to the F3 overlay
+// Hooks the call() CALL SITE inside renderDebugInfoLeft rather than injecting at call()'s own RETURN
+// The reason is a collision with Extras' steady_debug_hud mixin, which caches that method's result and serves a
+// copy from a cancellable HEAD injection — adding a second RETURN instruction to the method
+// A RETURN injector here would then fire on both the real return and the cache-hit return, and which one happens
+// depends on mixin application order. The call site exists exactly once per frame regardless, so hooking it stays
+// correct however the two mixins end up ordered
 @Mixin(GuiOverlayDebug.class)
 public abstract class GuiOverlayDebugMixin {
     @ModifyExpressionValue(

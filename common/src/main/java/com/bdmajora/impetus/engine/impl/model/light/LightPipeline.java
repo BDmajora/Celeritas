@@ -5,30 +5,20 @@ import com.bdmajora.impetus.engine.impl.model.quad.ModelQuadView;
 import com.bdmajora.impetus.engine.impl.model.quad.properties.ModelQuadFacing;
 import org.jetbrains.annotations.NotNull;
 
-/**
- * Light pipelines allow model quads for any location in the world to be lit regardless of what produced them
- * (blocks, fluids, or block entities).
- */
+// light pipelines light model quads for any location in the world, regardless of what produced them -
+// blocks, fluids or block entities
 public interface LightPipeline {
-    /**
-     * Calculates the light data for a given block model quad, storing the result in {@param out}.
-     * @param quad The block model quad
-     * @param x x-coordinate of the model this quad belongs to
-     * @param y y-coordinate of the model this quad belongs to
-     * @param z z-coordinate of the model this quad belongs to
-     * @param out The data arrays which will store the calculated light data results
-     * @param cullFace The cull face of the quad, may be {@link ModelQuadFacing#UNASSIGNED} if there is none
-     * @param lightFace The light face of the quad, must not be {@link ModelQuadFacing#UNASSIGNED}
-     * @param shade True if the block is shaded by ambient occlusion
-     * @param applyAoDepthBlending True if AO for partially inset quads should be computed via blending the results
-     *                             for fully inset and non-inset quads, rather than assuming fully inset like vanilla
-     */
+    // calculates the light data for one block model quad, storing the result in out
+    // x/y/z are the coordinates of the model the quad belongs to
+    // cullFace is the quad's cull face and may be ModelQuadFacing#UNASSIGNED if it has none;
+    // lightFace is the light face and must not be UNASSIGNED
+    // shade is true when the block is shaded by ambient occlusion
+    // applyAoDepthBlending computes AO for partially inset quads by blending the fully-inset and
+    // non-inset results, rather than assuming fully inset the way vanilla does
     void calculate(ModelQuadView quad, int x, int y, int z, QuadLightData out, @NotNull ModelQuadFacing cullFace,
                    @NotNull ModelQuadFacing lightFace, boolean shade, boolean applyAoDepthBlending);
 
-    /**
-     * Reset any cached data for this pipeline.
-     */
+    // resets any cached data held by this pipeline
     default void reset() {
 
     }

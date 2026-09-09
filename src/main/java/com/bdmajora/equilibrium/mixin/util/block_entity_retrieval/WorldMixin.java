@@ -10,17 +10,13 @@ import org.spongepowered.asm.mixin.Mixin;
 
 import javax.annotation.Nullable;
 
-/**
- * Gives {@code World} a non-creating tile entity lookup.
- *
- * <p>Deliberately additive: nothing vanilla is replaced, so {@code World#getTileEntity} keeps its
- * creating behaviour for the callers that depend on it. Only code that has explicitly opted in — the
- * hopper — reads through this.
- *
- * <p>{@code EnumCreateEntityType.CHECK} is the mode that answers honestly. {@code IMMEDIATE} builds
- * and registers a tile entity; {@code QUEUED} schedules one to be built later, which is just as much
- * a side effect. {@code CHECK} returns what is there.
- */
+// gives World a non-creating tile entity lookup
+// deliberately additive: nothing vanilla is replaced, so World#getTileEntity keeps its creating
+// behaviour for the callers that depend on it, and only code that has explicitly opted in - the
+// hopper - reads through this
+// EnumCreateEntityType.CHECK is the mode that answers honestly: IMMEDIATE builds and registers a
+// tile entity, QUEUED schedules one to be built later which is just as much a side effect, and
+// CHECK returns what is actually there
 @Mixin(World.class)
 public abstract class WorldMixin implements TileEntityAccess {
     @Nullable

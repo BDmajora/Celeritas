@@ -150,10 +150,9 @@ class AoFaceData {
         this.flags |= AoCompletionFlags.HAS_LIGHT_DATA;
     }
 
-    /**
-     * Vanilla's {@code BlockModelRenderer.AmbientOcclusionFace.getAoBrightness}, copied verbatim so the comparison is
-     * against the real reference rather than a paraphrase of it. {@code br4} is the centre sample.
-     */
+    // Vanilla's BlockModelRenderer.AmbientOcclusionFace.getAoBrightness, copied VERBATIM so any comparison is
+    // against the real reference rather than a paraphrase that might differ in the rounding
+    // br4 is the centre sample; the other three are the corner's neighbours
     private static int vanillaAoBrightness(int br1, int br2, int br3, int br4) {
         if (br1 == 0) {
             br1 = br4;

@@ -13,44 +13,29 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Map;
 import java.util.Objects;
 
-/**
- * A terrain render pass corresponds to a draw call to render some subset of terrain geometry. Passes are generally
- * used for fixed configuration that will not change from quad to quad and allow for optimizations to be made
- * within the terrain shader code at compile time (e.g. omitting the fragment discard conditional entirely on the solid pass).
- * <p></p>
- * Geometry that shares the same terrain render pass may still be able to specify some more dynamic properties. See {@link Material}
- * for more information.
- */
+// a terrain render pass corresponds to one draw call rendering some subset of terrain geometry
+// passes are generally used for fixed configuration that will not change from quad to quad, which lets
+// the terrain shader optimize at compile time - omitting the fragment discard conditional entirely on
+// the solid pass, for instance
+// geometry sharing a pass can still specify more dynamic properties; see Material
 @Accessors(fluent = true)
 @EqualsAndHashCode
 public class TerrainRenderPass {
-    /**
-     * The friendly name of this render pass.
-     */
+    // the friendly name of this render pass
     @Getter
     @EqualsAndHashCode.Exclude
     private final String name;
 
-    /**
-     * A callback used to set up/clear GPU pipeline state.
-     */
+    // callback that sets up and clears the GPU pipeline state
     private final PipelineState pipelineState;
 
-    /**
-     * Whether sections on this render pass should be rendered farthest-to-nearest, rather than nearest-to-farthest.
-     */
+    // whether sections on this pass render farthest-to-nearest rather than nearest-to-farthest
     private final boolean useReverseOrder;
-    /**
-     * Whether fragment alpha testing should be enabled for this render pass.
-     */
+    // whether fragment alpha testing should be enabled for this render pass
     private final boolean fragmentDiscard;
-    /**
-     * Whether this render pass wants to opt in to translucency sorting if enabled.
-     */
+    // whether this render pass wants to opt in to translucency sorting, when it is enabled
     private final boolean useTranslucencySorting;
-    /**
-     * Whether this render pass has no lightmap texture.
-     */
+    // whether this render pass has no lightmap texture
     private final boolean hasNoLightmap;
 
     private final @NotNull ChunkPrimitiveType primitiveType;

@@ -2,14 +2,13 @@ package com.bdmajora.impetus.engine.impl;
 
 import com.bdmajora.impetus.engine.impl.gui.ImpetusGameOptions;
 
-/**
- * Central, hot-readable snapshot of the option values that the render engine consults on hot paths (meshing,
- * translucency sorting, fluid rendering, entity sorting). The GUI writes user-facing values into
- * {@link ImpetusGameOptions}; {@link #apply(ImpetusGameOptions)} pushes the subset the engine reads per-frame
- * into plain static fields so those paths never touch config objects or synchronization.
- *
- * <p>Populated once at startup and again whenever options are applied.
- */
+// A hot-readable snapshot of just the option values the render engine consults on hot paths: meshing,
+// translucency sorting, fluid rendering, entity sorting
+// The GUI writes user-facing values into ImpetusGameOptions; apply() then pushes the subset the engine reads
+// per-frame into plain static fields
+// The point is that those paths never touch a config object or take a lock — a mesh worker reading an option is a
+// static field read and nothing more
+// Populated once at startup and again on every Apply
 public final class ImpetusRuntimeOptions {
     private ImpetusRuntimeOptions() {
     }

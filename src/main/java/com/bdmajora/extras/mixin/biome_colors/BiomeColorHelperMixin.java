@@ -8,15 +8,11 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
- * Replaces biome grass, foliage and water tint with fixed colours.
- *
- * <p>The saving is not the lookup itself but the blend around it: these methods average the tint
- * across every biome within the blend radius, which is up to 225 samples per block face. Returning a
- * constant skips all of it, at the cost of every biome looking like plains.
- *
- * <p>1.20's equivalent is {@code BiomeColors}; on 1.12.2 it is {@link BiomeColorHelper}.
- */
+// replaces biome grass, foliage and water tint with fixed colours
+// the saving is not the lookup itself but the blend around it: these methods average the tint across
+// every biome within the blend radius, which is up to 225 samples per block face, and returning a
+// constant skips all of it at the cost of every biome looking like plains
+// 1.20's equivalent is BiomeColors; on 1.12.2 it is BiomeColorHelper
 @Mixin(BiomeColorHelper.class)
 public class BiomeColorHelperMixin {
     @Unique

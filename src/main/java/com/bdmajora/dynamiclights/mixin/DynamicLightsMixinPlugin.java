@@ -7,13 +7,10 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Announces the subsystem; gates nothing.
- *
- * <p>Same reasoning as {@code ExtrasMixinPlugin}: every mixin here reads the mode switch at call
- * time, so gating them at coremod load would trade a live switch for a predictable-branch read.
- * Turning dynamic lights off leaves the mixins applied and inert.
- */
+// Exists to announce the subsystem; it gates nothing
+// Same reasoning as ExtrasMixinPlugin: every mixin here reads the mode switch at CALL time, so gating them at
+// coremod load would trade a live, user-changeable switch for one predictable-branch read
+// Turning dynamic lights off therefore leaves the mixins applied and inert rather than unapplied
 public class DynamicLightsMixinPlugin implements IMixinConfigPlugin {
     // Nothing to prepare; the interface requires the method
     @Override

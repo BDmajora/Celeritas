@@ -15,12 +15,11 @@ import com.bdmajora.impetus.umbra.pipeline.VanillaFeatureToggles;
 import com.bdmajora.impetus.umbra.shaderpack.loading.ProgramId;
 import com.bdmajora.impetus.umbra.uniforms.CelestialUniforms;
 
-/**
- * Switches the sky phase to {@code gbuffers_skytextured} for the textured celestial bodies (sun and moon) inside
- * {@code renderSky}, and back to {@code gbuffers_skybasic} once they are drawn — OptiFine's
- * {@code preCelestialRotate}/sun/moon program split. The outer {@code "sky"} profiler anchor in
- * {@code EntityRendererMixin} has already selected {@code skybasic} for the sky discs/horizon.
- */
+// switches the sky phase to gbuffers_skytextured for the textured celestial bodies (sun and moon)
+// inside renderSky, and back to gbuffers_skybasic once they are drawn - OptiFine's preCelestialRotate
+// sun/moon program split
+// the outer "sky" profiler anchor in EntityRendererMixin has already selected skybasic for the sky
+// discs and horizon
 @Mixin(RenderGlobal.class)
 public class RenderGlobalMixin {
     private static final String SUN_TEXTURES_FIELD =
@@ -28,11 +27,10 @@ public class RenderGlobalMixin {
     private static final String MOON_TEXTURES_FIELD =
             "Lnet/minecraft/client/renderer/RenderGlobal;MOON_PHASES_TEXTURES:Lnet/minecraft/util/ResourceLocation;";
 
-    /**
-     * Right before the vanilla sky disc VBO is drawn (skybasic phase already active), draw OptiFine's horizon fill so
-     * the thin uncovered band at the horizon lands in colortex1 with the atmospheric sky colour instead of stale HDR.
-     * Matches OptiFine's {@code Shaders.preSkyList()} call site (immediately before {@code skyVBO.bindBuffer()}).
-     */
+    // right before the vanilla sky disc VBO is drawn, with the skybasic phase already active, draw
+    // OptiFine's horizon fill so the thin uncovered band at the horizon lands in colortex1 with the
+    // atmospheric sky colour instead of stale HDR
+    // matches OptiFine's Shaders.preSkyList() call site, immediately before skyVBO.bindBuffer()
     @Inject(method = "renderSky(FI)V",
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/client/renderer/vertex/VertexBuffer;bindBuffer()V", ordinal = 0))
@@ -43,23 +41,21 @@ public class RenderGlobalMixin {
         }
     }
 
-    /**
-     * OptiFine's {@code Shaders.preCelestialRotate()} ({@code Shaders.java:3918}): rotate the live modelview by the
-     * pack's {@code sunPathRotation} between vanilla's fixed {@code -90°} Y-rotation and its time-of-day X-rotation,
-     * so the sun, moon and stars are actually drawn on the tilted arc.
-     * <p>
-     * Without it the pack's idea of where the sun is and the sun you can see disagree. {@code sunPosition},
-     * {@code shadowLightPosition} and the shadow projection already include {@code sunPathRotation} (see
-     * {@code CelestialUniforms.getCelestialPosition}), but vanilla's {@code renderSky} does not — so the world is lit
-     * and shadowed from one direction while the sun disc is drawn at another. OptiFine cannot get this wrong by
-     * construction: it leaves the rotation in the modelview that draws the celestial quads, then reads
-     * {@code sunPosition} straight back out of that same matrix in {@code postCelestialRotate()}.
-     * <p>
-     * Umbra does <em>not</em> do this — it rotates only the uniform and the shadow matrix. That is survivable there
-     * because modern versions draw the sky through a different renderer and packs that care paint their own; on
-     * 1.12 the vanilla sun disc goes through {@code gbuffers_skytextured} and the mismatch is plainly visible. This
-     * is not a corner case: 19 of the 22 packs installed here set a non-zero value, most of them -40°.
-     */
+    // OptiFine's Shaders.preCelestialRotate() (Shaders.java:3918): rotate the live modelview by the
+    // pack's sunPathRotation between vanilla's fixed -90 degree Y-rotation and its time-of-day
+    // X-rotation, so the sun, moon and stars are actually drawn on the tilted arc
+    // without it the pack's idea of where the sun is and the sun you can see disagree: sunPosition,
+    // shadowLightPosition and the shadow projection already include sunPathRotation (see
+    // CelestialUniforms.getCelestialPosition), but vanilla's renderSky does not, so the world is lit and
+    // shadowed from one direction while the sun disc is drawn at another
+    // OptiFine cannot get this wrong by construction: it leaves the rotation in the modelview that draws
+    // the celestial quads, then reads sunPosition straight back out of that same matrix in
+    // postCelestialRotate()
+    // Umbra does *not* do this - it rotates only the uniform and the shadow matrix - which is survivable
+    // there because modern versions draw the sky through a different renderer and packs that care paint
+    // their own; on 1.12 the vanilla sun disc goes through gbuffers_skytextured and the mismatch is
+    // plainly visible
+    // this is not a corner case: 19 of the 22 packs installed here set a non-zero value, most of them -40
     @Inject(method = "renderSky(FI)V",
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/client/multiplayer/WorldClient;getCelestialAngle(F)F", ordinal = 1))
@@ -79,12 +75,12 @@ public class RenderGlobalMixin {
         impetus$setPhase(ProgramId.SkyTextured, 4); // MC_RENDER_STAGE_SUN
     }
 
-    /**
-     * The moon needs its own stage. Vanilla draws sun then moon through one program, so a single anchor would report
-     * {@code SUN} for both — and 13 call sites across the installed packs branch on {@code MC_RENDER_STAGE_MOON}
-     * (Spooklementary and Pastel key their moon tinting on it). Reporting the sun for the moon is worse than
-     * reporting nothing, which is what made this worth splitting rather than approximating.
-     */
+    // the moon needs its own stage
+    // vanilla draws sun then moon through one program, so a single anchor would report SUN for both -
+    // and 13 call sites across the installed packs branch on MC_RENDER_STAGE_MOON, with Spooklementary
+    // and Pastel keying their moon tinting on it
+    // reporting the sun for the moon is worse than reporting nothing, which is what made this worth
+    // splitting rather than approximating
     @Inject(method = "renderSky(FI)V",
             at = @At(value = "FIELD", target = MOON_TEXTURES_FIELD, opcode = org.objectweb.asm.Opcodes.GETSTATIC),
             require = 0)
@@ -105,16 +101,14 @@ public class RenderGlobalMixin {
         impetus$setPhase(ProgramId.SkyBasic, 6); // MC_RENDER_STAGE_STARS
     }
 
-    /**
-     * OptiFine 1.12 brackets the actual cloud geometry inside {@code RenderGlobal.renderClouds} with
-     * {@code Shaders.beginClouds()}/{@code Shaders.endClouds()}, while modern Umbra brackets
-     * {@code LevelRenderer.renderClouds} at method entry/return. Do this at the geometry boundary instead of at
-     * {@code EntityRenderer}'s profiler label; shader-pack properties can cancel the dispatcher, and a leaked
-     * {@code gbuffers_clouds} phase leaves colortex4 selected until the composite chain.
-     * <p>
-     * These anchors only fire on the vanilla fallback path — {@code RenderGlobalMixin} in {@code core.terrain}
-     * normally replaces the geometry with Sodium's cloud renderer and brackets the phase itself.
-     */
+    // OptiFine 1.12 brackets the actual cloud geometry inside RenderGlobal.renderClouds with
+    // Shaders.beginClouds()/Shaders.endClouds(), while modern Umbra brackets LevelRenderer.renderClouds
+    // at method entry and return
+    // this does it at the geometry boundary rather than at EntityRenderer's profiler label, because
+    // shader-pack properties can cancel the dispatcher and a leaked gbuffers_clouds phase leaves
+    // colortex4 selected until the composite chain
+    // these anchors only fire on the vanilla fallback path - RenderGlobalMixin in core.terrain normally
+    // replaces the geometry with Sodium's cloud renderer and brackets the phase itself
     @Inject(method = "renderClouds(FIDDD)V",
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/client/renderer/GlStateManager;disableCull()V",
@@ -134,10 +128,8 @@ public class RenderGlobalMixin {
         impetus$setPhase(null);
     }
 
-    /**
-     * No {@code clouds} directive check here any more: {@code GameSettingsCloudsMixin} folds the pack's setting into
-     * {@code shouldRenderClouds()}, so reaching this method already means fancy clouds are the effective mode.
-     */
+    // no clouds directive check here any more: GameSettingsCloudsMixin folds the pack's setting into
+    // shouldRenderClouds(), so reaching this method already means fancy clouds are the effective mode
     @Inject(method = "renderCloudsFancy(FIDDD)V", at = @At("HEAD"), require = 0)
     private void impetus$beginFancyClouds(float partialTicks, int pass, double x, double y, double z, CallbackInfo ci) {
         impetus$setPhase(ProgramId.Clouds);
@@ -148,21 +140,16 @@ public class RenderGlobalMixin {
         impetus$setPhase(null);
     }
 
-    /**
-     * Binds {@code gbuffers_line} (falling back to {@code gbuffers_basic}) for the block selection box, matching
-     * Umbra, which routes vanilla's line render type through that program.
-     * <p>
-     * Vanilla draws the outline in the {@code "outline"} profiler section, which runs straight after
-     * {@code "entities"} and <em>before</em> {@code "destroyProgress"} ({@code EntityRenderer.renderWorldPass}: the
-     * outline block, then the debug renderer, then the {@code damagedBlocks} block). So without this anchor the
-     * outline inherits whatever {@code impetus$phaseEntities} left bound and is drawn through
-     * {@code gbuffers_entities} — a program that shades it as if it were an entity surface and writes it into the
-     * entity program's DRAWBUFFERS, normals and material targets included.
-     * <p>
-     * OptiFine reaches the same place from the other side: its hook inside {@code drawSelectionBox} is
-     * {@code Shaders.disableTexture2D()}, which is {@code useProgram(ProgramBasic)} whenever a textured program is
-     * current.
-     */
+    // binds gbuffers_line, falling back to gbuffers_basic, for the block selection box - matching Umbra,
+    // which routes vanilla's line render type through that program
+    // vanilla draws the outline in the "outline" profiler section, which runs straight after "entities"
+    // and *before* "destroyProgress" (in EntityRenderer.renderWorldPass: the outline block, then the
+    // debug renderer, then the damagedBlocks block)
+    // so without this anchor the outline inherits whatever impetus$phaseEntities left bound and is drawn
+    // through gbuffers_entities - a program that shades it as if it were an entity surface and writes it
+    // into the entity program's DRAWBUFFERS, normals and material targets included
+    // OptiFine reaches the same place from the other side: its hook inside drawSelectionBox is
+    // Shaders.disableTexture2D(), which is useProgram(ProgramBasic) whenever a textured program is current
     @Inject(method = "drawSelectionBox", at = @At("HEAD"), cancellable = true, require = 0)
     private void impetus$beginBlockOutline(net.minecraft.entity.player.EntityPlayer player,
                                            net.minecraft.util.math.RayTraceResult target, int execute,
@@ -231,11 +218,10 @@ public class RenderGlobalMixin {
      * can turn it off. `setPhase` already applies that directive when a pack declares one.
      */
 
-    /**
-     * {@code sky = false}: draw no vanilla sky geometry at all. The pack paints the sky in its composite chain
-     * instead, so the sky dome, void plane, sun, moon and stars are all skipped together — this is a stronger
-     * statement than the individual {@code sun}/{@code moon}/{@code stars} switches, which only remove one body.
-     */
+    // sky = false: draw no vanilla sky geometry at all
+    // the pack paints the sky in its composite chain instead, so the sky dome, void plane, sun, moon and
+    // stars are all skipped together - a stronger statement than the individual sun/moon/stars switches,
+    // which only remove one body
     @Inject(method = "renderSky(FI)V", at = @At("HEAD"), cancellable = true, require = 0)
     private void impetus$suppressSky(float partialTicks, int pass, CallbackInfo ci) {
         if (!VanillaFeatureToggles.shouldRenderSky()) {
@@ -243,11 +229,9 @@ public class RenderGlobalMixin {
         }
     }
 
-    /**
-     * {@code backFace.<layer>}: vanilla culls back faces for every terrain layer. A pack that shades both sides of a
-     * face asks for a layer's back faces to be kept, so culling is turned off around that layer's draw and restored
-     * afterwards.
-     */
+    // backFace.<layer>: vanilla culls back faces for every terrain layer
+    // a pack that shades both sides of a face asks for a layer's back faces to be kept, so culling is
+    // turned off around that layer's draw and restored afterwards
     @Inject(method = "renderBlockLayer(Lnet/minecraft/util/BlockRenderLayer;DILnet/minecraft/entity/Entity;)I",
             at = @At("HEAD"), require = 0)
     private void impetus$applyBackFaceCulling(net.minecraft.util.BlockRenderLayer layer, double partialTicks, int pass,
@@ -274,10 +258,8 @@ public class RenderGlobalMixin {
     @Unique
     private boolean impetus$restoreCull;
 
-    /**
-     * {@code skipAllRendering}: draw no terrain at all, leaving the composite chain to produce the whole image.
-     * Debug/benchmark packs use this.
-     */
+    // skipAllRendering: draw no terrain at all, leaving the composite chain to produce the whole image
+    // debug and benchmark packs use this
     @Inject(method = "renderBlockLayer(Lnet/minecraft/util/BlockRenderLayer;DILnet/minecraft/entity/Entity;)I",
             at = @At("HEAD"), cancellable = true, require = 0)
     private void impetus$skipTerrain(net.minecraft.util.BlockRenderLayer layer, double partialTicks, int pass,
@@ -289,11 +271,10 @@ public class RenderGlobalMixin {
         }
     }
 
-    /**
-     * The {@code sun}, {@code moon} and {@code stars} toggles. 1.12.2 draws all three inline in {@code renderSky},
-     * so each is suppressed at its own draw: the celestial quads by swapping in a fully transparent texture (they
-     * are drawn additively, so a transparent sample contributes nothing), the star field by skipping its draw call.
-     */
+    // the sun, moon and stars toggles
+    // 1.12.2 draws all three inline in renderSky, so each is suppressed at its own draw: the celestial
+    // quads by swapping in a fully transparent texture - they are drawn additively, so a transparent
+    // sample contributes nothing - and the star field by skipping its draw call
     @Redirect(method = "renderSky(FI)V",
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/client/renderer/texture/TextureManager;bindTexture"
@@ -331,7 +312,7 @@ public class RenderGlobalMixin {
         }
     }
 
-    /** A 1x1 fully transparent texture, so a suppressed celestial quad still draws but contributes nothing. */
+    // A 1x1 fully transparent texture, so a suppressed celestial quad still draws but contributes nothing.
     @Unique
     private static net.minecraft.util.ResourceLocation impetus$transparentTexture() {
         if (impetus$transparent == null) {
@@ -355,7 +336,7 @@ public class RenderGlobalMixin {
         }
     }
 
-    /** Same, for a phase whose {@code renderStage} is finer than its {@link ProgramId} (sky basic covers sky/stars/void). */
+    // Same, for a phase whose renderStage is finer than its ProgramId (sky basic covers sky/stars/void).
     private static void impetus$setPhase(ProgramId phase, int renderStage) {
         UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null) {

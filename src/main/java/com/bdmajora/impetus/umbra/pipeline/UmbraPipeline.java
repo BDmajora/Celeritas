@@ -15,14 +15,12 @@ import java.util.Map;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * The per-shader-pack rendering pipeline. Constructed on the render thread (a GL context must be current) from a parsed
- * {@link ShaderPack}: it compiles every declared program up front so the user gets an immediate, honest log of what
- * built and what did not — the tangible Phase 2 milestone.
- * <p>
- * Later phases grow this class into the full controller (render targets, per-pass framebuffers, shadow/composite
- * execution). For now it owns the compiled {@link UmbraProgram}s and their teardown.
- */
+// The per-pack compile step: takes a parsed ShaderPack and builds every program it declares
+// Must be constructed on the render thread with a GL context current, since compiling and linking are GL calls
+// Everything is compiled up front rather than on first use, so a pack that will not build says so at load time
+// instead of stuttering into a broken frame halfway through play
+// Owns the compiled programs and their teardown; UmbraRenderingPipeline is the one that owns render targets,
+// framebuffers and pass execution
 public class UmbraPipeline {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -76,7 +74,8 @@ public class UmbraPipeline {
         return this.programs.size();
     }
 
-    /** Frees all GL resources owned by this pipeline. Must be called on the render thread. */
+    // Frees every GL resource this owns. Render thread only, like the constructor — a GL delete from another
+    // thread has no context and silently does nothing, leaking the program
     public void destroy() {
         for (UmbraProgram program : this.programs.values()) {
             program.destroy();

@@ -17,14 +17,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/**
- * Pack-defined custom uniforms and variables ({@code uniform.<type>.<name> = <expr>} /
- * {@code variable.<type>.<name> = <expr>} in {@code shaders.properties}).
- *
- * <p>Variables evaluate once per frame in declaration order (so later expressions can reference earlier
- * results), reading built-in uniform values through {@link CustomUniformInputs}. Entries declared with
- * {@code uniform.} are additionally uploaded to every shader program that declares them.
- */
+// The uniforms and variables a pack defines for itself in shaders.properties, as
+// `uniform.<type>.<name> = <expr>` and `variable.<type>.<name> = <expr>`
+// Both evaluate once per frame in DECLARATION ORDER, which is what lets a later expression reference an earlier
+// result — reordering them would break packs that chain several variables together
+// Built-in uniform values reach the expressions through CustomUniformInputs
+// The only difference between the two forms: a `uniform.` entry is additionally uploaded to every program that
+// declares it, while a `variable.` entry exists purely as an intermediate for other expressions
 public final class CustomUniforms {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -41,7 +40,8 @@ public final class CustomUniforms {
         }
     }
 
-    /** Evaluates all variables for this frame. Call once per frame, before program uniform updates. */
+    // Evaluates every variable for this frame. Once per frame and BEFORE any program uniform update, or programs
+    // upload last frame's values
     public void update() {
         float frameTime = Math.max(SystemTimeUniforms.COUNTER.getLastFrameTime(), 1.0e-4f);
 
@@ -59,7 +59,9 @@ public final class CustomUniforms {
         }
     }
 
-    /** Registers every {@code uniform.}-declared variable with a program's uniform builder. */
+    // Registers every `uniform.`-declared entry with a program's uniform builder
+    // Registered for all of them regardless of whether this program uses any: the builder drops the ones whose
+    // location resolves to -1, so offering everything is both correct and simpler than pre-filtering
     public void assignTo(UniformCollector collector) {
         for (Variable variable : this.variables) {
             if (!variable.isUniform) {
@@ -99,13 +101,10 @@ public final class CustomUniforms {
         return this.variables.size();
     }
 
-    /**
-     * {@return every variable's value as evaluated for the current frame, in declaration order}
-     * <p>
-     * Diagnostics only. These are the values the pack's own {@code uniform.}/{@code variable.} expressions produced,
-     * which is what actually reaches the shader — built-ins of the same name are replaced by these at program build
-     * time. Comparing them against the equivalent built-in is how a divergence between the two shows up.
-     */
+    // Every variable's value as evaluated for the current frame, in declaration order
+    // Reporting only. What makes it worth having: a pack expression may share a name with a built-in, and the
+    // pack's version WINS at program build time — so these are the values that actually reach the shader, and
+    // comparing them against the equivalent built-in is how a divergence between the two becomes visible
     public Map<String, String> snapshot() {
         Map<String, String> out = new LinkedHashMap<>();
         for (Variable variable : this.variables) {

@@ -1,8 +1,6 @@
 package com.bdmajora.impetus.engine.gradle.build.conventions;
 
-/**
- * Taken from GTNHGradle
- */
+// taken from GTNHGradle
 public class RFBArgs {
     public static final String[] JAVA_17_ARGS = new String[] { "-Dfile.encoding=UTF-8",
             "-Djava.system.class.loader=com.gtnewhorizons.retrofuturabootstrap.RfbSystemClassLoader",

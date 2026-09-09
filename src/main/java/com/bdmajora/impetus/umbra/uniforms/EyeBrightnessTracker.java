@@ -6,26 +6,26 @@ import net.minecraft.world.World;
 import org.joml.Vector2f;
 import org.joml.Vector2i;
 
-/**
- * The temporally smoothed per-frame uniforms: {@code eyeBrightness}/{@code eyeBrightnessSmooth} (lightmap coordinates
- * — block, sky, each 0..240 — at the camera's eye, used for the cave-entrance exposure fade) and {@code wetness}
- * (rain strength smoothed with OptiFine's wetness/dryness half-lives). Smoothing must advance exactly once per frame
- * ({@code update()} from the frame hook), not from the uniform suppliers (which run once per program).
- */
+// The temporally smoothed per-frame uniforms
+// eyeBrightness and eyeBrightnessSmooth are the lightmap coordinates at the camera's eye — block and sky, each
+// 0..240 — which packs use for the exposure fade when walking into a cave
+// wetness is rain strength smoothed with OptiFine's separate wetness and dryness half-lives, so getting wet is slow
+// and drying off is slower
+// The smoothing must advance exactly ONCE per frame, from update() on the frame hook — never from the uniform
+// suppliers, which run once per program and would advance it a dozen times a frame at a dozen different rates
 public final class EyeBrightnessTracker {
-    /**
-     * Umbra's defaults, in <em>deciseconds</em> — the unit its {@code SmoothedFloat} takes, which scales the half-life
-     * by {@code 0.1f} to get seconds ({@code SmoothedFloat.java:53}). So the shipped values mean 60s to get fully wet,
-     * 20s to dry off, and 1s of eye-brightness smoothing.
-     * <p>
-     * These were previously hardcoded and, worse, interpreted as <em>ticks</em> ({@code halfLife / 20}), which halved
-     * every one of them: 30s/10s/0.5s. Packs are tuned against the Umbra/OptiFine rates.
-     */
+    // Iris's defaults, in DECISECONDS — the unit its SmoothedFloat takes, which multiplies by 0.1f to reach
+    // seconds. So the shipped values mean 60 seconds to get fully wet, 20 to dry off, and 1 second of
+    // eye-brightness smoothing
+    // These were previously hardcoded AND interpreted as ticks (halfLife / 20), which halved every one of them to
+    // 30s/10s/0.5s. Packs are tuned against the Iris and OptiFine rates, so a doubled rate is visible as rain
+    // effects that snap on instead of fading
     private static final float DEFAULT_WETNESS_HALF_LIFE = 600.0f;
     private static final float DEFAULT_DRYNESS_HALF_LIFE = 200.0f;
     private static final float DEFAULT_EYE_BRIGHTNESS_HALF_LIFE = 10.0f;
 
-    /** Deciseconds. Overwritten per pack load from the {@code const float *Halflife} directives. */
+    // Deciseconds, same unit as the defaults. Overwritten on every pack load from the pack's own
+    // `const float *Halflife` directives, so a pack that tunes these gets its own rates
     private static volatile float wetnessHalfLife = DEFAULT_WETNESS_HALF_LIFE;
     private static volatile float drynessHalfLife = DEFAULT_DRYNESS_HALF_LIFE;
     private static volatile float eyeBrightnessHalfLife = DEFAULT_EYE_BRIGHTNESS_HALF_LIFE;
@@ -38,11 +38,9 @@ public final class EyeBrightnessTracker {
     private EyeBrightnessTracker() {
     }
 
-    /**
-     * Installs the pack's {@code wetnessHalflife} / {@code drynessHalflife} / {@code eyeBrightnessHalflife}, in
-     * deciseconds. Called once per pack load; a non-positive value means "snap instantly", which is what a half-life
-     * of zero degenerates to.
-     */
+    // Installs the pack's own wetnessHalflife, drynessHalflife and eyeBrightnessHalflife, in deciseconds
+    // Once per pack load. A non-positive value means snap instantly, which is the natural limit a half-life of zero
+    // degenerates to rather than a special case
     public static void setHalfLives(float wetnessDeciseconds, float drynessDeciseconds,
                                    float eyeBrightnessDeciseconds) {
         wetnessHalfLife = wetnessDeciseconds;
@@ -50,11 +48,10 @@ public final class EyeBrightnessTracker {
         eyeBrightnessHalfLife = eyeBrightnessDeciseconds;
     }
 
-    /**
-     * The exponential-smoothing blend factor for one frame: the fraction of the way to move toward the target so that
-     * half the remaining distance is covered every {@code halfLifeDeciseconds}. Umbra expresses the same thing as
-     * {@code 1 - e^(-kt)} with {@code k = ln2 / (halfLife * 0.1)}.
-     */
+    // The exponential-smoothing blend factor for one frame: how far to move toward the target so that half the
+    // remaining distance is covered every halfLifeDeciseconds
+    // Derived from the frame time rather than assumed constant, so the smoothing rate is the same at 30 and 200 fps
+    // Iris writes the identical thing as 1 - e^(-kt) with k = ln2 / (halfLife * 0.1)
     private static float smoothingFactor(float halfLifeDeciseconds, float deltaSeconds) {
         if (halfLifeDeciseconds <= 0.0f) {
             return 1.0f;
@@ -62,7 +59,8 @@ public final class EyeBrightnessTracker {
         return 1.0f - (float) Math.pow(0.5, deltaSeconds / (halfLifeDeciseconds * 0.1f));
     }
 
-    /** Advances the tracker one frame. Called from the pipeline's frame-begin hook on the render thread. */
+    // Advances the tracker one frame, from the pipeline's frame-begin hook on the render thread — exactly once,
+    // which is the property the whole class depends on
     public static void update() {
         long now = System.nanoTime();
         float deltaSeconds = lastUpdateNanos < 0 ? 1.0f : (now - lastUpdateNanos) / 1_000_000_000.0f;

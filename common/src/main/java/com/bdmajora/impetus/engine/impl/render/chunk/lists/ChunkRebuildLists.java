@@ -7,11 +7,12 @@ import java.util.ArrayDeque;
 import java.util.EnumMap;
 import java.util.Map;
 
-/**
- * The list of render sections that need to be rebuilt.
- * @param byUpdateType a map from update type to the appropriate list of sections
- * @param hasAdditionalUpdates whether there were additional updates not queued for efficiency reasons
- */
+// The render sections needing a rebuild, bucketed by how urgent that rebuild is
+// byUpdateType maps each update type to its own queue, which is what lets an important rebuild jump ahead of a
+// merely-nearby one
+// hasAdditionalUpdates says whether more sections wanted rebuilding than were queued — the graph walk caps how
+// many it enqueues per frame, and this tells the caller to come back rather than assume it is finished
+// queueOverflowCounts records how many were dropped per type, for the debug overlay
 public record ChunkRebuildLists(Map<ChunkUpdateType, ArrayDeque<RenderSection>> byUpdateType, boolean hasAdditionalUpdates, Map<ChunkUpdateType, Integer> queueOverflowCounts) {
     public static final ChunkRebuildLists EMPTY;
 

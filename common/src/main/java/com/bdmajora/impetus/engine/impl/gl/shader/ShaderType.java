@@ -4,14 +4,11 @@ import com.bdmajora.impetus.lwjgl.GL20;
 import com.bdmajora.impetus.lwjgl.GL32;
 import com.bdmajora.impetus.lwjgl.GL42;
 import com.bdmajora.impetus.lwjgl.GL43;
-import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 
-/**
- * An enumeration over the supported OpenGL shader types.
- */
+// The shader stages this engine compiles, each carrying its GL type enum
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public enum ShaderType {
     VERTEX(GL20.GL_VERTEX_SHADER, "vsh"),

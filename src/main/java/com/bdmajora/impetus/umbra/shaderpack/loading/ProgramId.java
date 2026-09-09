@@ -5,16 +5,13 @@ import com.bdmajora.impetus.lwjgl.GL11;
 
 import java.util.Locale;
 
-/**
- * The set of shader programs that an OptiFine-style 1.12.2 shader pack may declare.
- * <p>
- * Unlike modern Umbra (which exposes the {@code rendertype_*} programs), 1.12.2 packs only ever use the classic
- * OptiFine {@code gbuffers_*}, {@code shadow*}, {@code deferred*}, {@code composite*} and {@code final} program
- * families. The numbered families (deferred, composite, shadowcomp) are represented by {@link ProgramArrayId}.
- * <p>
- * A {@code ProgramId} simply names a {@code .vsh}/{@code .gsh}/{@code .fsh} triple that may live in the pack's
- * {@code shaders/} directory. Whether a given program is actually present is decided at load time.
- */
+// Every shader program an OptiFine-style 1.12.2 pack may declare
+// Unlike modern Iris, which exposes the rendertype_* programs, 1.12.2 packs only ever use the classic OptiFine
+// families: gbuffers_*, shadow*, deferred*, composite* and final
+// The NUMBERED families — deferred, composite, shadowcomp — live in ProgramArrayId instead, because an enum
+// constant per index up to 100 would be unmanageable
+// A ProgramId only NAMES a .vsh/.gsh/.fsh triple that may exist in the pack's shaders/ directory; whether it is
+// actually present is decided at load time
 public enum ProgramId {
     // --- "Basic"/sky/textured family ---
     Basic("gbuffers_basic"),
@@ -34,7 +31,7 @@ public enum ProgramId {
     TerrainCutoutMip("gbuffers_terrain_cutout_mip", TerrainCutout),
     DamagedBlock("gbuffers_damagedblock", Terrain),
     Block("gbuffers_block", Terrain),
-    /** Umbra {@code ProgramId.BlockTrans}: the translucent half of the block-entity program. */
+    // The translucent half of the block-entity program, matching Iris's ProgramId.BlockTrans
     BlockTrans("gbuffers_block_translucent", Block),
     BeaconBeam("gbuffers_beaconbeam", Textured),
     Item("gbuffers_item", TexturedLit),
@@ -43,16 +40,17 @@ public enum ProgramId {
     Entities("gbuffers_entities", TexturedLit),
     EntitiesTrans("gbuffers_entities_translucent", Entities),
     EntitiesGlowing("gbuffers_entities_glowing", Entities),
-    /** Umbra {@code ProgramId.Lightning}: lightning bolts, split out of the entity program. */
+    // Lightning bolts, split out of the entity program so a pack can shade them differently — they are emissive
+    // geometry that would otherwise be lit like a mob
     Lightning("gbuffers_lightning", Entities),
     Particles("gbuffers_particles", TexturedLit),
     ParticlesTrans("gbuffers_particles_translucent", Particles),
     ArmorGlint("gbuffers_armor_glint", Textured),
-    /**
-     * The "eyes" overlay layers (spider, enderman, ender dragon). Umbra gives this program a default blend override
-     * (premultiplied additive, destination alpha untouched) that stands in for vanilla's plain {@code ONE, ONE}, so a
-     * pack that ships the program but no {@code blend.gbuffers_spidereyes} directive still gets it.
-     */
+    // The "eyes" overlay layers — spider, enderman, ender dragon
+    // Carries a DEFAULT blend override, premultiplied additive with destination alpha untouched, standing in for
+    // vanilla's plain ONE, ONE
+    // The default exists because a pack commonly ships gbuffers_spidereyes without a matching
+    // blend.gbuffers_spidereyes directive, and without it the eyes render opaque black over the mob
     SpiderEyes("gbuffers_spidereyes", Textured,
             new BlendMode(GL11.GL_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO, GL11.GL_ONE)),
     Hand("gbuffers_hand", TexturedLit),
@@ -73,7 +71,8 @@ public enum ProgramId {
     ShadowCutout("shadow_cutout", Shadow),
     ShadowWater("shadow_water", Shadow),
     ShadowEntities("shadow_entities", Shadow),
-    /** Umbra chains this to {@code shadow_entities}, not to {@code shadow}, so a pack overriding entities gets both. */
+    // Falls back to shadow_entities rather than plain shadow, matching Iris — so a pack that overrides entity
+    // shadows gets that override applied to lightning too, instead of lightning silently using the generic program
     ShadowLightning("shadow_lightning", ShadowEntities),
     ShadowBlock("shadow_block", Shadow),
 
@@ -98,30 +97,24 @@ public enum ProgramId {
         this.defaultBlendMode = defaultBlendMode;
     }
 
-    /**
-     * @return the base file name (without extension) used inside {@code shaders/}, e.g. {@code gbuffers_terrain}.
-     */
+    // The base file name inside shaders/, without extension — e.g. gbuffers_terrain, which the loader then looks
+    // for as .vsh, .gsh and .fsh
     public String getSourceName() {
         return this.sourceName;
     }
 
-    /**
-     * OptiFine defines a fallback chain: if a pack doesn't supply {@code gbuffers_terrain} it falls back to
-     * {@code gbuffers_textured_lit}, then {@code gbuffers_textured}, then {@code gbuffers_basic}.
-     *
-     * @return the program to use when this one is absent, or {@code null} if there is no fallback.
-     */
+    // The program to use when this one is absent, or null at the end of the chain
+    // OptiFine's fallback chain is what lets a three-file pack shade the whole world: a missing gbuffers_terrain
+    // resolves to gbuffers_textured_lit, then gbuffers_textured, then gbuffers_basic
     public ProgramId getFallback() {
         return this.fallback;
     }
 
-    /**
-     * The blend mode this program gets when the pack declared no {@code blend.<program>} of its own. Only meaningful
-     * for a directly-declared program: resolving through {@link #getFallback()} lands on another program's source,
-     * and that source keeps its own (absent) blend directives, exactly as in Umbra.
-     *
-     * @return the default, or {@code null} when the program has none.
-     */
+    // The blend mode this program gets when the pack declared no blend.<program> of its own, or null when it has
+    // no default
+    // Only meaningful for a DIRECTLY declared program. Resolving through the fallback chain lands on a different
+    // program's source, and that source keeps its own (absent) blend directives rather than inheriting this one —
+    // same rule Iris follows
     public BlendMode getDefaultBlendMode() {
         return this.defaultBlendMode;
     }

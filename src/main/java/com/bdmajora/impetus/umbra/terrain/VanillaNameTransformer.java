@@ -7,23 +7,19 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Rewrites the modern-Minecraft (1.17+ core profile) vertex-attribute and matrix names that shader packs use into the
- * GLSL 120 fixed-function built-ins the 1.12.2 context actually provides — the string-level equivalent of Umbra's
- * {@code VanillaCoreTransformer} / {@code CompositeCoreTransformer}.
- * <p>
- * Packs ship these because Umbra supplies them on every version, so a pack authored once runs everywhere. Two distinct
- * failure modes appear without this pass, both observed on the packs in use:
- * <ul>
- * <li>Complementary's {@code gbuffers_line} references {@code vaPosition}/{@code vaNormal}/{@code modelViewMatrix}
- * <em>without declaring them</em> and fails to compile outright ("undefined variable").</li>
- * <li>Photon's {@code gbuffers_line} <em>does</em> declare them, so it compiles — but nothing ever feeds those
- * attributes on the 1.12.2 draw path, so they silently read the generic default {@code (0,0,0,1)}.</li>
- * </ul>
- * Both are fixed the same way: drop the declarations, then point the references at the fixed-function equivalents.
- */
+// Rewrites the modern-Minecraft (1.17+ core profile) vertex-attribute and matrix names packs use into the GLSL 120
+// fixed-function built-ins a 1.12.2 context actually provides
+// The string-level equivalent of Iris's VanillaCoreTransformer and CompositeCoreTransformer
+// Packs ship those names because Iris supplies them on every version, so a pack authored once runs everywhere
+// Without this pass there are two distinct failures, both seen on packs in real use
+//   Complementary's gbuffers_line references vaPosition, vaNormal and modelViewMatrix WITHOUT declaring them, and
+//   fails to compile outright with "undefined variable"
+//   Photon's gbuffers_line DOES declare them, so it compiles — but nothing on the 1.12.2 draw path ever feeds those
+//   attributes, so they silently read the generic default (0,0,0,1) and the geometry collapses
+// Both are fixed the same way: drop the declarations, then point the references at the fixed-function equivalents
 public final class VanillaNameTransformer {
-    /** Modern name → GLSL 120 fixed-function replacement expression. */
+    // Modern name -> the GLSL 120 fixed-function expression that replaces it
+    // Ordered, because a longer name must be tried before a shorter one it contains
     private static final Map<String, String> REPLACEMENTS = new LinkedHashMap<>();
 
     static {
@@ -51,32 +47,29 @@ public final class VanillaNameTransformer {
         REPLACEMENTS.put("chunkOffset", "vec3(0.0)");
     }
 
-    /**
-     * A declaration of one or more names as an attribute, varying input or uniform. Matched on a whole line so the
-     * qualifier list ({@code flat in ivec2 vaUV2;}) and any trailing comment come with it.
-     * <p>
-     * The declarator list is captured as a whole rather than restricted to the modern names, because GLSL lets one
-     * declaration introduce several: Clarity writes {@code uniform mat4 modelViewMatrix, projectionMatrix;}. Matching
-     * only single declarators left that line in place, and the reference rewrite below then turned it into
-     * {@code uniform mat4 gl_ModelViewMatrix, gl_ProjectionMatrix;} — a user declaration in the reserved {@code gl_}
-     * namespace, which every driver rejects (C7528), taking both sky programs down with it. Declarators that are not
-     * modern names are kept; only the ones being replaced by a built-in are removed.
-     */
+    // A declaration of one or more names as an attribute, varying input or uniform
+    // Matched on a WHOLE line so the qualifier list (`flat in ivec2 vaUV2;`) and any trailing comment come with it
+    // The declarator list is captured as a whole rather than restricted to modern names, because GLSL lets one
+    // declaration introduce several — Clarity writes `uniform mat4 modelViewMatrix, projectionMatrix;`
+    // Matching only single declarators left that line in place, and the reference rewrite below then turned it into
+    // `uniform mat4 gl_ModelViewMatrix, gl_ProjectionMatrix;` — a user declaration in the reserved gl_ namespace,
+    // which every driver rejects with C7528, taking both sky programs down with it
+    // Declarators that are NOT modern names are kept; only the ones being replaced by a built-in are removed
     private static final Pattern DECLARATION = Pattern.compile(
             "(?m)^([\\t ]*(?:flat[\\t ]+|smooth[\\t ]+|noperspective[\\t ]+|centroid[\\t ]+)*"
                     + "(?:attribute|in|uniform)[\\t ]+)(\\w+)([\\t ]+)"
                     + "([A-Za-z_]\\w*(?:[\\t ]*,[\\t ]*[A-Za-z_]\\w*)*)[\\t ]*;[^\\n]*$");
 
-    /**
-     * The two-component attributes whose replacement has to match the type the pack declared. Umbra declares
-     * {@code iris_UV1}/{@code iris_UV2} as {@code vec2}, but only when the shader does not declare them itself —
-     * Photon declares {@code in ivec2 vaUV2;}. Substituting the wrong one turns a working shader into a type error
-     * ({@code ivec2 * float} on one side, {@code vec2} where an integer index is wanted on the other), so the
-     * declared type is read out of the source before the declaration is stripped.
-     */
+    // Marks the two-component attributes whose replacement has to match the type the pack declared
+    // Iris declares iris_UV1 and iris_UV2 as vec2, but only when the shader does not declare them itself — and
+    // Photon declares `in ivec2 vaUV2;`
+    // Substituting the wrong one turns a working shader into a type error either way: ivec2 * float on one side,
+    // vec2 where an integer index is wanted on the other
+    // So the declared type is read out of the source BEFORE the declaration is stripped, and this placeholder is
+    // where it gets filled in
     private static final Pattern TYPED_PLACEHOLDER = Pattern.compile("@\\(");
 
-    /** The GLSL type keywords a variable declaration can start with. Used by {@link #declaresLocally}. */
+    // The GLSL type keywords a variable declaration can start with, used to tell a declaration from a use
     private static final String GLSL_TYPE =
             "(?:bool|int|uint|float|double|[bidu]?vec[234]|d?mat[234](?:x[234])?"
                     + "|[iu]?sampler[123]D(?:Array|Rect)?(?:Shadow)?|[iu]?samplerCube(?:Shadow)?)";
@@ -84,28 +77,26 @@ public final class VanillaNameTransformer {
     private VanillaNameTransformer() {
     }
 
-    /**
-     * {@return whether {@code source} declares {@code name} as its own function parameter or local}
-     * <p>
-     * The uniform/attribute declarations are stripped before this is consulted, so a modern name still declared with a
-     * type is the pack's own variable. Rewriting it is wrong twice over: it renames something the pack owns, and —
-     * because every replacement in {@link #REPLACEMENTS} is a {@code gl_} built-in — it puts a user declaration in the
-     * reserved {@code gl_} namespace, which the spec forbids and drivers reject (C7528). That is the same hazard the
-     * declarator handling in {@link #DECLARATION} exists to avoid, reached by a different route: Body Camera's
-     * {@code composite.fsh} writes {@code vec3 projectAndDivide(mat4 projectionMatrix, vec3 position)}, which this
-     * pass turned into a {@code mat4 gl_ProjectionMatrix} parameter. NVIDIA happens to tolerate it, so the pass
-     * survived undetected; a stricter driver drops the whole composite.
-     * <p>
-     * The lookahead is what distinguishes a declaration from a use: a declarator is always followed by {@code ,} or
-     * {@code )} (parameter), or {@code =}, {@code ;} or {@code [} (local).
-     */
+    // Whether the source declares that name as its own function parameter or local variable
+    // The uniform and attribute declarations are stripped before this is consulted, so a modern name still declared
+    // with a type at this point is the PACK'S OWN variable
+    // Rewriting it would be wrong twice over: it renames something the pack owns, and because every replacement is
+    // a gl_ built-in it also puts a user declaration in the reserved gl_ namespace, which the spec forbids and
+    // drivers reject with C7528
+    // Same hazard the declarator handling above exists to avoid, reached by another route: Body Camera's
+    // composite.fsh writes `vec3 projectAndDivide(mat4 projectionMatrix, vec3 position)`, which this pass turned
+    // into a `mat4 gl_ProjectionMatrix` parameter. NVIDIA tolerates it, so it went undetected; a stricter driver
+    // drops the whole composite
+    // The lookahead is what separates a declaration from a use: a declarator is always followed by , or ) for a
+    // parameter, or =, ; or [ for a local
     private static boolean declaresLocally(String source, String name) {
         return Pattern.compile("(?<![A-Za-z0-9_])" + GLSL_TYPE + "\\s+" + Pattern.quote(name) + "\\s*(?=[,)=;\\[])")
                 .matcher(source)
                 .find();
     }
 
-    /** @return true if the source mentions any modern name at all (cheap gate before the rewrite). */
+    // Cheap gate before the real rewrite: true if the source mentions any modern name at all, so a pack written
+    // purely against 1.12.2 skips the whole pass
     public static boolean isModernNamed(String source) {
         if (source == null) {
             return false;

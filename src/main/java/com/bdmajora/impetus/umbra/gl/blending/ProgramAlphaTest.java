@@ -11,18 +11,15 @@ import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 import java.util.Locale;
 import java.util.Optional;
 
-/**
- * The {@code alphaTest.<program> = off | <func> <ref>} directive (Umbra's {@code AlphaTest}).
- * <p>
- * Umbra runs on core profile, where there is no fixed-function alpha test, so it compiles the comparison into a
- * {@code discard} in the fragment shader. On 1.12.2 the alpha test is real GL state that vanilla itself sets per
- * render type, so the faithful implementation here is to override that state while the pack's program is bound and
- * restore vanilla's afterwards — the same shape as {@link ProgramBlendState}.
- * <p>
- * This matters a lot in practice: Photon sets {@code off} for essentially every gbuffer program (it does its own
- * {@code discard}), and Complementary sets {@code GREATER 0.0001} on the sky/water/weather programs. Ignoring the
- * directive leaves vanilla's threshold in place, which silently culls fragments the pack intended to keep.
- */
+// The `alphaTest.<program> = off | <func> <ref>` directive, Iris's AlphaTest
+// Iris runs on core profile, where no fixed-function alpha test exists, so it compiles the comparison into a
+// discard in the fragment shader
+// On 1.12.2 the alpha test is REAL GL state that vanilla itself sets per render type, so the faithful thing here is
+// to override that state while the pack's program is bound and restore vanilla's afterwards — same shape as
+// ProgramBlendState
+// This matters in practice rather than in theory: Photon sets `off` on essentially every gbuffer program because it
+// does its own discard, and Complementary sets GREATER 0.0001 on the sky, water and weather programs
+// Ignoring the directive leaves vanilla's threshold in place, which silently culls fragments the pack meant to keep
 public final class ProgramAlphaTest {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -30,12 +27,11 @@ public final class ProgramAlphaTest {
     private static final int GL_ALPHA_TEST_FUNC = 0x0BC1;
     private static final int GL_ALPHA_TEST_REF = 0x0BC2;
 
-    /**
-     * The alpha state that was live when {@link #apply()} ran, so {@link #restore()} puts back exactly that.
-     * Vanilla sets {@code alphaFunc} to different references at different phases (0.1 for most, 0.5 for the cutout
-     * pass), and OptiFine simply lets vanilla re-set it rather than restoring a constant — so assuming any single
-     * value here would be wrong for some phase.
-     */
+    // The alpha state that was live when apply() ran, captured so restore() puts back exactly that rather than a
+    // constant
+    // It has to be captured because vanilla sets alphaFunc to different references at different phases — 0.1 for
+    // most, 0.5 for the cutout pass — so any single assumed value would be wrong for some phase
+    // OptiFine sidesteps this by letting vanilla re-set the state itself; this port restores it explicitly
     private boolean savedEnabled;
     private int savedFunction;
     private float savedReference;
@@ -44,7 +40,8 @@ public final class ProgramAlphaTest {
     private static final ProgramAlphaTest EMPTY = new ProgramAlphaTest(false, false, 0, 0.0f);
 
     private final boolean specified;
-    /** {@code alphaTest.<program> = off}: the test is disabled entirely rather than given a function. */
+    // Set by `alphaTest.<program> = off`, which disables the test outright rather than giving it a function —
+    // distinct from ALWAYS, which is a function that happens to pass everything
     private final boolean disabled;
     private final int function;
     private final float reference;
@@ -122,15 +119,13 @@ public final class ProgramAlphaTest {
         return this.specified;
     }
 
-    /**
-     * {@return this alpha test as a GLSL {@code discard}, or {@code ""} when it passes everything}
-     * <p>
-     * Mirrors Umbra's {@code AlphaTest.toExpression}, including its <em>negated</em> form:
-     * {@code if (!(a > ref)) discard;} rather than {@code if (a < ref) discard;}. The two differ on NaN — the
-     * negated form discards a non-finite alpha, the direct comparison keeps it — and Umbra's is the stricter,
-     * correct one. {@code ALWAYS} emits nothing at all, which is what makes an unspecified solid pass carry no
-     * discard; {@code NEVER} discards unconditionally.
-     */
+    // This alpha test as a GLSL discard, or an empty string when it passes everything
+    // Mirrors Iris's AlphaTest.toExpression, including its NEGATED form: `if (!(a > ref)) discard;` rather than
+    // `if (a < ref) discard;`
+    // The two differ on NaN — the negated form discards a non-finite alpha, the direct comparison keeps it — and
+    // Iris's is the stricter and correct one
+    // ALWAYS emits nothing at all, which is what leaves an unspecified solid pass carrying no discard; NEVER
+    // discards unconditionally
     public String toGlslDiscard(String alphaAccessor, String indent) {
         if (!this.specified || this.disabled || this.function == GL11.GL_ALWAYS) {
             return "";
@@ -147,14 +142,15 @@ public final class ProgramAlphaTest {
         return glslDiscard(alphaAccessor, op, Float.toString(this.reference), indent);
     }
 
-    /** Builds the same negated-comparison discard Umbra emits, for callers supplying their own threshold. */
+    // The same negated-comparison discard, for callers that supply their own threshold rather than the pack's
     public static String glslDiscard(String alphaAccessor, String operator, String threshold, String indent) {
         return indent + "if (!(" + alphaAccessor + " " + operator + " " + threshold + ")) {\n"
                 + indent + "    discard;\n"
                 + indent + "}\n";
     }
 
-    /** GL comparison enum to its GLSL operator (Umbra {@code AlphaTestFunction}); null where there is no operator. */
+    // GL comparison enum to its GLSL operator, matching Iris's AlphaTestFunction
+    // Null for ALWAYS and NEVER, which have no operator because they do not compare anything
     private static String glslOperatorFor(int function) {
         switch (function) {
             case GL11.GL_LESS: return "<";
@@ -167,12 +163,14 @@ public final class ProgramAlphaTest {
         }
     }
 
-    /** The pack-declared reference value, for the {@code alphaTestRef} uniform. */
+    // The pack-declared reference value, uploaded as the alphaTestRef uniform for packs that do their own discard
     public float getReference() {
         return this.disabled ? 0.0f : this.reference;
     }
 
-    /** Applies the override. Goes through {@link GlStateManager} so vanilla's state cache stays coherent. */
+    // Applies the override, capturing the previous state first so restore() can put it back exactly
+    // Goes through GlStateManager rather than raw GL, so vanilla's own state cache stays coherent and its later
+    // enable/disable calls are not silently skipped
     public void apply() {
         if (!this.specified) {
             return;
@@ -191,7 +189,8 @@ public final class ProgramAlphaTest {
         GlStateManager.alphaFunc(this.function, this.reference);
     }
 
-    /** Puts back whatever alpha state was live before {@link #apply()}. */
+    // Puts back whatever alpha state was live before apply(). Must run before the composite chain or vanilla's GUI
+    // pass, or the pack's threshold leaks into geometry it was never meant to affect
     public void restore() {
         if (!this.specified || !this.saved) {
             return;

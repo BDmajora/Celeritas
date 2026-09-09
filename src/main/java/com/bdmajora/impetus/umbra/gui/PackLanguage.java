@@ -6,14 +6,13 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
-/**
- * The localized display strings a shader pack ships in {@code shaders/lang/<locale>.lang}, used to render friendly
- * option/value labels in the option menu (e.g. {@code option.SHADER_STYLE=Visual Style}, {@code value.RP_MODE.1=Integrated PBR+}).
- * <p>
- * Mirrors OptiFine/Umbra conventions: the {@code en_us} file is the base and the active locale is layered on top.
- * {@code &}-prefixed color codes are converted to Minecraft's {@code §}. Every lookup falls back gracefully (usually to
- * the raw option name or value) so packs without lang files still work.
- */
+// The localised display strings a pack ships in shaders/lang/<locale>.lang, which is what turns the option screen
+// from raw identifiers into readable labels — `option.SHADER_STYLE=Visual Style`, `value.RP_MODE.1=Integrated PBR+`
+// Follows the OptiFine/Iris convention: en_us is the base, and the active locale is layered on top of it, so a
+// partially translated pack falls back per key rather than per file
+// &-prefixed colour codes are converted to Minecraft's section sign
+// Every lookup falls back to the raw option name or value, so a pack shipping no lang files at all still shows a
+// usable screen
 public final class PackLanguage {
     private final Map<String, String> entries = new HashMap<>();
 
@@ -48,7 +47,8 @@ public final class PackLanguage {
         }
     }
 
-    /** Looks up {@code /lang/<localeName>.lang} case-insensitively (packs vary between {@code en_us} and {@code en_US}). */
+    // Case-insensitive lookup, because packs are genuinely inconsistent about en_us versus en_US and an exact
+    // match silently finds nothing for half of them
     private static String findLangFile(Map<AbsolutePackPath, String> sources, String localeName) {
         String target = "/lang/" + localeName + ".lang";
         for (Map.Entry<AbsolutePackPath, String> entry : sources.entrySet()) {
@@ -59,7 +59,8 @@ public final class PackLanguage {
         return null;
     }
 
-    /** Converts {@code &}-prefixed formatting codes to {@code §}, leaving other ampersands alone. */
+    // Converts &-prefixed formatting codes to the section sign, leaving any other ampersand alone — a label
+    // reading "Sun & Moon" must not lose its ampersand
     private static String translateColorCodes(String value) {
         StringBuilder sb = new StringBuilder(value.length());
         for (int i = 0; i < value.length(); i++) {
@@ -77,7 +78,7 @@ public final class PackLanguage {
         return this.entries.get(key);
     }
 
-    /** The display label for an option, or the raw name if the pack provides none. */
+    // The display label for an option, falling back to the raw name when the pack provides none
     public String optionLabel(String name, String fallback) {
         String value = get("option." + name);
         if (value != null) {
@@ -86,36 +87,38 @@ public final class PackLanguage {
         return fallback != null ? fallback : name;
     }
 
-    /** The display label for a specific value of an option, or the raw value string if none. */
+    // The display label for one specific VALUE of an option, e.g. turning RP_MODE's "1" into "Integrated PBR+",
+    // falling back to the raw value string
     public String valueLabel(String name, String value) {
         String label = get("value." + name + "." + value);
         return label != null ? label : value;
     }
 
-    /** Optional text rendered before the value (rare). */
+    // Optional text rendered before the value; rare, but a pack can use it for a leading symbol
     public String prefix(String name) {
         String value = get("prefix." + name);
         return value != null ? value : "";
     }
 
-    /** Optional text rendered after the value, typically a unit. */
+    // Optional text rendered after the value, typically a unit like "%" or " blocks"
     public String suffix(String name) {
         String value = get("suffix." + name);
         return value != null ? value : "";
     }
 
-    /** The button label for a sub-screen, or the raw name if none. */
+    // The button label for a sub-screen, falling back to the raw screen name
     public String screenLabel(String name) {
         String value = get("screen." + name);
         return value != null ? value : name;
     }
 
-    /** The tooltip/comment for an option, or {@code null} if the pack provides none. */
+    // The tooltip for an option, or null when the pack provides none — null rather than the raw name, because a
+    // tooltip repeating the label is worse than no tooltip
     public String comment(String name) {
         return get("option." + name + ".comment");
     }
 
-    /** The display label for a profile value, or the raw name if none. */
+    // The display label for a profile, falling back to the raw profile name
     public String profileLabel(String name) {
         String value = get("profile." + name);
         return value != null ? value : name;

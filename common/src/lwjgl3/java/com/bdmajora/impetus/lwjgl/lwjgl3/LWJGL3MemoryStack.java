@@ -8,10 +8,8 @@ import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 import java.nio.ShortBuffer;
 
-/**
- * LWJGL3 implementation of MemoryStack.
- * Wraps {@code org.lwjgl.system.MemoryStack}.
- */
+// The LWJGL3 backend of MemoryStack, a thin wrapper over org.lwjgl.system.MemoryStack
+// LWJGL3 already ships a stack allocator, so unlike the LWJGL2 side this delegates rather than reimplementing one
 public class LWJGL3MemoryStack extends MemoryStack {
     private final org.lwjgl.system.MemoryStack delegate;
 

@@ -2,27 +2,24 @@ package com.bdmajora.impetus.umbra.shaderpack.texture;
 
 import java.util.Optional;
 
-/**
- * The pipeline stage a {@code texture.<stage>.<sampler>} override applies to. Verbatim port of Umbra's
- * {@code shaderpack.texture.TextureStage} (which follows OptiFine's shaders.txt custom-texture spec).
- * <p>
- * Impetus currently runs three of these stages (gbuffers+shadow, deferred, composite+final); the Umbra-1.6-exclusive
- * stages are parsed for compatibility so packs declaring them load without warnings, but nothing binds them yet.
- */
+// The pipeline stage a `texture.<stage>.<sampler>` override applies to
+// Verbatim port of Iris's shaderpack.texture.TextureStage, which follows OptiFine's shaders.txt custom-texture spec
+// Only three of these are actually bound here — gbuffers+shadow, deferred, and composite+final. The rest are parsed
+// so a pack declaring them loads cleanly instead of warning, but nothing binds them yet
 public enum TextureStage {
-    /** The setup passes. Exclusive to Umbra 1.6. */
+    // The setup passes; Iris 1.6 exclusive
     SETUP,
-    /** The begin pass. Exclusive to Umbra 1.6. */
+    // The begin pass; Iris 1.6 exclusive
     BEGIN,
-    /** The shadowcomp passes. Not documented in shaders.txt, but a valid stage for custom textures. */
+    // The shadowcomp passes — undocumented in shaders.txt but a valid stage that packs do use
     SHADOWCOMP,
-    /** The prepare passes. Not documented in shaders.txt, but a valid stage for custom textures. */
+    // The prepare passes; likewise undocumented but valid
     PREPARE,
-    /** All of the gbuffer passes, as well as the shadow passes. */
+    // Every gbuffer pass AND the shadow passes — one stage, because OptiFine treats them together
     GBUFFERS_AND_SHADOW,
-    /** The deferred passes. */
+    // The deferred passes
     DEFERRED,
-    /** The composite passes and final pass. */
+    // The composite passes and the final pass, again grouped as OptiFine groups them
     COMPOSITE_AND_FINAL;
 
     public static Optional<TextureStage> parse(String name) {

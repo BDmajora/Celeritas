@@ -9,15 +9,12 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
- * Stops the client recomputing lighting.
- *
- * <p>Client-side only — the server keeps its own lighting, so this changes nothing anyone else sees
- * and nothing about gameplay. What it does change is that light stops updating visibly: a torch
- * placed after this is switched off lights nothing until the chunk is rebuilt for some other reason.
- * That is why {@code ExtrasHud} draws a permanent warning while it is off; the symptom otherwise
- * looks exactly like a rendering bug.
- */
+// stops the client recomputing lighting
+// client-side only, so the server keeps its own lighting and this changes nothing anyone else sees
+// and nothing about gameplay
+// what it does change is that light stops updating visibly: a torch placed after this is switched
+// off lights nothing until the chunk is rebuilt for some other reason, which is why ExtrasHud draws
+// a permanent warning while it is off - the symptom otherwise looks exactly like a rendering bug
 @Mixin(World.class)
 public class WorldMixin {
     @Inject(method = "checkLightFor", at = @At("HEAD"), cancellable = true)

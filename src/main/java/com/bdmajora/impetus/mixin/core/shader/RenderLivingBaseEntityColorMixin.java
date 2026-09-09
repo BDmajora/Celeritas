@@ -12,17 +12,13 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
- * The hurt flash and the creeper charge-up are the only entity tints vanilla draws with fixed-function texture
- * combiners rather than vertex colours, so a bound shader program dropped them: damaged mobs kept their normal
- * texture. Publish the tint as OptiFine's {@code entityColor} uniform instead.
- * <p>
- * The combiner setup is skipped outright while a pipeline is active rather than left to run harmlessly alongside —
- * {@code setBrightness} binds its white brightness texture over unit 2, which is the gbuffer stage's {@code normals}
- * sampler, and {@code unsetBrightness} leaves that unit bound to 0 afterwards.
- *
- * @see CapturedRenderingState#getEntityColor()
- */
+// the hurt flash and the creeper charge-up are the only entity tints vanilla draws with fixed-function
+// texture combiners rather than vertex colours, so a bound shader program dropped them and damaged
+// mobs kept their normal texture
+// publish the tint as OptiFine's entityColor uniform instead - see CapturedRenderingState#getEntityColor()
+// the combiner setup is skipped outright while a pipeline is active rather than left to run harmlessly
+// alongside: setBrightness binds its white brightness texture over unit 2, which is the gbuffer stage's
+// normals sampler, and unsetBrightness leaves that unit bound to 0 afterwards
 @Mixin(RenderLivingBase.class)
 public abstract class RenderLivingBaseEntityColorMixin {
     @Shadow
@@ -73,11 +69,10 @@ public abstract class RenderLivingBaseEntityColorMixin {
         ci.cancel();
     }
 
-    /**
-     * {@code doRender} swallows any exception thrown while rendering an entity, which would otherwise skip
-     * {@code unsetBrightness} and leave every later entity in the frame tinted red. The blend factor is still zero on
-     * every normal entity, so this costs a float compare rather than a uniform re-upload.
-     */
+    // doRender swallows any exception thrown while rendering an entity, which would otherwise skip
+    // unsetBrightness and leave every later entity in the frame tinted red
+    // the blend factor is still zero on every normal entity, so this costs a float compare rather than
+    // a uniform re-upload
     @Inject(method = "doRender(Lnet/minecraft/entity/EntityLivingBase;DDDFF)V", at = @At("RETURN"))
     private void impetus$clearStrandedEntityColor(EntityLivingBase entity, double x, double y, double z,
                                                   float entityYaw, float partialTicks, CallbackInfo ci) {

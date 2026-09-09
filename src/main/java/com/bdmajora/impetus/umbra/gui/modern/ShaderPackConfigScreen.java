@@ -30,12 +30,14 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 
-/**
- * Modern Sodium/Umbra-style shader-pack option screen. Lays out the pack's {@code screen}/{@code screen.*} directives as
- * a grid of {@link OptionButtonWidget} tiles (auto-generated when the pack declares no layout), rendering friendly
- * localized labels/values via {@link PackLanguage}. Sits on the shared Impetus GUI framework (rendered through
- * {@link VintageDrawContext}); the option model + persistence is the ported Umbra backend behind {@link Umbra}.
- */
+// The loaded pack's own option screen, drawn in the Sodium/Iris style
+// Layout comes from the pack's `screen` and `screen.<name>` directives, laid out as a grid of OptionButtonWidget
+// tiles. A pack that declares no layout at all still gets a screen — one is generated from the options themselves,
+// since otherwise a perfectly configurable pack would appear to have no settings
+// Labels and values are localised through PackLanguage rather than shown raw, so an option reads "Shadow Quality:
+// High" instead of "SHADOW_QUALITY: 2"
+// Rendering goes through the shared Impetus GUI framework via VintageDrawContext; the option model and its
+// persistence are the ported Iris backend sitting behind Umbra
 public class ShaderPackConfigScreen extends GuiScreen {
     private static final int DEFAULT_COLUMNS = 2;
     private static final int ROW_HEIGHT = 22;

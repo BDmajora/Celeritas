@@ -53,14 +53,12 @@ import com.bdmajora.impetus.lwjgl.GL11;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * Registers the OptiFine 1.12.2 "common" uniforms — the ones that are a direct read of world/player/display state.
- * All formulas are faithful to OptiFine's {@code Shaders} and every Minecraft accessor here was checked against the
- * build's own deobfuscated sources (MCP {@code stable_39}) rather than assumed.
- * <p>
- * The matrix, camera, and previous-frame uniforms come from {@link CapturedRenderingState} and are registered by the
- * matrix-uniform provider.
- */
+// Registers the OptiFine 1.12.2 "common" uniforms — the ones that are a direct read of world, player or display
+// state rather than something the render loop has to capture
+// Every formula here is faithful to OptiFine's Shaders, and every Minecraft accessor was checked against the
+// build's own deobfuscated sources (MCP stable_39) rather than assumed from a decompile
+// The matrix, camera and previous-frame uniforms are NOT here: those come from CapturedRenderingState and are
+// registered by MatrixUniforms instead
 public final class CommonUniforms {
     private static final float DEFAULT_FRAME_TIME = 1.0f / 60.0f;
     private static final ResourceLocation DARKNESS_EFFECT_ID = new ResourceLocation("darkness");
@@ -482,7 +480,8 @@ public final class CommonUniforms {
         cachedEndFlashIntensity = getRawEndFlashIntensity();
     }
 
-    /** The pre-smoothing inner term of the pack's {@code isEyeInCave}; the {@code 1.0 -} is applied to the result. */
+    // The inner term of isEyeInCave, before smoothing — the caller applies the 1.0 - inversion to the smoothed
+    // result, so inverting here as well would cancel out
     private static float getRawEyeInCave(float skyBrightness) {
         return getEyeAltitude() < 5.0f ? skyBrightness : 1.0f;
     }
@@ -951,18 +950,15 @@ public final class CommonUniforms {
         return cachedPreviousEndFlashIntensity;
     }
 
-    /**
-     * Umbra feeds this from {@code level.endFlashState().getIntensity(tickDelta)} — the strength of the End's
-     * transient flash event, which is 0 whenever no flash is happening and only briefly rises during one.
-     * <p>
-     * That event is a 1.21 vanilla feature; 1.12.2 has no {@code endFlashState} and never flashes. So the faithful
-     * value here is a constant 0, not "1.0 while in the End": the latter tells a pack the End is permanently at
-     * full flash intensity, and Complementary drives {@code endFlashIntensityM} straight off this, so its entire End
-     * sky and lighting sat at the flash extreme for as long as the player was in the dimension.
-     * <p>
-     * Kept as a method rather than folded into a constant so the day 1.12 gains an equivalent event, or a pack-side
-     * emulation appears, there is one place to feed it from.
-     */
+    // Iris feeds this from level.endFlashState().getIntensity(tickDelta) — the strength of the End's TRANSIENT
+    // flash event, which is 0 whenever no flash is happening and rises only briefly during one
+    // That event is a 1.21 vanilla feature. 1.12.2 has no endFlashState and never flashes, so the faithful value is
+    // a constant 0 — NOT "1.0 while in the End"
+    // The difference matters: 1.0 tells a pack the End is permanently at full flash intensity, and Complementary
+    // drives endFlashIntensityM straight off this, so its whole End sky and lighting sat at the flash extreme for
+    // as long as the player stayed in the dimension
+    // Kept as a method rather than folded into a constant so that if 1.12 ever gains an equivalent event, or a
+    // pack-side emulation appears, there is one place to feed it from
     private static float getRawEndFlashIntensity() {
         return 0.0f;
     }
@@ -972,10 +968,10 @@ public final class CommonUniforms {
         return new Vector2f(mc.displayWidth, mc.displayHeight);
     }
 
-    /**
-     * The fixed-function fog mode (LINEAR/EXP/EXP2), or 0 while fog is disabled — read live from GL state like
-     * OptiFine, so each program bound mid-frame sees the fog vanilla configured for that stage.
-     */
+    // The fixed-function fog mode (LINEAR, EXP, EXP2), or 0 while fog is disabled
+    // Read LIVE from GL state rather than cached per frame, exactly as OptiFine does, so a program bound mid-frame
+    // sees the fog vanilla configured for that particular stage — vanilla changes it between sky, terrain and
+    // clouds within one frame
     private static int getFogMode() {
         return isFogEnabled() ? LWJGL.glGetInteger(GL11.GL_FOG_MODE) : 0;
     }
@@ -1049,11 +1045,9 @@ public final class CommonUniforms {
         return player == null ? ItemStack.EMPTY : player.getHeldItemMainhand();
     }
 
-    /**
-     * The item the {@code heldItemId}/{@code heldBlockLightValue} uniforms describe. With {@code oldHandLight} on
-     * (OptiFine's default) a brighter offhand item wins, so a torch in the offhand still lights the world — that is
-     * the swap {@code Shaders.java} performs right before uploading these uniforms.
-     */
+    // The item the heldItemId and heldBlockLightValue uniforms describe
+    // With oldHandLight on, which is OptiFine's default, a BRIGHTER OFFHAND item wins — so a torch held in the off
+    // hand still lights the world. That swap is what Shaders.java performs immediately before uploading these
     private static ItemStack brightestHeldItem() {
         ItemStack main = heldItem();
         if (!WorldRenderingSettings.isOldHandLight()) {
@@ -1179,7 +1173,8 @@ public final class CommonUniforms {
         return getDarknessFactor();
     }
 
-    /** Vanilla's night-vision brightness ramp (EntityRenderer): 1.0 held, pulsing fade in the last 10s. */
+    // Vanilla's night-vision brightness ramp from EntityRenderer: a steady 1.0 while the effect holds, then a
+    // pulsing fade over the last 10 seconds
     private static float getNightVision() {
         EntityLivingBase player = livingCamera();
         if (player == null || !player.isPotionActive(MobEffects.NIGHT_VISION)) {
@@ -1291,15 +1286,12 @@ public final class CommonUniforms {
         return world.provider.isSurfaceWorld() ? 0.0f : 0.1f;
     }
 
-    /**
-     * Umbra reports the MAIN RENDER TARGET's size for these, not the window's
-     * ({@code ViewportUniforms}: {@code Minecraft.getInstance().getMainRenderTarget().width/height}). The two are
-     * usually equal, but they diverge whenever the framebuffer is sized independently of the display. Packs derive
-     * their screen-space texel step from {@code viewWidth}/{@code viewHeight}, so a mismatch rescales every blur,
-     * bloom and neighbour tap by the ratio between them. The render target is what the composite chain actually
-     * rasterises into, so it is the correct denominator; the display size is only a fallback for when Minecraft is
-     * not using a framebuffer at all.
-     */
+    // Iris reports the MAIN RENDER TARGET's size for viewWidth/viewHeight, not the window's
+    // The two are usually equal but diverge whenever the framebuffer is sized independently of the display
+    // Packs derive their screen-space texel step from these, so a mismatch rescales every blur, bloom and
+    // neighbour tap by the ratio between them
+    // The render target is what the composite chain actually rasterises into, which makes it the correct
+    // denominator; the display size is only a fallback for when Minecraft is not using a framebuffer at all
     private static int getRenderTargetWidth() {
         Minecraft mc = Minecraft.getMinecraft();
         return OpenGlHelper.isFramebufferEnabled() && mc.getFramebuffer() != null

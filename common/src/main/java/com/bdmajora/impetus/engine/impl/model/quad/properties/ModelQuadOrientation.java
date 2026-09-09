@@ -1,9 +1,7 @@
 package com.bdmajora.impetus.engine.impl.model.quad.properties;
 
-/**
- * Defines the orientation of vertices in a model quad. This information be used to re-orient the quad's vertices to a
- * consistent order, eliminating a number of shading issues caused by anisotropy problems.
- */
+// defines the orientation of vertices in a model quad, used to re-orient them into a consistent order
+// and so eliminate a number of shading issues caused by anisotropy problems
 public enum ModelQuadOrientation {
     NORMAL(new int[] { 0, 1, 2, 3 }),
     FLIP(new int[] { 1, 2, 3, 0 });
@@ -14,16 +12,12 @@ public enum ModelQuadOrientation {
         this.indices = indices;
     }
 
-    /**
-     * @return The re-oriented index of the vertex {@param idx}
-     */
+    // returns the re-oriented index of vertex idx
     public int getVertexIndex(int idx) {
         return this.indices[idx];
     }
 
-    /**
-     * Determines the orientation of the vertices in the quad.
-     */
+    // determines the orientation of the vertices in the quad from their brightness
     public static ModelQuadOrientation orientByBrightness(float[] brightnesses, int[] lightmaps) {
         // If one side of the quad is brighter, flip the sides
         float br02 = brightnesses[0] + brightnesses[2];

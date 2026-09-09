@@ -11,9 +11,8 @@ public interface ChunkRenderListIterable {
         return this.iterator(false);
     }
 
-    /**
-     * {@return true if there are sections that need rendering for the given pass}
-     */
+    // Whether any section in this list needs rendering for that pass, so the caller can skip the whole pass setup
+    // — binding its program, framebuffer and state — rather than setting up for zero draws
     default boolean hasPass(TerrainRenderPass pass) {
         return true;
     }

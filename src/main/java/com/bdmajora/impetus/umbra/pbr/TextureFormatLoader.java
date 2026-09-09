@@ -8,12 +8,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 
-/**
- * Reads the resource-pack PBR format declaration ({@code assets/minecraft/optifine/texture.properties},
- * {@code format = <name>-<version>}, e.g. {@code format = lab-pbr-1.3}) and exposes it as the OptiFine/Umbra
- * preprocessor macros {@code MC_TEXTURE_FORMAT_<NAME>} and {@code MC_TEXTURE_FORMAT_<NAME>_<VERSION>} so shader
- * packs can adapt their normal/specular decoding.
- */
+// Reads the resource pack's PBR format declaration and turns it into preprocessor macros
+// The declaration lives in assets/minecraft/optifine/texture.properties as `format = <name>-<version>`, e.g.
+// `format = lab-pbr-1.3`
+// It becomes two macros, MC_TEXTURE_FORMAT_<NAME> and MC_TEXTURE_FORMAT_<NAME>_<VERSION>, because packs gate on
+// both — the coarse one to know the family, the versioned one to know which revision's channel packing to decode
+// Without this a pack decodes LabPBR data with the wrong channel layout and every surface comes out wrong
 public final class TextureFormatLoader {
     private static final ResourceLocation LOCATION = new ResourceLocation("minecraft", "optifine/texture.properties");
 

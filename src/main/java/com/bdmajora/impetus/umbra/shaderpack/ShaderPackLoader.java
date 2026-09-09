@@ -23,55 +23,43 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-/**
- * Reads a shader pack from disk (a folder or a {@code .zip}) into the in-memory representation consumed by
- * {@link ShaderPack}. Minecraft-free: uses only {@code java.nio} and {@code java.util.zip}.
- * <p>
- * Text stages relevant to compilation (GLSL stages, includes, {@code shaders.properties}) are read as strings.
- * Binary assets the custom-texture directives can point at ({@code .png}, raw LUT/data files, plus their
- * {@code .mcmeta} sidecars) are read as raw bytes into a separate map. All keys are made relative to the pack's
- * {@code shaders/} directory.
- */
+// Reads a shader pack off disk — a folder or a .zip — into the in-memory form ShaderPack consumes
+// Free of Minecraft entirely: java.nio and java.util.zip only, so loading can happen before the game is up
+// Two maps come out of it. Text relevant to compilation (GLSL stages, includes, shaders.properties) is read as
+// strings; binary assets the custom-texture directives can point at (.png, raw LUT and data files, plus their
+// .mcmeta sidecars) are read as raw bytes into a separate map
+// Every key is made relative to the pack's shaders/ directory, so a folder pack and a zip pack produce identical
+// keys and nothing downstream has to know which it came from
 public final class ShaderPackLoader {
-    /**
-     * File extensions read as raw bytes for the custom-texture directives ({@code texture.<stage>.<sampler>},
-     * {@code texture.noise}, {@code customTexture.<name>}) and their {@code .mcmeta} filtering sidecars.
-     * Photon and several newer packs ship 3D lookup textures as {@code .dat}; treating only PNGs as binary makes
-     * those directives fail even though the assets are present in the pack.
-     * <p>
-     * Built with {@code Arrays.asList} rather than {@code Set.of}: forge122 compiles with {@code --release 8}, so
-     * Java 9+ library APIs like {@code Set.of} are unavailable even though Jabel allows modern syntax.
-     */
+    // Extensions read as raw bytes, for the custom-texture directives — texture.<stage>.<sampler>, texture.noise,
+    // customTexture.<name> — and their .mcmeta filtering sidecars
+    // .dat is in here because Photon and several newer packs ship 3D lookup textures that way; treating only PNGs
+    // as binary makes those directives fail even though the asset is sitting right there in the pack
+    // Built with Arrays.asList rather than Set.of because this module compiles with --release 8, so Java 9+ library
+    // APIs are unavailable even though Jabel allows the modern syntax
     private static final Set<String> BINARY_EXTENSIONS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "png", "mcmeta", "dat", "bin", "raw")));
 
-    /**
-     * Text files that are pack metadata for <em>other</em> mods rather than GLSL, and so must stay out of the source
-     * map entirely.
-     * <p>
-     * This exists only because the source map does double duty here. {@link
-     * com.bdmajora.impetus.umbra.shaderpack.option.ShaderPackOptions} scans <em>every</em> entry for
-     * {@code #define}/{@code const} options, whereas Umbra only ever scans files reachable through its
-     * {@code IncludeGraph}. Voxy's per-dimension {@code voxy.json} (shipped by "I Like Vanilla" and Mellow) opens with
-     * lines like {@code #define OVERWORLD} / {@code #define DIMENSION_NETHER}; those names are {@code #ifdef}-tested
-     * throughout the pack, so scanning the JSON would register the pack's dimension macros as user-toggleable boolean
-     * options. Nothing {@code #include}s these files, so dropping them costs nothing.
-     */
+    // Text files that are metadata for OTHER mods rather than GLSL, kept out of the source map entirely
+    // This carve-out exists only because the source map does double duty here: ShaderPackOptions scans EVERY entry
+    // for #define and const options, where Iris only ever scans files reachable through its IncludeGraph
+    // Voxy's per-dimension voxy.json — shipped by "I Like Vanilla" and Mellow — opens with lines like
+    // `#define OVERWORLD` and `#define DIMENSION_NETHER`, and those names are #ifdef-tested throughout the pack. So
+    // scanning the JSON registers the pack's dimension macros as user-toggleable boolean options
+    // Nothing #includes these files, so dropping them costs nothing
     private static final Set<String> NON_GLSL_TEXT_EXTENSIONS =
             Collections.unmodifiableSet(new HashSet<>(Arrays.asList("json", "md")));
 
-    /** Guard against accidentally slurping a huge file as a string. */
+    // Guard against slurping something enormous into a String — a malformed pack, or a user's unrelated file
     private static final long MAX_TEXT_FILE_BYTES = 8L * 1024 * 1024;
 
-    /** Guard against accidentally slurping a huge binary asset (largest known pack LUTs are a few MB). */
+    // Same guard for binary assets, set well above the few MB the largest known pack LUTs occupy
     private static final long MAX_BINARY_FILE_BYTES = 32L * 1024 * 1024;
 
     private ShaderPackLoader() {
     }
 
-    /**
-     * Loads a pack laid out as a folder containing a {@code shaders/} subdirectory.
-     */
+    // Loads a pack laid out as a folder with a shaders/ subdirectory
     public static ShaderPack loadFromDirectory(Path packRoot) throws IOException {
         return loadFromDirectory(packRoot, Collections.emptyMap());
     }
@@ -102,10 +90,8 @@ public final class ShaderPackLoader {
         return new ShaderPack(sources, changedConfigs, binaries);
     }
 
-    /**
-     * Loads a pack distributed as a {@code .zip}. The archive is expected to contain a top-level {@code shaders/}
-     * directory; keys are made relative to it.
-     */
+    // Loads a pack distributed as a .zip, whose archive is expected to hold a top-level shaders/ directory
+    // Keys come out relative to that directory, matching the folder loader exactly
     public static ShaderPack loadFromZip(Path zipFile) throws IOException {
         return loadFromZip(zipFile, Collections.emptyMap());
     }
@@ -150,20 +136,16 @@ public final class ShaderPackLoader {
         return new ShaderPack(sources, changedConfigs, binaries);
     }
 
-    /**
-     * Everything that is not a recognized binary asset is read as text.
-     * <p>
-     * This must NOT be a whitelist of known GLSL extensions. Umbra never pre-scans the pack at all: its
-     * {@code IncludeGraph} walks out from the program stages and reads whatever path an {@code #include} names
-     * straight off disk, so the extension is irrelevant. OptiFine's {@code ShaderPackParser.resolveIncludes} does the
-     * same and hard-errors when the file is missing. Because this port pre-scans into a source map instead (options
-     * are applied per-file before includes are flattened), a whitelist here silently drops include files and the
-     * {@code #include} then resolves to nothing — every constant it defined becomes an "undefined variable" compile
-     * error and the whole pack falls back to vanilla rendering. That is exactly what happened to miniature-shader's
-     * {@code /shader.h} and RedHat's 22 {@code lib/defines/*.h} files.
-     *
-     * @see #NON_GLSL_TEXT_EXTENSIONS for the one narrow carve-out.
-     */
+    // Anything that is not a recognised binary asset is read as text — a blacklist, deliberately, NOT a whitelist
+    // of known GLSL extensions
+    // Iris never pre-scans a pack at all: its IncludeGraph walks out from the program stages and reads whatever
+    // path an #include names straight off disk, so the extension is irrelevant. OptiFine's
+    // ShaderPackParser.resolveIncludes does the same and hard-errors on a missing file
+    // This port pre-scans into a source map instead, because options are applied per file before includes are
+    // flattened. So a whitelist here silently drops include files, the #include then resolves to nothing, every
+    // constant it defined becomes an "undefined variable" compile error, and the whole pack falls back to vanilla
+    // That is exactly what happened to miniature-shader's /shader.h and to RedHat's 22 lib/defines/*.h files
+    // NON_GLSL_TEXT_EXTENSIONS above is the one narrow carve-out
     private static boolean isTextPath(String relative) {
         int dot = relative.lastIndexOf('.');
         if (dot >= 0 && NON_GLSL_TEXT_EXTENSIONS.contains(relative.substring(dot + 1).toLowerCase(Locale.ROOT))) {
@@ -212,7 +194,9 @@ public final class ShaderPackLoader {
         return out.toByteArray();
     }
 
-    /** Wraps a stream so that {@code close()} is a no-op (the underlying {@link ZipInputStream} is reused per entry). */
+    // Wraps a stream so close() does nothing
+    // Needed because the reading helpers close what they are handed, but a ZipInputStream is reused across every
+    // entry in the archive — closing it after the first file would end the whole scan
     private static final class UncloseableStream extends InputStream {
         private final InputStream delegate;
 

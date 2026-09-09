@@ -17,23 +17,17 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Takes the debug-world test out of the block read path.
- *
- * <p>Every single {@code getBlockState} in the game reaches this method, and the first thing vanilla
- * does with it is ask the world what type it is and compare that against
- * {@code DEBUG_ALL_BLOCK_STATES} — a field load, a virtual call and a reference comparison, to
- * establish something that was decided when the world was created and cannot change while it exists.
- *
- * <p>The answer is resolved once, in the constructor, and the hot path becomes a boolean test the
- * branch predictor gets right every time. The debug world itself still behaves exactly as before; it
- * is just no longer paid for by every other world.
- *
- * <p>The {@code try}/{@code catch} that wraps vanilla's lookup is preserved. It costs nothing when
- * nothing is thrown, and the crash report it builds — with the chunk, the position and the offending
- * section — is the difference between a diagnosable corruption bug and an anonymous
- * {@code ArrayIndexOutOfBoundsException}.
- */
+// takes the debug-world test out of the block read path
+// every single getBlockState in the game reaches this method, and the first thing vanilla does with
+// it is ask the world what type it is and compare that against DEBUG_ALL_BLOCK_STATES - a field load,
+// a virtual call and a reference comparison, to establish something that was decided when the world
+// was created and cannot change while it exists
+// the answer is resolved once, in the constructor, and the hot path becomes a boolean test the branch
+// predictor gets right every time; the debug world itself still behaves exactly as before, it is just
+// no longer paid for by every other world
+// the try/catch that wraps vanilla's lookup is preserved: it costs nothing when nothing is thrown, and
+// the crash report it builds - with the chunk, the position and the offending section - is the
+// difference between a diagnosable corruption bug and an anonymous ArrayIndexOutOfBoundsException
 @Mixin(Chunk.class)
 public abstract class ChunkMixin {
     @Shadow
@@ -47,11 +41,10 @@ public abstract class ChunkMixin {
     @Unique
     private boolean equilibrium$debugWorld;
 
-    /**
-     * Matches both constructors deliberately. The four-argument one delegates to the three-argument
-     * one, so this runs twice for it and assigns the same value both times; naming a descriptor
-     * instead would mean writing an obfuscated signature for Mixin to remap, for no benefit.
-     */
+    // matches both constructors deliberately: the four-argument one delegates to the three-argument
+    // one, so this runs twice for it and assigns the same value both times
+    // naming a descriptor instead would mean writing an obfuscated signature for Mixin to remap, for
+    // no benefit
     @Inject(method = "<init>", at = @At("RETURN"))
     private void equilibrium$resolveWorldType(CallbackInfo ci) {
         this.equilibrium$debugWorld = this.world.getWorldType() == WorldType.DEBUG_ALL_BLOCK_STATES;

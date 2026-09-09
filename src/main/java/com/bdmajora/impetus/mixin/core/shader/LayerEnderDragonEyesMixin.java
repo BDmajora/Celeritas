@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** The ender dragon's eyes overlay. Same layer shape and same reason as {@link LayerSpiderEyesMixin}. */
+// The ender dragon's eyes overlay. Same layer shape and same reason as LayerSpiderEyesMixin.
 @Mixin(LayerEnderDragonEyes.class)
 public class LayerEnderDragonEyesMixin {
     @Inject(method = "doRenderLayer(Lnet/minecraft/entity/boss/EntityDragon;FFFFFFF)V",

@@ -10,27 +10,20 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Decides which Equilibrium mixins apply, by resolving each one's package path against the option
- * tree.
- *
- * <p>Ported from Lithium's {@code LithiumMixinPlugin}. The structure is worth restating because it
- * differs from the other two subsystems in this project: {@code FulgorMixinPlugin} and
- * {@code CoartatioMixinPlugin} both switch on a hand-written list of mixin names, which is fine when
- * there are a dozen. Here there are far more than a dozen, and the mapping between a mixin and its
- * switch is not a table anyone maintains — it is the package the mixin lives in. Adding a mixin under
- * an existing option needs no change to this file at all.
- */
+// decides which Equilibrium mixins apply, by resolving each one's package path against the option tree
+// ported from Lithium's LithiumMixinPlugin; the structure is worth restating because it differs from
+// the other two subsystems in this project - FulgorMixinPlugin and CoartatioMixinPlugin both switch on
+// a hand-written list of mixin names, which is fine when there are a dozen
+// here there are far more than a dozen, and the mapping between a mixin and its switch is not a table
+// anyone maintains: it is the package the mixin lives in, so adding a mixin under an existing option
+// needs no change to this file at all
 public class EquilibriumMixinPlugin implements IMixinConfigPlugin {
     private static final String MIXIN_PACKAGE_ROOT = "com.bdmajora.equilibrium.mixin.";
 
-    /**
-     * Kill switch for bisecting a crash without editing the config file.
-     *
-     * <p>Lithium has the same property under {@code lithium.test.disable_all_mixins}. It is the first
-     * thing to reach for when a modpack crashes on startup, because it answers "is this us" in one
-     * launch argument.
-     */
+    // kill switch for bisecting a crash without editing the config file
+    // Lithium has the same property under lithium.test.disable_all_mixins; it is the first thing to
+    // reach for when a modpack crashes on startup, because it answers "is this us" in one launch
+    // argument
     private static final String DISABLE_ALL_MIXINS_PROPERTY = "equilibrium.disable_all_mixins";
 
     public static final boolean DISABLE_ALL_MIXINS = Boolean.parseBoolean(System.getProperty(DISABLE_ALL_MIXINS_PROPERTY));

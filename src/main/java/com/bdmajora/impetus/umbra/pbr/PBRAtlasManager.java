@@ -14,17 +14,17 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.Map;
 
-/**
- * Builds the {@code normals}/{@code specular} PBR atlases for the block atlas: for every stitched sprite, the
- * companion textures {@code <name>_n.png} / {@code <name>_s.png} are loaded (LabPBR/OldPBR resource-pack
- * convention) and uploaded into two atlas textures with the exact same layout as the base atlas, so the base
- * UVs address the PBR data directly. Sprites without companions keep the neutral defaults
- * (normals 127/127/255/255 = flat +Z, specular 0/0/0/0 = no reflectance), matching the pipeline's 1×1 fallbacks.
- *
- * <p>Rebuilt on every atlas stitch (resource reload). Animated sprites contribute their first frame; PBR
- * animation parity is a known follow-up. This is an original implementation for the 1.12.2 {@code TextureMap}
- * architecture — upstream Umbra's {@code SpriteContents}-based atlas classes do not port.
- */
+// Builds the `normals` and `specular` PBR atlases that sit alongside the block atlas
+// For every stitched sprite, the companion textures <name>_n.png and <name>_s.png are loaded — the LabPBR/OldPBR
+// resource-pack convention — and uploaded into two atlas textures with the EXACT same layout as the base atlas
+// That identical layout is the whole trick: the base UVs then address the PBR data directly, so a shader needs no
+// second coordinate set and no lookup table
+// A sprite with no companion keeps the neutral defaults, normals 127/127/255/255 (a flat +Z normal) and specular
+// 0/0/0/0 (no reflectance), which are the same values the pipeline's 1x1 fallback textures hold
+// Rebuilt on every atlas stitch, i.e. every resource reload. Animated sprites contribute only their first frame;
+// PBR animation parity is a known gap
+// Original implementation for 1.12.2's TextureMap architecture — Iris's SpriteContents-based atlas classes have no
+// counterpart here and do not port
 public final class PBRAtlasManager {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -46,12 +46,13 @@ public final class PBRAtlasManager {
     private PBRAtlasManager() {
     }
 
-    /** {@return the normals atlas GL id, or {@code fallback} when no pack provided any normal maps} */
+    // The normals atlas GL id, or the caller's fallback when no resource pack shipped a single normal map — the
+    // fallback being the neutral 1x1 texture, so the sampler is bound either way
     public static int getNormalsAtlas(int fallback) {
         return normalsCount > 0 ? normalsAtlas : fallback;
     }
 
-    /** {@return the specular atlas GL id, or {@code fallback} when no pack provided any specular maps} */
+    // The specular atlas GL id, same fallback rule
     public static int getSpecularAtlas(int fallback) {
         return specularCount > 0 ? specularAtlas : fallback;
     }
@@ -117,27 +118,25 @@ public final class PBRAtlasManager {
         return texture;
     }
 
-    /**
-     * Umbra pins the PBR atlas sampler to nearest + clamp-to-edge
-     * ({@code PBRAtlasTexture#upload}: {@code getSamplerCache().getClampToEdge(FilterMode.NEAREST)}). Reproduce that.
-     * <p>
-     * What the uploads leave behind instead: {@code TextureUtil.uploadTextureMipmap(..., blur, clamp)} applies its
-     * own sampling on every call, and this class passes {@code false, false}. Through
-     * {@code setTextureBlurMipmap(false, true)} that resolves to magnification {@code NEAREST} — already right — but
-     * minification {@code NEAREST_MIPMAP_LINEAR}, and {@code setTextureClamped(false)} leaves wrapping at
-     * {@code REPEAT}. The magnification filter was never the problem; the other two are.
-     * <p>
-     * {@code NEAREST_MIPMAP_LINEAR} <em>interpolates between mip levels</em>. These atlases hold labPBR channels, not
-     * colour, and in labPBR the specular alpha channel <em>is emissiveness</em>. Coarser mips average neighbouring
-     * sprites together, so a sprite with no {@code _s} companion — which should read the neutral fill and never
-     * glow — starts blending in its atlas neighbours' emission the moment the sampler drops to a coarser level. Mip
-     * level is chosen from screen-space UV derivatives, so it changes with viewing angle: the glow appears when the
-     * camera turns and disappears when it turns back, while the draw call itself is byte-for-byte identical. That is
-     * the failure servers hit when their scenery is built from custom item models.
-     * <p>
-     * {@code CLAMP_TO_EDGE} matches Umbra for the neighbouring reason: a UV a hair past a sprite's edge must clamp
-     * inside that sprite rather than wrap to the far side of the atlas.
-     */
+    // Pins the PBR atlas sampler to nearest filtering plus clamp-to-edge, which is what Iris does in
+    // PBRAtlasTexture#upload via getSamplerCache().getClampToEdge(FilterMode.NEAREST)
+    //
+    // It has to be re-applied because the uploads leave something else behind: TextureUtil.uploadTextureMipmap
+    // applies its own sampling on every call, and this class passes blur=false, clamp=false. Through
+    // setTextureBlurMipmap(false, true) that gives magnification NEAREST — already correct — but minification
+    // NEAREST_MIPMAP_LINEAR, and setTextureClamped(false) leaves wrapping at REPEAT. The magnification filter was
+    // never the problem; the other two are
+    //
+    // NEAREST_MIPMAP_LINEAR interpolates BETWEEN MIP LEVELS. These atlases hold labPBR channels rather than colour,
+    // and in labPBR the specular alpha channel IS emissiveness. Coarser mips average neighbouring sprites together,
+    // so a sprite with no _s companion — which should read the neutral fill and never glow — starts blending in its
+    // atlas neighbours' emission as soon as the sampler drops to a coarser level
+    // Mip level is chosen from screen-space UV derivatives, so it changes with VIEWING ANGLE: the glow appears when
+    // the camera turns and vanishes when it turns back, while the draw call itself is byte-for-byte identical.
+    // That is the failure servers hit when their scenery is built out of custom item models
+    //
+    // CLAMP_TO_EDGE matters for the neighbouring reason: a UV a hair past a sprite's edge must clamp inside that
+    // sprite rather than wrap around to the far side of the atlas
     private static void applyPbrSampling(int mipmapLevels) {
         // Nearest in both directions. With mipmaps present minification must be NEAREST_MIPMAP_NEAREST, not plain
         // NEAREST_MIPMAP_LINEAR — the "_LINEAR" half is the level blend, and that is the whole bug.
@@ -191,11 +190,10 @@ public final class PBRAtlasManager {
         return true;
     }
 
-    /**
-     * Scales the companion image to the sprite's base resolution and crops to the first animation frame.
-     * Companion maps commonly ship at a different resolution than the base texture; nearest-neighbour scaling
-     * preserves LabPBR-encoded channel data better than any smoothing filter would.
-     */
+    // Scales the companion image to the sprite's base resolution and crops to the first animation frame
+    // Nearest-neighbour scaling specifically: companion maps routinely ship at a different resolution than the base
+    // texture, and any smoothing filter would blend LabPBR's ENCODED channel values into each other — averaging two
+    // material ids gives a third, unrelated material rather than something in between
     private static int[] extractFrame(BufferedImage image, int iconWidth, int iconHeight) {
         int srcWidth = image.getWidth();
         int srcHeight = image.getHeight();

@@ -14,9 +14,9 @@ import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 
-/**
- * LWJGL3 implementation of {@link LWJGLService}.
- */
+// The LWJGL3 backend of LWJGLService, selected when the game runs on LWJGL 3 — which on 1.12.2 means an
+// lwjgl3ify or RetroFuturaBootstrap setup
+// Same record shape as the LWJGL2 side: capability decisions resolved once at creation
 public record LWJGL3Service(
         VAOMode vaoMode,
         TimerQueryMode timerQueryMode,

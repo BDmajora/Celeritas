@@ -17,15 +17,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Compiles a parsed {@link ProgramSource} (from Phase 1) into a linked {@link UmbraProgram}, applying the shared
- * {@code #define} set and binding the OptiFine vertex-attribute slots. This is the bridge between the shader-pack model
- * and the GL layer — the concrete realisation of the Phase 2 milestone "programs compile".
- * <p>
- * Must be called on the render thread (it issues GL calls). The caller is expected to catch
- * {@link com.bdmajora.impetus.umbra.gl.shader.ShaderCompileException} / {@link ProgramCreationException} and disable
- * shaders on failure rather than crash.
- */
+// Compiles a parsed ProgramSource into a linked UmbraProgram: applies the shared #define set, patches the source,
+// binds the OptiFine vertex-attribute slots, links
+// The bridge between the shader-pack model and the GL layer, and the compile path for every IMMEDIATE-MODE gbuffer
+// program — entities, hand, block entities, particles, held items. Terrain and the fullscreen passes have their own
+// transformers and are compiled elsewhere
+// Render thread only, since it issues GL calls. Callers are expected to catch ShaderCompileException and
+// ProgramCreationException and fall back to vanilla rendering rather than let a bad pack crash the game
 public final class ShaderProgramCompiler {
     public static final String HAND_LIGHTMAP_UNIFORM = "impetus_HandLightmap";
 
@@ -161,34 +159,27 @@ public final class ShaderProgramCompiler {
         return source.matches("(?s).*\\b(?:attribute|in)\\s+\\w+\\s+" + attributeName + "\\b.*");
     }
 
-    /**
-     * The immediate-mode (vanilla-geometry) gbuffer programs compiled here — entities, hand, block-entities, particles,
-     * held items — never receive the OptiFine generic vertex attributes the pack declares. OptiFine's own renderer
-     * computes and submits {@code at_tangent}/{@code mc_midTexCoord} per vertex (via SVertexBuilder); the vanilla
-     * 1.12.2 draw path does not, so those slots read the GL default generic value {@code (0,0,0,1)}. Two distinct
-     * failures result in ADVANCED_MATERIALS packs (BSL, Complementary v4 / Insanity), and both must be neutralized:
-     *
-     * <ul>
-     *   <li>{@code at_tangent = (0,0,0,1)} → {@code normalize(at_tangent.xyz)} and
-     *       {@code normalize(cross(at_tangent.xyz, gl_Normal))} are {@code normalize(vec3(0))} = <b>NaN</b> on every
-     *       vertex, poisoning the fragment TBN matrix. Replaced with an orthonormal basis derived from the vertex
-     *       normal; with the neutral normal map (0,0,1) the pack reconstructs {@code newNormal == gl_Normal}, so
-     *       shading is correct and finite.</li>
-     *   <li>{@code mc_midTexCoord = (0,0,0,1)} → the vertex shader builds the atlas-tiling basis
-     *       ({@code vTexCoordAM}/{@code vTexCoord}) from {@code texCoord - midCoord}. With {@code midCoord == 0} that
-     *       basis is garbage, and with {@code PARALLAX} enabled {@code GetParallaxCoord} returns out-of-sprite
-     *       (negative) coordinates that re-sample the albedo via {@code texture2DGradARB} — the salt-and-pepper
-     *       <b>speckle noise</b> smeared over every entity and the hand. Aliased to the vertex's own texcoord so
-     *       {@code midCoord == texCoord}: the tile size collapses to zero, parallax becomes a no-op, and the albedo is
-     *       sampled at {@code texCoord} exactly. (POM on standalone entity/hand textures is meaningless anyway.)</li>
-     * </ul>
-     * Photon declares this attribute as {@code vec2}, while older packs commonly declare {@code vec4}; handle the
-     * scalar/vector shapes Umbra's transformer accepts instead of leaving Photon's generic attribute unfed.
-     *
-     * Only the {@code ShaderProgramCompiler} path (vanilla geometry) is affected; terrain/water get real tangents and
-     * real quad texture centres from the chunk vertex format via {@code ImpetusTerrainTransformer} and are compiled
-     * elsewhere.
-     */
+    // The immediate-mode programs compiled here never receive the OptiFine generic vertex attributes a pack
+    // declares. OptiFine's own renderer computes and submits at_tangent and mc_midTexCoord per vertex through
+    // SVertexBuilder; the vanilla 1.12.2 draw path does not, so those slots read GL's default generic value
+    // (0, 0, 0, 1)
+    // That produces two distinct failures on ADVANCED_MATERIALS packs (BSL, Complementary v4, Insanity), and both
+    // have to be neutralised in the source rather than left to the driver
+    //
+    // at_tangent = (0,0,0,1) makes normalize(at_tangent.xyz) and normalize(cross(at_tangent.xyz, gl_Normal)) both
+    // normalize(vec3(0)), which is NaN on every vertex and poisons the fragment TBN matrix. It is replaced with an
+    // orthonormal basis derived from the vertex normal; with the neutral (0,0,1) normal map the pack then
+    // reconstructs newNormal == gl_Normal, so shading is both correct and finite
+    //
+    // mc_midTexCoord = (0,0,0,1) makes the vertex shader build its atlas-tiling basis from texCoord - midCoord,
+    // which with midCoord == 0 is garbage. With PARALLAX on, GetParallaxCoord then returns negative out-of-sprite
+    // coordinates that re-sample the albedo through texture2DGradARB — the salt-and-pepper speckle smeared over
+    // every entity and the hand. It is aliased to the vertex's own texcoord so midCoord == texCoord: the tile size
+    // collapses to zero, parallax becomes a no-op, and the albedo is sampled at texCoord exactly. POM on a
+    // standalone entity or hand texture is meaningless anyway
+    //
+    // Both scalar and vector declaration shapes are handled: Photon declares mc_midTexCoord as vec2 while older
+    // packs commonly use vec4, and matching only one shape leaves the other pack's attribute unfed
     private static String neutralizeUnfedVanillaAttributes(String source) {
         source = source.replaceAll("(?m)^\\s*(?:attribute|in)\\s+vec4\\s+at_tangent\\s*;",
                 "vec4 iris_tangentFallback() { "
@@ -211,16 +202,14 @@ public final class ShaderProgramCompiler {
         return "gbuffers_hand".equals(name) || "gbuffers_hand_water".equals(name);
     }
 
-    /**
-     * Replaces {@code gl_MultiTexCoord1} with a uniform the hand renderer feeds, because vanilla lights held items
-     * through GL lighting rather than the lightmap texcoord, so the fixed-function coord arrives at ~0.
-     * <p>
-     * The declaration goes immediately after the {@code #version} line and any {@code #extension} directives that
-     * <em>contiguously</em> follow it. Scanning the whole file for the last {@code #extension} (as this used to) breaks
-     * on packs whose flattened include tree contains a guarded {@code #extension} deep inside — Photon's
-     * {@code include/global.glsl} has three, so the declaration landed thousands of lines after the first use and
-     * {@code gbuffers_hand} failed to compile with "undefined variable {@code impetus_HandLightmap}".
-     */
+    // Replaces gl_MultiTexCoord1 with a uniform the hand renderer feeds
+    // Needed because vanilla lights held items through GL lighting rather than through the lightmap texcoord, so
+    // the fixed-function coordinate arrives at roughly 0 and the pack renders the hand black
+    // The declaration is inserted immediately after the #version line and any #extension directives CONTIGUOUSLY
+    // following it. Scanning the whole file for the last #extension, as this used to, breaks on packs whose
+    // flattened include tree contains a guarded #extension deep inside — Photon's include/global.glsl has three, so
+    // the declaration landed thousands of lines after its first use and gbuffers_hand failed to compile with
+    // "undefined variable impetus_HandLightmap"
     private static String injectHandLightmapBridge(String source) {
         List<String> lines = new ArrayList<>(Arrays.asList(source.split("\n", -1)));
         int insertIndex = -1;

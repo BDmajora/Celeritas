@@ -11,63 +11,66 @@ import java.util.Map;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-/**
- * Pack-declared shader storage buffers ({@code bufferObject.<index> = <byteSize>} or
- * {@code bufferObject.<index> = <elementSize> true <scaleX> <scaleY>} for screen-relative sizing in
- * {@code shaders.properties}). Buffers are zero-initialized at (re)creation, bound at their fixed binding index
- * every frame, and persist across frames — packs use them for history/accumulation data from compute passes.
- */
+// The shader storage buffers a pack declares in shaders.properties, as `bufferObject.<index> = <byteSize>` or
+// `bufferObject.<index> = <elementSize> true <scaleX> <scaleY>` for screen-relative sizing
+// Zero-initialised when created, bound at their fixed binding index every frame, and PERSISTENT across frames —
+// packs use them for history and accumulation data written by compute passes, so clearing them per frame would
+// destroy the thing they exist for
 public final class ShaderStorageBufferHolder {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
-    /** GL43 constants (the generated constant classes track LWJGL's; avoid a hard dependency for two values). */
+    // GL43 constants spelled out rather than imported: the generated constant classes track LWJGL's own, and a hard
+    // dependency on them for two values is not worth it
     private static final int GL_SHADER_STORAGE_BUFFER = 0x90D2;
     private static final int GL_MAX_SHADER_STORAGE_BLOCK_SIZE = 0x90DE;
     private static final int GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS = 0x90DD;
     private static final int GL_NO_ERROR = 0;
 
-    /** {@code NVX_gpu_memory_info}: free video memory in KiB. The only portable-ish availability query there is. */
+    // NVX_gpu_memory_info's free-video-memory query, reported in KiB. NVIDIA-only, and the closest thing to a
+    // portable availability query that exists
     private static final int GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX = 0x9049;
 
-    /** What Umbra assumes when the vendor query is unavailable ({@code UmbraRenderSystem.getVRAM}). */
+    // What Iris assumes when the vendor query is unavailable, matching its IrisRenderSystem.getVRAM
     private static final long ASSUMED_VRAM_BYTES = 4L * 1024 * 1024 * 1024;
 
-    /** Fill descriptor for the server-side zero: one unsigned byte per byte of buffer. */
+    // Fill descriptor for the server-side zero — one unsigned byte per byte of buffer, so the clear covers exactly
+    // the allocation regardless of what the pack stores in it
     private static final int GL_R8 = 0x8229;
     private static final int GL_RED = 0x1903;
     private static final int GL_UNSIGNED_BYTE = 0x1401;
 
-    /**
-     * Ceiling used only when the driver will not report {@link #GL_MAX_SHADER_STORAGE_BLOCK_SIZE}. This was previously
-     * a hard cap on every allocation, which silently rejected buffers packs genuinely need: Complementary Reimagined
-     * at {@code COLORED_LIGHTING = 512} with world-space reflections on declares
-     * {@code bufferObject.0 = 810549248} (773 MiB) for its reflection face data. Skipping it left binding 0 empty
-     * while the pack's shaders kept reading {@code blockDataSSBO.data[...]} for the colour, lightmap and texture
-     * bounds of whatever a reflection ray hit — undefined reads that shade reflective surfaces arbitrarily bright,
-     * deterministically per view direction. The symptom is every block and entity "glowing" depending on which way
-     * the camera faces, and only with a pack that voxelizes for reflections.
-     */
+    // Used ONLY when the driver will not report GL_MAX_SHADER_STORAGE_BLOCK_SIZE
+    // This was previously a hard cap on every allocation, which silently rejected buffers packs genuinely need:
+    // Complementary Reimagined at COLORED_LIGHTING = 512 with world-space reflections on declares
+    // bufferObject.0 = 810549248, i.e. 773 MiB, for its reflection face data
+    // Skipping that left binding 0 empty while the pack's shaders went on reading blockDataSSBO.data[...] for the
+    // colour, lightmap and texture bounds of whatever a reflection ray hit — undefined reads that shade reflective
+    // surfaces arbitrarily bright, deterministically per view direction
+    // The symptom is every block and entity "glowing" depending which way the camera faces, and only with a pack
+    // that voxelizes for reflections
     private static final long FALLBACK_MAX_BUFFER_BYTES = 512L * 1024 * 1024;
 
-    /** Host-staged zero-fill granularity, used only where {@code glClearBufferData} is unavailable. */
+    // Host-staged zero-fill granularity, used only where glClearBufferData is unavailable — chunked so a 773 MiB
+    // buffer does not need a 773 MiB host staging allocation
     private static final int ZERO_FILL_CHUNK_BYTES = 4 * 1024 * 1024;
 
-    /** Capability answers, resolved once against a live context. */
+    // Capability answers resolved once against a live context. Boxed so null means "not yet queried", which is
+    // distinct from a queried false
     private static Boolean immutableStorageAvailable;
     private static Boolean serverSideClearAvailable;
 
-    /** Driver's per-buffer ceiling, queried once against a live context; 0 until then. */
+    // The driver's per-buffer ceiling, queried once against a live context; 0 until then
     private static long cachedMaxBufferBytes;
 
-    /** Driver's count of indexed shader-storage binding points, queried once; 0 until then. */
+    // The driver's count of indexed shader-storage binding points, queried once; 0 until then
     private static int cachedMaxBindings;
 
-    /**
-     * Every buffer this class has created and not yet deleted, id -&gt; byte size. Umbra keeps the same registry
-     * ({@code ShaderStorageBufferHolder.ACTIVE_BUFFERS}) precisely because {@link #destroy()} is not guaranteed to be
-     * reached — a pipeline that is replaced without being torn down would otherwise strand its buffers in video memory
-     * with no way to name or reclaim them. At these sizes that is close to a gigabyte per leak.
-     */
+    // Every buffer this class has created and not yet deleted, as id -> byte size
+    // Iris keeps the same registry for the same reason: destroy() is NOT guaranteed to be reached, and a pipeline
+    // replaced without being torn down would otherwise strand its buffers in video memory with no remaining
+    // reference to name or reclaim them
+    // At the sizes involved that is close to a gigabyte per leak, which is why a static registry is worth the
+    // global state
     private static final Map<Integer, Long> ACTIVE_BUFFERS = new LinkedHashMap<>();
 
     public static final class Definition {
@@ -111,13 +114,14 @@ public final class ShaderStorageBufferHolder {
         return this.definitions.isEmpty();
     }
 
-    /** {@return the GL buffer id bound at {@code index}, or -1 when the pack declared none there} */
+    // The GL buffer id bound at that index, or -1 when the pack declared none there
     public int getBufferId(int index) {
         Integer buffer = this.buffers.get(index);
         return buffer != null ? buffer : -1;
     }
 
-    /** Recreates screen-relative buffers when the display size changes; fixed-size buffers are untouched. */
+    // Recreates the screen-relative buffers at the new size. Fixed-size buffers are left completely alone, so a
+    // pack's accumulated history in one of those survives a window resize
     public void onResize(int newWidth, int newHeight) {
         if (!this.anyRelative || (newWidth == this.width && newHeight == this.height)) {
             this.width = newWidth;
@@ -127,7 +131,8 @@ public final class ShaderStorageBufferHolder {
         allocate(newWidth, newHeight);
     }
 
-    /** Rebinds every buffer to its declared index (cheap; run once per frame for robustness). */
+    // Rebinds every buffer to its declared index. Cheap enough to run once per frame rather than tracking whether
+    // anything unbound them
     public void bindAll() {
         this.definitions.keySet().forEach(index -> {
             Integer buffer = this.buffers.get(index);
@@ -145,12 +150,10 @@ public final class ShaderStorageBufferHolder {
         this.buffers.clear();
     }
 
-    /**
-     * Deletes any buffer this class allocated that its owning holder never destroyed, and reports the total. Umbra runs
-     * the equivalent ({@code forceDeleteBuffers}) when a pipeline is torn down, because a holder that is dropped
-     * without {@link #destroy()} leaves its allocations resident with no remaining reference — and a pack like
-     * Complementary at high colored-lighting settings measures those in hundreds of megabytes each.
-     */
+    // Deletes any buffer this class allocated whose owning holder never destroyed it, and reports the total
+    // Iris runs the equivalent at pipeline teardown for the same reason: a holder dropped without destroy() leaves
+    // its allocations resident with no remaining reference, and at Complementary's high coloured-lighting settings
+    // those are hundreds of megabytes each
     public static void forceDeleteBuffers() {
         if (ACTIVE_BUFFERS.isEmpty()) {
             return;
@@ -236,11 +239,10 @@ public final class ShaderStorageBufferHolder {
         bindAll();
     }
 
-    /**
-     * The driver's own ceiling for a single shader storage block, which is the only limit that actually applies.
-     * Queried once against a live context and cached; {@code glGetInteger} saturates at {@link Integer#MAX_VALUE} for
-     * the drivers that report a larger 64-bit value, which is well past any real pack request.
-     */
+    // The driver's own ceiling for a single shader storage block, which is the only limit that actually applies —
+    // any cap of ours is a guess and has already been wrong once
+    // Queried once and cached. glGetInteger saturates at Integer.MAX_VALUE on drivers reporting a larger 64-bit
+    // value, which is still well past any real pack request
     private static long maxBufferBytes() {
         if (cachedMaxBufferBytes > 0) {
             return cachedMaxBufferBytes;
@@ -258,7 +260,8 @@ public final class ShaderStorageBufferHolder {
         return cachedMaxBufferBytes;
     }
 
-    /** Number of indexed {@code GL_SHADER_STORAGE_BUFFER} binding points, queried once and cached. */
+    // How many indexed GL_SHADER_STORAGE_BUFFER binding points the driver offers, queried once and cached — a pack
+    // asking for a binding past this is refused with a message naming the index
     private static int maxBindings() {
         if (cachedMaxBindings > 0) {
             return cachedMaxBindings;
@@ -270,15 +273,12 @@ public final class ShaderStorageBufferHolder {
         return cachedMaxBindings;
     }
 
-    /**
-     * Free video memory in bytes, matching Umbra's {@code UmbraRenderSystem.getVRAM()}: the {@code NVX_gpu_memory_info}
-     * query where it exists (NVIDIA, and it reports KiB), otherwise Umbra's flat 4 GiB assumption.
-     * <p>
-     * Deliberately <em>current</em> free memory rather than total, because that is what decides whether this
-     * allocation can succeed — the render targets, shadow maps and custom images are already resident by the time a
-     * holder is constructed, and on a pack like Complementary they account for well over a gigabyte before the first
-     * {@code bufferObject} is touched.
-     */
+    // Free video memory in bytes, matching Iris's IrisRenderSystem.getVRAM(): the NVX_gpu_memory_info query where
+    // it exists — NVIDIA only, and it reports KiB — otherwise Iris's flat 4 GiB assumption
+    // Deliberately CURRENT free memory rather than total, because that is what decides whether this allocation can
+    // succeed: the render targets, shadow maps and custom images are all already resident by the time a holder is
+    // constructed, and on a pack like Complementary they account for well over a gigabyte before the first
+    // bufferObject is touched
     private static long availableVideoMemoryBytes() {
         if (!LWJGL.isExtensionSupported(GLExtension.NVX_gpu_memory_info)) {
             return ASSUMED_VRAM_BYTES;
@@ -291,24 +291,23 @@ public final class ShaderStorageBufferHolder {
         return kib * 1024L;
     }
 
-    /**
-     * Allocates the currently bound shader storage buffer, preferring immutable GPU-only storage.
-     * <p>
-     * This is what Umbra does ({@code ShaderStorageBuffer.createStatic} -&gt; {@code bufferStorage(target, size, 0)};
-     * it uses {@code GL_DYNAMIC_STORAGE_BIT} only for the {@code bufferObject.<n> = <size> <file>} form that seeds a
-     * buffer from a resource, which this port does not implement, so {@code 0} is right for every buffer it creates).
-     * The <em>flags</em> matter as much as the immutability: {@code 0} states that the client will never map, read or
-     * write this buffer, so the driver is free to place it entirely in video memory. The previous
-     * {@code glBufferData(..., GL_DYNAMIC_DRAW)} said the opposite — a mutable buffer the client updates repeatedly —
-     * which invites a host-visible allocation or a system-memory mirror. Complementary Reimagined declares
-     * {@code bufferObject.0 = 810549248} (773 MiB) at {@code COLORED_LIGHTING = 512} with world-space reflections on,
-     * so the hint is worth three quarters of a gigabyte of resident host memory that nothing on the CPU ever reads.
-     * <p>
-     * Immutable storage is chosen only when {@link #canClearServerSide()}, because zeroing is then the only way to
-     * initialize the buffer: a {@code flags = 0} allocation rejects {@code glBufferSubData} by construction. Umbra can
-     * assume both entry points unconditionally; this port runs on 1.12.2 contexts that may predate either, so the two
-     * capabilities are resolved together rather than independently.
-     */
+    // Allocates the currently bound shader storage buffer, preferring immutable GPU-only storage
+    //
+    // This is what Iris does: ShaderStorageBuffer.createStatic calls bufferStorage(target, size, 0). It only uses
+    // GL_DYNAMIC_STORAGE_BIT for the `bufferObject.<n> = <size> <file>` form that seeds a buffer from a resource,
+    // which this port does not implement — so flags of 0 is right for every buffer created here
+    //
+    // The FLAGS matter as much as the immutability. 0 declares that the client will never map, read or write this
+    // buffer, leaving the driver free to place it entirely in video memory
+    // The previous glBufferData(..., GL_DYNAMIC_DRAW) said the opposite — a mutable buffer the client updates
+    // repeatedly — which invites a host-visible allocation or a system-memory mirror. Complementary Reimagined
+    // declares 773 MiB at COLORED_LIGHTING = 512 with world-space reflections on, so that hint is worth three
+    // quarters of a gigabyte of resident host memory nothing on the CPU ever reads
+    //
+    // Immutable storage is chosen only when the server-side clear is also available, because zeroing is then the
+    // ONLY way to initialise the buffer: a flags = 0 allocation rejects glBufferSubData by construction
+    // Iris can assume both entry points unconditionally; this port runs on 1.12.2 contexts that may predate either,
+    // so the two capabilities are resolved together rather than independently
     private static void allocateStorage(long bytes) {
         if (immutableStorageAvailable == null) {
             immutableStorageAvailable = (LWJGL.isOpenGLVersionSupported(4, 4)
@@ -323,17 +322,14 @@ public final class ShaderStorageBufferHolder {
         }
     }
 
-    /**
-     * Zeroes the currently bound shader storage buffer. Freshly allocated storage is undefined and the pack only
-     * writes the entries it visits, so anything it never touches has to read as zero rather than as whatever the
-     * driver handed us.
-     * <p>
-     * {@code glClearBufferData} does this entirely server-side, which is what Umbra uses
-     * ({@code clearBufferSubData}). The chunked {@code glBufferSubData} fallback both costs an upload of the buffer's
-     * full size and requires the buffer to be client-writable — the property that keeps a 773 MiB allocation resident
-     * in host memory — so it runs only where the server-side clear does not exist, and there
-     * {@link #allocateStorage} has already made the buffer mutable to match.
-     */
+    // Zeroes the currently bound shader storage buffer
+    // Necessary because freshly allocated storage is UNDEFINED and a pack only writes the entries it visits, so
+    // everything it never touches has to read as zero rather than as whatever the driver happened to hand us
+    // glClearBufferData does this entirely server-side, which is what Iris uses
+    // The chunked glBufferSubData fallback costs an upload of the buffer's full size AND requires the buffer to be
+    // client-writable — the very property that keeps a 773 MiB allocation resident in host memory — so it runs only
+    // where the server-side clear does not exist, and allocateStorage has already made the buffer mutable there to
+    // match
     private static void zeroFill(long bytes) {
         if (canClearServerSide()) {
             // One texel of source data, as GL_R8/GL_RED/GL_UNSIGNED_BYTE describes it. LWJGL 2's binding calls
@@ -352,12 +348,10 @@ public final class ShaderStorageBufferHolder {
         }
     }
 
-    /**
-     * {@code glClearBufferData} is GL 4.3 core, the same version that introduced shader storage buffers themselves, so
-     * in practice any driver that can run a pack declaring {@code bufferObject} has it. It is still queried rather
-     * than assumed: LWJGL 2 answers an unavailable entry point by throwing from
-     * {@code BufferChecks.checkFunctionAddress}, which would turn a silently-degraded pipeline into a failed one.
-     */
+    // glClearBufferData is GL 4.3 core — the same version that introduced shader storage buffers themselves — so in
+    // practice any driver able to run a pack declaring bufferObject has it
+    // Queried rather than assumed anyway, because LWJGL 2 answers an unavailable entry point by THROWING from
+    // BufferChecks.checkFunctionAddress, which would turn a silently degraded pipeline into a failed one
     private static boolean canClearServerSide() {
         if (serverSideClearAvailable == null) {
             serverSideClearAvailable = LWJGL.isOpenGLVersionSupported(4, 3)
@@ -366,7 +360,8 @@ public final class ShaderStorageBufferHolder {
         return serverSideClearAvailable;
     }
 
-    /** Parses every {@code bufferObject.<index> = ...} directive. */
+    // Parses every bufferObject.<index> directive out of the raw properties, in both the fixed-size and
+    // screen-relative forms
     public static Map<Integer, Definition> parseDefinitions(Map<String, String> rawProperties) {
         Map<Integer, Definition> definitions = new LinkedHashMap<>();
         rawProperties.forEach((key, value) -> {
