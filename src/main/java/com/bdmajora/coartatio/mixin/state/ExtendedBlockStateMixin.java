@@ -17,18 +17,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.Optional;
 
-/**
- * The unlisted-property counterpart to {@link BlockStateContainerMixin}.
- *
- * <p>{@code ExtendedBlockState} overrides {@code createState}, so the base mixin never fires for
- * these containers — except in the one case Forge delegates upward, where the block declared
- * unlisted properties but the map came through empty. That case is left alone here so it falls
- * through to {@code super.createState} and gets an ordinary packed state, which is correct.
- *
- * <p>Unlisted properties are the reason FoamFix needs a whole parallel container class. Here the
- * mapper already lives on the container via {@link MappedStateOwner}, so this only has to decide
- * which state class to build.
- */
+// The unlisted-property counterpart to BlockStateContainerMixin
+// ExtendedBlockState overrides createState, so the base mixin never fires for these containers — except in the
+// one case where Forge delegates upward, when the block declared unlisted properties but the map came through
+// empty. That case is deliberately left alone below so it falls through to super.createState and gets an
+// ordinary packed state, which is what it should get
+// Unlisted properties are the reason FoamFix needs an entire parallel container class. Here the mapper already
+// lives on the container through MappedStateOwner, so this only has to pick which state class to build
 @Mixin(ExtendedBlockState.class)
 public abstract class ExtendedBlockStateMixin {
     @Inject(method = "createState", at = @At("HEAD"), cancellable = true, remap = false)
@@ -53,11 +48,10 @@ public abstract class ExtendedBlockStateMixin {
                 coartatio$hasPresentValue(unlistedProperties)));
     }
 
-    /**
-     * States built during container setup normally have every unlisted value empty, but a mod is free
-     * to seed one, and such a state must be treated as dirty or it would hand its unlisted values to
-     * the shared clean instance on the next listed-property change.
-     */
+    // Whether any unlisted value is already set, which the state uses as its initial dirty flag
+    // States built during container setup normally have every unlisted value empty, but a mod is free to seed
+    // one, and such a state has to start out dirty — otherwise the next listed-property change would hand its
+    // unlisted values over to the shared clean instance
     @Unique
     private static boolean coartatio$hasPresentValue(ImmutableMap<IUnlistedProperty<?>, Optional<?>> unlisted) {
         for (Optional<?> value : unlisted.values()) {

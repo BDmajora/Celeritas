@@ -65,7 +65,6 @@ public final class BlockMaterialMapping {
             }
         });
 
-        LOGGER.info("[Umbra] block.properties resolved: {} block state(s) mapped", statesMapped[0]);
         return table;
     }
 
@@ -73,7 +72,6 @@ public final class BlockMaterialMapping {
         ResourceLocation location = new ResourceLocation(entry.getId().getNamespace(), entry.getId().getName());
         if (!Block.REGISTRY.containsKey(location)) {
             // Normal and expected: modern-only names behind the pack's own MC_VERSION guards, or absent mods.
-            LOGGER.debug("[Umbra] block.{}: no block named {} on this version, skipping", intId, location);
             return 0;
         }
 
@@ -103,8 +101,6 @@ public final class BlockMaterialMapping {
             IProperty<?> property = findProperty(state, predicate.getKey());
             if (property == null) {
                 // Umbra parity: a predicate naming a property the block lacks is dropped, not treated as a mismatch.
-                LOGGER.debug("[Umbra] block.{}: {} has no property named {}, ignoring that filter",
-                        intId, state.getBlock().getRegistryName(), predicate.getKey());
                 continue;
             }
             if (!valueName(state, property).equals(predicate.getValue())) {

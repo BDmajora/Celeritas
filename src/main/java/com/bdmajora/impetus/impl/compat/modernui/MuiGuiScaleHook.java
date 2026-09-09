@@ -2,7 +2,6 @@ package com.bdmajora.impetus.impl.compat.modernui;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.ScaledResolution;
-import com.bdmajora.impetus.ImpetusVintage;
 
 import java.lang.reflect.Method;
 import java.util.stream.Stream;
@@ -33,8 +32,6 @@ public class MuiGuiScaleHook {
                 return Stream.of();
             }
         }).findFirst().orElse(null);
-        if (calcGuiScalesMethod != null)
-            ImpetusVintage.logger().info("Found ModernUI GUI scale hook");
     }
 
     public static int getMaxGuiScale() {

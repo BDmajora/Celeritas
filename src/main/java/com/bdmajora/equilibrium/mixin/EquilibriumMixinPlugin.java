@@ -37,9 +37,6 @@ public class EquilibriumMixinPlugin implements IMixinConfigPlugin {
 
     private static EquilibriumConfig config;
 
-    /** Logs every mixin decision. Enabled by {@code mixin.debug} being absent from the tree, so: never. */
-    private static boolean debug;
-
     @Override
     public void onLoad(String mixinPackage) {
         if (DISABLE_ALL_MIXINS) {
@@ -58,10 +55,6 @@ public class EquilibriumMixinPlugin implements IMixinConfigPlugin {
         }
 
         Equilibrium.setConfig(config);
-        debug = Boolean.getBoolean("equilibrium.debug_mixins");
-
-        Equilibrium.LOGGER.info("Loaded configuration file for Equilibrium: {} options available, {} override(s) found",
-                config.getOptionCount(), config.getOptionOverrideCount());
     }
 
     @Override
@@ -93,28 +86,7 @@ public class EquilibriumMixinPlugin implements IMixinConfigPlugin {
             return false;
         }
 
-        if (option.isOverridden()) {
-            String source = option.isUserDefined()
-                    ? "user configuration"
-                    : "mods [" + String.join(", ", option.getDefiningMods()) + "]";
-
-            if (option.isEnabled()) {
-                Equilibrium.LOGGER.info("Force-enabling mixin '{}' as rule '{}' (added by {}) enables it",
-                        mixin, option.getName(), source);
-            } else {
-                Equilibrium.LOGGER.info("Force-disabling mixin '{}' as rule '{}' (added by {}) disables it and children",
-                        mixin, option.getName(), source);
-            }
-        }
-
-        boolean enabled = option.isEnabled();
-
-        if (debug) {
-            Equilibrium.LOGGER.info("{} mixin '{}' due to rule '{}'", enabled ? "Enabling" : "Disabling",
-                    mixin, option.getName());
-        }
-
-        return enabled;
+        return option.isEnabled();
     }
 
     @Override

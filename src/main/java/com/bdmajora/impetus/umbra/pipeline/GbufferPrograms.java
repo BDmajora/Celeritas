@@ -126,7 +126,6 @@ public class GbufferPrograms {
             }
             String sourceName = source.get().getName();
             if (!pack.getProperties().getProgramEnabled(sourceName).orElse(Boolean.TRUE)) {
-                LOGGER.info("[Umbra] Skipping disabled gbuffer program '{}'", sourceName);
                 bySourceName.put(sourceName, null);
                 continue;
             }
@@ -153,8 +152,6 @@ public class GbufferPrograms {
                 if (direct.isPresent()) {
                     this.directPhases.add(phase);
                 }
-                LOGGER.info("[Umbra] Gbuffer phase {} -> '{}'{}", phase, sourceName,
-                        direct.isPresent() ? "" : " (fallback)");
             }
         }
     }

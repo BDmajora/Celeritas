@@ -38,15 +38,6 @@ public final class Coartatio {
         ModelCaches.close();
         TransformCaches.close();
         ConditionCanonicalizer.close();
-
-        if (CoartatioConfig.get().logStatistics) {
-            for (String line : statistics()) {
-                LOGGER.info(line);
-            }
-            for (String line : MemoryReport.lines()) {
-                LOGGER.info(line);
-            }
-        }
     }
 
     // Equivalent to FoamFix's clClearCachesOnUnload. NBT keys and resource paths grow with play
@@ -59,7 +50,6 @@ public final class Coartatio {
         StringPool.NBT_KEYS.clear();
         ResourceLocationCaches.PATHS.open();
 
-        LOGGER.info("Released {} pooled strings on leaving the world", freed);
     }
 
     // Shared by the log and the F3 overlay.

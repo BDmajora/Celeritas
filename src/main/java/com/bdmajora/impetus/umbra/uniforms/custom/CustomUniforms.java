@@ -249,10 +249,6 @@ public final class CustomUniforms {
                 }
             }
 
-            if (!variables.isEmpty()) {
-                LOGGER.info("[Umbra] Loaded {} custom uniform(s)/variable(s)", variables.size());
-            }
-
             return new CustomUniforms(inputs, variables);
         }
 

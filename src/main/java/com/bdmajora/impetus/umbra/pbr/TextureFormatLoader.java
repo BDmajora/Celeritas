@@ -3,8 +3,6 @@ package com.bdmajora.impetus.umbra.pbr;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.IResource;
 import net.minecraft.util.ResourceLocation;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.Locale;
 import java.util.Map;
@@ -17,7 +15,6 @@ import java.util.Properties;
  * packs can adapt their normal/specular decoding.
  */
 public final class TextureFormatLoader {
-    private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
     private static final ResourceLocation LOCATION = new ResourceLocation("minecraft", "optifine/texture.properties");
 
     private TextureFormatLoader() {
@@ -44,7 +41,6 @@ public final class TextureFormatLoader {
         if (version != null) {
             macros.put(base + "_" + sanitize(version), "");
         }
-        LOGGER.info("[Umbra] Resource pack declares PBR texture format '{}'", format);
     }
 
     private static String sanitize(String token) {

@@ -133,7 +133,6 @@ public class CustomTextureManager {
                 try {
                     noise = new PngTexture((CustomTextureData.PngData) noiseData);
                     this.ownedTextures.add(noise);
-                    LOGGER.info("[Umbra] Using the pack's own noise texture ({}x{})", noise.getWidth(), noise.getHeight());
                 } catch (IOException e) {
                     LOGGER.error("[Umbra] Unable to parse the image data for the custom noise texture: {}", e.getMessage());
                 }
@@ -165,7 +164,6 @@ public class CustomTextureManager {
             for (TextureStage stage : TextureStage.values()) {
                 this.overrides.computeIfAbsent(stage, s -> new LinkedHashMap<>()).put(name, override);
             }
-            LOGGER.info("[Umbra] Custom texture '{}' on unit {} (all stages)", name, unit);
         });
     }
 
@@ -198,7 +196,6 @@ public class CustomTextureManager {
                 }
             }
         }
-        LOGGER.info("[Umbra] Custom texture for sampler '{}' on unit {} during {}", samplerName, unit, stage);
     }
 
     private int allocateUnit(String samplerName) {
@@ -275,8 +272,6 @@ public class CustomTextureManager {
             LWJGL.glBindTexture(target, 0);
 
             this.ownedRawTextures.add(texture);
-            LOGGER.info("[Umbra] Raw custom texture '{}' on GL texture {} ({} {}x{}x{})",
-                    name, texture, data.getTextureType(), data.getWidth(), data.getHeight(), data.getDepth());
             return new TextureRef(target, () -> texture);
         } catch (IllegalArgumentException e) {
             LOGGER.error("[Umbra] Unsupported raw custom texture '{}': {}", name, e.getMessage());

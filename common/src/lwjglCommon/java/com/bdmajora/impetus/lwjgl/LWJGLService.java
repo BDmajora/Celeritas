@@ -1,6 +1,5 @@
 package com.bdmajora.impetus.lwjgl;
 
-import java.io.PrintStream;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
@@ -127,15 +126,6 @@ public interface LWJGLService {
     void glDeleteQueries(int query);
     void glQueryCounter(int id, int target);
     long glGetQueryObjectui64(int id, int pname);
-
-    // ===================== DEBUG OPERATIONS =====================
-
-    default PrintStream getDebugStream() { return System.err; }
-    int setupDebugCallback(DebugMessageHandler handler); // returns 0=unsupported, 1=success, 2=restart needed
-    void disableDebugCallback();
-    void glObjectLabel(int identifier, int name, CharSequence label);
-    void glPushDebugGroup(int source, int id, CharSequence message);
-    void glPopDebugGroup();
 
     // ===================== TEXTURE OPERATIONS =====================
 

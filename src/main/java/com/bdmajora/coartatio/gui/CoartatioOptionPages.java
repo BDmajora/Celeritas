@@ -17,27 +17,22 @@ import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * The Memory page in Impetus' video options, alongside General, Quality, Performance and the Umbra
- * pages.
- *
- * <p>Built the same way {@code UmbraOptionPages} is: an {@link OptionStorage} over the subsystem's own
- * config object, and {@link OptionImpl} bindings that write straight through to it.
- *
- * <h2>Why almost everything says "requires restart"</h2>
- *
- * <p>Coartatio's switches are read once, by {@code CoartatioMixinPlugin}, when it decides which
- * mixins to apply — before the game window exists. Turning one off at runtime cannot un-apply a
- * mixin, and turning one on cannot apply one. Those options are flagged
- * {@link OptionFlag#REQUIRES_GAME_RESTART} so the screen says so rather than appearing to work.
- *
- * <p>The exceptions are the four read live: the two diagnostics, and the two NBT map settings, which
- * are consulted whenever a compound is created and so apply to everything built from that point on.
- */
+// Builds the Memory page in Impetus' video options, next to General, Quality, Performance and the Umbra pages
+// Same shape as UmbraOptionPages: one OptionStorage over the subsystem's config object, and OptionImpl bindings
+// whose setters write straight through to that object's fields
+//
+// Nearly every toggle here is flagged REQUIRES_GAME_RESTART, because CoartatioMixinPlugin reads the config once
+// to decide which mixins to apply, before the game window even exists. Flipping a switch at runtime cannot
+// un-apply an already-applied mixin or apply a skipped one, so the flag makes the screen say so instead of
+// letting the option look like it took effect
+// The live exceptions are built with an explicit builder rather than restartToggle: the two diagnostics, and the
+// two NBT map settings, which are re-read every time a compound is created
 public final class CoartatioOptionPages {
     private static final String MOD_ID = "coartatio";
 
-    /** Saving on every toggle is fine: the file is seventeen lines and writes are user-paced. */
+    // Reads and writes the live config singleton rather than a snapshot, so a toggle is visible to anything that
+    // asks CoartatioConfig.get() immediately
+    // save() runs on every apply; that is fine because the file is seventeen lines and writes are user-paced
     private static final OptionStorage<CoartatioConfig> STORAGE = new OptionStorage<CoartatioConfig>() {
         @Override
         public CoartatioConfig getData() {
@@ -54,8 +49,10 @@ public final class CoartatioOptionPages {
     }
 
     public static OptionPage memory() {
+        // Groups render as titled blocks in page order, so the order of these adds is the on-screen order
         List<OptionGroup> groups = new ArrayList<>();
 
+        // Interning passes over data the resource loader produces once at startup
         groups.add(OptionGroup.createBuilder()
                 .setId(OptionIdentifier.create(MOD_ID, "deduplication"))
                 .add(restartToggle("deduplicate_resource_locations",
@@ -80,6 +77,7 @@ public final class CoartatioOptionPages {
                         config -> config.canonicalizeMultipartConditions))
                 .build());
 
+        // The block state representation itself — highest impact of the lot, since it touches every state object
         groups.add(OptionGroup.createBuilder()
                 .setId(OptionIdentifier.create(MOD_ID, "block_states"))
                 .add(restartToggle("optimize_block_states",
@@ -94,6 +92,7 @@ public final class CoartatioOptionPages {
                         config -> config.compactStateProperties))
                 .build());
 
+        // Backing-collection swaps for NBT compounds and baked models
         groups.add(OptionGroup.createBuilder()
                 .setId(OptionIdentifier.create(MOD_ID, "collections"))
                 .add(restartToggle("compact_nbt_backing_map",
@@ -101,7 +100,8 @@ public final class CoartatioOptionPages {
                         OptionImpact.HIGH,
                         (config, value) -> config.compactNbtBackingMap = value,
                         config -> config.compactNbtBackingMap))
-                // Read per compound, so this one genuinely applies without a restart.
+                // Consulted every time a compound is built, so it genuinely applies without a restart and is
+                // spelled out longhand instead of going through restartToggle
                 .add(OptionImpl.createBuilder(boolean.class, STORAGE)
                         .setId(OptionIdentifier.create(MOD_ID, "intern_nbt_keys", boolean.class))
                         .setName(TextComponent.translatable("impetus.options.coartatio.nbt_keys.name"))
@@ -110,6 +110,8 @@ public final class CoartatioOptionPages {
                         .setBinding((config, value) -> config.internNbtKeys = value, config -> config.internNbtKeys)
                         .setImpact(OptionImpact.MEDIUM)
                         .build())
+                // Entry count below which a compound uses the array-backed map instead of a HashMap; also read
+                // per compound. Slider runs 0..64 in steps of 2, 0 meaning "never use the array map"
                 .add(OptionImpl.createBuilder(int.class, STORAGE)
                         .setId(OptionIdentifier.create(MOD_ID, "nbt_array_map_threshold", int.class))
                         .setName(TextComponent.translatable("impetus.options.coartatio.nbt_threshold.name"))
@@ -131,6 +133,7 @@ public final class CoartatioOptionPages {
                         config -> config.compactModelGraph))
                 .build());
 
+        // Chunk storage: what gets dropped on load rather than kept resident
         groups.add(OptionGroup.createBuilder()
                 .setId(OptionIdentifier.create(MOD_ID, "world"))
                 .add(restartToggle("strip_chunk_nbt",
@@ -145,6 +148,7 @@ public final class CoartatioOptionPages {
                         config -> config.dropEmptyChunkSections))
                 .build());
 
+        // Everything else: loader caches, sprite and bake scratch data, search trees, pool lifetime
         groups.add(OptionGroup.createBuilder()
                 .setId(OptionIdentifier.create(MOD_ID, "system"))
                 .add(restartToggle("weaken_class_loader_cache",
@@ -172,6 +176,7 @@ public final class CoartatioOptionPages {
                         OptionImpact.MEDIUM,
                         (config, value) -> config.lazySearchTrees = value,
                         config -> config.lazySearchTrees))
+                // Checked at world teardown, not at mixin-apply time, so no restart is needed
                 .add(OptionImpl.createBuilder(boolean.class, STORAGE)
                         .setId(OptionIdentifier.create(MOD_ID, "clear_pools_on_world_leave", boolean.class))
                         .setName(TextComponent.translatable("impetus.options.coartatio.clear_on_leave.name"))
@@ -188,6 +193,8 @@ public final class CoartatioOptionPages {
                         config -> config.compactRuntimeCollections))
                 .build());
 
+        // Read live every frame, so it carries no restart flag and sets no impact — an F3 line costs nothing
+        // worth warning about
         groups.add(OptionGroup.createBuilder()
                 .setId(OptionIdentifier.create(MOD_ID, "diagnostics"))
                 .add(OptionImpl.createBuilder(boolean.class, STORAGE)
@@ -198,14 +205,6 @@ public final class CoartatioOptionPages {
                         .setBinding((config, value) -> config.showDebugOverlay = value,
                                 config -> config.showDebugOverlay)
                         .build())
-                .add(OptionImpl.createBuilder(boolean.class, STORAGE)
-                        .setId(OptionIdentifier.create(MOD_ID, "log_statistics", boolean.class))
-                        .setName(TextComponent.translatable("impetus.options.coartatio.log_statistics.name"))
-                        .setTooltip(TextComponent.translatable("impetus.options.coartatio.log_statistics.tooltip"))
-                        .setControl(TickBoxControl::new)
-                        .setBinding((config, value) -> config.logStatistics = value,
-                                config -> config.logStatistics)
-                        .build())
                 .build());
 
         return new OptionPage(
@@ -214,6 +213,10 @@ public final class CoartatioOptionPages {
                 ImmutableList.copyOf(groups));
     }
 
+    // Every mixin-gated switch is the same tickbox with the same restart flag, so they are built from one helper
+    // langKey is the prefix; ".name" and ".tooltip" are appended to reach the two translation entries
+    // The setter/getter pair is the binding: the setter writes the config field on apply, the getter seeds the
+    // control's initial state and detects whether the value actually changed
     private static OptionImpl<CoartatioConfig, Boolean> restartToggle(
             String path,
             String langKey,

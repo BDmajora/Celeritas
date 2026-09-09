@@ -52,7 +52,8 @@ public final class StartupChecks {
                             String.valueOf(throwable.getMessage()) + "\n\n" +
                             "The full crash details are still written to the game log/crash report.");
                 } catch (Throwable dialogFailure) {
-                    LOGGER.debug("Crash dialog failed", dialogFailure);
+                    // The dialog is a courtesy on top of the crash report; if it cannot be shown, the crash
+                    // handling below still runs and the report is still written
                 }
             }
 
@@ -72,20 +73,13 @@ public final class StartupChecks {
 
     private static void run(GlContextInfo context) {
         try {
-            LOGGER.info("OpenGL context: {} / {} / {}", context.vendor(), context.renderer(), context.version());
-
             var adapters = GraphicsAdapterProbe.probe();
-
-            for (var adapter : adapters) {
-                LOGGER.info("Display adapter: {} ({}, driver {})", adapter.name(), adapter.vendor(),
-                        adapter.driverVersion().isEmpty() ? "unknown" : adapter.driverVersion());
-            }
-
             Workarounds.init(context, adapters);
             runBugChecks(context, adapters);
             scanForFrameHookOverlays();
         } catch (Throwable t) {
-            LOGGER.debug("Startup compatibility checks failed", t);
+            // Best-effort: these checks only decide which workarounds to enable and which advisory dialogs to
+            // show, so a probe that blows up must not take the load down with it
         }
     }
 
@@ -247,7 +241,7 @@ public final class StartupChecks {
                         "on-screen display) and try again.");
             }
         } catch (Exception e) {
-            LOGGER.debug("Overlay scan failed", e);
+            // The RTSS check is advisory; failing to detect it is not worth reporting
         }
     }
 }

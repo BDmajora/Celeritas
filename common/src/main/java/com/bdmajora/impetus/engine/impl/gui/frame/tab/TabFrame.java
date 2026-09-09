@@ -41,16 +41,10 @@ public class TabFrame extends AbstractFrame {
         this.modAccentColors = this.tabs.keySet().stream().collect(Collectors.toMap(id -> id, drawContext::getModAccentColor, (a, b) -> a, LinkedHashMap::new));
         int tabSectionY = (int)tabStream().count() * 18 + this.tabs.size() * TabHeaderWidget.HEIGHT;
         Optional<Integer> result = Stream.concat(
-                tabs.keySet().stream().flatMap(id -> {
+                // Icon padding + icon + icon padding, matching where TabHeaderWidget starts drawing its name
+                tabs.keySet().stream().map(id -> {
                     int headerTextOffset = 5 + 20 + 5;
-                    var version = drawContext.getModVersion(id);
-                    Stream<Integer> widths = Stream.of(drawContext.getStringWidth(drawContext.getFriendlyModName(id)) + headerTextOffset);
-
-                    if (version != null) {
-                        widths = Stream.concat(widths, Stream.of(drawContext.getStringWidth(version) + headerTextOffset));
-                    }
-
-                    return widths;
+                    return drawContext.getStringWidth(drawContext.getFriendlyModName(id)) + headerTextOffset;
                 }),
                 tabStream().map(tab -> drawContext.getStringWidth(tab.title()) + TAB_OPTION_INDENT)
         ).max(Integer::compareTo);

@@ -10,14 +10,12 @@ import static com.bdmajora.impetus.engine.impl.model.quad.properties.ModelQuadFa
 public enum VintageDiffuseProvider implements DiffuseProvider {
     INSTANCE;
 
-    /**
-     * {@return {@code true} when the pack's {@code oldLighting=false} means vanilla's per-face shading must not be
-     * baked into the vertex colour}
-     * <p>
-     * A pack that lights from the face normal itself (Body Camera's {@code lightBrightness}) would otherwise get
-     * vanilla's 0.5/0.6/0.8 face multiplier applied on top of its own, i.e. shaded twice. Umbra suppresses this by
-     * forcing the shade lookup to {@code Direction.UP}; OptiFine by setting its shade constants to 1.0.
-     */
+    // True when the loaded pack set oldLighting=false, meaning vanilla's per-face shading must NOT be baked into
+    // the vertex colour
+    // A pack that derives its own lighting from the face normal (Body Camera's lightBrightness, for instance) would
+    // otherwise receive vanilla's 0.5/0.6/0.8 face multiplier on top of its own and shade every face twice
+    // Iris suppresses this by forcing the shade lookup to Direction.UP, OptiFine by setting its shade constants
+    // to 1.0; both amount to the same "multiply by one" this flag selects below
     private static boolean directionalShadingDisabled() {
         return com.bdmajora.impetus.umbra.material.WorldRenderingSettings.shouldDisableDirectionalShading();
     }

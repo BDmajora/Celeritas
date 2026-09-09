@@ -22,7 +22,6 @@ public class ImpetusVintageMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public void onLoad(String mixinPackage) {
-        LOGGER.info("Loaded Impetus mixin plugin");
         try {
             Class.forName("com.gtnewhorizons.retrofuturabootstrap.SharedConfig");
             // class exists, apply compat
@@ -100,7 +99,6 @@ public class ImpetusVintageMixinPlugin implements IMixinConfigPlugin {
                 e.printStackTrace();
             }
         }
-        LOGGER.info("Found {} mixin classes", possibleMixinClasses.size());
         if (possibleMixinClasses.size() == 0) {
             throw new IllegalStateException("Found no mixin classes, something went very wrong");
         }

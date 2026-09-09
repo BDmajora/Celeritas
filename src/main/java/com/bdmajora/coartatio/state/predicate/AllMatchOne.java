@@ -7,17 +7,12 @@ import net.minecraft.block.state.IBlockState;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * A flattened {@code AND} over conditions that are all plain {@code property=value} tests.
- *
- * <p>This is the shape that actually shows up in the wild — {@code {"north": "true", "up": "false"}}
- * on every fence, wall, pane, wire and pipe in the game. Vanilla represents it as a Guava
- * {@code AndPredicate} wrapping a transformed {@code Iterable} wrapping N anonymous classes: five or
- * six objects per selector, times every selector, times every multipart block.
- *
- * <p>Here it is one object holding two exactly-sized arrays, and {@code apply} is a tight loop with
- * no virtual dispatch per element. Ported from Hydrogen's {@code AllMatchOneObject}.
- */
+// A flattened AND over conditions that are all plain property=value tests
+// Vanilla builds this as a Guava AndPredicate wrapping a transformed Iterable wrapping N anonymous classes:
+// five or six objects per selector, times every selector, times every multipart block
+// Here it is one object holding two exactly-sized arrays, and apply is a tight loop with no virtual dispatch
+// per element. Ported from Hydrogen's AllMatchOneObject
+// AllMatchOneBoolean handles the all-boolean case, which is commoner still; this is the general version
 public final class AllMatchOne implements Predicate<IBlockState> {
     private final IProperty<?>[] properties;
     private final Object[] values;
@@ -30,7 +25,7 @@ public final class AllMatchOne implements Predicate<IBlockState> {
         this.hash = 31 * Arrays.hashCode(properties) + Arrays.hashCode(values);
     }
 
-    /** @return a flattened predicate, or {@code null} if the input is not all {@link SingleMatchOne}. */
+    // Flattens a list of conditions into this form, or returns null unless every one is a SingleMatchOne
     public static AllMatchOne tryFlatten(List<Predicate<IBlockState>> predicates) {
         int size = predicates.size();
 
@@ -58,12 +53,15 @@ public final class AllMatchOne implements Predicate<IBlockState> {
             return false;
         }
 
+        // Hoisted into locals so the loop does not re-read the fields each iteration
         IProperty<?>[] properties = this.properties;
         Object[] values = this.values;
 
         for (int i = 0; i < properties.length; i++) {
             Object actual = state.getValue(properties[i]);
 
+            // Identity first: property values are interned enum constants and Boolean singletons, so equals is
+            // effectively never reached and is only kept for correctness against odd mod-added property types
             if (actual != values[i] && !actual.equals(values[i])) {
                 return false;
             }

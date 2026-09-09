@@ -98,7 +98,6 @@ public class ChunkBuilder {
             }
         }
 
-        LOGGER.info("Started {} worker threads", this.threads.size());
 
         this.localContext = contextSupplier.get();
 
@@ -164,12 +163,6 @@ public class ChunkBuilder {
 
         // Keep the target at or above the floor (the decay may have stepped it below).
         this.targetInFlight = Math.max(floor, this.targetInFlight);
-
-        if (DEBUG_ADAPTIVE_SCHEDULING && this.targetInFlight != previousTarget) {
-            LOGGER.info("Adaptive scheduling target {} {} -> {} (queued={}, starved={}, budgetLimited={})",
-                    this.targetInFlight > previousTarget ? "grew" : "shrank",
-                    previousTarget, this.targetInFlight, queued, starved, this.lastDispatchBudgetLimited);
-        }
     }
 
     /**
@@ -220,7 +213,6 @@ public class ChunkBuilder {
     }
 
     private void shutdownThreads() {
-        LOGGER.info("Stopping worker threads");
 
         // Wait for every remaining thread to terminate
         for (WorkerThread thread : this.threads) {

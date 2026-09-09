@@ -1,6 +1,5 @@
 package com.bdmajora.coartatio.state;
 
-import com.bdmajora.coartatio.Coartatio;
 import com.bdmajora.coartatio.CoartatioConfig;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap;
@@ -20,62 +19,56 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * Packs every listed property of a block into the bits of a single {@code int}, so that a block state
- * needs one field instead of a table.
- *
- * <h2>What this replaces</h2>
- *
- * <p>Vanilla gives every {@code StateImplementation} its own
- * {@code ImmutableTable<IProperty, Comparable, IBlockState>} mapping "this property set to that value"
- * onto the resulting state. For a block with {@code P} properties averaging {@code V} values, that is
- * {@code P * (V - 1)} table cells <i>per state</i>, and there are {@code V^P} states. The table is the
- * single largest structure in a modded heap — routinely 250-400 MB across a 300-mod pack, and it is
- * pure redundancy: every state's table is derivable from the block's property set.
- *
- * <p>Here each property is assigned a contiguous bit range, wide enough to index its allowed values.
- * A state is then an index into one {@code IBlockState[]} shared by every state of the block, and
- * {@code withProperty} becomes mask-and-index instead of a hash lookup in a per-state table. The
- * table disappears entirely; what remains is one array per block plus one {@code int} per state.
- *
- * <p>The technique is FoamFix's, and FerriteCore later did the same thing on modern versions. This
- * port differs in three ways that matter:
- *
- * <ul>
- *   <li><b>Value indices are resolved through the block's own property instance.</b> FoamFix keys its
- *       per-property value tables by identity, so passing an equal-but-distinct {@code IProperty} —
- *       which vanilla accepts, because the state's property map is {@code equals}-keyed — silently
- *       builds a second mapping with a possibly different ordering. Here the property name resolves
- *       to this block's entry, and the value is then looked up in that entry.
- *   <li><b>Bounded allocation.</b> Bit ranges are padded to powers of two, so the state array can be
- *       larger than the state count. FoamFix only rejects a block past 31 bits, which permits a
- *       multi-gigabyte array. This rejects anything over {@link #MAX_STATE_ARRAY} slots and falls
- *       back to vanilla for that block.
- *   <li><b>The table can still be produced on demand.</b> See
- *       {@link CoartatioBlockState#getPropertyValueTable()}.
- * </ul>
- *
- * <h2>Layout</h2>
- *
- * <p>Properties are ordered by how much of their bit range they waste, least first. That puts the
- * worst-fitting property in the high bits, where its unused range can be trimmed off the end of the
- * array rather than multiplying through every lower property.
- */
+// Packs every listed property of a block into the bits of one int, so a state needs a single field instead of
+// a per-state lookup table
+//
+// What this replaces: vanilla gives every StateImplementation its own
+// ImmutableTable<IProperty, Comparable, IBlockState> mapping "this property set to that value" onto the
+// resulting state. For a block with P properties averaging V values that is P * (V - 1) table cells PER STATE,
+// and there are V^P states. It is the single largest structure in a modded heap — routinely 250-400 MB across a
+// 300-mod pack — and it is pure redundancy, since every state's table is derivable from the block's property set
+//
+// Here each property gets a contiguous bit range wide enough to index its allowed values. A state is then just
+// an index into one IBlockState[] shared by every state of the block, and withProperty becomes a mask-and-index
+// rather than a hash lookup in a per-state table. The table disappears; what is left is one array per block
+// plus one int per state
+//
+// The technique is FoamFix's, and FerriteCore later did the same on modern versions. This port differs in three
+// ways that matter
+// Value indices resolve through the block's OWN property instance. FoamFix keys its per-property value tables
+// by identity, so passing an equal-but-distinct IProperty — which vanilla accepts, because a state's property
+// map is equals-keyed — silently builds a second mapping with a possibly different ordering. Here the property
+// NAME resolves to this block's entry and the value is looked up inside that entry
+// Allocation is bounded. Bit ranges are padded to powers of two, so the state array can be larger than the
+// state count; FoamFix only rejects a block past 31 bits, which permits a multi-gigabyte array. Anything over
+// MAX_STATE_ARRAY slots is refused here and that block keeps vanilla states
+// The table can still be produced on demand — see CoartatioBlockState.getPropertyValueTable()
+//
+// Layout: properties are ordered by how much of their bit range they waste, least first. That puts the
+// worst-fitting property in the HIGH bits, where its unused range is simply never addressed off the end of the
+// array rather than multiplying through every lower property
 public final class PropertyValueMapper {
-    /**
-     * Hard ceiling on the shared state array. A block needing more than a million slots is
-     * pathological; falling back to vanilla for it costs a table we were never going to fit anyway.
-     */
+    // Hard ceiling on the shared state array, a million slots. A block needing more than that is pathological,
+    // and falling back to vanilla for it costs a table that was never going to fit anyway
     private static final int MAX_STATE_ARRAY = 1 << 20;
 
-    /** Entries are per-property and immutable, so blocks sharing a static property share one. */
+    // Entries are per-property and immutable, so every block sharing a static property (BlockHorizontal.FACING
+    // and friends) shares one entry rather than rebuilding it
+    // Reference-keyed on purpose: two equal-but-distinct properties may order their values differently, so they
+    // must NOT collapse to one entry here
     private static final Map<IProperty<?>, Entry> ENTRY_CACHE = new Reference2ObjectOpenHashMap<>();
 
+    // Counters for the memory report; atomic because block registration is not confined to one thread once mods
+    // register from their own init
     private static final AtomicInteger BLOCKS_MAPPED = new AtomicInteger();
     private static final AtomicInteger BLOCKS_SKIPPED = new AtomicInteger();
     static final AtomicInteger TABLES_MATERIALISED = new AtomicInteger();
 
-    /** Least wasteful property first; the worst fit ends up in the high bits where it can be trimmed. */
+    // Orders properties least-wasteful first, waste being padded width minus real value count
+    // The worst fit therefore lands in the high bits, where its unused tail runs off the end of the array
+    // instead of multiplying through every property below it
+    // Ties break on the property name so the layout is deterministic across launches, which matters because a
+    // packed value is meaningless without the layout that produced it
     private static final Comparator<Entry> BY_BIT_FITNESS = (a, b) -> {
         int wasteA = a.bitSize - a.count;
         int wasteB = b.bitSize - b.count;
@@ -85,12 +78,17 @@ public final class PropertyValueMapper {
                 : Integer.compare(wasteA, wasteB);
     };
 
+    // Sorted by BY_BIT_FITNESS, so index order here is bit order, not the container's property order
     private final Entry[] entries;
+    // offsets[i] is the low bit of entries[i]'s slice within the packed int
     private final int[] offsets;
+    // Property name -> index into entries; -1 for anything this block does not have
     private final Object2IntOpenHashMap<String> indexByName;
+    // Every state of the block, indexed by its packed value. Shared by all of them — this is the array that
+    // replaces the per-state tables
     private final IBlockState[] states;
 
-    /** Donated by the first state of this block; see {@link #sharedKeys}. */
+    // Donated by the first state of this block and then reused by all of them; see sharedKeys below
     private Object[] sharedKeys;
 
     private PropertyValueMapper(Entry[] entries, int[] offsets, Object2IntOpenHashMap<String> indexByName,
@@ -101,13 +99,11 @@ public final class PropertyValueMapper {
         this.states = states;
     }
 
-    /**
-     * Builds a mapper for a container, or returns {@code null} if this block should keep vanilla
-     * states.
-     *
-     * <p>Safe to call from inside {@code BlockStateContainer}'s constructor: the property map is
-     * assigned before the state loop that calls {@code createState}.
-     */
+    // Builds a mapper for a container, or returns null when this block should keep vanilla states
+    // Every rejection path is a plain null return, so the caller never has to distinguish between blacklisted,
+    // unindexable and too-large — all three simply mean "leave this block alone"
+    // Safe to call from inside BlockStateContainer's constructor, because the property map is assigned before
+    // the state loop that calls createState
     public static PropertyValueMapper create(BlockStateContainer container, Block block) {
         if (block == null || isBlacklisted(block)) {
             BLOCKS_SKIPPED.incrementAndGet();
@@ -159,7 +155,6 @@ public final class PropertyValueMapper {
         }
 
         if (size > MAX_STATE_ARRAY) {
-            Coartatio.LOGGER.debug("Leaving {} on vanilla states: would need {} slots", block, size);
             BLOCKS_SKIPPED.incrementAndGet();
             return null;
         }
@@ -180,12 +175,9 @@ public final class PropertyValueMapper {
         return false;
     }
 
-    /**
-     * Assigns this state its packed index and files it in the shared array.
-     *
-     * <p>Called from {@code buildPropertyValueTable}, which the container invokes on every state once
-     * they all exist — so by the time anything can call {@link #byValue} the array is complete.
-     */
+    // Computes this state's packed index, files the state in the shared array, and hands the index back
+    // Called from buildPropertyValueTable, which the container invokes on every state once all of them exist,
+    // so by the time anything can call byValue the array is fully populated
     int register(IBlockState state) {
         int value = 0;
 
@@ -217,21 +209,19 @@ public final class PropertyValueMapper {
         return value;
     }
 
-    /** The state at a packed index, or {@code null} if that combination was never registered. */
+    // The state at a packed index, or null when that bit combination lands in a padding hole no real state
+    // occupies
     public IBlockState byValue(int value) {
         return this.states[value];
     }
 
-    /**
-     * The property key array shared by every state of this block.
-     *
-     * <p>Captured from the first state's own property map rather than derived from {@link #entries},
-     * because the compact map indexes against that map's iteration order and {@code entries} has
-     * been reordered for bit-packing fitness.
-     *
-     * <p>Returns {@code null} if this map's shape does not match the donated array, which leaves the
-     * caller on Guava's map for that state.
-     */
+    // The property key array every state of this block shares, for CoartatioPropertyMap
+    // Captured from the FIRST state's own property map rather than derived from entries, because the compact map
+    // indexes against that map's iteration order while entries has been reordered for bit-packing fitness — the
+    // two orders are not the same and using the wrong one silently mismatches keys with values
+    // Returns null when the caller's map does not have the same shape as the donated array, which leaves that
+    // one state on Guava's map instead of risking a wrong pairing
+    // Synchronized because the first-state capture is a lazy write and states can be created off-thread
     public synchronized Object[] sharedKeys(Map<IProperty<?>, Comparable<?>> properties) {
         if (this.sharedKeys == null) {
             this.sharedKeys = properties.keySet().toArray();
@@ -240,10 +230,12 @@ public final class PropertyValueMapper {
         return this.sharedKeys.length == properties.size() ? this.sharedKeys : null;
     }
 
-    /**
-     * Returns {@code packed} with {@code property} set to {@code newValue}, or {@code -1} if this
-     * block has no such property or the value is not allowed.
-     */
+    // Returns packed with one property changed to newValue, or -1 when this block has no such property or the
+    // value is not one it allows
+    // This is what replaces vanilla's per-state table lookup in withProperty: clear the property's bit slice and
+    // OR the new index into it
+    // Resolved by property NAME, so an equal-but-distinct IProperty instance still finds this block's entry —
+    // the difference from FoamFix noted at the top of the file
     public int withValue(int packed, IProperty<?> property, Object newValue) {
         int index = this.indexByName.getInt(property.getName());
 
@@ -258,6 +250,7 @@ public final class PropertyValueMapper {
             return -1;
         }
 
+        // bitSize is a power of two, so bitSize - 1 is the slice's low-bit mask, shifted into position
         int offset = this.offsets[index];
         int mask = (entry.bitSize - 1) << offset;
 
@@ -269,6 +262,8 @@ public final class PropertyValueMapper {
                 BLOCKS_MAPPED.get(), BLOCKS_SKIPPED.get(), TABLES_MATERIALISED.get());
     }
 
+    // Cache lookup for buildEntry. Note a null result is NOT cached, so an unindexable property is rebuilt (and
+    // re-rejected) once per block that declares it — cheap, and it keeps the cache free of null values
     private static Entry entryFor(IProperty<?> property) {
         synchronized (ENTRY_CACHE) {
             Entry cached = ENTRY_CACHE.get(property);
@@ -320,6 +315,9 @@ public final class PropertyValueMapper {
         return new MappedEntry(property, allowed);
     }
 
+    // Rounds up to the next power of two by smearing the highest set bit down and adding one
+    // Used to pad a property's value count out to a whole bit width, which is what makes the packed layout
+    // addressable with shifts and masks instead of multiplications
     private static int ceilPowerOfTwo(int value) {
         int v = value - 1;
         v |= v >> 1;
@@ -330,11 +328,16 @@ public final class PropertyValueMapper {
         return v + 1;
     }
 
-    /** One property's slice of the packed int: how wide it is, and how a value maps into it. */
+    // One property's slice of the packed int: how wide it is, and how a value maps into it
+    // Subclassed rather than branched so the hot indexOf call is a single virtual dispatch instead of a chain of
+    // instanceof tests, and each subclass can use the cheapest indexing its property type allows
     abstract static class Entry {
         final IProperty<?> property;
+        // Real number of allowed values
         final int count;
+        // count rounded up to a power of two, i.e. how many slots the slice actually occupies
         final int bitSize;
+        // Width of the slice in bits, log2 of bitSize
         final int bits;
 
         Entry(IProperty<?> property, int count) {
@@ -344,7 +347,8 @@ public final class PropertyValueMapper {
             this.bits = Integer.numberOfTrailingZeros(this.bitSize);
         }
 
-        /** @return the index of {@code value} within the allowed values, or {@code -1}. */
+        // Index of value among the allowed values, or -1 when the value does not belong to this property
+        // Never falls back to a default index: a wrong answer here produces a valid-looking but incorrect state
         abstract int indexOf(Object value);
     }
 
@@ -420,13 +424,9 @@ public final class PropertyValueMapper {
         }
     }
 
-    /**
-     * The general case: an explicit value-to-index map.
-     *
-     * <p>Keyed by {@code equals}, not identity. Integer autoboxing only caches -128..127, so a
-     * property whose values exceed that range would miss on identity even for the same numeric
-     * value.
-     */
+    // The general case, used when none of the closed-form entries above apply: an explicit value-to-index map
+    // Keyed by equals rather than identity. Integer autoboxing only caches -128..127, so a property whose values
+    // run past that range would miss on identity even for the same numeric value
     private static final class MappedEntry extends Entry {
         private final Object2IntOpenHashMap<Object> indices;
 

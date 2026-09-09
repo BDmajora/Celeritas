@@ -3,8 +3,6 @@ package com.bdmajora.impetus.umbra.pipeline.shadow;
 import com.bdmajora.impetus.engine.impl.render.viewport.frustum.Frustum;
 import com.bdmajora.impetus.umbra.pipeline.ShadowContentSettings;
 import com.bdmajora.impetus.umbra.uniforms.CapturedRenderingState;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
@@ -19,7 +17,6 @@ import org.joml.Vector3f;
  * stability, so the advanced test can safely apply outside it.
  */
 public final class ShadowFrustums {
-    private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
     /**
      * Accepts every section. Umbra returns its {@code NonCullingFrustum} in exactly two cases: the pack turned
@@ -28,23 +25,7 @@ public final class ShadowFrustums {
      */
     public static final Frustum NON_CULLING = (minX, minY, minZ, maxX, maxY, maxZ) -> true;
 
-    /**
-     * The last culling decision logged. {@link #create} runs once per frame, and logging every call flooded the log
-     * with thousands of identical INFO lines per minute (measured: 6637 lines in a 90-second session, ~74/s). Each
-     * one is a synchronous log4j write to file and console, which stalls the client badly enough to look like a
-     * freeze. The decision string embeds the distances, so any change that matters still prints; the only thing lost
-     * is a repeat line when a reload lands on an identical decision.
-     */
-    private static String lastLoggedDecision;
-
     private ShadowFrustums() {
-    }
-
-    private static void logDecision(String decision) {
-        if (!decision.equals(lastLoggedDecision)) {
-            lastLoggedDecision = decision;
-            LOGGER.info("[Umbra] Shadow culling: {}", decision);
-        }
     }
 
     /**
@@ -56,23 +37,8 @@ public final class ShadowFrustums {
      */
     public static Frustum create(ShadowContentSettings.Culling culling, float shadowDistance, float voxelDistance,
                                  boolean packVoxelizes, int renderDistance, float sunPathRotation) {
-        // Diagnostic override: -Dimpetus.shadow.culling=off forces every section into the shadow map.
-        //
-        // Shadow culling is the last view-dependent input to the shadow map — the advanced frustum is built from
-        // this frame's camera matrices, so which casters reach the shadow map genuinely changes as the camera turns.
-        // That is faithful to Umbra (ShadowRenderer#createShadowFrustum takes the same branch for a non-voxelizing
-        // pack with no `shadow.culling` directive), which makes it impossible to tell by reading whether a
-        // brightness-changes-with-heading symptom comes from culling being wrong or from something downstream.
-        // Forcing it off answers that in one launch: if the symptom survives, the shadow pass is exonerated and the
-        // cause is in the deferred/composite chain.
-        if ("off".equalsIgnoreCase(System.getProperty("impetus.shadow.culling"))) {
-            logDecision("disabled (forced by -Dimpetus.shadow.culling=off)");
-            return NON_CULLING;
-        }
-
         // Culling explicitly off: draw it all.
         if (culling == ShadowContentSettings.Culling.OFF) {
-            logDecision("disabled (set by shader pack)");
             return NON_CULLING;
         }
 
@@ -82,10 +48,8 @@ public final class ShadowFrustums {
         // `distance <= 0 || distance > renderDistance` test guards the NonCullingFrustum return and nothing else.
         if (culling == ShadowContentSettings.Culling.ON && packVoxelizes) {
             if (shadowDistance <= 0.0f || shadowDistance > renderDistance) {
-                logDecision("disabled (voxelization detected, shadow distance covers the render distance)");
                 return NON_CULLING;
             }
-            logDecision("distance only, " + shadowDistance + " blocks (voxelization detected)");
             return new ShadowBoxCuller(shadowDistance);
         }
 
@@ -105,8 +69,6 @@ public final class ShadowFrustums {
             // the whole frustum to NON_CULLING for any pack whose shadowDistance exceeds the render distance
             // (Complementary's 256 over anything under 16 chunks), handing the shadow pass every loaded section
             // in place of a voxelDistance-sized safe zone.
-            logDecision("safe-zone frustum, " + voxelDistance + " block safe zone inside "
-                    + shadowDistance + " blocks");
             return new SafeZoneCullingFrustum(projView, lightVector,
                     new ShadowBoxCuller(voxelDistance), new ShadowBoxCuller(shadowDistance));
         }
@@ -115,11 +77,9 @@ public final class ShadowFrustums {
         // direction-dependent planes still apply, which is what keeps off-screen casters casting. Both frustums
         // treat a null culler as "no distance bound".
         if (shadowDistance <= 0.0f || shadowDistance >= renderDistance) {
-            logDecision("advanced frustum, no distance bound (render distance " + renderDistance + " blocks)");
             return new AdvancedShadowCullingFrustum(projView, lightVector, null);
         }
 
-        logDecision("advanced frustum, " + shadowDistance + " blocks");
         return new AdvancedShadowCullingFrustum(projView, lightVector, new ShadowBoxCuller(shadowDistance));
     }
 

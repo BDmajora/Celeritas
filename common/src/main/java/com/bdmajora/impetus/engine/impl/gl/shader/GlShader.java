@@ -1,13 +1,11 @@
 package com.bdmajora.impetus.engine.impl.gl.shader;
 
 import com.bdmajora.impetus.lwjgl.GL20;
-import com.bdmajora.impetus.lwjgl.GL43;
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
 import com.bdmajora.impetus.engine.impl.gl.GlObject;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import com.bdmajora.impetus.engine.impl.gl.debug.GLDebug;
 
 /**
  * A compiled OpenGL shader object.
@@ -37,8 +35,6 @@ public class GlShader extends GlObject {
         }
 
         this.setHandle(handle);
-
-        GLDebug.nameObject(GL43.GL_SHADER, handle, name);
     }
 
     public String getName() {

@@ -72,9 +72,9 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
         pages.add(FulgorOptionPages.lighting());
         pages.add(EquilibriumOptionPages.optimizations());
 
+        // Only when a shader mod actually resolved; without it the Umbra heading would sit above nothing
         if (ShaderModBridge.isShaderModPresent()) {
             pages.add(UmbraOptionPages.shaderPacks(parent));
-            pages.add(UmbraOptionPages.settings(parent));
         }
 
         return pages;

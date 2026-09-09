@@ -158,12 +158,6 @@ public class CustomImageManager {
             if (samplerUnit >= 0) {
                 this.uniformOverrides.put(definition.samplerName, samplerUnit);
             }
-            LOGGER.info("[Umbra] Custom image '{}' ({}x{}x{}{} {}) on image unit {}{}",
-                    definition.name, sizeX, sizeY, definition.sizeZ,
-                    definition.relative ? " relative" : "",
-                    definition.internalFormat, imageUnit,
-                    samplerUnit >= 0 ? ", sampler '" + definition.samplerName + "' on unit " + samplerUnit
-                            : ", sampler '" + definition.samplerName + "' unbound");
         }
     }
 

@@ -6,22 +6,16 @@ import net.minecraft.block.state.IBlockState;
 
 import java.util.Objects;
 
-/**
- * {@code property=value}. The leaf of every multipart condition tree.
- *
- * <p>Properties are compared by {@code equals}, not identity, so that two blocks which each declare
- * their own {@code PropertyBool.create("north")} share one predicate. That is safe because
- * {@code IBlockState.getValue} resolves through an {@code ImmutableMap} keyed the same way — a state
- * looks up an equal property and finds its own value regardless of which instance was passed in.
- *
- * <p>The hash is computed once and stored. {@code PropertyEnum.hashCode} folds in the whole allowed
- * value set, which is expensive enough that FoamFix patches it outright; paying for it once per
- * predicate instead of once per pool lookup keeps that off the bake's critical path.
- */
+// property=value — the leaf of every multipart condition tree
+// property and value are public because the tryFlatten methods on the AllMatch* classes read them directly
 public final class SingleMatchOne implements Predicate<IBlockState> {
     public final IProperty<?> property;
     public final Object value;
 
+    // Computed once in the constructor rather than on demand
+    // PropertyEnum.hashCode folds in the whole allowed value set, which is expensive enough that FoamFix patches
+    // it outright; paying for it once per predicate instead of once per pool lookup keeps it off the bake's
+    // critical path, and these predicates are hashed constantly while being interned
     private final int hash;
 
     public SingleMatchOne(IProperty<?> property, Object value) {
@@ -40,6 +34,10 @@ public final class SingleMatchOne implements Predicate<IBlockState> {
         return actual == this.value || actual.equals(this.value);
     }
 
+    // Properties are compared by equals rather than identity, so two blocks that each declared their own
+    // PropertyBool.create("north") end up sharing one interned predicate
+    // That is safe because IBlockState.getValue resolves through an ImmutableMap keyed the same way: a state
+    // looks up an equal property and finds its own value no matter which instance was passed in
     @Override
     public boolean equals(Object o) {
         if (this == o) {

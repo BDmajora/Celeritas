@@ -370,43 +370,6 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
 
     private List<Entity>[] impetus$collectedEntities;
 
-    // --- TEMP DIAGNOSTIC: MCParks/Photon entity culling. Remove once the cause is found. ------------------------
-    // -Dimpetus.cullProbeInterval=60   log every 60th frame (0 = off)
-    // -Dimpetus.cullProbeBypass=true   skip both culls entirely, to confirm they are what removes the trains
-    @Unique
-    private static final org.apache.logging.log4j.Logger impetus$CULL_LOG =
-            org.apache.logging.log4j.LogManager.getLogger("ImpetusCullProbe");
-    @Unique
-    private static final int impetus$cullProbeInterval = Integer.getInteger("impetus.cullProbeInterval", 0);
-    @Unique
-    private int impetus$cullProbeCounter;
-
-    @Unique
-    private void impetus$logCullDecision(Entity entity, ICamera camera,
-                                         double viewX, double viewY, double viewZ) {
-        double dx = entity.posX - viewX, dy = entity.posY - viewY, dz = entity.posZ - viewZ;
-        double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist > 64.0D) {
-            return;
-        }
-        net.minecraft.util.math.AxisAlignedBB frustumBox = entity.getRenderBoundingBox().grow(0.5D);
-        boolean degenerateBox = frustumBox.hasNaN() || frustumBox.getAverageEdgeLength() == 0.0D;
-        if (degenerateBox) {
-            // What vanilla Render#shouldRender substitutes — note it does NOT rescue isInRangeToRender3d.
-            frustumBox = new net.minecraft.util.math.AxisAlignedBB(
-                    entity.posX - 2.0D, entity.posY - 2.0D, entity.posZ - 2.0D,
-                    entity.posX + 2.0D, entity.posY + 2.0D, entity.posZ + 2.0D);
-        }
-        boolean inRange = entity.isInRangeToRender3d(viewX, viewY, viewZ);
-        boolean inFrustum = entity.ignoreFrustumCheck || camera.isBoundingBoxInFrustum(frustumBox);
-        boolean sectionVisible = ImpetusWorldRenderer.instance().isEntityVisible(entity);
-        impetus$CULL_LOG.info(
-                "{} id={} d={} collisionEdge={} degenerateRenderBox={} inRange={} inFrustum={} sectionVisible={} -> {}",
-                entity.getClass().getSimpleName(), entity.getEntityId(), String.format("%.1f", dist),
-                String.format("%.3f", entity.getEntityBoundingBox().getAverageEdgeLength()), degenerateBox,
-                inRange, inFrustum, sectionVisible,
-                (inRange && inFrustum && sectionVisible) ? "DRAWN" : "CULLED");
-    }
     // --- end TEMP DIAGNOSTIC -----------------------------------------------------------------------------------
 
     /**
@@ -438,31 +401,21 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         Entity.setRenderDistanceWeight(MathHelper.clamp((double)this.mc.gameSettings.renderDistanceChunks / 8.0D, 1.0D, 2.5D)
                 * (ImpetusVintage.options().quality.entityDistance / 100.0D));
 
-        // TEMP DIAGNOSTIC (remove when the MCParks/Photon entity-culling bug is fixed): every
-        // `impetus.cullProbeInterval` frames, report each sub-test of the two culls for nearby entities.
-        boolean impetus$cullProbe = pass == 0 && impetus$cullProbeInterval > 0
-                && (impetus$cullProbeCounter++ % impetus$cullProbeInterval) == 0;
-        boolean impetus$cullBypass = Boolean.getBoolean("impetus.cullProbeBypass");
-
         for(Entity entity : impetus$collectedEntities[pass]) {
             boolean isSleeping = renderViewEntity instanceof EntityLivingBase && ((EntityLivingBase) renderViewEntity).isPlayerSleeping();
             boolean isPlayerAttachedEntity = player != null && entity.isRidingOrBeingRiddenBy(player);
             boolean isLocalPlayerBody = player != null && entity == player
                     && (this.mc.gameSettings.thirdPersonView != 0 || isSleeping);
 
-            if (impetus$cullProbe) {
-                impetus$logCullDecision(entity, camera, renderViewX, renderViewY, renderViewZ);
-            }
-
             // Do regular vanilla checks for visibility
-            if(!impetus$cullBypass && !isLocalPlayerBody
+            if(!isLocalPlayerBody
                     && !this.renderManager.shouldRender(entity, camera, renderViewX, renderViewY, renderViewZ)
                     && !isPlayerAttachedEntity) {
                 continue;
             }
 
             // Check if any corners of the bounding box are in a visible subchunk
-            if(!impetus$cullBypass && !isLocalPlayerBody && !isPlayerAttachedEntity
+            if(!isLocalPlayerBody && !isPlayerAttachedEntity
                     && !ImpetusWorldRenderer.instance().isEntityVisible(entity)) {
                 continue;
             }

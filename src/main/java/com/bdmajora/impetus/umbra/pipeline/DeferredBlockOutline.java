@@ -36,17 +36,6 @@ public final class DeferredBlockOutline {
     private static final FloatBuffer PROJECTION = BufferUtils.createFloatBuffer(16);
     private static final FloatBuffer MODELVIEW = BufferUtils.createFloatBuffer(16);
 
-    /**
-     * <b>ON BY DEFAULT — this is temporary diagnostic state, remove it once the artifact is identified.</b> Draws the
-     * replayed box in opaque green and logs once that the replay ran. It exists because "is this artifact the
-     * selection outline or not?" cannot be settled from a screenshot when the outline is a thin dark line on dark
-     * geometry, and guessing at that question has already cost several wrong fixes. Turn off with
-     * {@code -Dimpetus.umbra.outlineDebug=false}.
-     */
-    private static final boolean DEBUG =
-            !"false".equalsIgnoreCase(System.getProperty("impetus.umbra.outlineDebug", "true"));
-    private static boolean loggedDraw;
-
     private static boolean pending;
     /** Guards the replay's own call to {@code drawSelectionBox} so the capture hook lets it through. */
     private static boolean replaying;
@@ -117,16 +106,6 @@ public final class DeferredBlockOutline {
         // The final pass leaves its own program bound; the outline is fixed-function geometry.
         LWJGL.glUseProgram(0);
 
-        if (DEBUG && !loggedDraw) {
-            loggedDraw = true;
-            org.apache.logging.log4j.LogManager.getLogger("Impetus/Umbra").info(
-                    "[Umbra] Deferred block outline REPLAY is running (target {}). With -Dimpetus.umbra.outlineDebug"
-                            + " the box is drawn bright green: if you see a green box, the selection outline is this"
-                            + " draw and nothing else; if the artifact is still there in its original colour next to"
-                            + " a green box, the artifact is NOT the selection outline.",
-                    capturedTarget.getBlockPos());
-        }
-
         GlStateManager.matrixMode(GL11.GL_PROJECTION);
         GlStateManager.pushMatrix();
         GlStateManager.loadIdentity();
@@ -146,11 +125,6 @@ public final class DeferredBlockOutline {
 
         replaying = true;
         try {
-            if (DEBUG) {
-                // Vanilla passes its colour per vertex, so a constant only wins if nothing else is driving it — which
-                // is exactly what we want to observe here. Restored by vanilla's own postDraw resetColor().
-                GlStateManager.color(0.0F, 1.0F, 0.0F, 1.0F);
-            }
             mc.renderGlobal.drawSelectionBox(capturedPlayer, capturedTarget, 0, partialTicks);
         } finally {
             replaying = false;

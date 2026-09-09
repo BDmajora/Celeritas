@@ -132,7 +132,6 @@ public final class ResourcePackScanner {
         try {
             return pack.getResourceDomains().contains("minecraft");
         } catch (RuntimeException e) {
-            LOGGER.debug("Failed to query resource domains for {}", pack.getPackName(), e);
             return false;
         }
     }
@@ -141,7 +140,6 @@ public final class ResourcePackScanner {
         try {
             return pack.resourceExists(new ResourceLocation("minecraft", path.toLowerCase(Locale.ROOT)));
         } catch (RuntimeException e) {
-            LOGGER.debug("Failed to probe resource pack {} for {}", pack.getPackName(), path, e);
             return false;
         }
     }

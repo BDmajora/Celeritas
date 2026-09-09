@@ -77,8 +77,6 @@ public final class CoartatioConfig {
     public boolean compactRuntimeCollections;
     // Upper bound on any single deduplication pool, after which it stops accepting new entries.
     public int poolSizeLimit;
-    // Prints pool statistics to the log after every resource reload.
-    public boolean logStatistics;
     // Adds a Coartatio line to the F3 debug overlay.
     public boolean showDebugOverlay;
 
@@ -105,7 +103,6 @@ public final class CoartatioConfig {
         this.clearPoolsOnWorldLeave = bool(props, "clearPoolsOnWorldLeave", true);
         this.lazySearchTrees = bool(props, "lazySearchTrees", true);
         this.poolSizeLimit = integer(props, "poolSizeLimit", 262144, 1024, Integer.MAX_VALUE);
-        this.logStatistics = bool(props, "logStatistics", true);
         this.showDebugOverlay = bool(props, "showDebugOverlay", true);
     }
 
@@ -135,7 +132,7 @@ public final class CoartatioConfig {
     }
 
     // Most switches only take effect on next launch (read once by CoartatioMixinPlugin);
-    // logStatistics, showDebugOverlay and the NBT map settings are read live.
+    // showDebugOverlay and the NBT map settings are read live.
     public void save() {
         if (this.file != null) {
             writeBack(this.file);
@@ -181,7 +178,6 @@ public final class CoartatioConfig {
         values.put("clearPoolsOnWorldLeave", Boolean.toString(this.clearPoolsOnWorldLeave));
         values.put("lazySearchTrees", Boolean.toString(this.lazySearchTrees));
         values.put("poolSizeLimit", Integer.toString(this.poolSizeLimit));
-        values.put("logStatistics", Boolean.toString(this.logStatistics));
         values.put("showDebugOverlay", Boolean.toString(this.showDebugOverlay));
 
         Properties out = new Properties();

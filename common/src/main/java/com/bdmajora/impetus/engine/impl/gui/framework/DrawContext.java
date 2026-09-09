@@ -44,10 +44,6 @@ public interface DrawContext extends FontMetricsProvider {
         return TextComponent.literal(modId);
     }
 
-    default @Nullable String getModVersion(String modId) {
-        return null;
-    }
-
     default int getModAccentColor(String modId) {
         return DefaultColors.getModAccentColor(modId);
     }

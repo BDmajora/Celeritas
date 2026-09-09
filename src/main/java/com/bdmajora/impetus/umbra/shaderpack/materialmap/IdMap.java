@@ -66,11 +66,6 @@ public final class IdMap {
         this.blockRenderLayerMap = blockProperties != null
                 ? parseRenderLayerMap(PropertiesPreprocessor.preprocess(blockProperties, preprocessorDefines))
                 : Collections.emptyMap();
-
-        if (this.hasBlockProperties) {
-            LOGGER.info("[Umbra] block.properties: {} block ID(s) declared, {} render-layer override(s)",
-                    this.blockPropertiesMap.size(), this.blockRenderLayerMap.size());
-        }
     }
 
     /** {@code layer.<rendertype>} overrides: block id → the layer the pack wants it meshed into. */
@@ -171,8 +166,6 @@ public final class IdMap {
             }
             translated.put(intId, Collections.unmodifiableList(legacy));
         });
-        LOGGER.info("[Umbra] block.properties declares no 1.12.2 blocks; using its 1.13+ mapping instead "
-                + "({} ID(s), names translated back to 1.12.2)", translated.size());
         return translated;
     }
 
@@ -193,7 +186,6 @@ public final class IdMap {
                         entries.add((BlockEntry) entry);
                     } else {
                         // 1.12.2 has no block tags; packs only reference them behind MC_VERSION gates anyway.
-                        LOGGER.debug("[Umbra] Ignoring tag entry \"{}\" for block.{} (no tag system on 1.12.2)", part, intId);
                     }
                 } catch (Exception e) {
                     LOGGER.warn("[Umbra] Unexpected error while parsing a block.properties entry for block.{}: {}",

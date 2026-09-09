@@ -116,34 +116,20 @@ public final class FullscreenTransformer {
         return VERTEX_PROLOGUE + hoist.body + vertexMain(hoist.hoistedAssignments);
     }
 
-    /**
-     * Fragment epilogue: wraps the pack's main and scrubs non-finite components out of every slot the pass writes.
-     * A NaN left in place spreads — it survives the composite chain, poisons the TAA history buffer, and turns a
-     * one-pixel divide-by-zero into a permanent smear — so replacing it with 0 is the robust behaviour.
-     * <p>
-     * Opt in to {@code -Dimpetus.umbra.tintNaN=true} (same flag the terrain path uses) to paint those pixels MAGENTA
-     * instead, which is how you find WHERE the NaN is born. Do not make that the default: it converts an invisible
-     * one-pixel glitch into screaming pink speckle around every object and particle.
-     */
-    private static final boolean TINT_NAN =
-            "true".equalsIgnoreCase(System.getProperty("impetus.umbra.tintNaN", "false"));
-
+    // Fragment epilogue: wraps the pack's main and scrubs non-finite components out of every slot the pass writes
+    // A NaN left in place spreads — it survives the composite chain, poisons the TAA history buffer, and turns a
+    // one-pixel divide-by-zero into a permanent smear — so replacing it with 0 is the robust behaviour
     private static String fragmentEpilogue(int[] drawBuffers) {
         StringBuilder out = new StringBuilder("\nvoid main() {\n    irisMain();\n");
         int slots = drawBuffers == null ? 1 : Math.max(1, drawBuffers.length);
         for (int slot = 0; slot < slots; slot++) {
             String target = "iris_FragData[" + slot + "]";
-            if (TINT_NAN) {
-                out.append("    if (any(isnan(").append(target).append(")) || any(isinf(").append(target)
-                        .append("))) { ").append(target).append(" = vec4(1.0, 0.0, 1.0, 1.0); }\n");
-            } else {
-                // Per-component so a NaN in one channel does not discard the other three. Two mixes rather than one:
-                // `||` is a scalar-bool operator in GLSL, there is no component-wise or() for bvec4.
-                out.append("    ").append(target).append(" = mix(").append(target)
-                        .append(", vec4(0.0), isnan(").append(target).append("));\n");
-                out.append("    ").append(target).append(" = mix(").append(target)
-                        .append(", vec4(0.0), isinf(").append(target).append("));\n");
-            }
+            // Per-component so a NaN in one channel does not discard the other three. Two mixes rather than one:
+            // `||` is a scalar-bool operator in GLSL, there is no component-wise or() for bvec4.
+            out.append("    ").append(target).append(" = mix(").append(target)
+                    .append(", vec4(0.0), isnan(").append(target).append("));\n");
+            out.append("    ").append(target).append(" = mix(").append(target)
+                    .append(", vec4(0.0), isinf(").append(target).append("));\n");
         }
         return out.append("}\n").toString();
     }

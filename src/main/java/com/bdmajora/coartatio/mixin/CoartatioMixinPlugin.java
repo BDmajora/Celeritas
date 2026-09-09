@@ -21,7 +21,6 @@ public class CoartatioMixinPlugin implements IMixinConfigPlugin {
     @Override
     public void onLoad(String mixinPackage) {
         this.config = CoartatioConfig.get();
-        Coartatio.LOGGER.info("Coartatio memory subsystem loading");
     }
 
     @Override

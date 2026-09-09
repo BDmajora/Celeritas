@@ -40,13 +40,11 @@ public final class CompactPropertyMaps {
         Class<?> defined = ClassDefineTool.defineClass(ImmutableMap.class, MAP_CLASS);
 
         if (defined == null) {
-            Coartatio.LOGGER.info("Compact state property maps unavailable on this JVM; using Guava's");
             return;
         }
 
         try {
             constructor = defined.getConstructor(Object[].class, Object[].class);
-            Coartatio.LOGGER.info("Compact state property maps enabled");
         } catch (NoSuchMethodException e) {
             Coartatio.LOGGER.warn("Injected {} has no usable constructor", MAP_CLASS, e);
         }

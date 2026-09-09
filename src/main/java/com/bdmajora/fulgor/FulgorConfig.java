@@ -50,8 +50,6 @@ public final class FulgorConfig {
     public int maxScheduledUpdates;
     // Inherited from Phosphor; always another mod's bug and the engine survives it either way, but loud by default
     public boolean warnOnIllegalThreadAccess;
-    /** Prints engine statistics to the log when the player leaves a world. */
-    public boolean logStatistics;
     /** Adds a Fulgor line to the F3 debug overlay. */
     public boolean showDebugOverlay;
 
@@ -66,7 +64,6 @@ public final class FulgorConfig {
         this.skipUpdatesWhilePaused = bool(props, "skipUpdatesWhilePaused", true);
         this.maxScheduledUpdates = integer(props, "maxScheduledUpdates", 1 << 22, 1 << 12, Integer.MAX_VALUE);
         this.warnOnIllegalThreadAccess = bool(props, "warnOnIllegalThreadAccess", true);
-        this.logStatistics = bool(props, "logStatistics", false);
         this.showDebugOverlay = bool(props, "showDebugOverlay", false);
     }
 
@@ -130,7 +127,6 @@ public final class FulgorConfig {
         values.put("skipUpdatesWhilePaused", Boolean.toString(this.skipUpdatesWhilePaused));
         values.put("maxScheduledUpdates", Integer.toString(this.maxScheduledUpdates));
         values.put("warnOnIllegalThreadAccess", Boolean.toString(this.warnOnIllegalThreadAccess));
-        values.put("logStatistics", Boolean.toString(this.logStatistics));
         values.put("showDebugOverlay", Boolean.toString(this.showDebugOverlay));
 
         Properties out = new Properties();

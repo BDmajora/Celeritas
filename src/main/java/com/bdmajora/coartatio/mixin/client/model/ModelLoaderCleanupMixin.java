@@ -1,6 +1,5 @@
 package com.bdmajora.coartatio.mixin.client.model;
 
-import com.bdmajora.coartatio.Coartatio;
 import net.minecraft.client.renderer.block.model.IBakedModel;
 import com.bdmajora.coartatio.state.BakeStateReleasable;
 import net.minecraft.client.renderer.block.model.ModelBlockDefinition;
@@ -53,6 +52,5 @@ public abstract class ModelLoaderCleanupMixin {
         // multipartVariantMap is private to ModelBakery, so it is cleared from the mixin that owns it.
         models += ((BakeStateReleasable) this).coartatio$releaseBakeryState();
 
-        Coartatio.LOGGER.info("Released {} unbaked models after bake", models);
     }
 }

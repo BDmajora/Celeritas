@@ -8,24 +8,18 @@ import net.minecraft.client.renderer.block.model.ItemTransformVec3f;
 
 import java.util.Objects;
 
-/**
- * Bake-scoped pools for the two objects every baked model carries but almost never varies.
- *
- * <p>This is the tractable core of FoamFix's {@code geDeduplicate}. FoamFix walks the whole baked
- * model graph reflectively and shares every structurally identical leaf; the overwhelming majority
- * of what it finds is these two, because a model's camera transforms come from its JSON parent and
- * its override list is empty unless the model declares overrides.
- *
- * <p>Doing it at construction rather than by a post-bake graph walk keeps the code honest — there is
- * no reflection, nothing to keep in sync with Forge's model classes, and the sharing happens before
- * the duplicates are ever reachable.
- */
+// Bake-scoped pools for the two objects every baked model carries and almost never varies
+// This is the tractable core of FoamFix's geDeduplicate. FoamFix walks the entire baked model graph
+// reflectively and shares every structurally identical leaf; the overwhelming majority of what it finds is
+// these two, because a model's camera transforms come from its JSON parent and its override list is empty
+// unless the model declares overrides of its own
+// Doing it at construction rather than as a post-bake graph walk avoids reflection entirely, leaves nothing to
+// keep in sync with Forge's model classes, and shares the objects before the duplicates are ever reachable
 public final class TransformCaches {
-    /**
-     * {@code ItemCameraTransforms} has no {@code equals}, so identical transform blocks from
-     * different model files never compare equal on their own. The strategy compares the eight
-     * vectors it holds.
-     */
+    // ItemCameraTransforms defines no equals, so two identical transform blocks from different model files
+    // would never compare equal on their own and the pool would hold one entry per model
+    // The strategy therefore compares the eight vectors it holds, in the same order in both methods so the hash
+    // and the equality agree
     private static final Hash.Strategy<ItemCameraTransforms> TRANSFORMS_STRATEGY =
             new Hash.Strategy<ItemCameraTransforms>() {
                 @Override
@@ -70,16 +64,15 @@ public final class TransformCaches {
     private TransformCaches() {
     }
 
+    // ItemTransformVec3f does define hashCode, so this only has to add null tolerance
     private static int vectorHash(ItemTransformVec3f vector) {
         return vector == null ? 0 : vector.hashCode();
     }
 
-    /**
-     * Override lists are shared by identity against the canonical empty one, then pooled.
-     *
-     * <p>{@code ItemOverrideList.NONE} already exists for the empty case, but a model built from
-     * JSON with no {@code overrides} block still gets a fresh instance wrapping an empty list.
-     */
+    // Collapses an empty override list onto the canonical shared instance
+    // ItemOverrideList.NONE already exists for the empty case, but a model parsed from JSON with no `overrides`
+    // block still gets a fresh instance wrapping an empty list, and that is what this catches
+    // No pool is involved: non-empty lists are genuinely per-model, so there is nothing to share among them
     public static ItemOverrideList deduplicate(ItemOverrideList overrides) {
         if (overrides == null) {
             return null;

@@ -12,50 +12,50 @@ import net.minecraft.client.shader.ShaderGroup;
 import net.minecraft.client.shader.ShaderUniform;
 import net.minecraft.util.ResourceLocation;
 
-/**
- * Sodium Extra's Panini projection, as a 1.12.2 post-processing pass.
- *
- * <p>Panini is a cylindrical-ish projection that widens the field of view without the corner
- * stretching a plain perspective projection gives you past about 100°. It is a screen-space remap of
- * the finished frame, which is why it can be a post effect at all.
- *
- * <p>The strength and the two projection extents change per frame, and 1.12.2's
- * {@link ShaderGroup} can only set uniforms to constants from its JSON, so the pass is reached
- * through {@link ShaderGroupAccessor} and written directly.
- *
- * <p>Disabled next to a shader pack. A pack owns the framebuffer contents and its own projection
- * uniforms; warping the result afterwards would put every screen-space effect in the pack — SSAO,
- * reflections, volumetric light — out of register with what is on screen. Sodium Extra refuses for
- * the same reason.
- */
+// Sodium Extra's Panini projection, ported to 1.12.2 as a post-processing pass
+// Panini is a roughly cylindrical projection that widens the field of view without the corner stretching a
+// plain perspective projection produces past about 100 degrees. It is a screen-space remap of the already
+// finished frame, which is the only reason it can be a post effect rather than a change to the world projection
+// The strength and the two frustum extents change every frame, but 1.12.2's ShaderGroup can only set uniforms
+// to constants baked into its JSON, so the pass is reached through ShaderGroupAccessor and its uniforms written
+// by hand each frame
+// Refuses to run while a shader pack is loaded: the pack owns the framebuffer contents and its own projection
+// uniforms, so warping the finished image afterwards would leave every screen-space effect in the pack — SSAO,
+// reflections, volumetric light — misaligned with what is actually on screen. Sodium Extra bails for the same
+// reason
 public final class PaniniProjection {
     private static final ResourceLocation CHAIN = new ResourceLocation("impetus", "shaders/post/panini.json");
     private static final String CONFIG_UNIFORM = "PaniniParams";
-    /** {@code GL_TEXTURE}; {@link GlStateManager#matrixMode} takes the raw enum. */
+    // GL_TEXTURE spelled out as a literal because GlStateManager.matrixMode takes the raw GL enum and 1.12.2's
+    // GlStateManager exposes no constant for it
     private static final int GL_TEXTURE = 5890;
 
+    // Built lazily on first use and thrown away whenever the window resizes or the effect is switched off
     private static ShaderGroup shaderGroup;
+    // Size the current shaderGroup's framebuffers were allocated at, compared each frame to detect a resize
     private static int framebufferWidth;
     private static int framebufferHeight;
+    // Latched on a load failure so a broken or missing chain is attempted exactly once instead of every frame
     private static boolean failed;
 
-    /** Extents of the current perspective frustum at unit depth, captured from the live projection. */
+    // Half-extents of the live perspective frustum at unit depth, refreshed per frame by captureProjection
+    // Default 1.0 so the very first frame, before any capture, produces an identity-ish remap rather than a
+    // division by zero
     private static float horizontalExtent = 1.0F;
     private static float verticalExtent = 1.0F;
 
     private PaniniProjection() {
     }
 
-    /**
-     * Records the frustum extents from the world projection matrix.
-     *
-     * <p>Read from GL rather than recomputed from the FOV setting because the effective FOV is not
-     * the setting: sprinting, speed effects and the nausea warp all scale it, and Panini has to
-     * follow whatever was actually rendered or the image swims.
-     *
-     * <p>{@code m00} and {@code m11} of a perspective matrix are the reciprocals of the horizontal
-     * and vertical half-extents.
-     */
+    // Captures the frustum extents from the world projection matrix as it is being set up
+    // Taken from the actual matrix rather than recomputed from the FOV setting, because the effective FOV is not
+    // the setting: sprinting, speed effects and the nausea warp all scale it, and if Panini does not follow what
+    // was really rendered the image swims
+    // m00 and m11 of a perspective matrix are the reciprocals of the horizontal and vertical half-extents, hence
+    // the inversion; abs() because a flipped-handedness projection makes them negative without changing the
+    // extent
+    // The zero guard skips degenerate matrices (an orthographic or not-yet-initialised one) and leaves the last
+    // good values in place
     public static void captureProjection(float m00, float m11) {
         if (m00 != 0.0F && m11 != 0.0F) {
             horizontalExtent = Math.abs(1.0F / m00);
@@ -63,7 +63,9 @@ public final class PaniniProjection {
         }
     }
 
-    /** Runs the pass, if it is enabled and usable. Call once per frame with the world drawn. */
+    // Runs the pass. Called once per frame, after the world is drawn and before the GUI
+    // Releasing on the disabled path is deliberate: it frees the framebuffers as soon as the effect stops being
+    // used rather than holding them for a toggle that may never come back
     public static void render(float partialTicks) {
         if (!shouldApply()) {
             release();
@@ -77,17 +79,21 @@ public final class PaniniProjection {
 
         updateUniforms();
 
-        // The texture matrix is left dirty by the world pass; ShaderGroup assumes identity.
+        // The world pass leaves the texture matrix dirty and ShaderGroup assumes it is identity, so it is saved,
+        // reset, and restored around the render rather than left for the next consumer to trip over
         GlStateManager.matrixMode(GL_TEXTURE);
         GlStateManager.pushMatrix();
         GlStateManager.loadIdentity();
         shaderGroup.render(partialTicks);
         GlStateManager.popMatrix();
 
+        // ShaderGroup finishes with its own last framebuffer bound; rebind the main one so the GUI draws to the
+        // screen. true also resets the viewport to the framebuffer's size
         minecraft.getFramebuffer().bindFramebuffer(true);
     }
 
-    /** Drops the framebuffers when the option is turned off or the game window changes size. */
+    // Frees the chain and its framebuffers; called when the option goes off, the window resizes, or the world
+    // unloads. Null-safe and idempotent, so callers do not have to track whether anything was allocated
     public static void release() {
         if (shaderGroup != null) {
             shaderGroup.deleteShaderGroup();
@@ -95,6 +101,11 @@ public final class PaniniProjection {
         }
     }
 
+    // Every reason the pass might not run this frame, cheapest checks first
+    // failed short-circuits a chain that would not load; strength <= 0 means the user dialled it to nothing;
+    // preventShaders is the vanilla-post-chain switch, which this pass counts as; shadersSupported covers
+    // drivers with no GLSL at all
+    // The world/view-entity check keeps it off the main menu, and the pipeline check is the shader-pack refusal
     private static boolean shouldApply() {
         ExtrasConfig.ExtraSettings settings = Extras.options().extra;
 
@@ -114,6 +125,9 @@ public final class PaniniProjection {
         return Umbra.getRenderingPipeline() == null;
     }
 
+    // Lazily builds the chain, rebuilding it when the window size changed since it was created
+    // Returns false when the pass cannot run this frame, either because the window has no area yet or because
+    // loading failed
     private static boolean ensureShaderGroup(Minecraft minecraft) {
         int width = minecraft.displayWidth;
         int height = minecraft.displayHeight;

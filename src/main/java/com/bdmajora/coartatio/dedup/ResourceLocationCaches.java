@@ -2,18 +2,13 @@ package com.bdmajora.coartatio.dedup;
 
 import com.bdmajora.coartatio.CoartatioConfig;
 
-/**
- * Pools for the two strings every {@code ResourceLocation} carries.
- *
- * <p>A modded instance holds hundreds of thousands of {@code ResourceLocation}s — one per item
- * model, per texture, per recipe, per registry entry, per sound. The domain is nearly always one of
- * a few hundred mod ids, so pooling domains collapses that column almost completely. Paths are less
- * repetitive but still share heavily across variants of the same block.
- *
- * <p>Both pools live for the whole session; unlike the model pools there is no point at which no
- * further {@code ResourceLocation}s will be constructed. The cap in
- * {@link DeduplicationCache} is what keeps that safe.
- */
+// Pools for the two strings every ResourceLocation carries
+// A modded instance holds hundreds of thousands of them: one per item model, texture, recipe, registry entry
+// and sound
+// The domain is nearly always one of a few hundred mod ids, so pooling that column collapses it almost
+// completely. Paths repeat less, but still share heavily across the variants of a single block
+// Both pools live for the whole session, because unlike the model pools there is no point after which no more
+// ResourceLocations get constructed. DeduplicationCache's size cap is what keeps that from being a leak
 public final class ResourceLocationCaches {
     public static final DeduplicationCache<String> DOMAINS =
             new DeduplicationCache<>("Resource domains", CoartatioConfig.get().poolSizeLimit);

@@ -8,28 +8,21 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
 
-/**
- * An immutable, insertion-ordered {@link Map} stored as two parallel arrays.
- *
- * <p>Built for {@code MultipartBakedModel.selectors}, which vanilla creates as a
- * {@code LinkedHashMap} and thereafter only iterates. A {@code LinkedHashMap} entry is a 40-byte
- * object with a hash, a next pointer and two order pointers; here an entry costs eight bytes of
- * array slot. Multipart models are one per multipart blockstate, and packs that lean on them
- * (pipes, cables, fences, wires) create thousands.
- *
- * <p>Lookups are a linear scan. That is the right shape here: selector counts are single digits, and
- * a scan over two small arrays beats a hash probe plus a pointer chase at that size. The class is
- * not suitable as a general-purpose map and is not exposed outside this package's callers.
- *
- * <p>Unlike Hydrogen's equivalent, the entry set iterator allocates a fresh entry per step instead
- * of recycling one mutable instance. Recycling breaks any caller that collects the entry set — and
- * on 1.12.2, with Forge's model pipeline and a long tail of mods wrapping baked models, that risk
- * is not worth the eden allocation it saves.
- */
+// An immutable, insertion-ordered Map held as two parallel arrays
+// Built for MultipartBakedModel.selectors, which vanilla creates as a LinkedHashMap and from then on only ever
+// iterates. A LinkedHashMap entry is a 40-byte object carrying a hash, a next pointer and two order pointers;
+// here an entry costs one array slot in each of two arrays. There is one multipart model per multipart
+// blockstate, and packs built on them (pipes, cables, fences, wires) create thousands
+// Lookups are a linear scan, which is the right shape at this size: selector counts are single digits, and a
+// scan over two small arrays beats a hash probe plus a pointer chase. It is NOT a general-purpose map and is
+// not exposed beyond the callers in this package
 public class ArrayBackedLinkedMap<K, V> extends AbstractMap<K, V> {
+    // Insertion order is the array order, which is what makes the iteration order match a LinkedHashMap's
     private final K[] keys;
     private final V[] values;
 
+    // Copies out of the source map once; the source is not retained, so whatever it was can be collected
+    // Arrays are exactly sized, so there is no growth slack to pay for
     @SuppressWarnings("unchecked")
     public ArrayBackedLinkedMap(Map<K, V> src) {
         int size = src.size();
@@ -66,6 +59,7 @@ public class ArrayBackedLinkedMap<K, V> extends AbstractMap<K, V> {
         return index < 0 ? null : this.values[index];
     }
 
+    // Objects.equals rather than a bare equals so a null key is handled like any other value
     private int indexOf(Object key) {
         K[] keys = this.keys;
 
@@ -78,6 +72,8 @@ public class ArrayBackedLinkedMap<K, V> extends AbstractMap<K, V> {
         return -1;
     }
 
+    // Immutable: the mutators throw instead of no-opping, so a mod trying to edit a baked model after the fact
+    // gets a stack trace at bake time rather than a rendering bug much later
     @Override
     public V put(K key, V value) {
         throw new UnsupportedOperationException();
@@ -109,6 +105,10 @@ public class ArrayBackedLinkedMap<K, V> extends AbstractMap<K, V> {
                     return this.index < ArrayBackedLinkedMap.this.keys.length;
                 }
 
+                // A fresh SimpleImmutableEntry per step, unlike Hydrogen's version, which recycles one mutable
+                // entry. Recycling breaks any caller that collects the entry set, and on 1.12.2 — Forge's model
+                // pipeline plus a long tail of mods wrapping baked models — that risk is not worth the one eden
+                // allocation it would save
                 @Override
                 public Map.Entry<K, V> next() {
                     if (!hasNext()) {

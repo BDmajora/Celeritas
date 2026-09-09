@@ -1,7 +1,5 @@
 package com.bdmajora.impetus.umbra.shaderpack.texture;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -27,7 +25,6 @@ import java.util.regex.Pattern;
  * terrain and shadow compile paths reach the transform from static contexts that have no pack handle.
  */
 public final class CustomTextureTransformer {
-    private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
     /** {@code uniform <type> <name>[, <name>...];} — the declaration form every pack uses for samplers. */
     private static final Pattern UNIFORM_DECLARATION =
@@ -74,8 +71,6 @@ public final class CustomTextureTransformer {
             result = renameIdentifier(result, patch.getSamplerName(), patch.getNewSamplerName());
             // The rename changes the text the next patch scans (a program can carry several patched samplers).
             declarationScan = stripComments(result);
-            LOGGER.info("[Umbra] Program '{}': custom texture {} declared as {} -> {}",
-                    programName, patch.getSamplerName(), declaredType, patch.getNewSamplerName());
         }
         return result;
     }

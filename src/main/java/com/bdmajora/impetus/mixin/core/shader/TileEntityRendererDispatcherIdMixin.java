@@ -2,14 +2,12 @@ package com.bdmajora.impetus.mixin.core.shader;
 
 import net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.bdmajora.impetus.umbra.Umbra;
-import com.bdmajora.impetus.umbra.devtool.ShaderStateProbe;
 import com.bdmajora.impetus.umbra.material.WorldRenderingSettings;
 import com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline;
 import com.bdmajora.impetus.umbra.uniforms.CapturedRenderingState;
@@ -38,34 +36,6 @@ public class TileEntityRendererDispatcherIdMixin {
         // frame — which is why player heads and other model-based block entities stay lit once they have gone wrong.
         // Resetting before every dispatch guarantees the first compile of each model happens clean.
         UmbraRenderingPipeline.resetVanillaVertexArrayState();
-
-        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
-
-        // Measured, not assumed. Vanilla's render() sets the lightmap coord from getCombinedLight a few instructions
-        // AFTER this injection point, so the two light figures logged here answer different questions and the pair is
-        // the whole point: `lightCoord` is what the previous draw left in the current-vertex state, `worldLight` is
-        // what this block entity is about to be given. Across a bright capture and a normal one at the same spot,
-        // worldLight differing means the light engine disagrees about the block, while worldLight holding steady
-        // while the model still renders bright means the coordinate is right and something downstream ignored it.
-        if (pipeline != null && !pipeline.isCameraPassActive()) {
-            ShaderStateProbe.noteShadowDrawSkipped();
-        }
-        if (pipeline != null && pipeline.isCameraPassActive() && ShaderStateProbe.consumeDrawProbeSlot()) {
-            pipeline.logDrawStateProbe(
-                    tileEntity.getClass().getSimpleName() + " @" + tileEntity.getPos(),
-                    impetus$describeWorldLight(tileEntity));
-        }
-    }
-
-    /** {@return the light vanilla is about to hand this block entity, in the same 0..240 units as {@code lightCoord}} */
-    @Unique
-    private static String impetus$describeWorldLight(TileEntity tileEntity) {
-        World world = tileEntity.getWorld();
-        if (world == null) {
-            return "worldLight=unavailable";
-        }
-        int combined = world.getCombinedLight(tileEntity.getPos(), 0);
-        return "worldLight=(" + (combined % 65536) + ", " + (combined / 65536) + ")";
     }
 
     @Inject(method = "render(Lnet/minecraft/tileentity/TileEntity;FI)V", at = @At("RETURN"))

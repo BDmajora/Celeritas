@@ -5,7 +5,6 @@ import it.unimi.dsi.fastutil.objects.Reference2ReferenceOpenHashMap;
 import com.bdmajora.impetus.engine.impl.gl.array.GlVertexArray;
 import com.bdmajora.impetus.engine.impl.gl.attribute.GlVertexAttributeBinding;
 import com.bdmajora.impetus.engine.impl.gl.attribute.GlVertexFormat;
-import com.bdmajora.impetus.engine.impl.gl.debug.GLDebug;
 import com.bdmajora.impetus.engine.impl.gl.device.CommandList;
 import com.bdmajora.impetus.engine.impl.gl.device.RenderDevice;
 import com.bdmajora.impetus.engine.impl.gl.tessellation.*;
@@ -75,8 +74,6 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
         if (this.activeProgram != null) {
             boolean useBlockFaceCulling = this.useBlockFaceCulling();
 
-            GLDebug.pushGroup(770, renderPass.name() + " terrain pass");
-
             ChunkShaderInterface shader = this.activeProgram.getInterface();
             shader.setProjectionMatrix(matrices.projection());
             shader.setModelViewMatrix(matrices.modelView());
@@ -121,8 +118,6 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
 
             this.currentVertexFormat = null;
             this.currentRenderPass = null;
-
-            GLDebug.popGroup();
         }
 
         this.end(renderPass);

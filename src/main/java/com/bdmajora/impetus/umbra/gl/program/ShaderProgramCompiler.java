@@ -1,10 +1,7 @@
 package com.bdmajora.impetus.umbra.gl.program;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import com.bdmajora.impetus.umbra.gl.shader.GlShader;
 import com.bdmajora.impetus.umbra.gl.shader.ShaderType;
-import com.bdmajora.impetus.umbra.pipeline.UmbraDebugDump;
 import com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline;
 import com.bdmajora.impetus.umbra.shaderpack.ProgramSource;
 import com.bdmajora.impetus.umbra.shaderpack.preprocessor.GlslPreprocessor;
@@ -30,18 +27,14 @@ import java.util.Map;
  * shaders on failure rather than crash.
  */
 public final class ShaderProgramCompiler {
-    private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
     public static final String HAND_LIGHTMAP_UNIFORM = "impetus_HandLightmap";
 
     private ShaderProgramCompiler() {
     }
 
-    /**
-     * The driver-visible source for one gbuffer/shadow program, and the dense draw-buffer routing that goes with it.
-     * Split out of {@link #compile} so the headless {@code PackSmoke} tool can exercise the exact same string patching
-     * without a GL context — a copy of it there had already drifted, hiding the {@code impetus_HandLightmap}
-     * regression from the smoke checks.
-     */
+    // The driver-visible source for one gbuffer/shadow program, plus the dense draw-buffer routing that goes with it
+    // Kept as its own type, and produced by patchSource rather than inline in compile, so the string patching is one
+    // reusable step instead of something a second caller would end up duplicating and letting drift
     public static final class PatchedSource {
         public final String vertex;
         public final String fragment;
@@ -116,11 +109,6 @@ public final class ShaderProgramCompiler {
         String geometrySource = patched.geometry;
         int[] drawBuffers = patched.drawBuffers;
 
-        // Dump the driver-visible source for every gbuffer program (entities, hand, block, …). The terrain/fullscreen
-        // paths dump their own; these immediate-mode programs were the blind spot when debugging entity/hand artifacts.
-        UmbraDebugDump.dumpText("src_" + name + ".vsh", processedVertex);
-        UmbraDebugDump.dumpText("src_" + name + ".fsh", processedFragment);
-
         GlShader vertexShader = null;
         GlShader fragmentShader = null;
         GlShader geometryShader = null;
@@ -140,7 +128,6 @@ public final class ShaderProgramCompiler {
             bindOptifineAttributes(builder, processedVertex);
 
             GlProgram program = builder.link();
-            LOGGER.info("[Umbra] {} resolved DRAWBUFFERS {}", name, Arrays.toString(drawBuffers));
             return new UmbraProgram(program, drawBuffers);
         } finally {
             // The stage objects are no longer needed once the program is linked (or if linking failed).

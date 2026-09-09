@@ -116,13 +116,6 @@ public class UmbraShadowRenderer {
             ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
 
     private int failureCount;
-    /**
-     * OFF unless {@code -Dimpetus.umbra.shadowProbeFrame=<n>} names a shadow pass to sample. The probe reads back three
-     * full 2048² buffers, so it is not something to leave running.
-     */
-    private static final int SHADOW_PROBE_FRAME = Integer.getInteger("impetus.umbra.shadowProbeFrame", -1);
-    private int shadowPassCounter;
-    private boolean probeDone;
     private boolean failed;
     /** Monotonic frame tag for the dedicated shadow render-list graph updates (independent of the main list's). */
     private int shadowListFrame;
@@ -201,14 +194,6 @@ public class UmbraShadowRenderer {
         this.blockEntityShadowProgram = this.blockEntityProgramShared
                 ? this.entityShadowProgram
                 : GbufferPrograms.compile(blockSource, shaderDefines, samplerUnits);
-        if (!this.blockEntityProgramShared) {
-            LOGGER.info("[Umbra] Pack ships a separate shadow block-entity program; compiled alongside shadow_entities");
-        }
-
-        LOGGER.info("[Umbra] Shadow map ready: {}x{}, distance {}, near {}, far {}, interval {}, fov {}, hardware filtering [{}, {}], mipmaps [{}, {}], nearest [{}, {}], separate hardware samplers {}",
-                resolution, resolution, shadowDistance, nearPlane, farPlane, intervalSize,
-                shadowMapFov == null ? "ortho" : shadowMapFov, hardwareFiltering[0], hardwareFiltering[1],
-                mipmapDepth[0], mipmapDepth[1], nearestDepth[0], nearestDepth[1], separateHardwareSamplers);
     }
 
     private static DepthTexture createShadowDepthTexture(int resolution, boolean hardwareFiltering,
@@ -419,9 +404,6 @@ public class UmbraShadowRenderer {
                 GlStateManager.disableBlend();
             }
             generateMipmaps();
-            sampleShadowCoverageIfRequested();
-            probeShadowDepth();
-            dumpShadowMapIfRequested();
         } catch (Throwable t) {
             // The very first frames can race renderer setup (no viewport/render lists yet) — only give up for good
             // after repeated failures.
@@ -591,96 +573,6 @@ public class UmbraShadowRenderer {
     }
 
     /**
-     * One-shot diagnostic that runs on its own, once per pack load, a few seconds in. Logs two lines and never
-     * repeats; {@code -Dimpetus.umbra.shadowProbeFrame=<n>} only moves which pass it samples.
-     * <p>
-     * Complementary's light shafts read {@code shadowtex0} with {@code texelFetch}, and wherever that says "shadowed"
-     * they cross-check {@code shadowtex1} (the pre-translucent depth) with {@code shadow2D}. If {@code shadowtex1}
-     * claims the texel is lit, the pack concludes the occluder must be translucent glass or water and swaps the
-     * density for {@code pow2(shadowcolor1.rgb * 4.0)} — and shadowcolor1 clears to white, making that path 16x
-     * overbright. Over solid terrain that is precisely "sunlight leaking through the ground".
-     * <p>
-     * The number that settles it is {@code onlyIn0}: texels where shadowtex0 holds an occluder but shadowtex1 is
-     * still at the clear value. That is the exact condition the pack's translucent branch tests, so it should be
-     * near zero in a world with no glass or water overhead. A large value means the pre-translucent depth copy is
-     * losing geometry, which is a bug here rather than in the pack.
-     */
-    private void probeShadowDepth() {
-        // Retry rather than fire on a fixed count. A shader reload rebuilds this renderer and restarts the counter,
-        // so a fixed trigger can land while the world is still loading — which reads a 100%-empty shadow map and
-        // eyeBrightness (0,0), i.e. plausible-looking numbers that mean nothing.
-        if (SHADOW_PROBE_FRAME < 0 || this.probeDone || this.shadowPassCounter++ < SHADOW_PROBE_FRAME) {
-            return;
-        }
-        int depth0 = this.depthTexture.getTextureId();
-        int depth1 = this.depthTextureNoTranslucents.getTextureId();
-        try {
-            float[] with = readDepth();
-            if (fractionUntouched(with) > 0.99f) {
-                // Nothing has been drawn into the shadow map yet; wait and look again shortly.
-                this.shadowPassCounter = SHADOW_PROBE_FRAME - 60;
-                return;
-            }
-            this.framebuffer.addDepthAttachment(depth1);
-            float[] without = readDepth();
-            this.framebuffer.addDepthAttachment(depth0);
-            float[] rgba = readShadowColor1();
-            logDepthComparison(with, without, rgba);
-            logSceneAwareProbe(with, rgba);
-            this.probeDone = true;
-        } catch (Throwable t) {
-            LOGGER.warn("[Umbra] Shadow probe failed", t);
-            this.probeDone = true;
-        } finally {
-            this.framebuffer.addDepthAttachment(depth0);
-            this.framebuffer.bind();
-            this.framebuffer.drawBuffers(this.shadowDrawBuffers);
-        }
-    }
-
-    /**
-     * Writes both shadow depth textures to PNGs when the player has just taken a screenshot, so the shadow map can be
-     * read side by side with the frame it belongs to. {@code shadowtex0} is the one the light shafts sample.
-     */
-    private void dumpShadowMapIfRequested() {
-        if (!com.bdmajora.impetus.umbra.devtool.ShadowMapDump.consumeRequest()) {
-            return;
-        }
-        int depth0 = this.depthTexture.getTextureId();
-        int depth1 = this.depthTextureNoTranslucents.getTextureId();
-        try {
-            float[] depth = readDepth();
-            logShadowLookupProbe(depth);
-            com.bdmajora.impetus.umbra.devtool.ShadowMapDump.writeDepth("shadowtex0", depth, this.resolution);
-            this.framebuffer.addDepthAttachment(depth1);
-            com.bdmajora.impetus.umbra.devtool.ShadowMapDump.writeDepth("shadowtex1", readDepth(), this.resolution);
-        } catch (Throwable t) {
-            LOGGER.warn("[Umbra] Shadow map dump failed", t);
-        } finally {
-            this.framebuffer.addDepthAttachment(depth0);
-            this.framebuffer.bind();
-            this.framebuffer.drawBuffers(this.shadowDrawBuffers);
-        }
-    }
-
-    /**
-     * Replays Complementary's {@code GetShadowPos} against the live matrices and the shadow map that was just
-     * rendered, for points straight above the camera. This is the last unobserved link in the light-shaft path: the
-     * shafts leak only if this lookup reports LIT for a sample that sits under solid rock.
-     * <p>
-     * Underground, the camera itself (h=0) and every point below the ceiling must come back {@code shadowed}. An
-     * {@code OUTSIDE DISC} verdict is worse than a wrong depth — the pack skips the shadow test entirely there and
-     * substitutes {@code localDensity = vec3(1.0)}, i.e. fully lit with no occlusion at all.
-     */
-    private void logShadowLookupProbe(float[] depth0) {
-        for (float h : new float[]{0.0f, 2.0f, 5.0f, 10.0f, 20.0f, 40.0f, 80.0f}) {
-            for (String model : SHADOW_DISTORTION_MODELS) {
-                logShadowLookupRow(depth0, h, model);
-            }
-        }
-    }
-
-    /**
      * The distortion functions the installed packs use. A pack applies its distortion twice — per vertex in
      * {@code shadow.vsh} when rasterising, and per pixel in the composite lookup — so they cancel, and a probe that
      * assumes the wrong one manufactures a mismatch that exists only inside the probe.
@@ -691,55 +583,6 @@ public class UmbraShadowRenderer {
      * reader take the row matching the loaded pack.
      */
     private static final String[] SHADOW_DISTORTION_MODELS = {"COMPLEMENTARY", "LOLIP_P"};
-
-    /**
-     * One probe sample under one distortion model.
-     *
-     * @param model {@code COMPLEMENTARY} — {@code xy /= len * bias + (1 - bias)} where
-     *              {@code bias = 1 - 25.6 / halfPlaneLength}, and {@code z *= 0.2}; used by Complementary and Photon.
-     *              {@code LOLIP_P} — {@code xy /= len + 0.1} and {@code z *= 0.5}; used by Body Camera and miniature.
-     */
-    private void logShadowLookupRow(float[] depth0, float h, String model) {
-        org.joml.Vector4f p = new org.joml.Vector4f(0.0f, h, 0.0f, 1.0f);
-        this.shadowModelView.transform(p);
-        this.shadowProjection.transform(p);
-        float len = (float) Math.sqrt(p.x * p.x + p.y * p.y);
-
-        float distort;
-        float zScale;
-        if ("LOLIP_P".equals(model)) {
-            distort = len + 0.1f;
-            zScale = 0.5f;
-        } else {
-            float bias = 1.0f - 25.6f / this.halfPlaneLength;
-            distort = len * bias + (1.0f - bias);
-            zScale = 0.2f;
-        }
-        float sx = (p.x / distort) * 0.5f + 0.5f;
-        float sy = (p.y / distort) * 0.5f + 0.5f;
-        float sz = (p.z * zScale) * 0.5f + 0.5f;
-
-        double ndc = Math.hypot(sx * 2.0 - 1.0, sy * 2.0 - 1.0);
-        int tx = (int) (sx * this.resolution);
-        int ty = (int) (sy * this.resolution);
-        String verdict;
-        String storedText = "-";
-        if (ndc >= 1.0) {
-            verdict = "OUTSIDE DISC -> a pack that clamps here skips the shadow test (FULLY LIT)";
-        } else if (tx < 0 || ty < 0 || tx >= this.resolution || ty >= this.resolution) {
-            verdict = "texel out of range " + tx + "," + ty;
-        } else {
-            float stored = depth0[ty * this.resolution + tx];
-            storedText = Float.toString(stored);
-            float sample = Math.max(0.0f, Math.min(1.0f, (stored - sz) * 65536.0f));
-            verdict = sample > 0.5f ? "LIT" : "shadowed";
-            if (stored >= 0.99999f) {
-                verdict += " (nothing rendered in this column)";
-            }
-        }
-        LOGGER.info("[Umbra] SHADOW LOOKUP [{}] h=+{}: uv=({}, {}) z={} ndc={} texel=({},{}) stored={} -> {}",
-                model, h, sx, sy, sz, ndc, tx, ty, storedText, verdict);
-    }
 
     private static float fractionUntouched(float[] depth) {
         int cleared = 0;
@@ -766,189 +609,6 @@ public class UmbraShadowRenderer {
         float[] rgba = new float[texels * 4];
         pixels.asFloatBuffer().get(rgba);
         return rgba;
-    }
-
-    /**
-     * Replays composite1's scene-aware light-shaft (SALS) probe exactly as the shader runs it, because its result is
-     * what drives {@code vlFactor} — and {@code vlFactor} is the switch on the ONLY unshadowed term in the whole
-     * raymarch. At {@code vlFactor == 0} the near-field covers the entire ray and every sample is shadow-tested; as
-     * it rises, {@code qualityThreshold} collapses from ~188 blocks toward 100 and everything past that gets one
-     * sample of {@code eyeBrightnessM} with no shadow test at all — distant fog that ignores geometry.
-     * <p>
-     * The shader's own loop: sample a 5x5 grid over the middle of the shadow map, keep texels whose depth is
-     * {@code < 0.55}, recover {@code (a - 0.25) / 0.05} from shadowcolor1's alpha, and compare the average against a
-     * threshold of 6.0. Above it {@code vlFactor} climbs toward 1, below it decays toward 0.
-     */
-    private void logSceneAwareProbe(float[] depth0, float[] rgba) {
-        double heightSum = 0.0;
-        int counted = 0;
-        int considered = 0;
-        for (double i = 0.25; i < 5.0; i++) {
-            for (double h = 0.45; h < 5.0; h++) {
-                double u = 0.3 + 0.4 * (1.0 / 5.0) * i;
-                double v = 0.3 + 0.4 * (1.0 / 5.0) * h;
-                int x = Math.min(this.resolution - 1, (int) (u * this.resolution));
-                int y = Math.min(this.resolution - 1, (int) (v * this.resolution));
-                int index = y * this.resolution + x;
-                considered++;
-                if (depth0[index] >= 0.55f) {
-                    continue;
-                }
-                float alpha = rgba[index * 4 + 3];
-                if (alpha > 0.0f) {
-                    heightSum += Math.max(0.0f, alpha - 0.25f) / 0.05;
-                    counted++;
-                }
-            }
-        }
-        double salsCheck = counted == 0 ? Double.NaN : heightSum / counted;
-        LOGGER.info("[Umbra] SHADOW PROBE SALS: sampled {}/{} grid points, salsCheck={} vs threshold 6.0 -> vlFactor {}",
-                counted, considered, salsCheck,
-                Double.isNaN(salsCheck) ? "DECAYS (no samples)" : (salsCheck > 6.0 ? "CLIMBS toward 1" : "decays to 0"));
-
-        // With vlFactor pinned high, qualityThreshold collapses to 100 blocks and everything beyond it takes ONE
-        // unshadowed sample of eyeBrightnessM. That is only harmless if eyeBrightnessM is genuinely low, which it
-        // must be whenever the SALS says the camera is under cover — the two are meant to move together.
-        org.joml.Vector2i eye = com.bdmajora.impetus.umbra.uniforms.EyeBrightnessTracker.getEyeBrightness();
-        Minecraft mc = Minecraft.getMinecraft();
-        Entity cam = mc.getRenderViewEntity();
-        int optifineWay = cam == null ? -1 : cam.getBrightnessForRender();
-        int handRolled = -1;
-        String eyePos = "?";
-        if (cam != null && mc.world != null) {
-            BlockPos p = new BlockPos(cam.posX, cam.posY + cam.getEyeHeight(), cam.posZ);
-            eyePos = p.getX() + "," + p.getY() + "," + p.getZ();
-            handRolled = mc.world.getCombinedLight(p, 0);
-        }
-        LOGGER.info("[Umbra] SHADOW PROBE eyeBrightness=({},{}) of 240 -> eyeBrightnessM={} | eyePos={} "
-                        + "getBrightnessForRender()=block {} sky {} | getCombinedLight()=block {} sky {}",
-                eye.x, eye.y, com.bdmajora.impetus.umbra.uniforms.CommonUniforms.getEyeBrightnessM(), eyePos,
-                optifineWay & 0xFFFF, optifineWay >> 16, handRolled & 0xFFFF, handRolled >> 16);
-    }
-
-    /**
-     * Answers the one question a light leak turns on: does the sun actually see the geometry above the player?
-     * <p>
-     * A texel still holding the 1.0 depth clear means nothing was ever drawn there, so every shadow lookup into it
-     * reports "lit". Standing indoors, the roof must appear in the shadow map; if coverage is near zero while the
-     * player is under cover, the interior is being flooded with unoccluded sunlight and that is the whole bug.
-     * <p>
-     * Deliberately samples a 64x64 corner rather than the full map: {@code readDepth} pulls the entire 2048² buffer
-     * (16 MB and a hard pipeline stall), which is why {@link ShadowMapDump} is behind a flag. 16 KB on the frames the
-     * player actually asked for is affordable.
-     */
-    private void sampleShadowCoverageIfRequested() {
-        if (!com.bdmajora.impetus.umbra.devtool.ShaderStateProbe.consumeShadowCoverageRequest()) {
-            return;
-        }
-        final int size = 64;
-        try {
-            ByteBuffer pixels = ByteBuffer.allocateDirect(size * size * 4).order(ByteOrder.nativeOrder());
-            this.framebuffer.bindAsReadBuffer();
-            pixels.clear();
-            // Centre the window on the shadow map, which is where the player's immediate surroundings land.
-            int origin = Math.max(0, (this.resolution - size) / 2);
-            LWJGL.glReadPixels(origin, origin, size, size, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, pixels);
-            FloatBuffer depths = pixels.asFloatBuffer();
-
-            int cleared = 0;
-            float min = Float.MAX_VALUE;
-            float max = -Float.MAX_VALUE;
-            double sum = 0.0;
-            int count = size * size;
-            for (int i = 0; i < count; i++) {
-                float depth = depths.get(i);
-                min = Math.min(min, depth);
-                max = Math.max(max, depth);
-                sum += depth;
-                if (depth >= 0.99999f) {
-                    cleared++;
-                }
-            }
-            LOGGER.info("[Umbra] SHADOW COVERAGE (centre {}x{} of {}): min={} max={} mean={} cleared={}% "
-                            + "-- cleared texels read as fully lit; high while indoors means the roof is missing "
-                            + "from the shadow map",
-                    size, size, this.resolution, min, max, sum / count, pct(cleared, count));
-        } catch (Throwable t) {
-            LOGGER.warn("[Umbra] Shadow coverage sample failed", t);
-        } finally {
-            this.shaderPackResourceRestorer.run();
-        }
-    }
-
-    private float[] readDepth() {
-        int texels = this.resolution * this.resolution;
-        ByteBuffer pixels = ByteBuffer.allocateDirect(texels * 4).order(ByteOrder.nativeOrder());
-        this.framebuffer.bindAsReadBuffer();
-        pixels.clear();
-        LWJGL.glReadPixels(0, 0, this.resolution, this.resolution,
-                GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, pixels);
-        FloatBuffer depths = pixels.asFloatBuffer();
-        float[] out = new float[texels];
-        depths.get(out);
-        return out;
-    }
-
-    private void logDepthComparison(float[] with, float[] without, float[] rgba) {
-        // 1.0 is the depth clear: nothing was ever drawn into that texel.
-        final float clear = 0.99999f;
-        int texels = with.length;
-        int untouched0 = 0;
-        int untouched1 = 0;
-        int onlyIn0 = 0;
-        int differ = 0;
-        float min0 = Float.MAX_VALUE;
-        float max0 = -Float.MAX_VALUE;
-        double sum0 = 0.0;
-        for (int i = 0; i < texels; i++) {
-            float d0 = with[i];
-            float d1 = without[i];
-            min0 = Math.min(min0, d0);
-            max0 = Math.max(max0, d0);
-            sum0 += d0;
-            boolean empty0 = d0 >= clear;
-            boolean empty1 = d1 >= clear;
-            if (empty0) {
-                untouched0++;
-            }
-            if (empty1) {
-                untouched1++;
-            }
-            if (!empty0 && empty1) {
-                onlyIn0++;
-            }
-            if (Math.abs(d0 - d1) > 1.0e-6f) {
-                differ++;
-            }
-        }
-        LOGGER.info("[Umbra] SHADOW PROBE {}x{} shadowtex0: min={} max={} mean={} untouched={}%",
-                this.resolution, this.resolution, min0, max0, sum0 / texels, pct(untouched0, texels));
-        LOGGER.info("[Umbra] SHADOW PROBE shadowtex1: untouched={}%  differ-from-tex0={}%  "
-                        + "onlyIn0(translucent-over-solid, where the pack's tint branch fires)={}%",
-                pct(untouched1, texels), pct(differ, texels), pct(onlyIn0, texels));
-
-        // What the tint branch actually consumes. It computes pow2(shadowcolor1.rgb * 4.0), so 0.25 is the neutral
-        // value (-> 1.0) and anything near the white clear explodes (1.0 -> 16x). Restricted to the texels where the
-        // branch fires, because everywhere else the value is irrelevant.
-        double tintAll = 0.0;
-        double tintFiring = 0.0;
-        int firing = 0;
-        int firingWhite = 0;
-        for (int i = 0; i < texels; i++) {
-            tintAll += rgba[i * 4];
-            if (with[i] < clear && without[i] >= clear) {
-                tintFiring += rgba[i * 4];
-                firing++;
-                if (rgba[i * 4] >= 0.95f) {
-                    firingWhite++;
-                }
-            }
-        }
-        double meanFiring = firing == 0 ? 0.0 : tintFiring / firing;
-        LOGGER.info("[Umbra] SHADOW PROBE shadowcolor1.r: mean={} | over firing texels mean={} -> pow2(x*4)={} "
-                        + "(neutral is 0.25 -> 1.0); still-white(>=0.95) there={}%",
-                tintAll / texels, meanFiring, Math.pow(meanFiring * 4.0, 2.0),
-                firing == 0 ? "n/a" : pct(firingWhite, firing));
     }
 
     private static String pct(int count, int total) {

@@ -1,7 +1,5 @@
 package com.bdmajora.impetus.umbra.terrain;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -26,7 +24,6 @@ import java.util.regex.Pattern;
  * the specific call sites keeps every other call's resolution exactly as it was.
  */
 public final class GlslIntegerOverloadPolyfill {
-    private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
     /**
      * The integer-typed uniforms in the OptiFine/Umbra spec. Only calls whose arguments are built purely out of these
@@ -57,24 +54,18 @@ public final class GlslIntegerOverloadPolyfill {
 
         Matcher matcher = SIMPLE_TWO_ARG_CALL.matcher(source);
         StringBuffer result = new StringBuffer();
-        int rewritten = 0;
         while (matcher.find()) {
             String first = matcher.group(2);
             String second = matcher.group(3);
             if (isIntegerExpression(first) && isIntegerExpression(second)) {
                 matcher.appendReplacement(result, Matcher.quoteReplacement(
                         matcher.group(1) + "(float(" + first + "), float(" + second + "))"));
-                rewritten++;
             } else {
                 matcher.appendReplacement(result, Matcher.quoteReplacement(matcher.group()));
             }
         }
         matcher.appendTail(result);
 
-        if (rewritten > 0) {
-            LOGGER.info("[Umbra] Program '{}': widened {} integer max/min call(s) to float (GLSL 120 has no integer overload)",
-                    name, rewritten);
-        }
         return result.toString();
     }
 

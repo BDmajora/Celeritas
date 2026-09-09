@@ -3,13 +3,10 @@ package com.bdmajora.coartatio.state.predicate;
 import com.google.common.base.Predicate;
 import net.minecraft.block.state.IBlockState;
 
-/**
- * {@code property=!value}.
- *
- * <p>Guava's {@code Predicates.not} would do, and it even defines {@code equals} — but only against
- * other Guava {@code NotPredicate}s, so a negation of one of our flattened predicates could never be
- * interned alongside them. Owning the wrapper keeps the whole tree poolable.
- */
+// property=!value — inverts whatever it wraps
+// Guava's Predicates.not would work and even defines equals, but only against other Guava NotPredicates, so a
+// negation of one of the flattened predicates here could never be interned alongside them
+// Owning the wrapper is what keeps the whole condition tree poolable
 public final class NegatedPredicate implements Predicate<IBlockState> {
     private final Predicate<IBlockState> delegate;
 
@@ -27,6 +24,8 @@ public final class NegatedPredicate implements Predicate<IBlockState> {
         return o instanceof NegatedPredicate && this.delegate.equals(((NegatedPredicate) o).delegate);
     }
 
+    // Bitwise complement rather than a multiply-and-add: it is one instruction, and it guarantees a negation
+    // never collides with the predicate it wraps
     @Override
     public int hashCode() {
         return ~this.delegate.hashCode();

@@ -1,8 +1,6 @@
 package com.bdmajora.impetus.engine.impl.compat.probe;
 
 import com.bdmajora.impetus.engine.impl.compat.environment.OsKind;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -25,7 +23,6 @@ import java.util.concurrent.TimeUnit;
  * caller only uses this to *refine* warnings, never to gate rendering.
  */
 public final class GraphicsAdapterProbe {
-    private static final Logger LOGGER = LogManager.getLogger("Impetus-AdapterProbe");
     private static final long PROCESS_TIMEOUT_SECONDS = 5;
 
     private GraphicsAdapterProbe() {
@@ -39,7 +36,6 @@ public final class GraphicsAdapterProbe {
                 default -> Collections.emptyList();
             };
         } catch (Throwable t) {
-            LOGGER.debug("Graphics adapter probe failed", t);
             return Collections.emptyList();
         }
     }
@@ -70,7 +66,8 @@ public final class GraphicsAdapterProbe {
                         driver));
             }
         } catch (Exception e) {
-            LOGGER.debug("Failed to walk /sys/class/drm", e);
+            // Whatever was collected before the failure is still usable; an adapter list is a hint, not a
+            // requirement, so a partial result beats none
         }
 
         return results;
@@ -137,7 +134,6 @@ public final class GraphicsAdapterProbe {
 
             return output;
         } catch (Exception e) {
-            LOGGER.debug("Failed to run {}", command[0], e);
             return Collections.emptyList();
         }
     }

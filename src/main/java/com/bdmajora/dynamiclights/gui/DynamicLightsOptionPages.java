@@ -170,12 +170,18 @@ public final class DynamicLightsOptionPages {
             OptionGroup.Builder builder = OptionGroup.createBuilder()
                     .setId(group(kind + "." + namespace));
 
+            // Vanilla entries drop the namespace suffix: every row in this screen is a Minecraft entity or block
+            // unless a mod added it, so "(minecraft)" on hundreds of rows is noise. A modded namespace is kept,
+            // because there the suffix is the only thing saying which mod a row came from
+            boolean showNamespace = !"minecraft".equals(namespace);
+
             for (Map.Entry<String, String> type : namespaceEntry.getValue().entrySet()) {
                 String id = type.getKey();
+                String label = showNamespace ? type.getValue() + " (" + namespace + ")" : type.getValue();
 
                 builder.add(OptionImpl.createBuilder(boolean.class, STORAGE)
                         .setId(option(kind + ".type." + id, boolean.class))
-                        .setName(TextComponent.literal(type.getValue() + " (" + namespace + ")"))
+                        .setName(TextComponent.literal(label))
                         .setTooltip(TextComponent.literal(id))
                         .setControl(TickBoxControl::new)
                         .setBinding(

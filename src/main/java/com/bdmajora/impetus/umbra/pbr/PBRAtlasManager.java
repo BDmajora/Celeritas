@@ -86,10 +86,6 @@ public final class PBRAtlasManager {
             applyPbrSampling(mipmapLevels);
 
             GlStateManager.bindTexture(0);
-
-            if (normalsCount > 0 || specularCount > 0) {
-                LOGGER.info("[Umbra] PBR atlases built: {} normal map(s), {} specular map(s)", normalsCount, specularCount);
-            }
         } catch (Throwable t) {
             // PBR is an enhancement; a failure here must never break the atlas reload.
             LOGGER.error("[Umbra] Failed to build PBR atlases; packs will see flat surfaces", t);

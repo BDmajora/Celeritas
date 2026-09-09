@@ -56,6 +56,5 @@ public abstract class TextureMapMixin {
         }
 
         MemoryReport.recordSpriteBytes(bytes);
-        Coartatio.LOGGER.info("Released pixel data for {} static sprites ({})", released, MemoryReport.mib(bytes));
     }
 }

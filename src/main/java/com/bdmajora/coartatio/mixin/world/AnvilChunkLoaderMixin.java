@@ -9,32 +9,24 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
- * Strips a loaded chunk's NBT down to the tags that are still needed after the chunk object exists.
- *
- * <p>Hydrogen's {@code MixinChunkSerializer}, retargeted to Forge's asynchronous chunk pipeline.
- *
- * <p>Forge splits chunk loading in two: {@code checkedReadChunkFromNBT__Async} builds the
- * {@code Chunk} on the IO thread and hands back {@code Object[]{chunk, compound}}, then
- * {@code ChunkIOProvider.callStage2} calls {@code loadEntities} on the main thread with
- * {@code compound.getCompoundTag("Level")}. Between those two points the <i>entire</i> chunk tag
- * stays reachable through the queued task — and the bulk of it is {@code Sections}, tens of
- * kilobytes of block, light and metadata arrays that have already been copied into the
- * {@code ExtendedBlockStorage}s and will never be read again.
- *
- * <p>{@code loadEntities} reads exactly three tags: {@code Entities}, {@code TileEntities} and
- * {@code TileTicks}. Everything else is dropped here, so a backlog of chunks waiting on the main
- * thread holds entity data instead of whole chunks.
- *
- * <p>{@code remap = false} on the injection: {@code checkedReadChunkFromNBT__Async} is a Forge
- * addition and is not in the obfuscation map.
- */
+// Strips a loaded chunk's NBT down to the tags still needed once the Chunk object exists
+// Hydrogen's MixinChunkSerializer, retargeted onto Forge's asynchronous chunk pipeline
+// Forge splits chunk loading in two: checkedReadChunkFromNBT__Async builds the Chunk on the IO thread and hands
+// back Object[]{chunk, compound}, then ChunkIOProvider.callStage2 calls loadEntities on the main thread with
+// compound.getCompoundTag("Level")
+// Between those two points the ENTIRE chunk tag stays reachable through the queued task, and the bulk of it is
+// Sections — tens of kilobytes of block, light and metadata arrays already copied into the
+// ExtendedBlockStorages and never read again
+// loadEntities reads exactly three tags, so everything else is dropped here and a backlog of chunks waiting on
+// the main thread holds entity data rather than whole chunks
 @Mixin(AnvilChunkLoader.class)
 public abstract class AnvilChunkLoaderMixin {
-    /** Tag names {@code AnvilChunkLoader.loadEntities} still reads after the chunk is built. */
+    // The three tags AnvilChunkLoader.loadEntities still reads after the chunk is built
     @Unique
     private static final String[] COARTATIO_RETAINED_TAGS = {"Entities", "TileEntities", "TileTicks"};
 
+    // At RETURN so the Chunk has already been built from the full tag; remap = false because
+    // checkedReadChunkFromNBT__Async is a Forge addition and is not in the obfuscation map
     @Inject(method = "checkedReadChunkFromNBT__Async", at = @At("RETURN"), remap = false)
     private void coartatio$stripPendingChunkNbt(World world, int x, int z, NBTTagCompound compound,
                                                 CallbackInfoReturnable<Object[]> cir) {

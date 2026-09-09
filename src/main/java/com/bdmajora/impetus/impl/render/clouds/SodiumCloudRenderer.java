@@ -30,24 +30,31 @@ public final class SodiumCloudRenderer {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Clouds");
     private static final ResourceLocation CLOUDS_TEXTURES = new ResourceLocation("textures/environment/clouds.png");
 
-    /** The cell has cloud in it. Cells without this bit emit nothing at all. */
+    // One byte of face flags per cell, precomputed from the cloud texture so meshing never has to look at
+    // neighbours again
+    // The cell holds cloud; a cell without this bit emits nothing at all
     private static final int OPAQUE = 1;
-    /** The neighbour on -Z is empty, so this cell's north wall is an exterior surface. */
+    // The -Z neighbour is empty, so this cell's north wall is an exterior surface and needs a quad
     private static final int NORTH_OPEN = 1 << 1;
-    /** The neighbour on +Z is empty. */
+    // The +Z neighbour is empty
     private static final int SOUTH_OPEN = 1 << 2;
-    /** The neighbour on -X is empty. */
+    // The -X neighbour is empty
     private static final int WEST_OPEN = 1 << 3;
-    /** The neighbour on +X is empty. */
+    // The +X neighbour is empty
     private static final int EAST_OPEN = 1 << 4;
 
-    /** Vanilla's cell edge length. The Extras cloud-scale option passes a multiple of this to {@code render}. */
+    // Vanilla's cell edge length in world units; the Extras cloud-scale option multiplies this and passes the
+    // result to render, so the constant stays the unscaled baseline
     public static final float CELL_SIZE = 12.0F;
+    // Vertical thickness of the cloud layer, also vanilla's
     private static final float THICKNESS = 4.0F;
-    /** Vanilla's inset on the far side of each cell, so coincident cell walls do not z-fight. */
+    // Vanilla's inset applied to the far side of each cell so walls shared between adjacent cells do not land on
+    // exactly the same plane and z-fight
     private static final float INSET = 9.765625E-4F;
     private static final float ALPHA = 0.8F;
 
+    // Vanilla's fixed per-face shading, applied instead of real lighting: bottom darkest, then the Z walls, then
+    // the X walls, with the top face left unmultiplied
     private static final float TINT_BOTTOM = 0.7F;
     private static final float TINT_X = 0.9F;
     private static final float TINT_Z = 0.8F;
@@ -58,10 +65,13 @@ public final class SodiumCloudRenderer {
     private static final int INSIDE = 1;
     private static final int ABOVE = 2;
 
-    /** Sodium's epsilon on the layer boundaries, so the orientation does not flip-flop when flying at cloud level. */
+    // Sodium's epsilon around the top and bottom of the layer: without it, hovering exactly at cloud height makes
+    // the BELOW/INSIDE/ABOVE classification flip every frame and the culled faces pop in and out
     private static final float ORIENTATION_EPSILON = 0.125F;
 
+    // The parsed cloud texture, rebuilt only when the resource pack changes
     private static CloudCells cachedCells;
+    // Reload counter the cache was built against; -1 means "nothing cached yet", which no real counter matches
     private static int cachedTextureReloadCount = -1;
 
     private SodiumCloudRenderer() {

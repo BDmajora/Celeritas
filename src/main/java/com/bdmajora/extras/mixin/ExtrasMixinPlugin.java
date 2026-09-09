@@ -21,9 +21,9 @@ import java.util.Set;
  * availability check would belong if one is ever needed.
  */
 public class ExtrasMixinPlugin implements IMixinConfigPlugin {
+    // Nothing to prepare; the interface requires the method
     @Override
     public void onLoad(String mixinPackage) {
-        Extras.LOGGER.info("Extras subsystem loading");
     }
 
     @Override

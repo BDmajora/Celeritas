@@ -14,7 +14,6 @@ import org.apache.logging.log4j.Logger;
 import org.joml.Matrix4f;
 import com.bdmajora.impetus.umbra.gl.framebuffer.UmbraFramebuffer;
 import com.bdmajora.impetus.umbra.gl.program.DrawBuffers;
-import com.bdmajora.impetus.umbra.devtool.ShaderStateProbe;
 import com.bdmajora.impetus.umbra.gl.blending.ProgramBlendState;
 import com.bdmajora.impetus.umbra.gl.program.GlProgram;
 import com.bdmajora.impetus.umbra.gl.program.UmbraProgram;
@@ -54,9 +53,7 @@ import com.bdmajora.impetus.lwjgl.GL12;
 import com.bdmajora.impetus.lwjgl.GL13;
 import com.bdmajora.impetus.lwjgl.GL14;
 import com.bdmajora.impetus.lwjgl.GL15;
-import com.bdmajora.impetus.lwjgl.GL20;
 import com.bdmajora.impetus.lwjgl.GL30;
-import com.bdmajora.impetus.lwjgl.GL33;
 import com.bdmajora.impetus.mixin.core.terrain.ActiveRenderInfoAccessor;
 
 import java.util.ArrayList;
@@ -585,13 +582,6 @@ public class UmbraRenderingPipeline {
      * model-view/projection/texture matrices (see {@link #runPass}).
      */
     private boolean modernPack;
-    /**
-     * Frames left to probe {@code glGetError} around each composite pass (0 = off). Pinpoints which pass/step raises
-     * the {@code 1282 Invalid operation} Minecraft's "Post render" check reports. Counts down over the opening frames.
-     */
-    private int glErrorProbeFrames =
-            Math.max(0, Integer.getInteger("impetus.umbra.glErrorProbeFrames", 3));
-
     public UmbraRenderingPipeline(ShaderPack pack) {
         Minecraft mc = Minecraft.getMinecraft();
         this.renderTargets = new UmbraRenderTargets(mc.displayWidth, mc.displayHeight);
@@ -637,9 +627,6 @@ public class UmbraRenderingPipeline {
                 }
                 boolean[] relative = pack.getProperties().getBufferSizeRelative(index);
                 this.renderTargets.setColorSize(index, size[0], size[1], relative);
-                LOGGER.info("[Umbra] Render target colortex{} sized {}{} x {}{}", index,
-                        size[0], relative[0] ? " (relative)" : "",
-                        size[1], relative[1] ? " (relative)" : "");
             });
             materializeSampledTargets(fullscreenSources);
 
@@ -703,15 +690,11 @@ public class UmbraRenderingPipeline {
                 boolean hasDeferred = pack.getProgramSet().get(ProgramArrayId.Deferred, 0).isPresent();
                 return hasDeferred && !this.separateEntityDraws ? "after" : "mixed";
             });
-            LOGGER.info("[Umbra] Particle ordering: {}", this.particleOrdering);
             // BlockRenderLayer order on 1.12.2 is SOLID, CUTOUT_MIPPED, CUTOUT, TRANSLUCENT.
             String[] backFaceKeys = {"solid", "cutoutMipped", "cutout", "translucent"};
             for (int i = 0; i < backFaceKeys.length; i++) {
                 this.backFaceCulling[i] = pack.getProperties()
                         .getBackFaceCulling(backFaceKeys[i]).orElse(Boolean.TRUE);
-                if (!this.backFaceCulling[i]) {
-                    LOGGER.info("[Umbra] backFace.{} = false; back faces kept for that layer", backFaceKeys[i]);
-                }
             }
             this.gbufferPrograms = new GbufferPrograms(pack, GBUFFER_SAMPLER_UNITS, gbufferSamplerOverrideUnits());
             this.gbufferAttachments = computeGbufferAttachments(pack, terrainDrawBuffers(pack));
@@ -737,14 +720,7 @@ public class UmbraRenderingPipeline {
             buildSchedule(pack, flipper);
             buildSwapPasses(flipper);
             buildClearPasses();
-            logRenderTargetSchedule(flipper);
 
-            LOGGER.info("[Umbra] Rendering pipeline ready: {} begin + {} prepare + {} deferred + {} composite/final pass(es){}, {} swap(s), gbuffer {}x{}",
-                    this.beginPasses.size(), this.preparePasses.size(),
-                    this.deferredPasses.size(), this.passes.size(),
-                    this.blitSourceFramebuffer != null ? " + colortex0 blit" : "",
-                    this.swapPasses.size(),
-                    this.renderTargets.getWidth(), this.renderTargets.getHeight());
 
             // Pipeline setup creates and checks Umbra FBOs as a side effect. Give Minecraft's main target back before
             // vanilla reaches its next post-render GL check.
@@ -849,7 +825,6 @@ public class UmbraRenderingPipeline {
             // Umbra createIfUnsure()s the target: a buffer nothing samples but a compute writes still has to exist.
             this.renderTargets.getOrCreate(index);
             this.renderTargetImageUnits.put(index, unit);
-            LOGGER.info("[Umbra] Render target image colorimg{} on image unit {}", index, unit);
             unit++;
         }
     }
@@ -897,7 +872,6 @@ public class UmbraRenderingPipeline {
                 continue;
             }
             this.shadowColorImageUnits.put(index, unit);
-            LOGGER.info("[Umbra] Shadow color image shadowcolorimg{} on image unit {}", index, unit);
             unit++;
         }
     }
@@ -940,8 +914,6 @@ public class UmbraRenderingPipeline {
                     }
                     InternalTextureFormat.fromString(name).ifPresent(format -> {
                         this.renderTargets.setColorFormat(7, format);
-                        LOGGER.info("[Umbra] Legacy GAUX4FORMAT directive in '{}': colortex7 -> {}",
-                                source.getName(), name);
                     });
                 }
             }
@@ -1012,7 +984,6 @@ public class UmbraRenderingPipeline {
                     }
                     try {
                         this.renderTargets.setColorFormat(index, format.get());
-                        LOGGER.info("[Umbra] colortex{} format {}", index, format.get());
                     } catch (IllegalStateException e) {
                         LOGGER.warn("[Umbra] Format directive for colortex{} came after the target was created", index);
                     }
@@ -1077,10 +1048,6 @@ public class UmbraRenderingPipeline {
                 parseConstFloat(activeText, "eyeBrightnessHalflife", DEFAULT_EYE_BRIGHTNESS_HALF_LIFE);
         EyeBrightnessTracker.setHalfLives(this.wetnessHalfLife, this.drynessHalfLife, this.eyeBrightnessHalfLife);
 
-        LOGGER.info("[Umbra] Pack directives: noiseTextureResolution={}, ambientOcclusionLevel={}, "
-                        + "centerDepthHalflife={}, wetnessHalflife={}, drynessHalflife={}, eyeBrightnessHalflife={}",
-                this.noiseTextureResolution, this.ambientOcclusionLevel, this.centerDepthHalfLife,
-                this.wetnessHalfLife, this.drynessHalfLife, this.eyeBrightnessHalfLife);
     }
 
     private static float[] parseVec4(String value) {
@@ -1160,7 +1127,6 @@ public class UmbraRenderingPipeline {
 
         Optional<ProgramSource> shadowSource = pack.getProgramSet().get(ProgramId.Shadow);
         if (!shadowSource.isPresent()) {
-            LOGGER.info("[Umbra] Pack declares no shadow program; shadow mapping disabled (always-lit stub in use)");
             return null;
         }
         // OptiFine's pre-const spelling of the same three settings: `#define SHADOWRES 2048` etc. Umbra accepts both
@@ -1200,23 +1166,15 @@ public class UmbraRenderingPipeline {
         // so an unset or negative value simply means "no scaling".
         float shadowDistanceRenderMul = parseConstFloat(activeText, "shadowDistanceRenderMul", -1.0f);
         float cullDistance = shadowDistanceRenderMul >= 0.0f ? distance * shadowDistanceRenderMul : distance;
-        if (shadowDistanceRenderMul >= 0.0f && shadowDistanceRenderMul != 1.0f) {
-            LOGGER.info("[Umbra] shadowDistanceRenderMul={} scales the shadow culling distance to {} blocks",
-                    shadowDistanceRenderMul, cullDistance);
-        }
         float voxelRadius = voxelDistance > 0.0f ? voxelDistance : distance;
         com.bdmajora.impetus.umbra.material.WorldRenderingSettings.setVoxelRenderDistanceChunks(
                 Math.max(1, Math.round(voxelRadius / 16.0f)));
-        if (voxelDistance > 0.0f) {
-            LOGGER.info("[Umbra] voxelDistance={} overrides shadowDistance={} for voxelization", voxelDistance, distance);
-        }
         parseShadowDepthSamplingSettings(activeText);
         // The FF shadow program (entities/block entities) belongs to the gbuffers custom-texture stage.
         Map<String, Integer> shadowSamplerUnits = new LinkedHashMap<>(GBUFFER_SAMPLER_UNITS);
         shadowSamplerUnits.putAll(gbufferSamplerOverrideUnits());
         try {
             ShadowContentSettings content = ShadowContentSettings.from(pack.getProperties());
-            LOGGER.info("[Umbra] Shadow pass content: {}", content);
             // Umbra's voxelization detection: a shadow geometry stage, or the pack declaring custom images.
             boolean packVoxelizes = shadowSource.get().getGeometrySource().isPresent()
                     || !pack.getProperties().getUmbraCustomImages().isEmpty();
@@ -1437,7 +1395,6 @@ public class UmbraRenderingPipeline {
         for (int buffer : attachments) {
             result[i++] = buffer;
         }
-        LOGGER.info("[Umbra] Gbuffer attachments {}", java.util.Arrays.toString(result));
         return result;
     }
 
@@ -1539,7 +1496,6 @@ public class UmbraRenderingPipeline {
             }
             String name = source.get().getName();
             if (!isProgramEnabled(pack, name)) {
-                LOGGER.info("[Umbra] Skipping disabled pass '{}'", name);
                 continue;
             }
             List<ComputePass> computes = buildFamilyComputePasses(pack, source.get(), stage);
@@ -1577,8 +1533,6 @@ public class UmbraRenderingPipeline {
             if (pass.viewportWidth == 0) {
                 pass.viewportWidth = width;
                 pass.viewportHeight = height;
-                LOGGER.info("[Umbra] Pass '{}' renders at {}x{} (colortex{} declares its own size)",
-                        pass.name, width, height, buffer);
             } else if (pass.viewportWidth != width || pass.viewportHeight != height) {
                 LOGGER.warn("[Umbra] Pass '{}' writes buffers of different sizes ({}x{} vs colortex{} at {}x{}); "
                                 + "using the first", pass.name, pass.viewportWidth, pass.viewportHeight,
@@ -1600,15 +1554,12 @@ public class UmbraRenderingPipeline {
         pass.viewportScale = scale[0];
         pass.viewportOffsetX = scale[1];
         pass.viewportOffsetY = scale[2];
-        LOGGER.info("[Umbra] Pass '{}' scaled to {} of its viewport (offset {}, {})",
-                pass.name, scale[0], scale[1], scale[2]);
     }
 
     private void applyExplicitPreFlips(Map<Integer, Boolean> explicitFlips, BufferFlipper flipper, String name) {
         for (Map.Entry<Integer, Boolean> entry : explicitFlips.entrySet()) {
             if (entry.getValue()) {
                 flipper.flip(entry.getKey());
-                LOGGER.info("[Umbra] Explicit pre-flip '{}': colortex{}", name, entry.getKey());
             }
         }
     }
@@ -1622,9 +1573,6 @@ public class UmbraRenderingPipeline {
     private void buildSwapPasses(BufferFlipper flipper) {
         for (int i = 0; i < UmbraRenderTargets.MAX_COLOR_BUFFERS; i++) {
             if (!flipper.isFlipped(i) || this.renderTargets.get(i) == null || this.colorBufferClears[i]) {
-                if (flipper.isFlipped(i) && this.renderTargets.get(i) != null) {
-                    LOGGER.info("[Umbra] colortex{} ends odd-flipped but is clear=true; no swap copy is needed", i);
-                }
                 continue;
             }
             UmbraRenderTarget target = this.renderTargets.get(i);
@@ -1634,8 +1582,6 @@ public class UmbraRenderingPipeline {
             checkFramebufferComplete(from, "swap colortex" + i, new int[]{i});
             this.swapPasses.add(new SwapPass(i, from, target.getMainTexture(),
                     this.renderTargets.getWidth(i), this.renderTargets.getHeight(i)));
-            LOGGER.info("[Umbra] colortex{} ends the frame odd-flipped and clear=false; swap pass (alt->main copy) added",
-                    i);
         }
     }
 
@@ -1675,26 +1621,6 @@ public class UmbraRenderingPipeline {
             return new float[]{1.0f, 1.0f, 1.0f, 1.0f};
         }
         return new float[]{0.0f, 0.0f, 0.0f, 0.0f};
-    }
-
-    private void logRenderTargetSchedule(BufferFlipper flipper) {
-        LOGGER.info("[Umbra] Gbuffer sampler flips: preTranslucent={}, translucent={}",
-                formatBitSet(this.preTranslucentGbufferSamplerFlips),
-                formatBitSet(this.translucentGbufferSamplerFlips));
-        LOGGER.info("[Umbra] End-of-schedule flipped buffers: {}", formatBitSet(flipper.snapshot()));
-        for (int i = 0; i < UmbraRenderTargets.MAX_COLOR_BUFFERS; i++) {
-            UmbraRenderTarget target = this.renderTargets.get(i);
-            if (target == null) {
-                continue;
-            }
-            LOGGER.info("[Umbra] Target colortex{}: format={}, clearAtFrameStart={}, gbufferAttachment={}, flippedAtEnd={}, mainTex={}, altTex={}, defaultClear={}",
-                    i, target.getInternalFormat(), this.colorBufferClears[i], isGbufferAttachment(i),
-                    flipper.isFlipped(i), target.getMainTexture(), target.getAltTexture(),
-                    formatClearColor(defaultClearColor(i)));
-        }
-        for (SwapPass swap : this.swapPasses) {
-            LOGGER.info("[Umbra] Swap copy scheduled: colortex{} alt/readFbo -> mainTex{}", swap.index, swap.targetTexture);
-        }
     }
 
     /**
@@ -1793,9 +1719,6 @@ public class UmbraRenderingPipeline {
                 }
             }
             BitSet flipsAfter = flipper.snapshot();
-            LOGGER.info("[Umbra] Scheduled pass '{}': drawBuffers={}, flipsBefore={}, flipsAfter={}, mipmaps={}, samplerSummary={}",
-                    name, Arrays.toString(drawBuffers), formatBitSet(flipsBefore), formatBitSet(flipsAfter),
-                    formatBitSet(mipmappedBuffers), summarizeSamplers(colorSamplers));
 
             FullscreenPass pass = new FullscreenPass(name, program, this.compiledUniforms.get(name), framebuffer,
                     colorSamplers, drawBuffers, ProgramBlendState.from(pack.getProperties(), name),
@@ -1816,7 +1739,6 @@ public class UmbraRenderingPipeline {
         }
         String name = source.get().getName();
         if (!isProgramEnabled(pack, name)) {
-            LOGGER.info("[Umbra] Skipping disabled final pass '{}'", name);
             return null;
         }
         try {
@@ -1827,8 +1749,6 @@ public class UmbraRenderingPipeline {
             BitSet flips = flipper.snapshot();
             BitSet mipmappedBuffers = parseMipmappedBuffers(source.get());
             int[] colorSamplers = snapshotFrontTextures(flipper);
-            LOGGER.info("[Umbra] Scheduled final pass '{}': flips={}, mipmaps={}, samplerSummary={}",
-                    name, formatBitSet(flips), formatBitSet(mipmappedBuffers), summarizeSamplers(colorSamplers));
             return new FullscreenPass(name, program, this.compiledUniforms.get(name), null,
                     colorSamplers, DrawBuffers.DEFAULT.clone(),
                     ProgramBlendState.from(pack.getProperties(), name), flips, (BitSet) flips.clone(),
@@ -1917,8 +1837,8 @@ public class UmbraRenderingPipeline {
             String vsh;
             String fsh;
             if (modern) {
-                // Modern sources rely on the driver preprocessor for their #if trees; the MC_*/UMBRA_FEATURE_* macro
-                // environment has to be present for those gates (colored lighting checks UMBRA_FEATURE_CUSTOM_IMAGES).
+                // Modern sources rely on the driver preprocessor for their #if trees; the MC_*/IRIS_FEATURE_* macro
+                // environment has to be present for those gates (colored lighting checks IRIS_FEATURE_CUSTOM_IMAGES).
                 // The quad is drawn from generic vertex attributes, so gl_MultiTexCoord0 has to be fed from a real
                 // one rather than relying on NVIDIA's generic-to-conventional aliasing. See
                 // ModernPackTransformer#bindFullscreenTexCoord.
@@ -1931,8 +1851,8 @@ public class UmbraRenderingPipeline {
                         drawBuffers);
             } else {
                 // The macro environment has to be injected here too, not just on the modern branch. Without it a
-                // legacy pack's whole post chain compiles with MC_VERSION, UMBRA_VERSION, MC_RENDER_QUALITY,
-                // MC_RENDER_STAGE_*, MC_OLD_LIGHTING and the UMBRA_FEATURE_* flags all absent — while its gbuffer
+                // legacy pack's whole post chain compiles with MC_VERSION, IRIS_VERSION, MC_RENDER_QUALITY,
+                // MC_RENDER_STAGE_*, MC_OLD_LIGHTING and the IRIS_FEATURE_* flags all absent — while its gbuffer
                 // programs, which go through ShaderProgramCompiler, get every one of them. The two halves of the
                 // same pack then disagree about what version of Minecraft they are running on.
                 //
@@ -1951,8 +1871,6 @@ public class UmbraRenderingPipeline {
                 fsh = FullscreenTransformer.transformFragmentShader(foldUncompilableConditionals(source.getName(),
                         com.bdmajora.impetus.umbra.gl.shader.ShaderMacros.injectDefines(fshRaw, macros)), drawBuffers);
             }
-            UmbraDebugDump.dumpText("src_" + source.getName() + ".vsh", vsh);
-            UmbraDebugDump.dumpText("src_" + source.getName() + ".fsh", fsh);
             vertex = new GlShader(ShaderType.VERTEX, source.getName() + ".vsh", vsh);
             fragment = new GlShader(ShaderType.FRAGMENT, source.getName() + ".fsh", fsh);
 
@@ -2128,10 +2046,9 @@ public class UmbraRenderingPipeline {
     }
 
     private static int[] sanitizeDrawBuffers(String name, int[] drawBuffers, int maxExclusive) {
-        return DrawBuffers.sanitize(drawBuffers, maxExclusive,
-                buffer -> LOGGER.debug(
-                        "[Umbra] '{}' declares draw buffer {} (max {} here; usually an inactive #ifdef path); ignoring it",
-                        name, buffer, maxExclusive - 1));
+        // An out-of-range index is normally just an inactive #ifdef path in the pack, so it is dropped silently
+        // rather than reported; the consumer stays because sanitize requires one
+        return DrawBuffers.sanitize(drawBuffers, maxExclusive, buffer -> { });
     }
 
     // ------------------------------------------------------------------ per-frame hooks
@@ -2227,7 +2144,6 @@ public class UmbraRenderingPipeline {
                     dispatchComputes(pass.computes);
                 }
                 LWJGL.glUseProgram(0);
-                LOGGER.info("[Umbra] Dispatched {} setup pass(es)", this.setupPasses.size());
             }
         }
         runFullscreenFamily(this.beginPasses, mc);
@@ -2477,6 +2393,9 @@ public class UmbraRenderingPipeline {
      * <p>
      * No-op in the shadow pass, which binds its own entity program that this phase tracking does not describe.
      */
+    // GL_CURRENT_PROGRAM, spelled as a literal because the generated GL constant classes do not carry it
+    private static final int GL_CURRENT_PROGRAM = 0x8B8D;
+
     public void refreshDynamicUniforms() {
         if (!this.worldRenderingActive || UmbraShadowRenderer.isShadowPass() || this.currentPhase == null
                 || this.gbufferPrograms == null) {
@@ -2888,7 +2807,6 @@ public class UmbraRenderingPipeline {
         GlStateManager.depthFunc(GL11.GL_ALWAYS);
         GlStateManager.enableAlpha();
         GlStateManager.enableBlend();
-        logHandVertexStateProbe();
         resyncTextureUnitZero();
         resetVanillaVertexArrayState();
 
@@ -2967,215 +2885,6 @@ public class UmbraRenderingPipeline {
     /** gl_Vertex/gl_Normal/gl_Color/gl_MultiTexCoord0..7 all alias generic slots below this. */
     private static final int VANILLA_ALIASED_ATTRIBUTE_SLOTS = 16;
 
-    /**
-     * One-shot record of the vertex-array state the vanilla hand draw was about to inherit, so a single run says
-     * whether {@link #resetVanillaVertexArrayState()} treated the real disease. A non-zero {@code vao} or
-     * {@code arrayBuffer}, or any {@code enabledAttribs} entry — slot 8 ({@code gl_MultiTexCoord0}) above all — is it.
-     */
-    private static void logHandVertexStateProbe() {
-        if (handVertexStateProbeLogged) {
-            return;
-        }
-        handVertexStateProbeLogged = true;
-        StringBuilder enabled = new StringBuilder();
-        for (int slot = 0; slot < VANILLA_ALIASED_ATTRIBUTE_SLOTS; slot++) {
-            if (LWJGL.glGetVertexAttribi(slot, GL20.GL_VERTEX_ATTRIB_ARRAY_ENABLED) != 0) {
-                enabled.append(enabled.length() == 0 ? "" : ",").append(slot);
-            }
-        }
-        LOGGER.info("[Umbra] Hand vertex-state probe: vao={} arrayBuffer={} clientActiveTexture={} enabledAttribs=[{}]",
-                LWJGL.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING),
-                LWJGL.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING),
-                LWJGL.glGetInteger(GL13.GL_CLIENT_ACTIVE_TEXTURE) - GL13.GL_TEXTURE0,
-                enabled);
-    }
-
-    private static boolean handVertexStateProbeLogged;
-
-    /**
-     * The same measurement as {@link #logHandVertexStateProbe()}, taken on an actual custom item-model draw, plus the
-     * two other things that decide whether such a draw comes out fullbright.
-     * <p>
-     * Items carry no lightmap in their vertex format, so their lighting comes entirely from GL state rather than from
-     * vertex data. Exactly three things can make that state wrong, and this prints all three so the answer stops
-     * being a guess:
-     * <ul>
-     * <li>{@code enabledAttribs} containing slot 9 — {@code gl_MultiTexCoord1} aliases it, and an enabled generic
-     *     array there beats the conventional array and flattens the lightmap coordinate to one constant;</li>
-     * <li>{@code lightCoord} — the actual {@code gl_MultiTexCoord1} the draw will use. Both components are 0..240;
-     *     240,240 is vanilla's fullbright sentinel, so seeing it here in a dim room is the bug outright;</li>
-     * <li>{@code program} / {@code lightmapUnitTexture} — which shader is bound and whether unit 1 still holds the
-     *     lightmap texture at all. A zero texture there samples white, which is also fullbright.</li>
-     * </ul>
-     * Fires once per request (the screenshot hook), on the first item drawn after it.
-     */
-    /** Raw GL enums; the generated constant classes do not carry these four. */
-    private static final int GL_CURRENT_TEXTURE_COORDS = 0x0B03;
-    private static final int GL_TEXTURE_BINDING_2D = 0x8069;
-    private static final int GL_ACTIVE_TEXTURE_QUERY = 0x84E0;
-    private static final int GL_CURRENT_PROGRAM = 0x8B8D;
-
-    public void logDrawStateProbe(String label, String detail) {
-        try {
-            logDrawStateProbe0(label, detail);
-        } catch (Throwable t) {
-            // This runs in the middle of a draw call. It measures the frame; it must never be able to abort it.
-            LOGGER.warn("[Umbra] DRAW probe failed", t);
-        }
-    }
-
-    private void logDrawStateProbe0(String label, String detail) {
-        StringBuilder enabled = new StringBuilder();
-        for (int slot = 0; slot < VANILLA_ALIASED_ATTRIBUTE_SLOTS; slot++) {
-            if (LWJGL.glGetVertexAttribi(slot, GL20.GL_VERTEX_ATTRIB_ARRAY_ENABLED) != 0) {
-                enabled.append(enabled.length() == 0 ? "" : ",").append(slot);
-            }
-        }
-
-        int previousActive = LWJGL.glGetInteger(GL_ACTIVE_TEXTURE_QUERY);
-        // LWJGL2's BufferChecks demands room for the largest value any glGetFloat pname can return (16 floats, a
-        // matrix) regardless of how many this particular pname actually writes. A 4-float buffer throws
-        // IllegalArgumentException, which propagated out of the probe and aborted the entity render it was measuring.
-        java.nio.FloatBuffer coords = java.nio.ByteBuffer.allocateDirect(16 * Float.BYTES)
-                .order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer();
-        int lightmapTexture;
-        try {
-            GlStateManager.setActiveTexture(OpenGlHelper.lightmapTexUnit);
-            coords.clear();
-            GlStateManager.getFloat(GL_CURRENT_TEXTURE_COORDS, coords);
-            lightmapTexture = LWJGL.glGetInteger(GL_TEXTURE_BINDING_2D);
-        } finally {
-            GlStateManager.setActiveTexture(previousActive);
-        }
-
-        String phaseName = this.currentPhase == null ? "none" : this.currentPhase.name();
-        int program = LWJGL.glGetInteger(GL_CURRENT_PROGRAM);
-        int vao = LWJGL.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
-        int arrayBuffer = LWJGL.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING);
-
-        // The per-draw state that actually varies with draw ORDER, which is what changes when the camera turns: the
-        // visible section list is sorted from the camera, so a different heading hands the renderers a different
-        // sequence. Everything sampled above came back identical across 3728 draws in two headings, which rules out
-        // program and attribute state but says nothing about these — a colour or blend mode left behind by one
-        // renderer is inherited by whatever draws next, and only these fields would show it.
-        java.nio.FloatBuffer colour = java.nio.ByteBuffer.allocateDirect(16 * Float.BYTES)
-                .order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer();
-        GlStateManager.getFloat(GL11.GL_CURRENT_COLOR, colour);
-        String currentColour = String.format(java.util.Locale.ROOT, "%.3f/%.3f/%.3f/%.3f",
-                colour.get(0), colour.get(1), colour.get(2), colour.get(3));
-        String alphaTest = LWJGL.glGetInteger(GL11.GL_ALPHA_TEST) != 0
-                ? LWJGL.glGetInteger(GL11.GL_ALPHA_TEST_FUNC) + ">" + LWJGL.glGetInteger(GL11.GL_ALPHA_TEST_REF)
-                : "off";
-        String blend = LWJGL.glGetInteger(GL11.GL_BLEND) != 0
-                ? LWJGL.glGetInteger(GL11.GL_BLEND_SRC) + "/" + LWJGL.glGetInteger(GL11.GL_BLEND_DST)
-                : "off";
-
-        // The inputs that actually decide whether Complementary makes something GLOW, which is the question the
-        // earlier fields never answered. In gbuffers_entities: `int mat = currentRenderedItemId;` drives the item
-        // material table (IDs >= 45000 from item.properties), `entityId` does the same for entities, and
-        // GetCustomEmission reads emission out of the SPECULAR atlas alpha. Everything logged above can be identical
-        // between a glowing and a non-glowing draw while these differ — they are set per draw from a push/pop stack,
-        // so a stack that desyncs leaks one object's material onto the next, and draw order changes with heading.
-        CapturedRenderingState ids = CapturedRenderingState.INSTANCE;
-        String materialIds = "itemId=" + ids.getCurrentRenderedItem()
-                + " entityId=" + ids.getCurrentRenderedEntity()
-                + " blockEntityId=" + ids.getCurrentRenderedBlockEntity();
-
-        // Repeats of an identical state say nothing; a scene draws the same carpet dozens of times. Deduplicating on
-        // the full state means the budget buys distinct states rather than an arbitrary prefix of the draw order.
-        String signature = label + '|' + phaseName + '|' + program + '|' + enabled + '|' + vao + '|' + arrayBuffer
-                + '|' + coords.get(0) + ',' + coords.get(1) + '|' + lightmapTexture + '|' + detail
-                + '|' + currentColour + '|' + alphaTest + '|' + blend + '|' + materialIds;
-        if (!ShaderStateProbe.isNewDrawSignature(signature)) {
-            return;
-        }
-
-        // `shadow` first, because it decides whether any of the rest means what it looks like: the shadow pass draws
-        // entities and block entities through the same vanilla renderers as the camera pass, so a probe on those
-        // paths samples both. A shadow-pass draw legitimately reports whatever phase the camera pass last left
-        // behind — reading that as "the gbuffer phase is wrong" is a mistake this field exists to prevent.
-        LOGGER.info("[Umbra] DRAW probe ({}): shadow={} phase={} program={} enabledAttribs=[{}] vao={} arrayBuffer={} "
-                        + "lightCoord=({}, {}) of 240 lightmapUnitTexture={} color={} alphaTest={} blend={} {}{}",
-                label, UmbraShadowRenderer.isShadowPass(), phaseName, program, enabled, vao, arrayBuffer,
-                coords.get(0), coords.get(1), lightmapTexture, currentColour, alphaTest, blend, materialIds,
-                detail == null ? "" : " " + detail);
-        LOGGER.info("[Umbra]   via {}", describeDrawCallSite());
-    }
-
-    /**
-     * {@return the renderer call path that reached this draw, newest first}
-     * <p>
-     * The probe established that these draws run with no gbuffer phase bound, which means the phase-setting injects
-     * in {@code EntityRendererMixin} do not cover whatever is issuing them. Naming the actual callers is the only way
-     * to find the right injection point instead of guessing at 1.12's {@code renderWorldPass} ordering: an item frame,
-     * a held item on an armor stand and a dropped item entity all land in {@code RenderItem} by different routes and
-     * each needs its phase set somewhere different.
-     * <p>
-     * Mixin/probe frames are dropped so the first entry printed is the renderer that actually made the call.
-     */
-    private static String describeDrawCallSite() {
-        StackTraceElement[] frames = Thread.currentThread().getStackTrace();
-        StringBuilder path = new StringBuilder();
-        int printed = 0;
-        for (StackTraceElement frame : frames) {
-            String className = frame.getClassName();
-            if (className.startsWith("java.lang.Thread")
-                    || className.startsWith("com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline")
-                    || className.startsWith("com.bdmajora.impetus.umbra.devtool")
-                    || className.contains("Mixin")) {
-                continue;
-            }
-            if (printed > 0) {
-                path.append(" <- ");
-            }
-            path.append(className.substring(className.lastIndexOf('.') + 1))
-                    .append('.').append(frame.getMethodName()).append(':').append(frame.getLineNumber());
-            // 16, not 10: the held-item path (RenderItem -> ItemRenderer -> LayerHeldItem -> RenderLivingBase ->
-            // RenderLiving -> RenderManager -> RenderGlobal/UmbraShadowRenderer) is exactly 10 frames deep, so a
-            // 10-frame cap truncated the entry that identifies which pass issued the draw.
-            if (++printed == 16) {
-                break;
-            }
-        }
-        return path.length() == 0 ? "(no frames)" : path.toString();
-    }
-
-    /**
-     * One-shot identification of the texture the first-person arm actually sampled. Called straight after vanilla's
-     * arm draw, while unit 0 still holds whatever that draw used, because the shader-side probe showed the sampled
-     * alpha is 1.0 where the player skin's jacket layer is fully transparent — so the arm's overlay box can never be
-     * discarded and covers the real arm. Dimensions identify the texture without guesswork: 64x64 is a player skin,
-     * 256+ is the block atlas.
-     */
-    public static void logHandBoundTextureProbe() {
-        if (handBoundTextureProbeLogged) {
-            return;
-        }
-        handBoundTextureProbeLogged = true;
-        Minecraft mc = Minecraft.getMinecraft();
-        GlTextureUnits.resetToUnit0();
-        int bound = LWJGL.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
-        int width = LWJGL.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
-        int height = LWJGL.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
-        int format = LWJGL.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_INTERNAL_FORMAT);
-        // A sampler object bound here would override the texture's own sampling state, which is the last thing that
-        // could explain an alpha of 1.0 coming from an RGBA texture that genuinely has alpha 0 there. Non-zero is it.
-        int sampler = LWJGL.glGetInteger(GL33.GL_SAMPLER_BINDING);
-        int skin = mc.player != null ? textureIdOf(mc.player.getLocationSkin()) : -1;
-        int atlas = textureIdOf(net.minecraft.client.renderer.texture.TextureMap.LOCATION_BLOCKS_TEXTURE);
-        LOGGER.info("[Umbra] Hand bound-texture probe: unit0={} ({}x{}, internalFormat=0x{}, sampler={}); "
-                + "playerSkin={}, blockAtlas={}", bound, width, height, Integer.toHexString(format), sampler,
-                skin, atlas);
-    }
-
-    private static int textureIdOf(net.minecraft.util.ResourceLocation location) {
-        net.minecraft.client.renderer.texture.ITextureObject texture =
-                Minecraft.getMinecraft().getTextureManager().getTexture(location);
-        return texture != null ? texture.getGlTextureId() : -1;
-    }
-
-    private static boolean handBoundTextureProbeLogged;
-
     private static void resyncTextureUnitZero() {
         // resetToUnit0 already performs the step-through-unit-1 dance that used to be inlined on the two lines above
         // it, and the cached unbind below leaves real GL and the cache both holding 0 — so the trailing raw
@@ -3239,12 +2948,6 @@ public class UmbraRenderingPipeline {
             return;
         }
         this.worldRenderingActive = false;
-        // The camera pass is over, so every draw a screenshot could have sampled has now happened. Report here so an
-        // empty capture is stated outright instead of leaving the log silent and ambiguous.
-        ShaderStateProbe.finishCapture();
-        if (this.glErrorProbeFrames > 0) {
-            this.glErrorProbeFrames--;
-        }
         // An alphaTest.<program> override must not survive into the composite chain or vanilla's GUI pass.
         if (this.activeAlphaTest != null) {
             this.activeAlphaTest.restore();
@@ -3260,10 +2963,6 @@ public class UmbraRenderingPipeline {
         GlStateManager.disableAlpha();
 
         bindDepthSamplers();
-
-        // Off unless -Dimpetus.umbra.sunProbeFrame is set. Reads the celestial uniforms at exactly the point the
-        // composite/final passes consume them.
-        com.bdmajora.impetus.umbra.devtool.SunProbe.sample();
 
         // centerDepthSmooth: sample depthtex0 at the screen centre now that all geometry (translucents included) has
         // landed in it, before any composite consumes the uniform — OptiFine's readCenterDepth in renderHand1.
@@ -3438,8 +3137,6 @@ public class UmbraRenderingPipeline {
                     new BitSet(), new BitSet(), new BitSet(), computes);
             pass.viewportWidth = this.shadowRenderer.getResolution();
             pass.viewportHeight = this.shadowRenderer.getResolution();
-            LOGGER.info("[Umbra] Scheduled shadowcomp pass '{}': drawBuffers={}, {}x{}",
-                    name, Arrays.toString(drawBuffers), pass.viewportWidth, pass.viewportHeight);
             return pass;
         } catch (Exception e) {
             LOGGER.error("[Umbra] Failed to build shadowcomp pass '{}'; it will be skipped: {}", name, e.getMessage());
@@ -3474,7 +3171,6 @@ public class UmbraRenderingPipeline {
             return java.util.Collections.emptyList();
         }
         if (!isProgramEnabled(pack, source.getName())) {
-            LOGGER.info("[Umbra] Skipping disabled compute pass '{}'", source.getName());
             return java.util.Collections.emptyList();
         }
 
@@ -3494,7 +3190,6 @@ public class UmbraRenderingPipeline {
                         CustomTextureTransformer.transform(name, computeSources[variant], stage),
                         this.shaderDefines);
                 csh = stabilizeShaderSource(name, csh);
-                UmbraDebugDump.dumpText("src_" + name + ".csh", csh);
                 int[] localSize = parseLocalSize(csh);
                 int[] fallbackWorkGroups = (volume != null && localSize != null)
                         ? new int[]{
@@ -3534,8 +3229,6 @@ public class UmbraRenderingPipeline {
                         // Umbra ComputeProgram.getWorkGroups' last resort: cover the screen, one invocation per pixel.
                         renderScale = new float[]{1.0f, 1.0f};
                         workGroups = new int[]{1, 1, 1};
-                        LOGGER.info("[Umbra] Compute pass '{}' declares no workGroups/workGroupsRender/indirect; dispatching over the full render size",
-                                name);
                     } else {
                         workGroups = new int[]{1, 1, 1};
                     }
@@ -3562,9 +3255,6 @@ public class UmbraRenderingPipeline {
                         localSize != null ? localSize[0] : 1,
                         localSize != null ? localSize[1] : 1,
                         indirectBuffer, indirectOffset));
-                LOGGER.info("[Umbra] Compute pass '{}' ready: dispatch {}x{}x{}{}",
-                        name, workGroups[0], workGroups[1], workGroups[2],
-                        localSize == null ? "" : " (local " + localSize[0] + "x" + localSize[1] + "x" + localSize[2] + ")");
             } catch (Exception e) {
                 LOGGER.error("[Umbra] Failed to build compute pass '{}'; it will be skipped: {}", name, e.getMessage());
             }
@@ -3640,8 +3330,6 @@ public class UmbraRenderingPipeline {
             }
             result = result.replaceAll("(?<![A-Za-z0-9_])" + Pattern.quote(entry.getKey()) + "(?=\\s*\\()",
                     Matcher.quoteReplacement(entry.getValue()));
-            LOGGER.info("[Umbra] Program '{}': {} -> {} (core replacement for #version {})",
-                    name, entry.getKey(), entry.getValue(), versionNumber);
         }
         return result;
     }
@@ -3662,11 +3350,7 @@ public class UmbraRenderingPipeline {
      * water pass).
      */
     public static String foldUncompilableConditionals(String name, String source) {
-        String folded = GlslPreprocessor.foldFloatConditionals(source, java.util.Collections.emptyMap());
-        if (!folded.equals(source)) {
-            LOGGER.info("[Umbra] Program '{}': folded #if conditional(s) the GLSL preprocessor cannot parse", name);
-        }
-        return folded;
+        return GlslPreprocessor.foldFloatConditionals(source, java.util.Collections.emptyMap());
     }
 
     public static String stabilizeShaderSource(String name, String source) {
@@ -3675,8 +3359,6 @@ public class UmbraRenderingPipeline {
         source = com.bdmajora.impetus.umbra.terrain.GlslIntegerOverloadPolyfill.widenIntegerBuiltinCalls(name, source);
         Matcher declaration = UNINITIALIZED_LIGHT_VOLUME.matcher(source);
         if (declaration.find()) {
-            LOGGER.info("[Umbra] Program '{}': zero-initializing colored-lighting volume accumulator (pack declares it uninitialized)",
-                    name);
             source = declaration.replaceAll("$1vec4 lightVolume = vec4(0.0);");
         }
         return source;
@@ -3954,35 +3636,8 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    /**
-     * Diagnostic: {@code -Dimpetus.skip.passes=composite3,composite4} skips those fullscreen passes entirely.
-     * <p>
-     * The shadow-culling override established that the view-dependent brightness on MCParks scenery is not the
-     * shadow pass, and the draw probe established it is not the gbuffer draws — every input to all 3836 of them was
-     * byte-identical across two headings. That leaves the deferred/composite chain, which is too long to reason
-     * about: this turns "which pass introduces the view dependence" into a binary search the pack itself answers.
-     * <p>
-     * Skipping a pass leaves its targets holding whatever the previous pass wrote, so the image will be wrong in
-     * other ways — the only thing to read off it is whether the brightness still tracks the camera heading.
-     */
-    private boolean shouldSkipPass(String name) {
-        String skip = System.getProperty("impetus.skip.passes");
-        if (skip == null || skip.isEmpty()) {
-            return false;
-        }
-        for (String entry : skip.split(",")) {
-            if (entry.trim().equalsIgnoreCase(name)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /** Runs one full-screen pass into its framebuffer (or Minecraft's framebuffer for the final pass). */
     private void runPass(FullscreenPass pass, Minecraft mc) {
-        if (shouldSkipPass(pass.name)) {
-            return;
-        }
         // Umbra CompositeRenderer.renderAll: the pass's computes dispatch first, under this pass's flip state, then a
         // barrier publishes their writes to the draw that follows (deferred4 texelFetches the SH that deferred4_a
         // just imageStored into colortex4). Both the colortex samplers they read and the colorimg images they write
@@ -4020,32 +3675,16 @@ public class UmbraRenderingPipeline {
         pass.program.bind();
         bindShaderPackResources();
         pass.uniforms.update();
-        boolean probe = this.glErrorProbeFrames > 0;
-        if (probe) {
-            drainGlError(); // clear anything vanilla/Impetus left so we only attribute this pass's own errors
-        }
         if (this.modernPack) {
             // The [0,1] fullscreen quad maps to NDC via an ortho projection (modelview/texture stay identity), so
             // ftransform() = projection*modelview*gl_Vertex = ortho*[0,1] = NDC and (gl_TextureMatrix[0]*
             // gl_MultiTexCoord0) passes the [0,1] texcoords through. Save/restore so the hand and GUI that vanilla
             // draws after the composite chain are unaffected.
             pushFullscreenFixedFunctionMatrices();
-            if (probe) {
-                reportGlError(pass.name + " push-matrices");
-            }
             this.quadRenderer.draw();
-            if (probe) {
-                reportGlError(pass.name + " draw");
-            }
             popFixedFunctionMatrices();
-            if (probe) {
-                reportGlError(pass.name + " pop-matrices");
-            }
         } else {
             this.quadRenderer.draw();
-            if (probe) {
-                reportGlError(pass.name + " draw");
-            }
         }
     }
 

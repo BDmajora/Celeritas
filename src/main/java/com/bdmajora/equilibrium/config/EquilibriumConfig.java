@@ -2,7 +2,6 @@ package com.bdmajora.equilibrium.config;
 
 import com.bdmajora.equilibrium.Equilibrium;
 import net.minecraft.launchwrapper.Launch;
-import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -78,7 +77,10 @@ public class EquilibriumConfig {
         return config;
     }
 
-    /** The directory the config file lives in, mirroring how Fulgor and Coartatio resolve theirs. */
+    // Where the config file lives, resolved the same way Fulgor and Coartatio resolve theirs
+    // Launch.minecraftHome is null under a test harness or a launcher that never set it, so the working
+    // directory stands in — the file still loads and saves, it just lands next to the process instead
+    // The directory is created eagerly so save() does not have to care whether it exists yet
     public static Path defaultFile() {
         File home = Launch.minecraftHome;
         Path dir = (home == null ? Paths.get(".") : home.toPath()).resolve("config");
@@ -142,12 +144,9 @@ public class EquilibriumConfig {
         }
     }
 
-    /**
-     * Applies one mod's override.
-     *
-     * <p>Disabling wins over enabling: if two mods disagree about an option, the one that says the
-     * patch is unsafe is the one to believe, because the cost of being wrong is asymmetric.
-     */
+    // Applies one installed mod's request to force an option on or off
+    // Disabling wins over enabling: when two mods disagree, believe the one calling the patch unsafe, because
+    // the cost of wrongly keeping a patch (a crash or corruption) is worse than wrongly dropping one (lost perf)
     void applyModOverride(ModCompatibility.Override override) {
         Option option = this.options.get(override.option());
 
@@ -181,15 +180,12 @@ public class EquilibriumConfig {
         }
     }
 
-    /**
-     * Resolves the effective option for a mixin, by walking its package path from the root down.
-     *
-     * <p>The first disabled rule on the way down wins, otherwise the deepest rule found wins. So
-     * {@code mixin.world=false} disables everything under {@code world} regardless of what those
-     * children say, which is what a user turning off a whole category means by it.
-     *
-     * @return the governing option, or null if nothing in the tree matched
-     */
+    // Finds the option that governs a mixin class, by walking its package path from the root downwards
+    // Every prefix of the class name is tried as "mixin.<prefix>"; the first DISABLED rule found short-circuits
+    // and wins, otherwise the deepest rule that exists wins
+    // That short-circuit is the whole point: mixin.world=false has to kill everything under world no matter what
+    // the child keys say, because that is what a user switching off a whole category means by it
+    // Returns null when no rule anywhere on the path matched, which the caller reads as "no opinion, leave it on"
     public Option getEffectiveOptionForMixin(String mixinClassName) {
         int lastSplit = 0;
         int nextSplit;
@@ -220,7 +216,9 @@ public class EquilibriumConfig {
         return option != null && option.isEnabledRecursive(this);
     }
 
-    /** Used by the options screen, which edits values and then calls {@link #save()}. */
+    // Used by the options screen, which edits values in place and then calls save()
+    // Silently does nothing for an unknown name rather than throwing, since the screen is built from the same
+    // option tree and a miss here means the two drifted, not that the caller did anything wrong
     public void setOptionEnabled(String optionName, boolean enabled) {
         Option option = this.options.get(optionName);
 
@@ -256,13 +254,11 @@ public class EquilibriumConfig {
         return count;
     }
 
-    /**
-     * Turns off every option whose dependencies are not met, repeating until nothing changes.
-     *
-     * <p>One pass is not enough: disabling an option can break a dependency of another option that
-     * was already visited. This terminates because each pass that changes anything disables at least
-     * one option and options are never re-enabled.
-     */
+    // Switches off every option whose dependencies are not satisfied, repeating until a pass changes nothing
+    // A single pass is not enough: disabling an option can break a dependency of an option already visited
+    // earlier in the same pass, so the loop has to run again
+    // It terminates because any pass that reports a change disabled at least one option, and nothing here ever
+    // re-enables one, so the number of enabled options strictly decreases
     private void applyDependencies() {
         //noinspection StatementWithEmptyBody
         while (this.applyDependenciesOnce()) {
@@ -271,16 +267,19 @@ public class EquilibriumConfig {
 
     private boolean applyDependenciesOnce() {
         boolean changed = false;
-        Logger logger = Equilibrium.LOGGER;
 
         for (Option optionWithDependency : this.optionsWithDependencies) {
-            changed |= optionWithDependency.disableIfDependenciesNotMet(logger, this);
+            changed |= optionWithDependency.disableIfDependenciesNotMet(this);
         }
 
         return changed;
     }
 
-    /** Writes every option out with its description, preserving whatever the user has set. */
+    // Rewrites the whole file from the current option values, each under its description comment
+    // Everything is written out, not just the changed keys, so the file doubles as the documentation of what
+    // exists; the user's current settings survive because they are what is being written
+    // A null file means this config was never loaded from disk (a test, or a failed resolve), so saving is a
+    // no-op rather than an error, and an IO failure is logged and swallowed — losing settings must not stop launch
     public void save() {
         if (this.file == null) {
             return;

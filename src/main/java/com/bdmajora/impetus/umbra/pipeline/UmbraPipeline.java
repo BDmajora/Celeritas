@@ -51,8 +51,6 @@ public class UmbraPipeline {
             }
         }
 
-        LOGGER.info("Umbra: compiled {} of {} shader program(s){}",
-                compiled, declared.size(), failed > 0 ? " (" + failed + " failed — see errors above)" : "");
     }
 
     private static Map<String, String> buildDefines(ShaderPack pack) {

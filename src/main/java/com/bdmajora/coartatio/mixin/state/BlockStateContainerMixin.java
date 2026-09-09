@@ -16,36 +16,27 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.Optional;
 
-/**
- * Swaps vanilla's table-backed block states for {@link CoartatioBlockState}.
- *
- * <p>{@code createState} is a Forge addition — it exists exactly so a state implementation can be
- * substituted, which is why this needs no coremod and no access transformer. It is also why the
- * injection carries {@code remap = false}: methods Forge adds by patch are not in the obfuscation
- * map and keep their source names.
- *
- * <p>Cancelling at {@code HEAD} leaves the vanilla path fully intact underneath. If the mapper
- * declines this block — blacklisted, too many states, or an {@code IProperty} it cannot index — the
- * injection simply returns and vanilla builds the state it always would. That is the whole fallback
- * strategy, and it is per-block rather than global.
- *
- * <p>Note that a mod shipping its own {@code BlockStateContainer} subclass which overrides
- * {@code createState} without calling {@code super} never reaches this code, so its blocks keep
- * their own states automatically.
- */
+// Swaps vanilla's table-backed block states for CoartatioBlockState
+// createState is a Forge addition that exists precisely so a state implementation can be substituted, which is
+// why this needs no coremod and no access transformer
+// Cancelling at HEAD leaves the vanilla path completely intact underneath: when the mapper declines a block —
+// blacklisted, too many states, or an IProperty it cannot index — the injection just returns and vanilla builds
+// the state it always would. That is the entire fallback strategy, and it is per block rather than global
+// A mod shipping its own BlockStateContainer subclass that overrides createState without calling super never
+// reaches this code at all, so its blocks keep their own states automatically
 @Mixin(BlockStateContainer.class)
 public abstract class BlockStateContainerMixin implements MappedStateOwner {
+    // Null both before resolution and when this block was declined, hence the separate resolved flag
     @Unique
     private PropertyValueMapper coartatio$stateMapper;
 
+    // Distinguishes "not built yet" from "built and came back null", so a declined block is not re-analysed once
+    // per state
     @Unique
     private boolean coartatio$stateMapperResolved;
 
-    /**
-     * The container calls {@code createState} once per state, so the mapper is built on the first
-     * call and reused. Safe here because the container assigns its property map before the loop that
-     * produces states.
-     */
+    // The container calls createState once per state, so the mapper is built on the first call and reused
+    // Safe to build it here because the container assigns its property map before the loop that produces states
     @Override
     public PropertyValueMapper coartatio$mapper(Block block) {
         if (!this.coartatio$stateMapperResolved) {
@@ -56,6 +47,8 @@ public abstract class BlockStateContainerMixin implements MappedStateOwner {
         return this.coartatio$stateMapper;
     }
 
+    // remap = false because methods Forge adds by patch are not in the obfuscation map and keep their source
+    // names
     @Inject(method = "createState", at = @At("HEAD"), cancellable = true, remap = false)
     private void coartatio$createPackedState(Block block,
                                              ImmutableMap<IProperty<?>, Comparable<?>> properties,

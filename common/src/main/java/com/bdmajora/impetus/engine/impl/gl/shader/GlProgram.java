@@ -3,11 +3,9 @@ package com.bdmajora.impetus.engine.impl.gl.shader;
 import com.bdmajora.impetus.lwjgl.GL20;
 import com.bdmajora.impetus.lwjgl.GL30;
 import com.bdmajora.impetus.lwjgl.GL32;
-import com.bdmajora.impetus.lwjgl.GL43;
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
 import com.bdmajora.impetus.engine.impl.gl.GlObject;
-import com.bdmajora.impetus.engine.impl.gl.debug.GLDebug;
 import com.bdmajora.impetus.engine.impl.gl.shader.uniform.GlUniform;
 import com.bdmajora.impetus.engine.impl.gl.shader.uniform.GlUniformBlock;
 import org.apache.logging.log4j.LogManager;
@@ -113,8 +111,6 @@ public class GlProgram<T> extends GlObject implements ShaderBindingContext {
             if (result != GL20.GL_TRUE) {
                 throw new RuntimeException("Shader program linking failed, see log for details");
             }
-
-            GLDebug.nameObject(GL43.GL_PROGRAM, this.program, this.name);
 
             return new GlProgram<>(this.program, factory);
         }

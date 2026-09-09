@@ -2,7 +2,6 @@ package com.bdmajora.equilibrium.config;
 
 import it.unimi.dsi.fastutil.objects.Object2BooleanLinkedOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2BooleanMap;
-import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -103,12 +102,10 @@ public class Option {
         this.dependencies.put(dependencyOption, requiredValue);
     }
 
-    /**
-     * Turns this option off if any dependency is not in its required state.
-     *
-     * @return whether the option was changed, so the caller knows to run another pass
-     */
-    public boolean disableIfDependenciesNotMet(Logger logger, EquilibriumConfig config) {
+    // Turns this option off if any dependency is not in its required state
+    // Returns whether the option changed, so the caller knows to run another pass — one pass is not enough,
+    // because disabling an option can break a dependency of an option already visited
+    public boolean disableIfDependenciesNotMet(EquilibriumConfig config) {
         if (this.dependencies != null && this.isEnabled()) {
             for (Object2BooleanMap.Entry<Option> dependency : this.dependencies.object2BooleanEntrySet()) {
                 Option option = dependency.getKey();
@@ -117,8 +114,6 @@ public class Option {
 
                 if (enabledRecursive != requiredValue) {
                     this.enabled = false;
-                    logger.info("Option '{}' requires '{}={}' but found '{}'. Setting '{}={}'.",
-                            this.name, option.name, requiredValue, enabledRecursive, this.name, this.enabled);
                     return true;
                 }
             }

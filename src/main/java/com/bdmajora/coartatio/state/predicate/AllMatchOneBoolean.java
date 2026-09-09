@@ -7,21 +7,18 @@ import net.minecraft.block.state.IBlockState;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * A flattened {@code AND} where every condition tests a boolean property.
- *
- * <p>Ported from Hydrogen's class of the same name. This is the single most common multipart shape
- * in the game — {@code {"north": "true", "east": "false"}} on every fence, wall, pane, redstone wire
- * and pipe — so it is worth a specialisation over the general {@link AllMatchOne}.
- *
- * <p>The win is a {@code boolean[]} instead of an {@code Object[]} of boxed {@code Boolean}s: one
- * byte per property rather than a four-byte reference, and {@code test} compares primitives with no
- * chance of falling through to {@code equals}.
- */
+// A flattened AND where every condition tests a boolean property
+// Ported from Hydrogen's class of the same name
+// This is the single most common multipart shape in the game — {"north": "true", "east": "false"} on every
+// fence, wall, pane, redstone wire and pipe — which is what makes it worth specialising over AllMatchOne
+// The saving is a boolean[] rather than an Object[] of boxed Booleans: one byte per property instead of a
+// reference, and the comparison is a primitive one that can never fall through to equals
 public final class AllMatchOneBoolean implements Predicate<IBlockState> {
     private final IProperty<?>[] properties;
+    // Parallel to properties: the value that property must have for the condition to hold
     private final boolean[] values;
 
+    // Precomputed; these predicates are interned, so hashCode runs far more often than apply
     private final int hash;
 
     private AllMatchOneBoolean(IProperty<?>[] properties, boolean[] values) {
@@ -30,10 +27,10 @@ public final class AllMatchOneBoolean implements Predicate<IBlockState> {
         this.hash = 31 * Arrays.hashCode(properties) + Arrays.hashCode(values);
     }
 
-    /**
-     * @return a flattened predicate, or {@code null} unless every input is a {@link SingleMatchOne}
-     *         over a {@code Boolean} value.
-     */
+    // Flattens a list of conditions into this form, or returns null unless every one of them is a SingleMatchOne
+    // whose value is a Boolean
+    // The two rejections are separate on purpose: a non-SingleMatchOne cannot be flattened at all, while a
+    // SingleMatchOne over a non-Boolean is still flattenable, just by AllMatchOne instead
     public static AllMatchOneBoolean tryFlatten(List<Predicate<IBlockState>> predicates) {
         int size = predicates.size();
 
@@ -66,6 +63,7 @@ public final class AllMatchOneBoolean implements Predicate<IBlockState> {
             return false;
         }
 
+        // Hoisted into locals so the loop does not re-read the fields each iteration
         IProperty<?>[] properties = this.properties;
         boolean[] values = this.values;
 

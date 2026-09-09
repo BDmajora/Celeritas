@@ -3,15 +3,12 @@ package com.bdmajora.impetus.lwjgl.lwjgl3;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.lwjgl.opengl.*;
-import org.lwjgl.system.APIUtil;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.system.Pointer;
-import com.bdmajora.impetus.lwjgl.DebugMessageHandler;
 import com.bdmajora.impetus.lwjgl.GLExtension;
 import com.bdmajora.impetus.lwjgl.LWJGLService;
 import com.bdmajora.impetus.lwjgl.MemoryStack;
 
-import java.io.PrintStream;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
@@ -23,10 +20,8 @@ import java.nio.IntBuffer;
 public record LWJGL3Service(
         VAOMode vaoMode,
         TimerQueryMode timerQueryMode,
-        DebugMode debugMode,
         VertexAttribIMode vertexAttribIMode) implements LWJGLService {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/LWJGL3Service");
-    private static final LWJGL3DebugSupport debugSupport = new LWJGL3DebugSupport();
 
     // ===================== CAPABILITIES =====================
 
@@ -69,9 +64,6 @@ public record LWJGL3Service(
             case ARB_shader_storage_buffer_object -> caps.GL_ARB_shader_storage_buffer_object;
             case ARB_sync -> caps.GL_ARB_sync;
             case ARB_timer_query -> caps.GL_ARB_timer_query;
-            case ARB_debug_output -> caps.GL_ARB_debug_output;
-            case KHR_debug -> caps.GL_KHR_debug;
-            case AMD_debug_output -> caps.GL_AMD_debug_output;
             case ARB_uniform_buffer_object -> caps.GL_ARB_uniform_buffer_object;
             case ARB_vertex_array_object -> caps.GL_ARB_vertex_array_object;
             case ARB_map_buffer_range -> caps.GL_ARB_map_buffer_range;
@@ -214,7 +206,6 @@ public record LWJGL3Service(
         public abstract void bind(int array);
     }
     private enum TimerQueryMode { CORE, ARB, NONE }
-    private enum DebugMode { KHR, NONE }
     private enum VertexAttribIMode { CORE, EXT, NONE }
 
 
@@ -249,14 +240,6 @@ public record LWJGL3Service(
             LOGGER.warn("ARB_timer_query extension not available - GPU profiling will be disabled");
         }
 
-        DebugMode debugMode;
-
-        if (caps.GL_KHR_debug || caps.OpenGL43) {
-            debugMode = DebugMode.KHR;
-        } else {
-            debugMode = DebugMode.NONE;
-        }
-
         VertexAttribIMode vertexAttribIMode;
         if (caps.OpenGL30) {
             vertexAttribIMode = VertexAttribIMode.CORE;
@@ -266,7 +249,7 @@ public record LWJGL3Service(
             vertexAttribIMode = VertexAttribIMode.NONE;
         }
 
-        return new LWJGL3Service(vaoMode, timerQueryMode, debugMode, vertexAttribIMode);
+        return new LWJGL3Service(vaoMode, timerQueryMode, vertexAttribIMode);
     }
 
     @Override
@@ -586,42 +569,6 @@ public record LWJGL3Service(
             case ARB -> ARBTimerQuery.glGetQueryObjectui64(id, pname);
             case NONE -> 0L;
         };
-    }
-
-    // ===================== DEBUG OPERATIONS =====================
-
-    @Override
-    public PrintStream getDebugStream() { return APIUtil.DEBUG_STREAM; }
-
-    @Override
-    public int setupDebugCallback(DebugMessageHandler handler) {
-        return debugSupport.setupDebugCallback(handler);
-    }
-
-    @Override
-    public void disableDebugCallback() {
-        debugSupport.disableDebugCallback();
-    }
-
-    @Override
-    public void glObjectLabel(int identifier, int name, CharSequence label) {
-        if (debugMode == DebugMode.KHR) {
-            KHRDebug.glObjectLabel(identifier, name, label);
-        }
-    }
-
-    @Override
-    public void glPushDebugGroup(int source, int id, CharSequence message) {
-        if (debugMode == DebugMode.KHR) {
-            KHRDebug.glPushDebugGroup(source, id, message);
-        }
-    }
-
-    @Override
-    public void glPopDebugGroup() {
-        if (debugMode == DebugMode.KHR) {
-            KHRDebug.glPopDebugGroup();
-        }
     }
 
     // ===================== TEXTURE OPERATIONS =====================

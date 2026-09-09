@@ -61,8 +61,8 @@ public final class ShaderPack {
     private final ShaderProperties properties;
     private final ProgramSet baseProgramSet;
     /**
-     * The Umbra features this pack <em>declared</em> in {@code umbra.features.required}/{@code optional} and that this
-     * port can honor. Distinct from the {@code UMBRA_FEATURE_<NAME>} GLSL defines, which advertise everything the port
+     * The Umbra features this pack <em>declared</em> in {@code iris.features.required}/{@code optional} and that this
+     * port can honor. Distinct from the {@code IRIS_FEATURE_<NAME>} GLSL defines, which advertise everything the port
      * supports so packs can {@code #ifdef} on availability — Umbra draws exactly the same distinction
      * ({@code ShaderPack.hasFeature} reads {@code activeFeatures}, while the defines come from {@code isUsable()}).
      */
@@ -127,10 +127,10 @@ public final class ShaderPack {
         // Feature-flag validation: a pack *requiring* a flag this port cannot honor must fail loudly and visibly
         // instead of rendering subtly wrong. Optional flags simply stay undefined for the pack to detect.
         this.activeFeatures = com.bdmajora.impetus.umbra.features.FeatureFlags.parseDeclared(
-                this.properties.getRaw().get("umbra.features.required"),
-                this.properties.getRaw().get("umbra.features.optional"));
+                this.properties.getRaw().get("iris.features.required"),
+                this.properties.getRaw().get("iris.features.optional"));
         java.util.List<String> unsupportedRequired = com.bdmajora.impetus.umbra.features.FeatureFlags
-                .findUnsupported(this.properties.getRaw().get("umbra.features.required"));
+                .findUnsupported(this.properties.getRaw().get("iris.features.required"));
         if (!unsupportedRequired.isEmpty()) {
             String missing = String.join(", ", unsupportedRequired);
             LOGGER.error("[Umbra] This shader pack requires Umbra features not supported by this port: {}", missing);
@@ -190,7 +190,7 @@ public final class ShaderPack {
 
     /**
      * The {@code !defined(IS_IRIS) && MC_VERSION < <newer than ours>} directive: the pack saying "here is the path I
-     * authored for an OptiFine this old". Those programs get compiled without {@code IS_IRIS}/{@code UMBRA_VERSION}
+     * authored for an OptiFine this old". Those programs get compiled without {@code IS_IRIS}/{@code IRIS_VERSION}
      * (see {@code ShaderMacros.setPackLegacyPrograms}) so they take that path instead of the Umbra one, which on 1.12.2
      * is both what the pack intends and what actually works — Sildur's water does its reflection inline behind
      * {@code IS_IRIS} at {@code F0=0.5} over 85%-opaque water (opaque, mirror-like), while the 1.12.2 path defers it
@@ -224,7 +224,6 @@ public final class ShaderPack {
                 // Only a cutoff ABOVE ours means the legacy branch is the one 1.12.2 would take.
                 if (version > ShaderMacros.MC_VERSION) {
                     legacy.add(name);
-                    LOGGER.info("[Umbra] {} has a pre-Umbra path for MC < {}; compiling it without IS_IRIS", name, version);
                     break;
                 }
             }

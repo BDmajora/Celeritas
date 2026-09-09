@@ -87,18 +87,6 @@ public final class ImpetusTerrainTransformer {
             "// and discards in-shader instead; mirror its per-material cutoff (bits 1-2 of the material byte).",
             "const float[4] _UMBRA_ALPHA_CUTOFF = float[4](0.0, 0.1, 0.5, 1.0);",
             "flat out float iris_AlphaCutoff;",
-            // DEBUG: 1.0 on any vertex whose clip position came out non-finite (see the NaN/Inf guard in main()).
-            // Interpolated (not flat) so the fragment tint reveals the whole flung triangle, not just its provoking vertex.
-            "out float iris_nanFlag;",
-            // DEBUG: the raw mc_Entity.x (pack block id) this vertex carried, forwarded so the fragment stage can
-            // report it. flat, not smooth: it is an integer id, and interpolating between two ids yields a third that
-            // matches neither. Declared unconditionally, like iris_nanFlag, so enabling the probe cannot change the
-            // varying layout — a diagnostic that perturbs what it measures is worthless.
-            "flat out float iris_blockIdProbe;",
-            // DEBUG: this vertex's sky light, normalized the way the packs themselves normalize it (raw 0..240 -> 0..1),
-            // so it can be compared directly against a pack's lightmap thresholds. flat for the same reason as above,
-            // and because vertex-stage effects sample the per-vertex value, not the interpolated one.
-            "flat out float iris_skyLightProbe;",
             "// ---- end generated prologue ----",
             ""
     ) + "\n";
@@ -118,12 +106,7 @@ public final class ImpetusTerrainTransformer {
                 + "    iris_MultiTexCoord1 = vec4(float(blockLight), float(skyLight), 0.0, 1.0);\n"
                 + "    iris_MidTexFull = vec4(iris_MidTexCoord, 0.0, 1.0);\n"
                 + "    iris_EntityFull = iris_BlockInfo;\n"
-                + "    iris_blockIdProbe = iris_BlockInfo.x;\n"
-                // 240, not 255: vanilla's lightmap tops out at 240, and packs divide by that. Complementary's
-                // GetLightMapCoordinates does it as (raw/256 + 1/32 - 1/32) * 32/30, which is exactly sky/240.
-                + "    iris_skyLightProbe = float(skyLight) / 240.0;\n"
                 + "    iris_AlphaCutoff = _UMBRA_ALPHA_CUTOFF[int((lightData >> 1u) & 3u)];\n"
-                + "    iris_nanFlag = 0.0;\n"
                 + hoistedAssignments
                 + "    irisMain();\n"
                 // Robustness guard for a non-finite clip position out of the pack's vertex math.
@@ -133,17 +116,15 @@ public final class ImpetusTerrainTransformer {
                 // screen) but created a far worse one: when the cause is a *uniform* rather than one bad vertex, every
                 // terrain vertex in the frame is non-finite, so this deleted the entire world. Both terrain passes
                 // carry this guard and the entity programs do not, which is exactly the recurring "world unloads
-                // randomly, signs and armour stands keep drawing" report. It also made itself undiagnosable: a clipped
-                // vertex never reaches a fragment, so iris_nanFlag could never be observed.
+                // randomly, signs and armour stands keep drawing" report.
                 //
                 // Fall back to the plain transform instead. u_ProjectionMatrix, u_ModelViewMatrix and iris_Vertex are
                 // supplied by this pipeline, not by the pack, and are finite whenever the draw itself is valid — so
                 // the vertex lands where it geometrically belongs. A single bad vertex still cannot spike (it gets its
                 // real position), and a bad uniform now costs the pack's vertex effects for a frame instead of the
-                // whole world. iris_nanFlag survives to the fragment stage, so the failure is finally observable.
+                // whole world.
                 + "    if (any(isnan(gl_Position)) || any(isinf(gl_Position))) {\n"
                 + "        gl_Position = u_ProjectionMatrix * u_ModelViewMatrix * iris_Vertex;\n"
-                + "        iris_nanFlag = 1.0;\n"
                 + "    }\n"
                 + "}\n";
     }
@@ -161,177 +142,12 @@ public final class ImpetusTerrainTransformer {
         );
     }
 
-    // DEBUG: paints a terrain/water/shadow fragment red when its vertex tripped the NaN/Inf clip guard.
-    // Opt in with -Dimpetus.umbra.tintNaN=true; the guard itself stays active regardless as a robustness measure.
-
     // The in-shader stand-in for the fixed-function alpha test, threshold picked to match Umbra's per-pass default
     // (TERRAIN_SOLID = ALWAYS/no discard, TERRAIN_CUTOUT = 0.5, TERRAIN_TRANSLUCENT = 0.0001) instead of the old
     // per-vertex material-byte cutoff, which had no counterpart in Umbra and could discard the whole world if the
     // packed bits read 3 (cutoff 1.0, everything under full alpha dropped).
     private static String alphaDiscard(String snippet) {
         return snippet == null ? "" : snippet;
-    }
-
-    private static final String NAN_TINT_SNIPPET =
-            "true".equalsIgnoreCase(System.getProperty("impetus.umbra.tintNaN", "false"))
-                    ? "    if (iris_nanFlag > 0.001) { iris_FragData[0] = vec4(1.0, 0.0, 0.0, 1.0); }\n"
-                    : "";
-
-    /**
-     * DEBUG tint: reports which block id actually reached {@code mc_Entity.x} — the value every OptiFine-era pack
-     * switches its per-material effects on ({@code mat = int(mc_Entity.x + 0.5)}). Opt in with
-     * {@code -Dimpetus.umbra.tintBlockId=<pack id>}; {@code 10009} is Complementary's leaves.
-     * <p>
-     * The readout is four-way rather than a yes/no highlight, so a single screenshot separates every hypothesis
-     * instead of confirming one and leaving the rest open:
-     * <ul>
-     *   <li><b>green</b> — the requested id arrived <em>and</em> this vertex has enough sky light to clear the pack's
-     *       {@code NO_WAVING_INDOORS} gate. Everything the vertex stage needs is present, so a leaf that is green and
-     *       still does not move is a genuine defect.</li>
-     *   <li><b>yellow</b> — the id arrived but sky light is at or below {@code 0.87}, so the pack zeroes the
-     *       displacement itself. Not a bug: covered/indoor foliage is supposed to stand still. This is the case that
-     *       makes waving look like it "works on some but not others" in a roofed build.</li>
-     *   <li><b>red</b> — {@code -1}, the sentinel {@code WorldRenderingSettings.getBlockStateId} returns for a state
-     *       the pack's {@code block.properties} does not map. Plumbing fine, id resolution missed.</li>
-     *   <li><b>blue</b> — {@code 0}: nothing was ever written. Either the mesher's
-     *       {@code UmbraTerrainProgramOverride.areShadersActive()} gate read false when the chunk was built, or no
-     *       pack table was published.</li>
-     *   <li><b>magenta</b> — a different id arrived: plumbing and resolution both work, the block just maps
-     *       elsewhere than expected.</li>
-     * </ul>
-     * A fourth signal comes free: this only runs in the terrain and shadow programs, so foliage that stays its
-     * <b>normal colour</b> while everything around it is tinted is not terrain at all — it is a block entity or an
-     * armour-stand item model, which no terrain waving code will ever touch. On a build like MCParks, where scenery
-     * is largely block entities and armour stands, that is the expected explanation for untinted greenery.
-     * <p>
-     * The fragment's original alpha is preserved so the cutout discard below still carves the leaf silhouette —
-     * forcing {@code a = 1.0} would paint solid quads and hide which fragments are foliage at all.
-     * <p>
-     * Use one probe at a time: this runs after {@link #NAN_TINT_SNIPPET} and overwrites it unconditionally, and both
-     * spend red on different meanings (NaN vertex here, unmapped block id there), so enabling both reads as this one.
-     */
-    private static final String BLOCK_ID_TINT_SNIPPET = buildBlockIdTint();
-
-    /**
-     * DEBUG tint: renders the <em>wave amplitude</em> the pack will actually apply to each vertex, rather than the
-     * inputs to it. Opt in with {@code -Dimpetus.umbra.tintWaveAmp=<pack id>}.
-     * <p>
-     * This exists for one specific report: parts of a single leaf block move while other parts of the same block stay
-     * put, so the block visibly tears. Displacement is computed per vertex, and the only per-vertex term that varies
-     * between two faces of one block is sky light — Complementary scales every {@code NO_WAVING_INDOORS} effect by
-     * {@code clamp(lmCoord.y - 0.87, 0.0, 0.1)}, which is a hard cutoff, not a ramp to zero. Two vertices sitting on
-     * the same corner but belonging to different faces can therefore land on opposite sides of it: one gets full
-     * displacement, the other exactly none, and the faces separate.
-     * <p>
-     * Readout, flat-shaded so each face reports its own provoking vertex:
-     * <ul>
-     *   <li><b>red</b> — amplitude is exactly zero. This vertex is pinned and will never move.</li>
-     *   <li><b>green, brightening with amplitude</b> — this vertex is displaced, brighter meaning further.</li>
-     *   <li><b>dark grey</b> — some other block; ignore it.</li>
-     * </ul>
-     * A block showing red faces flush against green faces is the tear, caught in the act. If instead each block is
-     * uniformly one colour, the cause is not this threshold and the search should move on.
-     * <p>
-     * Takes precedence over {@link #BLOCK_ID_TINT_SNIPPET} when both are set, since it is emitted afterwards.
-     */
-    private static final String WAVE_AMP_TINT_SNIPPET = buildWaveAmpTint();
-
-    private static String buildWaveAmpTint() {
-        Integer target = parseTargetId("impetus.umbra.tintWaveAmp");
-        if (target == null) {
-            return "";
-        }
-        // Mirrors the pack expression exactly: clamp(lmCoord.y - 0.87, 0.0, 0.1). The * 10.0 only rescales the
-        // 0..0.1 result into 0..1 so it is visible as a colour ramp; it does not change where the cutoff falls.
-        return "    {\n"
-                + "        float _iris_amp = clamp(iris_skyLightProbe - 0.87, 0.0, 0.1) * 10.0;\n"
-                + "        vec3 _iris_ampTint;\n"
-                + "        if (abs(iris_blockIdProbe - " + target + ".0) < 0.5) {\n"
-                + "            _iris_ampTint = _iris_amp <= 0.0\n"
-                + "                ? vec3(1.0, 0.0, 0.0)\n"
-                + "                : mix(vec3(0.0, 0.25, 0.0), vec3(0.0, 1.0, 0.0), _iris_amp);\n"
-                + "        } else {\n"
-                + "            _iris_ampTint = vec3(0.15);\n"
-                + "        }\n"
-                + "        iris_FragData[0] = vec4(_iris_ampTint, iris_FragData[0].a);\n"
-                + "    }\n";
-    }
-
-    /**
-     * DEBUG tint: renders per-vertex sky light as discrete vanilla light levels. Opt in with
-     * {@code -Dimpetus.umbra.tintSkyLight=true}.
-     * <p>
-     * Where the other probes ask "is this vertex above the pack's threshold", this one shows the underlying field, so
-     * the field can be judged rather than a boolean derived from it.
-     * <p>
-     * <strong>Banded hues, not a greyscale ramp, and that distinction is the whole point.</strong> This writes into
-     * {@code iris_FragData[0]}, which is colortex0 — the <em>albedo</em> the pack's deferred passes then light and
-     * tonemap. A greyscale value does not survive that: it comes back as {@code value * lighting * exposure}, which is
-     * unreadable. The first attempt here did exactly that and produced a near-uniform white frame that measured
-     * 0.11–0.91, i.e. carried no recoverable sky light at all. Saturated hues survive, because lighting scales a
-     * colour without moving it around the wheel — which is why the block-id probe reads back as near-pure primaries.
-     * <p>
-     * Levels are the vanilla 0–15, recovered as {@code round(sky * 15)}:
-     * <ul>
-     *   <li><b>green</b> — 15, full sky</li>
-     *   <li><b>yellow</b> — 14</li>
-     *   <li><b>magenta</b> — 13 (the pack's {@code 0.87} cutoff falls between 13 and 14, so the green/yellow-to-magenta
-     *       boundary is exactly where waving stops)</li>
-     *   <li><b>red</b> — 12</li>
-     *   <li><b>blue</b> — 11 or below, i.e. properly shaded</li>
-     * </ul>
-     * What to look for: under a roof, levels should <em>fall off</em> — blues and reds indoors, greens only near
-     * openings. Deep interior geometry reading green means the sky light this port feeds is simply wrong, and the
-     * pack's threshold is merely the thing that made it visible. A sensible falloff means the lightmap is fine.
-     * <p>
-     * Emitted last, so it overrides the other tints when more than one is enabled.
-     */
-    private static final String SKY_LIGHT_TINT_SNIPPET =
-            "true".equalsIgnoreCase(System.getProperty("impetus.umbra.tintSkyLight", "false"))
-                    ? "    {\n"
-                            + "        int _iris_lvl = int(floor(iris_skyLightProbe * 15.0 + 0.5));\n"
-                            + "        vec3 _iris_skyTint;\n"
-                            + "        if (_iris_lvl >= 15) _iris_skyTint = vec3(0.0, 1.0, 0.0);\n"
-                            + "        else if (_iris_lvl == 14) _iris_skyTint = vec3(1.0, 1.0, 0.0);\n"
-                            + "        else if (_iris_lvl == 13) _iris_skyTint = vec3(1.0, 0.0, 1.0);\n"
-                            + "        else if (_iris_lvl == 12) _iris_skyTint = vec3(1.0, 0.0, 0.0);\n"
-                            + "        else _iris_skyTint = vec3(0.0, 0.0, 1.0);\n"
-                            + "        iris_FragData[0] = vec4(_iris_skyTint, iris_FragData[0].a);\n"
-                            + "    }\n"
-                    : "";
-
-    /** {@return the block id requested by the given debug property, or null when unset or unparseable} */
-    private static Integer parseTargetId(String property) {
-        String requested = System.getProperty(property);
-        if (requested == null || requested.trim().isEmpty()) {
-            return null;
-        }
-        try {
-            return Integer.valueOf(requested.trim());
-        } catch (NumberFormatException e) {
-            return null;
-        }
-    }
-
-    private static String buildBlockIdTint() {
-        Integer target = parseTargetId("impetus.umbra.tintBlockId");
-        if (target == null) {
-            return "";
-        }
-        // 0.87 is the pack-side lightmap threshold this port keeps tripping over: Complementary gates every
-        // NO_WAVING_INDOORS effect on clamp(lmCoord.y - 0.87, 0.0, 0.1), so a vertex at or below it gets exactly
-        // zero displacement no matter how well the block id resolved.
-        String skyGate = "iris_skyLightProbe > 0.87";
-        return "    {\n"
-                + "        vec3 _iris_probeTint;\n"
-                + "        if (abs(iris_blockIdProbe - " + target + ".0) < 0.5) {\n"
-                + "            _iris_probeTint = " + skyGate + " ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 1.0, 0.0);\n"
-                + "        }\n"
-                + "        else if (iris_blockIdProbe < -0.5) _iris_probeTint = vec3(1.0, 0.0, 0.0);\n"
-                + "        else if (iris_blockIdProbe < 0.5) _iris_probeTint = vec3(0.0, 0.0, 1.0);\n"
-                + "        else _iris_probeTint = vec3(1.0, 0.0, 1.0);\n"
-                + "        iris_FragData[0] = vec4(_iris_probeTint, iris_FragData[0].a);\n"
-                + "    }\n";
     }
 
     /** Fragment prologue: promote GLSL 120 fragment built-ins to 330 core outputs/keywords. */
@@ -360,9 +176,6 @@ public final class ImpetusTerrainTransformer {
             "in vec4 iris_TexCoordArr[4];",
             "#define gl_TexCoord iris_TexCoordArr",
             "flat in float iris_AlphaCutoff;",
-            "in float iris_nanFlag;",   // DEBUG: >0 where the vertex stage produced a non-finite clip position
-            "flat in float iris_blockIdProbe;", // DEBUG: the pack block id mc_Entity.x carried for this fragment
-            "flat in float iris_skyLightProbe;", // DEBUG: this fragment's vertex sky light, normalized to 0..1
             "// ---- end generated prologue ----",
             ""
     ) + "\n";
@@ -397,10 +210,6 @@ public final class ImpetusTerrainTransformer {
         GlslGlobalInitHoister.Result hoist = GlslGlobalInitHoister.hoist(body);
         String transformed = FRAGMENT_PROLOGUE + fragDataBlock() + hoist.body
                 + "\nvoid main() {\n" + hoist.hoistedAssignments + "    irisMain();\n"
-                + NAN_TINT_SNIPPET
-                + BLOCK_ID_TINT_SNIPPET
-                + WAVE_AMP_TINT_SNIPPET
-                + SKY_LIGHT_TINT_SNIPPET
                 + alphaDiscard(alphaTestSnippet)
                 + "}\n";
         return transformed;
@@ -448,20 +257,11 @@ public final class ImpetusTerrainTransformer {
         // and the injected alpha test; packs using named layout(location) outputs (photon) keep their declarations
         // — the 16-array would collide with their output locations — and handle cutout discard themselves.
         boolean usesFragData = Pattern.compile("\\bgl_Frag(?:Data|Color)\\b").matcher(body).find();
-        // The NaN tint has to be emitted here too, not only on the legacy path. Complementary's terrain fragment is
-        // `#version 430 compatibility`, so it comes through this method — which meant `-Dimpetus.umbra.tintNaN=true`
-        // silently did nothing for the one pack the flag was added to diagnose. Only the gl_FragData form can be
-        // tinted: a pack using named layout(location) outputs keeps its own declarations, so there is no output here
-        // whose name we know.
         String transformed = compatFor(FRAGMENT_PROLOGUE, source)
                 + (usesFragData ? fragDataBlock() : "")
                 + body
                 + (usesFragData
                         ? "\nvoid main() {\n    irisMain();\n"
-                                + NAN_TINT_SNIPPET
-                                + BLOCK_ID_TINT_SNIPPET
-                                + WAVE_AMP_TINT_SNIPPET
-                                + SKY_LIGHT_TINT_SNIPPET
                                 + alphaDiscard(alphaTestSnippet)
                                 + "}\n"
                         : "\nvoid main() {\n    irisMain();\n}\n");

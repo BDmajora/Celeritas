@@ -43,7 +43,6 @@ public class FulgorMixinPlugin implements IMixinConfigPlugin {
             return;
         }
 
-        Fulgor.LOGGER.info("Fulgor lighting subsystem loading");
     }
 
     @Override

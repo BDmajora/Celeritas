@@ -7,52 +7,32 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.URL;
 
-/**
- * Defines a class into another class's runtime package.
- *
- * <p>Java enforces package-private access by <i>runtime package</i>: same package name <b>and</b>
- * same classloader. Guava's {@code ImmutableMap} has a package-private constructor, so a subclass
- * must be loaded by whichever loader loaded Guava. Shipping a {@code com.google.common.collect}
- * class in our own jar is not enough — if Guava came from a different loader the JVM refuses the
- * access at first use, with an {@code IllegalAccessError} far from the cause.
- *
- * <p>Hydrogen calls this category of trick "things too dirty to put in Lithium", and it is the only
- * place Coartatio does anything of the sort. Three tiers, most-preferred first:
- *
- * <ol>
- *   <li>{@code MethodHandles.privateLookupIn(...).defineClass(byte[])} — Java 9 and later, which is
- *       what an lwjgl3ify/RetroFuturaBootstrap setup runs. Reached reflectively so this still
- *       compiles at source level 8.
- *   <li>{@code ClassLoader.defineClass} via {@code setAccessible} — the ordinary 1.12.2 case on
- *       Java 8, where the module system is not there to stop us.
- *   <li>Give up. {@link #defineClass} returns {@code null}, the caller disables its feature, and the
- *       game starts normally.
- * </ol>
- *
- * <h2>Rules for anything injected this way</h2>
- *
- * <ul>
- *   <li><b>No Coartatio imports.</b> The injected class may reference only its host package and
- *       {@code java.*}. If Guava turns out to be on a loader that cannot see our jar, an import
- *       would produce {@code NoClassDefFoundError} at first use rather than a clean, detectable
- *       failure here.
- *   <li><b>Define in reverse dependency order</b>, innermost helper first, so a partial failure
- *       cannot leave a half-linked class behind.
- * </ul>
- */
+// Defines a class into another class's runtime package
+// Java enforces package-private access by RUNTIME package, meaning the same package name AND the same
+// classloader. Guava's ImmutableMap has a package-private constructor, so a subclass must be loaded by whatever
+// loader loaded Guava. Simply shipping a com.google.common.collect class inside our own jar is not enough: if
+// Guava came from a different loader, the JVM refuses the access at first use with an IllegalAccessError
+// thrown a long way from its cause
+// Hydrogen calls this category of trick "things too dirty to put in Lithium", and this is the only place
+// Coartatio does anything of the sort
+// Three tiers are tried, most preferred first: MethodHandles.privateLookupIn(...).defineClass on Java 9+, which
+// is what an lwjgl3ify/RetroFuturaBootstrap setup runs; ClassLoader.defineClass unlocked with setAccessible,
+// the ordinary 1.12.2-on-Java-8 case where the module system is not there to stop it; and giving up, in which
+// case defineClass returns null, the caller disables its feature, and the game starts normally
+// Two rules for anything injected this way. It may reference ONLY its host package and java.* — no Coartatio
+// imports, because if Guava is on a loader that cannot see our jar an import turns into a NoClassDefFoundError
+// at first use instead of the clean, detectable failure this class produces. And classes must be defined in
+// reverse dependency order, innermost helper first, so a partial failure cannot leave a half-linked class behind
 public final class ClassDefineTool {
     private static boolean warned;
 
     private ClassDefineTool() {
     }
 
-    /**
-     * Loads {@code name} from our own resources and defines it alongside {@code host}.
-     *
-     * @param host a class in the target package, whose classloader and package are borrowed
-     * @param name binary name of the class to define, which must live in {@code host}'s package
-     * @return the defined class, or {@code null} if the JVM would not allow it
-     */
+    // Reads name out of our own resources and defines it alongside host
+    // host is any class already in the target package; its classloader and package are what get borrowed
+    // name is the binary name of the class to define and must live in host's package, or the JVM rejects it
+    // Returns null when the JVM will not allow the definition, which is a normal outcome, not an error
     public static Class<?> defineClass(Class<?> host, String name) {
         byte[] bytecode = readBytecode(name);
 
@@ -82,7 +62,9 @@ public final class ClassDefineTool {
         return defined;
     }
 
-    /** Java 9+: {@code MethodHandles.privateLookupIn(host, lookup).defineClass(bytecode)}. */
+    // Tier one, Java 9 and later: MethodHandles.privateLookupIn(host, lookup).defineClass(bytecode)
+    // Reached entirely through reflection so this file still compiles at source level 8, where neither
+    // privateLookupIn nor Lookup.defineClass exists
     private static Class<?> defineWithLookup(Class<?> host, byte[] bytecode) {
         try {
             Class<?> lookupClass = Class.forName("java.lang.invoke.MethodHandles$Lookup");
@@ -101,7 +83,9 @@ public final class ClassDefineTool {
         }
     }
 
-    /** Java 8: reflectively unlock {@code ClassLoader.defineClass} on the host's loader. */
+    // Tier two, Java 8: unlock ClassLoader.defineClass on the host's own loader with setAccessible
+    // Defining through the host's loader is the whole point — that is what puts the new class in the same
+    // runtime package as the host and makes the package-private constructor reachable
     private static Class<?> defineWithClassLoader(Class<?> host, String name, byte[] bytecode) {
         ClassLoader loader = host.getClassLoader();
 

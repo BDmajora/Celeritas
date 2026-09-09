@@ -55,7 +55,6 @@ public final class AdaptiveSync {
             }
         } catch (ClassNotFoundException e) {
             // LWJGL2: no swap-interval control exists, so adaptive sync is simply not a mode here.
-            Extras.LOGGER.debug("Adaptive VSync unavailable: this build is running on LWJGL 2");
         } catch (Throwable t) {
             Extras.LOGGER.warn("Could not determine adaptive VSync support; assuming unsupported", t);
         }

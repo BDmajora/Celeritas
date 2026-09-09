@@ -38,7 +38,6 @@ public final class Extras {
     // Loads the config now rather than on the first mixin that asks for it
     public static void initialize() {
         options();
-        LOGGER.info("Extras options loaded");
     }
 
     // Persists the current options; safe to call before initialize()

@@ -420,8 +420,6 @@ public class EntityRendererMixin {
                     && !this.mc.gameSettings.hideGUI && !this.mc.playerController.isSpectator()) {
                 this.enableLightmap();
                 this.itemRenderer.renderItemInFirstPerson(partialTicks);
-                // Unit 0 still holds whatever the arm draw sampled; identify it once (see the probe's javadoc).
-                UmbraRenderingPipeline.logHandBoundTextureProbe();
                 this.disableLightmap();
             }
         } finally {

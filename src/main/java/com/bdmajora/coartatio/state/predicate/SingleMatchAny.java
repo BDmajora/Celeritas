@@ -6,13 +6,11 @@ import net.minecraft.block.state.IBlockState;
 
 import java.util.Arrays;
 
-/**
- * {@code property=a|b|c}.
- *
- * <p>Vanilla builds this as a {@code Predicates.or} over one anonymous inner class per value, which
- * is a composite object, a transformed {@code Iterable}, and N closures. This is one object and one
- * array.
- */
+// property=a|b|c — one property against a set of accepted values
+// Vanilla builds the same thing as a Predicates.or over one anonymous inner class per value: a composite
+// object, a transformed Iterable, and N closures. This is one object and one array
+// property and values are public because AllMatchAnyObject.tryFlatten reads them straight out when folding a
+// list of these into its own arrays
 public final class SingleMatchAny implements Predicate<IBlockState> {
     public final IProperty<?> property;
     public final Object[] values;

@@ -1,7 +1,6 @@
 package com.bdmajora.impetus.lwjgl.lwjgl2;
 
 import org.lwjgl.BufferUtils;
-import com.bdmajora.impetus.lwjgl.DebugMessageHandler;
 import com.bdmajora.impetus.lwjgl.LWJGLService;
 import com.bdmajora.impetus.lwjgl.lwjgl2.memory.MemoryStack;
 import com.bdmajora.impetus.lwjgl.lwjgl2.memory.MemoryUtilities;
@@ -30,9 +29,7 @@ import org.lwjgl.opengl.GL33;
 import org.lwjgl.opengl.GL43;
 import org.lwjgl.opengl.GLContext;
 import org.lwjgl.opengl.GLSync;
-import org.lwjgl.opengl.KHRDebug;
 
-import java.io.PrintStream;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
@@ -44,11 +41,9 @@ import java.nio.IntBuffer;
 public record LWJGL2Service(
         VAOMode vaoMode,
         TimerQueryMode timerQueryMode,
-        DebugMode debugMode,
         VertexAttribIMode vertexAttribIMode,
         Long2ObjectOpenHashMap<GLSync> syncObjects) implements LWJGLService {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/LWJGL2Service");
-    private static final LWJGL2DebugSupport debugSupport = new LWJGL2DebugSupport();
 
     private enum VAOMode {
         CORE {
@@ -95,23 +90,6 @@ public record LWJGL2Service(
         public abstract long getQueryObjectui64(int id, int pname);
     }
 
-    private enum DebugMode {
-        KHR {
-            @Override public void objectLabel(int identifier, int name, CharSequence label) { KHRDebug.glObjectLabel(identifier, name, label); }
-            @Override public void pushDebugGroup(int source, int id, CharSequence message) { KHRDebug.glPushDebugGroup(source, id, message); }
-            @Override public void popDebugGroup() { KHRDebug.glPopDebugGroup(); }
-        },
-        NONE {
-            @Override public void objectLabel(int identifier, int name, CharSequence label) { /* no-op */ }
-            @Override public void pushDebugGroup(int source, int id, CharSequence message) { /* no-op */ }
-            @Override public void popDebugGroup() { /* no-op */ }
-        };
-
-        public abstract void objectLabel(int identifier, int name, CharSequence label);
-        public abstract void pushDebugGroup(int source, int id, CharSequence message);
-        public abstract void popDebugGroup();
-    }
-
     private enum VertexAttribIMode {
         CORE {
             @Override public void vertexAttribIPointer(int index, int size, int type, int stride, long pointer) {
@@ -156,13 +134,6 @@ public record LWJGL2Service(
             LOGGER.warn("ARB_timer_query extension not available - GPU profiling will be disabled");
         }
 
-        DebugMode debugMode;
-        if (caps.GL_KHR_debug || caps.OpenGL43) {
-            debugMode = DebugMode.KHR;
-        } else {
-            debugMode = DebugMode.NONE;
-        }
-
         VertexAttribIMode vertexAttribIMode;
         if (caps.OpenGL30) {
             vertexAttribIMode = VertexAttribIMode.CORE;
@@ -172,7 +143,7 @@ public record LWJGL2Service(
             vertexAttribIMode = VertexAttribIMode.NONE;
         }
 
-        return new LWJGL2Service(vaoMode, timerQueryMode, debugMode, vertexAttribIMode, new Long2ObjectOpenHashMap<>());
+        return new LWJGL2Service(vaoMode, timerQueryMode, vertexAttribIMode, new Long2ObjectOpenHashMap<>());
     }
 
     // ===================== CAPABILITIES =====================
@@ -214,9 +185,6 @@ public record LWJGL2Service(
             case ARB_shader_storage_buffer_object -> caps.GL_ARB_shader_storage_buffer_object;
             case ARB_sync -> caps.GL_ARB_sync;
             case ARB_timer_query -> caps.GL_ARB_timer_query;
-            case ARB_debug_output -> caps.GL_ARB_debug_output;
-            case KHR_debug -> caps.GL_KHR_debug;
-            case AMD_debug_output -> caps.GL_AMD_debug_output;
             case ARB_uniform_buffer_object -> caps.GL_ARB_uniform_buffer_object;
             case ARB_vertex_array_object -> caps.GL_ARB_vertex_array_object;
             case ARB_map_buffer_range -> caps.GL_ARB_map_buffer_range;
@@ -673,36 +641,6 @@ public record LWJGL2Service(
     @Override
     public long glGetQueryObjectui64(int id, int pname) {
         return timerQueryMode.getQueryObjectui64(id, pname);
-    }
-
-    // ===================== DEBUG OPERATIONS =====================
-
-    @Override
-    public PrintStream getDebugStream() { return System.err; }
-
-    @Override
-    public int setupDebugCallback(DebugMessageHandler handler) {
-        return debugSupport.setupDebugCallback(handler);
-    }
-
-    @Override
-    public void disableDebugCallback() {
-        debugSupport.disableDebugCallback();
-    }
-
-    @Override
-    public void glObjectLabel(int identifier, int name, CharSequence label) {
-        debugMode.objectLabel(identifier, name, label);
-    }
-
-    @Override
-    public void glPushDebugGroup(int source, int id, CharSequence message) {
-        debugMode.pushDebugGroup(source, id, message);
-    }
-
-    @Override
-    public void glPopDebugGroup() {
-        debugMode.popDebugGroup();
     }
 
     // ===================== TEXTURE OPERATIONS =====================

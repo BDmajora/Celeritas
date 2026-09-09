@@ -140,9 +140,9 @@ public final class MatrixUniforms {
                 // Umbra's precise camera-position split (CameraUniforms): the integer and fractional parts are computed
                 // in DOUBLE precision on the CPU, so the fractional part stays exact ([0,1)) no matter how far from the
                 // world origin the camera is. Complementary's voxelization (SceneToVoxel uses cameraPositionBestFract)
-                // switches to this path when UMBRA_VERSION is defined; the OptiFine float `fract(cameraPosition)` path
+                // switches to this path when IRIS_VERSION is defined; the OptiFine float `fract(cameraPosition)` path
                 // loses low bits at large coordinates, so the voxel grid boundary wobbles frame-to-frame and colored
-                // lighting shimmers along block edges. Providing these + defining UMBRA_VERSION removes that.
+                // lighting shimmers along block edges. Providing these + defining IRIS_VERSION removes that.
                 .uniform3i(UniformUpdateFrequency.PER_FRAME, "cameraPositionInt",
                         () -> CameraUniforms.getCameraPositionInt(CameraUniforms.getCurrentCameraPositionUnshifted()))
                 .uniform3f(UniformUpdateFrequency.PER_FRAME, "cameraPositionFract",
@@ -175,8 +175,7 @@ public final class MatrixUniforms {
      * non-finite inverse therefore makes {@code gl_Position} NaN for all terrain, the non-finite guard in
      * {@link com.bdmajora.impetus.umbra.terrain.ImpetusTerrainTransformer} collapses every one of those vertices behind
      * the far plane, and the world silently disappears while entities, block entities and particles keep drawing.
-     * That is the recurring "world unloads randomly" report, and because the guard clips the vertex before any
-     * fragment runs, its {@code iris_nanFlag} could never be observed.
+     * That is the recurring "world unloads randomly" report.
      * <p>
      * Identity is wrong, but it is finite: one frame renders from the wrong basis instead of not rendering at all, and
      * the log names the uniform.

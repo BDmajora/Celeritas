@@ -428,13 +428,19 @@ public final class ExtrasOptionPages {
                 OptionGroup.Builder builder = OptionGroup.createBuilder()
                         .setId(group("particles." + modId));
 
+                // Vanilla particles drop the mod suffix; "(minecraft)" repeated down the whole list says nothing
+                // the user does not already know. A modded id stays, since that is the only marker of where a
+                // particle class came from
+                boolean showModId = !"minecraft".equals(modId);
+
                 for (Map.Entry<String, String> classEntry : classes) {
                     String fullName = classEntry.getKey();
                     String simpleName = classEntry.getValue();
+                    String label = showModId ? simpleName + " (" + modId + ")" : simpleName;
 
                     builder.add(OptionImpl.createBuilder(boolean.class, STORAGE)
                             .setId(option("particles.class." + fullName, boolean.class))
-                            .setName(TextComponent.literal(simpleName + " (" + modId + ")"))
+                            .setName(TextComponent.literal(label))
                             .setTooltip(TextComponent.literal(fullName))
                             .setControl(TickBoxControl::new)
                             .setBinding(

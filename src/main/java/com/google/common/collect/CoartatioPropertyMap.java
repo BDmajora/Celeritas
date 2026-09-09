@@ -2,41 +2,23 @@ package com.google.common.collect;
 
 import java.util.Map;
 
-/**
- * A compact {@link ImmutableMap} for block state property maps.
- *
- * <p><b>This class lives in Guava's package on purpose.</b> {@code ImmutableMap}'s constructor is
- * package-private, so a subclass has to share Guava's runtime package — same package name and same
- * classloader. It is loaded through
- * {@code com.bdmajora.coartatio.util.ClassDefineTool}, and must therefore reference <b>only</b>
- * {@code com.google.common.collect} and {@code java.*}: if Guava turns out to be on a loader that
- * cannot see the Impetus jar, any other import becomes a {@code NoClassDefFoundError} at first use.
- *
- * <h2>What it saves</h2>
- *
- * <p>Guava's {@code RegularImmutableMap} stores an {@code ImmutableMapEntry} object per entry — key,
- * value, hash and a collision pointer — plus an entry array and a hash table roughly twice the entry
- * count. For a four-property block state that is around 240 bytes.
- *
- * <p>Here the keys array is <i>shared by every state of a block</i>, because every state of a block
- * has exactly the same properties in the same order and differs only in the values. So a state costs
- * this object plus a values array: about 72 bytes, with the keys paid for once per block instead of
- * once per state.
- *
- * <p>Lookups are a linear scan. Blocks have single-digit property counts, and a scan of one small
- * array beats a hash probe plus a pointer chase at that size.
- *
- * <h2>Why the overrides matter</h2>
- *
- * <p>{@code ImmutableMap.hashCode()} is {@code Sets.hashCodeImpl(entrySet())}, and {@code entrySet()}
- * lazily builds <i>and caches</i> an {@code ImmutableSet} of {@code Entry} objects. Since
- * {@code StateImplementation.hashCode()} delegates straight to this map, and block states live in
- * hash maps all over the game, inheriting that behaviour would materialise a full entry set per
- * state on first use and undo the entire saving. {@code hashCode}, {@code equals},
- * {@code containsKey} and {@code containsValue} are all answered from the arrays for that reason.
- */
+// An ImmutableMap replacement for the property->value map every block state carries
+//
+// The package is com.google.common.collect on purpose, not by accident: ImmutableMap's constructor is
+// package-private, so subclassing it requires sharing Guava's runtime package — same package name AND same
+// classloader. ClassDefineTool injects this class into whichever loader Guava ended up on, which is why the
+// imports below are only com.google.common.collect and java.*. Any other import resolves against a loader that
+// may not be able to see the Impetus jar and turns into a NoClassDefFoundError the first time it is touched.
+//
+// The saving: Guava's RegularImmutableMap allocates one ImmutableMapEntry per entry (key, value, hash, collision
+// pointer), an entry array, and a hash table about twice the entry count — roughly 240 bytes for a four-property
+// state. Here the keys array is shared by every state of a block, since all states of a block have the same
+// properties in the same order and differ only in the values, so a state costs this object plus its values array:
+// about 72 bytes, and the keys are paid for once per block instead of once per state.
 public final class CoartatioPropertyMap<K, V> extends ImmutableMap<K, V> {
+    // Shared across every state of the owning block — never mutate, never hand out
     private final Object[] keys;
+    // Parallel to keys: values[i] belongs to keys[i]. Per-state, so this is the only array a state really owns
     private final Object[] values;
 
     public CoartatioPropertyMap(Object[] keys, Object[] values) {
@@ -44,6 +26,9 @@ public final class CoartatioPropertyMap<K, V> extends ImmutableMap<K, V> {
         this.values = values;
     }
 
+    // Linear scan rather than a hash probe: blocks have single-digit property counts, and walking one small
+    // contiguous array beats hashing plus a pointer chase at that size
+    // Identity is tried first because properties are interned singletons, so the equals call is normally skipped
     private int indexOf(Object key) {
         Object[] keys = this.keys;
 
@@ -59,6 +44,7 @@ public final class CoartatioPropertyMap<K, V> extends ImmutableMap<K, V> {
     @Override
     @SuppressWarnings("unchecked")
     public V get(Object key) {
+        // ImmutableMap forbids null keys, so a null lookup is a miss rather than a scan
         if (key == null) {
             return null;
         }
@@ -77,6 +63,8 @@ public final class CoartatioPropertyMap<K, V> extends ImmutableMap<K, V> {
         return this.keys.length == 0;
     }
 
+    // Overridden rather than inherited: the inherited version goes through get(), which is the same scan, but
+    // this one skips unwrapping the value
     @Override
     public boolean containsKey(Object key) {
         return key != null && indexOf(key) >= 0;
@@ -88,6 +76,7 @@ public final class CoartatioPropertyMap<K, V> extends ImmutableMap<K, V> {
             return false;
         }
 
+        // Straight scan of the values array; the inherited version would build the entry set to answer this
         for (Object candidate : this.values) {
             if (candidate == value || value.equals(candidate)) {
                 return true;
@@ -97,16 +86,15 @@ public final class CoartatioPropertyMap<K, V> extends ImmutableMap<K, V> {
         return false;
     }
 
+    // Guava asks this to decide whether the map retains more memory than it exposes and should be copied
+    // Both arrays are exactly sized, so it never needs copying
     @Override
     boolean isPartialView() {
         return false;
     }
 
-    /**
-     * Only reached if something genuinely iterates the map. {@code ImmutableMap} caches the result,
-     * so a state that is iterated once pays for an entry set once — the same cost vanilla would
-     * always have paid.
-     */
+    // Only reached when something genuinely iterates the map. ImmutableMap caches the result, so a state that is
+    // iterated once pays for an entry set once — the cost vanilla would have paid unconditionally
     @Override
     @SuppressWarnings("unchecked")
     ImmutableSet<Map.Entry<K, V>> createEntrySet() {
@@ -119,7 +107,12 @@ public final class CoartatioPropertyMap<K, V> extends ImmutableMap<K, V> {
         return ImmutableSet.copyOf(entries);
     }
 
-    /** {@code Map.hashCode} contract: the sum of the entries' hashes. Computed without allocating. */
+    // Must be overridden, and this is the whole reason the class is worth having
+    // ImmutableMap.hashCode() is Sets.hashCodeImpl(entrySet()), and entrySet() lazily builds AND caches an
+    // ImmutableSet of Entry objects. StateImplementation.hashCode() delegates straight here, and block states
+    // sit in hash maps all over the game, so inheriting it would materialise a full entry set per state on first
+    // use and give back every byte saved above
+    // Map.hashCode's contract is the sum of the entries' hashes, which is computed here without allocating
     @Override
     public int hashCode() {
         int hash = 0;
@@ -132,17 +125,21 @@ public final class CoartatioPropertyMap<K, V> extends ImmutableMap<K, V> {
         return hash;
     }
 
+    // Same motivation as hashCode: answered from the arrays so no entry set is ever materialised
     @Override
     public boolean equals(Object object) {
         if (object == this) {
             return true;
         }
+        // Compared against the Map interface, not against this class, because Map.equals must hold across
+        // implementations — a vanilla ImmutableMap with the same content has to compare equal
         if (!(object instanceof Map)) {
             return false;
         }
 
         Map<?, ?> other = (Map<?, ?>) object;
 
+        // Sizes first: equal sizes plus every one of our entries present in theirs implies the maps match
         if (other.size() != this.keys.length) {
             return false;
         }
@@ -151,6 +148,8 @@ public final class CoartatioPropertyMap<K, V> extends ImmutableMap<K, V> {
             Object mine = this.values[i];
             Object theirs = other.get(this.keys[i]);
 
+            // A null on our side needs the containsKey check to tell "mapped to null" from "absent"; a non-null
+            // one does not, since get returning null already means unequal
             if (mine == null ? theirs != null || !other.containsKey(this.keys[i]) : !mine.equals(theirs)) {
                 return false;
             }
@@ -159,6 +158,8 @@ public final class CoartatioPropertyMap<K, V> extends ImmutableMap<K, V> {
         return true;
     }
 
+    // Same {k=v, k=v} shape AbstractMap produces, built straight from the arrays so debuggers and crash reports
+    // do not force an entry set into existence just by printing a state
     @Override
     public String toString() {
         if (this.keys.length == 0) {

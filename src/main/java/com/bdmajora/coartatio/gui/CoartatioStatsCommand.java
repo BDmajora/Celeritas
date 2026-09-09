@@ -8,17 +8,14 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.text.TextComponentString;
 import net.minecraft.util.text.TextFormatting;
 
-/**
- * {@code /coartatio} — prints what the memory subsystem has saved, in megabytes.
- *
- * <p>Registered client-side, so it works in single-player and on any server without the mod.
- *
- * <p>Two sections. The first is per-feature savings; each line says whether the number was
- * <b>measured</b> (texture pixel data and the class loader cache, where the released arrays were
- * summed before release) or <b>estimated</b> (a shared-object count times a per-object size). The
- * second is the live heap, which is what to compare across a launch with the mod disabled — that is
- * the only honest way to get a true before-and-after, and it is why the figures are printed together.
- */
+// /coartatio — prints what the memory subsystem has saved, in megabytes
+// Registered client-side, so it works in single-player and on any server, including servers without the mod
+// The output has two sections. The first is per-feature savings, and each line says whether its number was
+// MEASURED (texture pixel data and the class loader cache, where the released arrays were summed before being
+// dropped) or ESTIMATED (a shared-object count times a per-object size)
+// The second is the live heap. That is the figure to compare against a launch with the mod disabled, which is
+// the only honest before-and-after available, and the reason both sections are printed together rather than the
+// estimates being presented on their own
 public class CoartatioStatsCommand extends CommandBase {
     @Override
     public String getName() {

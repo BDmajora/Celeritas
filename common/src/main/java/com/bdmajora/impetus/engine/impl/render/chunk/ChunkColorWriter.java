@@ -3,21 +3,23 @@ package com.bdmajora.impetus.engine.impl.render.chunk;
 import com.bdmajora.impetus.engine.api.util.ColorABGR;
 import com.bdmajora.impetus.engine.api.util.ColorMixer;
 
-/**
- * How per-vertex ambient occlusion is folded into the chunk vertex colour.
- * <p>
- * {@link #IMPETUS} multiplies AO into RGB, which is what vanilla 1.12.2 effectively does. {@link #SEPARATE_AO}
- * instead carries AO in the alpha channel and leaves RGB as the pure block/biome tint — the shaders.properties
- * {@code separateAo} directive, which every modern pack sets, so its own lighting model can apply AO itself
- * (Umbra does exactly this split in {@code XHFPTerrainVertex}).
- */
+// The two ways per-vertex ambient occlusion can be folded into a chunk vertex's packed colour
+// Which one the mesher uses is decided by the active shader pack, not by the engine, so the choice is an enum
+// the mesher asks for once per quad rather than a branch buried in the encoder
 public enum ChunkColorWriter {
+    // AO goes in the alpha channel and RGB stays the pure block/biome tint
+    // This is the shaders.properties `separateAo` directive, which effectively every modern pack sets, because
+    // the pack wants to apply AO itself inside its own lighting model instead of receiving it pre-multiplied
+    // Iris does exactly this split in XHFPTerrainVertex
     SEPARATE_AO {
         @Override
         public int writeColor(int colorWithAlpha, float aoValue) {
             return ColorABGR.withAlpha(colorWithAlpha, aoValue);
         }
     },
+    // AO multiplied straight into RGB, which is what vanilla 1.12.2 effectively does
+    // aoValue is 0..1 and the mixer wants 0..255, hence the scale; alpha is left alone because it still carries
+    // the quad's own translucency here
     IMPETUS {
         @Override
         public int writeColor(int colorWithAlpha, float aoValue) {
@@ -25,18 +27,21 @@ public enum ChunkColorWriter {
         }
     };
 
+    // Called once per vertex on the meshing hot path; colorWithAlpha is packed ABGR, aoValue is 0..1
     public abstract int writeColor(int colorWithAlpha, float aoValue);
 
-    /** The writer the terrain mesher should use right now, following the active pack's {@code separateAo}. */
+    // The writer the terrain mesher should be using right now, following the active pack's `separateAo`
+    // Read per section build rather than cached, so a pack reload takes effect on the next rebuild
     public static ChunkColorWriter active() {
         return SeparateAoState.enabled ? SEPARATE_AO : IMPETUS;
     }
 
-    /**
-     * Holder for the flag. Lives here rather than in the Umbra packages because the mesher runs on worker threads in
-     * the engine module, which must not depend on the shader-pack model.
-     */
+    // Holds the flag itself
+    // It lives here rather than in the Umbra packages on purpose: the mesher runs on worker threads inside the
+    // engine module, and the engine module must not depend on the shader-pack model. Umbra pushes the value in
+    // through set() at pack load; the engine only ever reads it
     public static final class SeparateAoState {
+        // volatile because the writer is the render thread at pack load and the readers are mesh workers
         private static volatile boolean enabled;
 
         private SeparateAoState() {

@@ -9,17 +9,12 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 
-/**
- * An immutable {@link List} that is exactly one object plus one exactly-sized array.
- *
- * <p>Ported from Hydrogen. The lists this replaces are all {@code ArrayList}s built by
- * {@code Lists.newArrayList()} and then never modified again, which means they carry a growth buffer
- * that is on average a third wasted, plus the {@code ArrayList} object itself. Across every face of
- * every baked model that adds up.
- *
- * <p>Mutating methods throw rather than silently no-op: if some mod does try to add a quad to a baked
- * model after the fact we want a loud stack trace at bake time, not a rendering bug six hours later.
- */
+// An immutable List that is exactly one object plus one exactly-sized array. Ported from Hydrogen
+// The lists this replaces are ArrayLists built by Lists.newArrayList() and then never touched again, so they
+// carry a growth buffer that is on average a third wasted, on top of the ArrayList object itself. Once per face
+// per baked model, that adds up
+// Implements List directly rather than extending AbstractList, so nothing inherits a modCount field or the
+// AbstractList iterator machinery
 public class FixedArrayList<T> implements List<T> {
     private final T[] array;
 
@@ -52,11 +47,15 @@ public class FixedArrayList<T> implements List<T> {
         return Iterators.forArray(this.array);
     }
 
+    // Cloned, not returned directly: the List contract says the caller owns the result, and handing out the
+    // backing array would let it be written through
     @Override
     public Object[] toArray() {
         return this.array.clone();
     }
 
+    // The awkward Collection.toArray(T[]) contract: allocate a new array of the caller's component type when
+    // theirs is too small, otherwise fill theirs and null-terminate the leftover so they can find the end
     @SuppressWarnings("unchecked")
     @Override
     public <T1> T1[] toArray(T1[] dst) {
@@ -75,6 +74,8 @@ public class FixedArrayList<T> implements List<T> {
         return dst;
     }
 
+    // Every mutator throws rather than silently no-opping: if a mod does try to add a quad to a baked model
+    // after the fact, that should be a loud stack trace at bake time, not a rendering bug hours later
     @Override
     public boolean add(T t) {
         throw new UnsupportedOperationException();
@@ -169,7 +170,8 @@ public class FixedArrayList<T> implements List<T> {
         return java.util.Collections.unmodifiableList(Arrays.asList(this.array).subList(fromIndex, toIndex));
     }
 
-    /** {@link List#equals} contract: equal iff same elements in the same order. */
+    // List.equals contract: equal to any List with the same elements in the same order, whatever its class
+    // Compared through the other list's iterator so it works against a LinkedList as well as an ArrayList
     @Override
     public boolean equals(Object o) {
         if (this == o) {

@@ -60,7 +60,6 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
             throw new RuntimeException("Couldn't save configuration changes", e);
         }
 
-        LOGGER.info("Flushed changes to Impetus configuration");
     }
 
     public static class PerformanceSettings {

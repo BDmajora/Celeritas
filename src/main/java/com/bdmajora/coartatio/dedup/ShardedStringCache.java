@@ -2,27 +2,24 @@ package com.bdmajora.coartatio.dedup;
 
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 
-/**
- * A string pool striped across independently locked shards.
- *
- * <p>{@link DeduplicationCache} takes one lock per call, which is right for the model pools — those
- * are filled by a single-threaded bake. NBT keys are not: they are interned from the netty worker
- * that decodes packets, from the chunk IO thread, and from the client thread, several thousand times
- * a second while chunks stream in. One global monitor there would turn a memory win into a
- * throughput loss, which is not a trade worth making.
- *
- * <p>Striping by hash means threads working on different keys almost never contend, and the shard
- * for a given key is fixed, so a key still resolves to exactly one canonical instance.
- *
- * <p>Sixteen shards is enough to make contention negligible at 1.12.2's thread counts without the
- * per-shard hash tables costing more than the strings they save.
- */
+// A string pool striped across independently locked shards
+// DeduplicationCache takes one lock per call, which is right for the model pools because a bake is
+// single-threaded. NBT keys are not: they are interned from the netty worker decoding packets, from the chunk
+// IO thread and from the client thread, several thousand times a second while chunks stream in, and one global
+// monitor there turns a memory win into a throughput loss
+// Striping by hash means threads working on different keys almost never contend, and because a key's shard is
+// fixed it still resolves to exactly one canonical instance
 public final class ShardedStringCache {
+    // Sixteen is enough to make contention negligible at 1.12.2's thread counts without the per-shard hash
+    // tables costing more than the strings they save
+    // A power of two so the shard index is a mask rather than a modulo
     private static final int SHARD_COUNT = 16;
     private static final int SHARD_MASK = SHARD_COUNT - 1;
 
     private final String name;
+    // The overall cap divided evenly; at least 1 so a tiny configured limit cannot produce a zero-capacity shard
     private final int shardSizeLimit;
+    // Each shard is its own monitor, which is why they are locked individually below rather than as a group
     private final ObjectOpenHashSet<String>[] shards;
 
     private long requests;
@@ -74,7 +71,9 @@ public final class ShardedStringCache {
         }
     }
 
-    /** Empties every shard. Strings already issued stay valid; they simply stop being shared. */
+    // Empties every shard. Strings already issued stay valid, they just stop being shared with new arrivals
+    // trim() after clear() is what actually gives the memory back: fastutil's clear leaves the grown table in
+    // place, so without it a spike in unique keys is never released
     public void clear() {
         for (ObjectOpenHashSet<String> shard : this.shards) {
             synchronized (shard) {
@@ -87,7 +86,8 @@ public final class ShardedStringCache {
         this.hits = 0;
     }
 
-    /** Number of lookups that found an existing entry, i.e. strings this pool prevented. */
+    // Lookups that found an existing entry, i.e. the number of strings this pool kept from being allocated
+    // Read without a lock: it is a report figure, and a slightly stale count is not worth serialising the pool
     public long shared() {
         return this.hits;
     }

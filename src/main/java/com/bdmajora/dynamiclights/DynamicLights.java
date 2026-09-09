@@ -66,7 +66,6 @@ public final class DynamicLights {
     /** Loads the config now rather than on the first mixin that asks for it. */
     public static void initialize() {
         options();
-        LOGGER.info("Dynamic Lights options loaded");
     }
 
     /**

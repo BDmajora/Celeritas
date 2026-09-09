@@ -183,27 +183,32 @@ public class VintageDrawContext implements DrawContext {
         return font.FONT_HEIGHT;
     }
 
+    // Sidebar heading for a group of option pages
+    // Impetus' subsystems (umbra, coartatio, fulgor, equilibrium) are not separately registered Forge mods, so
+    // the indexed mod list has no container for them and the raw lowercase mod id would come back. Everything is
+    // therefore capitalised on the way out, which keeps every heading in the sidebar in one style instead of
+    // mixing "Impetus" against "coartatio"
+    // A real third-party mod still wins with its own declared display name, since that is the name its author
+    // chose and is already properly cased
     @Override
     public TextComponent getFriendlyModName(String modId) {
-        if ("umbra".equals(modId)) {
-            return TextComponent.literal("Umbra");
+        var container = Loader.instance().getIndexedModList().get(modId);
+        if (container != null) {
+            return TextComponent.literal(container.getName());
         }
 
-        var container = Loader.instance().getIndexedModList().get(modId);
-        if (container == null) {
-            return DrawContext.super.getFriendlyModName(modId);
-        }
-        return TextComponent.literal(container.getName());
+        return TextComponent.literal(capitalize(modId));
     }
 
-    @Override
-    public @Nullable String getModVersion(String modId) {
-        if ("umbra".equals(modId)) {
-            return "1.12.2-port";
+    // First character upper-cased, rest untouched; anything empty or already capitalised passes straight through
+    // Character.toUpperCase rather than String.toUpperCase on the first character: the String form applies the
+    // default locale, which on a Turkish install maps "i" to the dotted capital "I" and renders "Impetus" wrong
+    private static String capitalize(String modId) {
+        if (modId == null || modId.isEmpty()) {
+            return modId;
         }
 
-        var container = Loader.instance().getIndexedModList().get(modId);
-        return container != null ? container.getDisplayVersion() : null;
+        return Character.toUpperCase(modId.charAt(0)) + modId.substring(1);
     }
 
     @Override

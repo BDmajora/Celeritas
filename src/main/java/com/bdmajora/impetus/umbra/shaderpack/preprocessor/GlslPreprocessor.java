@@ -1,7 +1,5 @@
 package com.bdmajora.impetus.umbra.shaderpack.preprocessor;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -17,7 +15,6 @@ import java.util.regex.Pattern;
 // Handles: finding #version, injecting #define macros after it, and injecting a default #version (120) when missing.
 // Legacy fixed-function built-in substitution (gl_MultiTexCoord0 etc) is NOT done here - see replaceLegacyBuiltins.
 public final class GlslPreprocessor {
-    private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
     // Trailing \r? is load-bearing: callers split on "\n" alone and call matches(), which must consume the whole
     // line. Without it, Windows line endings failed every #version match, silently breaking detectVersion,
@@ -478,7 +475,6 @@ public final class GlslPreprocessor {
         }
 
         String result = source;
-        int rewritten = 0;
         for (Map.Entry<String, String> lookup : LEGACY_TEXTURE_LOOKUPS.entrySet()) {
             if (!result.contains(lookup.getKey())) {
                 continue;
@@ -493,16 +489,11 @@ public final class GlslPreprocessor {
                 String subscript = call.group(2) == null ? "" : call.group(2);
                 call.appendReplacement(rewrite,
                         Matcher.quoteReplacement(lookup.getValue() + "(" + call.group(1) + subscript));
-                rewritten++;
             }
             call.appendTail(rewrite);
             result = rewrite.toString();
         }
 
-        if (rewritten > 0) {
-            LOGGER.info("[Umbra] Program '{}': repointed {} legacy texture lookup(s) on integer sampler(s) {} to the core built-in (no texture2D overload exists for them)",
-                    name, rewritten, samplers);
-        }
         return result;
     }
 

@@ -229,8 +229,6 @@ public final class ShaderStorageBufferHolder {
 
             this.buffers.put(definition.index, buffer);
             ACTIVE_BUFFERS.put(buffer, bytes);
-            LOGGER.info("[Umbra] Shader storage buffer {} allocated: {} bytes{}", definition.index, bytes,
-                    definition.relative ? " (screen-relative)" : "");
         }
 
         this.width = newWidth;

@@ -101,11 +101,6 @@ public final class FulgorOptionPages {
                         null,
                         (config, value) -> config.showDebugOverlay = value,
                         config -> config.showDebugOverlay))
-                .add(liveToggle("log_statistics",
-                        "impetus.options.fulgor.log_statistics",
-                        null,
-                        (config, value) -> config.logStatistics = value,
-                        config -> config.logStatistics))
                 .add(liveToggle("warn_on_illegal_thread_access",
                         "impetus.options.fulgor.thread_warnings",
                         null,

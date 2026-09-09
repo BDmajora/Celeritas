@@ -1,6 +1,5 @@
 package com.bdmajora.dynamiclights.mixin;
 
-import com.bdmajora.dynamiclights.DynamicLights;
 import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
@@ -16,9 +15,9 @@ import java.util.Set;
  * Turning dynamic lights off leaves the mixins applied and inert.
  */
 public class DynamicLightsMixinPlugin implements IMixinConfigPlugin {
+    // Nothing to prepare; the interface requires the method
     @Override
     public void onLoad(String mixinPackage) {
-        DynamicLights.LOGGER.info("Dynamic Lights subsystem loading");
     }
 
     @Override

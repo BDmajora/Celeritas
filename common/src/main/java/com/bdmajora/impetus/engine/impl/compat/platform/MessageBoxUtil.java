@@ -39,7 +39,6 @@ public final class MessageBoxUtil {
         } catch (Throwable t) {
             // AWT can fail in exotic launcher setups (e.g. macOS without -XstartOnFirstThread juggling); the
             // warning is already in the log, so never let the dialog itself take the game down.
-            LOGGER.debug("Could not display message box", t);
         }
     }
 }

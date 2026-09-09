@@ -31,7 +31,6 @@ import com.bdmajora.coartatio.CoartatioConfig;
 import com.bdmajora.coartatio.gui.CoartatioStatsCommand;
 import com.bdmajora.coartatio.launch.ClassLoaderCleaner;
 import com.bdmajora.dynamiclights.DynamicLights;
-import com.bdmajora.equilibrium.Equilibrium;
 import com.bdmajora.equilibrium.gui.EquilibriumStatsCommand;
 import com.bdmajora.extras.Extras;
 import com.bdmajora.fulgor.Fulgor;
@@ -94,13 +93,6 @@ public class ImpetusVintage {
         ClientCommandHandler.instance.registerCommand(new FulgorStatsCommand());
         ClientCommandHandler.instance.registerCommand(new EquilibriumStatsCommand());
 
-        // Equilibrium's options were resolved during coremod setup, long before this. Logging the
-        // summary here rather than there puts it after the mod list in the log, which is where
-        // someone reading a crash report will already be looking to find out what else is installed.
-        for (String line : Equilibrium.statistics()) {
-            Equilibrium.LOGGER.info(line);
-        }
-
         // Phase 1: load (parse only) the selected shader pack. No rendering changes happen here — if no pack is
         // selected or loading fails, Impetus renders exactly as before.
         Umbra.initialize(PlatformUtil.getGameDir().toPath());
@@ -128,14 +120,6 @@ public class ImpetusVintage {
         // unambiguous "the world is gone" signal on 1.12.2 — WorldEvent.Unload fires per dimension.
         if (CoartatioConfig.get().clearPoolsOnWorldLeave) {
             Coartatio.onWorldLeave();
-        }
-
-        // Leaving the world is the natural boundary for the lighting counters: they are cumulative
-        // over a session, and the interesting comparison is between one world and the next.
-        if (FulgorConfig.get().logStatistics) {
-            for (String line : Fulgor.statistics()) {
-                Fulgor.LOGGER.info(line);
-            }
         }
     }
 

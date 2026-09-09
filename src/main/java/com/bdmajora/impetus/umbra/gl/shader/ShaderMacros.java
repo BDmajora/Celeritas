@@ -11,7 +11,7 @@ public final class ShaderMacros {
     // Minecraft version encoded the OptiFine way: 1.12.2 -> 11202
     public static final int MC_VERSION = 11202;
 
-    // Programs forced to compile as plain OptiFine 1.12.2 (IS_IRIS/UMBRA_VERSION withheld) so they take the
+    // Programs forced to compile as plain OptiFine 1.12.2 (IS_IRIS/IRIS_VERSION withheld) so they take the
     // path they authored for this MC version instead of the Umbra path. Sildur's gbuffers_water/composite1 pair
     // must be listed together — one writes the wave normal to gl_FragData[2] (DRAWBUFFERS:412), the other reads
     // it from colortex2 — but setPackLegacyPrograms detects that pairing automatically from the pack's own guards.
@@ -61,7 +61,7 @@ public final class ShaderMacros {
         }
         Map<String, String> scoped = new LinkedHashMap<>(macros);
         scoped.remove("IS_IRIS");
-        scoped.remove("UMBRA_VERSION");
+        scoped.remove("IRIS_VERSION");
         return scoped;
     }
 
@@ -81,23 +81,28 @@ public final class ShaderMacros {
         // Resource-pack-declared PBR texture format (assets/minecraft/optifine/texture.properties `format=`),
         // e.g. MC_TEXTURE_FORMAT_LAB_PBR + MC_TEXTURE_FORMAT_LAB_PBR_1_3. Umbra parity.
         com.bdmajora.impetus.umbra.pbr.TextureFormatLoader.addFormatMacros(macros);
-        // Umbra feature flags for the subset of Umbra extensions this port implements. Packs declare what they can
-        // use via `umbra.features.optional` and gate on `#ifdef UMBRA_FEATURE_<NAME>` (Complementary gates its
-        // colored lighting on CUSTOM_IMAGES).
+        // Feature flags for the subset of the Iris extensions this port implements, one IRIS_FEATURE_<NAME>
+        // define each. Packs gate on `#ifdef IRIS_FEATURE_<NAME>` — Complementary's colored lighting hangs off
+        // IRIS_FEATURE_CUSTOM_IMAGES, and without that define its shadowcomp pass never declares voxel_sampler.
         com.bdmajora.impetus.umbra.features.FeatureFlags.addUsableDefines(macros);
-        // Umbra identity define: packs gate their Umbra-exclusive uniform DECLARATIONS on this (Complementary's
-        // uniforms.glsl declares renderStage/is_invisible behind #ifdef IS_IRIS). Everything that block declares at
-        // MC_VERSION 11202 is provided by CommonUniforms.
+        // The three names below (IS_IRIS, IRIS_VERSION, and the IRIS_FEATURE_* prefix above) are what shader packs
+        // read to tell an Iris-class pipeline from plain OptiFine. They are the pack-facing contract, NOT our own
+        // naming: this subsystem is called Umbra everywhere else, but renaming these makes every pack fall back to
+        // its OptiFine path — Complementary puts up its "Colored Lighting is not supported on Optifine" screen and
+        // drops colored lighting entirely. Leave them spelled exactly as Iris spells them.
+        // IS_IRIS specifically gates the pack's Iris-exclusive uniform DECLARATIONS (Complementary's uniforms.glsl
+        // declares renderStage/is_invisible behind it); everything that block declares at MC_VERSION 11202 is
+        // uploaded by CommonUniforms, so claiming it is honest.
         macros.put("IS_IRIS", "");
-        // Umbra version, encoded major*10000 + minor*100 + bugfix (StandardMacros.getFormattedUmbraVersion). Packs gate
+        // Iris version, encoded major*10000 + minor*100 + bugfix (StandardMacros.getFormattedIrisVersion). Packs gate
         // real behavior on this: Complementary's common.glsl takes `cameraPositionBestFract = cameraPositionFract`
-        // (the precise double-derived split we now upload) at `UMBRA_VERSION >= 10800`, instead of the OptiFine
+        // (the precise double-derived split we now upload) at `IRIS_VERSION >= 10800`, instead of the OptiFine
         // `fract(cameraPosition)` path whose float precision loss makes the colored-lighting voxel grid — and thus
         // block-edge lighting — shimmer at world coordinates far from origin. 10805 is the lowest value that both
-        // enables that path AND leaves every legacy `UMBRA_VERSION < N` workaround exactly where undefined(=0) left it
+        // enables that path AND leaves every legacy `IRIS_VERSION < N` workaround exactly where undefined(=0) left it
         // (the 10800..10804 skybasic moon-discard stays off; the <10902 skytextured sun fallback stays on — that
         // geometric fallback is more reliable than our still-partial fixed-function renderStage mapping).
-        macros.put("UMBRA_VERSION", "10805");
+        macros.put("IRIS_VERSION", "10805");
         // Umbra render-stage constants (WorldRenderingPhase ordinals, exact Umbra order) for the renderStage uniform.
         macros.put("MC_RENDER_STAGE_NONE", "0");
         macros.put("MC_RENDER_STAGE_SKY", "1");

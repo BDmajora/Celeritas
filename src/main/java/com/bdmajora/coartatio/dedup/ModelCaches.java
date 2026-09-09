@@ -7,44 +7,35 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-/**
- * Bake-scoped pools, opened and closed around a resource reload by
- * {@link com.bdmajora.coartatio.Coartatio}.
- *
- * <p>{@link #QUADS} is the largest single win in Phase 1. Every full block face in the game bakes to
- * a 28-int vertex array, and the overwhelming majority of them are byte-identical: every plain cube
- * with the same texture on the same side produces the same array. In a large pack this collapses
- * millions of arrays down to tens of thousands.
- *
- * <p><b>Every array handed out by {@link #QUADS} must be treated as immutable.</b> See
- * {@code CoartatioBakedQuadMixin} for the (deliberately conservative) rule that enforces it.
- */
+// Bake-scoped pools, opened and closed around a resource reload by Coartatio
 public final class ModelCaches {
+    // The largest single saving of the lot. Every full block face bakes to a 28-int vertex array and the
+    // overwhelming majority are byte-identical, since every plain cube with the same texture on the same side
+    // produces the same array. On a large pack this collapses millions of arrays into tens of thousands
+    // IntArrays.HASH_STRATEGY is what makes it work: it hashes and compares CONTENTS, so two equal arrays from
+    // different models pool together, which reference equality would never catch
+    // Every array handed out here must be treated as immutable — see CoartatioBakedQuadMixin for the
+    // deliberately conservative rule that enforces it
     public static final DeduplicationCache<int[]> QUADS =
             new DeduplicationCache<>("Quad vertex data", CoartatioConfig.get().poolSizeLimit,
                     IntArrays.HASH_STRATEGY);
 
-    /**
-     * The {@code variant} of a {@code ModelResourceLocation} — {@code "normal"},
-     * {@code "facing=north,half=bottom"} and friends. {@code "normal"} and {@code "inventory"} alone
-     * account for a large fraction of all instances.
-     */
+    // The variant string of a ModelResourceLocation: "normal", "inventory", "facing=north,half=bottom" and so
+    // on. The first two alone account for a large fraction of every instance in the game
     public static final DeduplicationCache<String> VARIANTS =
             new DeduplicationCache<>("Model variants", CoartatioConfig.get().poolSizeLimit);
 
-    /**
-     * Quads rejected by the immutability rule, counted per implementing class.
-     *
-     * <p>Instrumentation rather than diagnostics: "the pool is empty" is indistinguishable from "the
-     * injection never fired" and from "every quad was a subclass" unless something counts the
-     * difference. The first build of the quad mixin bound to the wrong constructor and pooled
-     * nothing, and this is what tells the two apart next time.
-     */
+    // Quads the immutability rule refused, counted per implementing class
+    // Instrumentation, not diagnostics: without it "the pool is empty" is indistinguishable from "the injection
+    // never fired" and from "every quad turned out to be a subclass". The first build of the quad mixin bound to
+    // the wrong constructor and pooled nothing at all, and this is what tells those apart next time
     private static final Map<String, Integer> SKIPPED_BY_CLASS = new HashMap<>();
 
     private ModelCaches() {
     }
 
+    // Called from the quad mixin's reject path; synchronised because quad construction is not confined to one
+    // thread once mods are in the picture
     public static void recordSkippedQuad(Class<?> type) {
         String name = type.getName();
 
@@ -53,7 +44,8 @@ public final class ModelCaches {
         }
     }
 
-    /** Human-readable summary of quads that were not pooled, most frequent first. */
+    // One line for the memory report: the five commonest rejected classes, most frequent first
+    // Capped at five because a broken mod can produce a long tail nobody will read
     public static String skippedSummary() {
         synchronized (SKIPPED_BY_CLASS) {
             if (SKIPPED_BY_CLASS.isEmpty()) {
@@ -68,6 +60,7 @@ public final class ModelCaches {
         }
     }
 
+    // Called at the start of a resource reload, so each bake is measured on its own
     public static void open() {
         QUADS.open();
         VARIANTS.open();

@@ -19,7 +19,6 @@ import com.bdmajora.impetus.umbra.shaderpack.loading.ProgramId;
 import com.bdmajora.impetus.umbra.uniforms.CommonUniforms;
 import com.bdmajora.impetus.umbra.uniforms.MatrixUniforms;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -128,7 +127,6 @@ public final class UmbraTerrainProgramOverride {
             }
             ProgramSource source = sourceOpt.get();
             if (!pack.getProperties().getProgramEnabled(source.getName()).orElse(Boolean.TRUE)) {
-                LOGGER.info("[Umbra] Skipping disabled terrain program '{}'", source.getName());
                 return null;
             }
             String vshSource = source.getVertexSource().orElse(null);
@@ -158,7 +156,7 @@ public final class UmbraTerrainProgramOverride {
             int[] drawBuffers = UmbraRenderingPipeline.sanitizeDrawBuffers(
                     programId.getSourceName(), DrawBuffers.parseActive(fshSource, macros));
             // The GLSL-120 terrain path (Chocapic family: Sildur's, BSL, ...) needs the same
-            // MC_*/IS_IRIS/UMBRA_VERSION macro environment the 120 gbuffers path and the modern path
+            // MC_*/IS_IRIS/IRIS_VERSION macro environment the 120 gbuffers path and the modern path
             // already get. Without it gbuffers_water compiles its pre-Umbra/pre-1.16 branch: it writes
             // gl_FragData[2] and skips the SSR reflection + water-fog blocks (both gated behind
             // `defined(IS_IRIS) || MC_VERSION >= 11604`). Worse, DrawBuffers.parseActive above IS given
@@ -229,12 +227,6 @@ public final class UmbraTerrainProgramOverride {
                     .finalizeForDriver(shaderName + ".vsh", vsh);
             fsh = com.bdmajora.impetus.umbra.shaderpack.preprocessor.GlslPreprocessor
                     .finalizeForDriver(shaderName + ".fsh", fsh);
-            // Dump AFTER finalizing: these dumps are the port's primary diagnostic, and the hoist shifts every line
-            // below #version, so a pre-finalize dump disagrees with the line numbers in the driver's error messages.
-            com.bdmajora.impetus.umbra.pipeline.UmbraDebugDump.dumpText(
-                    "src_" + programId.getSourceName() + ".vsh", vsh);
-            com.bdmajora.impetus.umbra.pipeline.UmbraDebugDump.dumpText(
-                    "src_" + programId.getSourceName() + ".fsh", fsh);
             vertexShader = new GlShader(ShaderType.VERTEX, shaderName + ".vsh", vsh);
             fragmentShader = new GlShader(ShaderType.FRAGMENT, shaderName + ".fsh", fsh);
 
@@ -245,8 +237,6 @@ public final class UmbraTerrainProgramOverride {
             for (var attribute : options.pass().vertexType().getVertexFormat().getAttributes()) {
                 builder.bindAttribute(attribute.getName(), index++);
             }
-            LOGGER.info("[Umbra] {} resolved DRAWBUFFERS {}", programId.getSourceName(),
-                    Arrays.toString(drawBuffers));
             ProgramBlendState blendState = ProgramBlendState.from(pack.getProperties(), source.getName());
             ProgramAlphaTest alphaTest = packAlphaTest;
             UmbraRenderingPipeline.drainGlError();
@@ -268,8 +258,6 @@ public final class UmbraTerrainProgramOverride {
             ((UmbraTerrainShaderInterface) program.getInterface()).setUniforms(uniforms.buildUniforms());
             UmbraRenderingPipeline.reportGlError("terrain '" + programId.getSourceName() + "' uniforms");
 
-            LOGGER.info("[Umbra] Built terrain override program ('{}') for pass '{}'",
-                    programId.getSourceName(), options.pass().name());
             return program;
         } catch (Exception e) {
             LOGGER.error("[Umbra] Failed to build terrain override; using Impetus default", e);

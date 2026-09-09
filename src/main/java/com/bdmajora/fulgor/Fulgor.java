@@ -48,14 +48,6 @@ public final class Fulgor {
         // The config switch also gates the Block mixin, so without it the cast the fast path performs
         // would fail rather than merely mislead.
         cachedBlockLightInfo = FulgorConfig.get().cacheBlockLightInfo && !dynamicLights && !fluidloggedApi;
-
-        if (dynamicLights) {
-            LOGGER.info("Dynamic Lights detected; block luminance will be queried through it");
-        }
-
-        if (fluidloggedApi) {
-            LOGGER.info("Fluidlogged API detected; fluid states will be folded into opacity and luminance");
-        }
     }
 
     public static boolean hasDynamicLights() {

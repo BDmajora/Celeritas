@@ -9,7 +9,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.bdmajora.impetus.umbra.Umbra;
-import com.bdmajora.impetus.umbra.devtool.ShaderStateProbe;
 import com.bdmajora.impetus.umbra.material.WorldRenderingSettings;
 import com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline;
 import com.bdmajora.impetus.umbra.uniforms.CapturedRenderingState;
@@ -53,17 +52,6 @@ public class RenderItemItemIdMixin {
         // so block entities are drawn by gbuffers_entities. Umbra routes them separately. Restoring that means a
         // per-object setPhase, which is the change that previously shredded water and terrain by firing inside the
         // shadow pass — setPhase now carries an isShadowPass() guard, so it is safe to retry, but as its own change.
-
-        // Sample the GL state this draw actually lights from. Gated on world rendering: GUI item draws run after the
-        // world with no phase bound, and being first in line after the screenshot they claimed every sample of an
-        // earlier capture, so the world geometry under investigation was never measured at all.
-        UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
-        if (pipeline != null && !pipeline.isCameraPassActive()) {
-            ShaderStateProbe.noteShadowDrawSkipped();
-        }
-        if (pipeline != null && pipeline.isCameraPassActive() && ShaderStateProbe.consumeDrawProbeSlot()) {
-            pipeline.logDrawStateProbe("item " + stack.getItem().getRegistryName(), null);
-        }
     }
 
     @Inject(method = "renderItem(Lnet/minecraft/item/ItemStack;Lnet/minecraft/client/renderer/block/model/IBakedModel;)V",

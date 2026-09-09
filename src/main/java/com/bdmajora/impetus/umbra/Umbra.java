@@ -77,8 +77,6 @@ public final class Umbra {
 
         if (config.isShaderPackEnabled()) {
             loadCurrentShaderpack();
-        } else {
-            LOGGER.info("No shader pack selected; Impetus rendering unchanged.");
         }
     }
 
@@ -127,7 +125,6 @@ public final class Umbra {
             currentPack = pack;
             pipelineNeedsInit = true;
             List<String> programs = pack.getProgramSet().listDeclaredPrograms();
-            LOGGER.info("Loaded shader pack '{}' with {} program(s): {}", name, programs.size(), programs);
         } catch (Exception e) {
             currentPack = null;
             LOGGER.error("Failed to load shader pack '" + name + "'; shaders disabled", e);
