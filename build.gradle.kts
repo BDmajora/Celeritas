@@ -1,4 +1,3 @@
-import com.bdmajora.impetus.engine.gradle.build.conventions.ShadowHelper
 import com.bdmajora.impetus.engine.gradle.mdg.remapper.ReobfuscateCodeAndMixinsTask
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import com.gtnewhorizons.retrofuturagradle.mcp.ApplySourceAccessTransformersTask
@@ -7,7 +6,7 @@ import com.gtnewhorizons.retrofuturagradle.modutils.ModUtils
 plugins {
     id("org.taumc.gradle.versioning")
     id("com.gtnewhorizons.retrofuturagradle") version "1.4.8"
-    id("com.gradleup.shadow")
+    id("com.gradleup.shadow") version "9.3.0"
     id("impetus-mdg-remapper")
     id("maven-publish")
 }
@@ -29,6 +28,12 @@ configurations.compileOnly.get().extendsFrom(modCompileOnly)
 val modRuntimeOnly by configurations.creating
 configurations.runtimeOnly.get().extendsFrom(modRuntimeOnly)
 
+// CleanMix + MixinExtras, shaded into a jar that is nested inside the mod jar rather than unpacked
+// into it. BooterBootstrap extracts it at runtime only when the install has no MixinBooter, so on
+// installs that do have one Impetus contributes zero org.spongepowered.asm classes and the
+// duplicate-class race that bundling normally causes cannot occur.
+val booterLibs by configurations.creating
+
 minecraft {
     mcVersion.set("1.12.2")
 }
@@ -38,6 +43,7 @@ repositories {
         forRepository { maven("https://maven.cleanroommc.com") }
         filter {
             includeGroup("zone.rong")
+            includeGroup("com.cleanroommc")
         }
     }
     exclusiveContent {
@@ -103,7 +109,12 @@ dependencies {
 
     "shadow"("org.joml:joml:1.10.5")
     implementation("org.joml:joml:1.10.5")
-    implementation("zone.rong:mixinbooter:10.5")
+    val cleanmixVersion = "0.7.2"
+    val mixinExtrasVersion = "0.5.5"
+    compileOnly("com.cleanroommc:cleanmix:${cleanmixVersion}")
+    compileOnly("com.cleanroommc:mixinextras-common:${mixinExtrasVersion}")
+    booterLibs("com.cleanroommc:cleanmix:${cleanmixVersion}")
+    booterLibs("com.cleanroommc:mixinextras-common:${mixinExtrasVersion}")
     compileOnly("com.gtnewhorizons.retrofuturabootstrap:RetroFuturaBootstrap:1.0.11") {
         exclude(group = "org.apache.logging.log4j")
     }
@@ -133,7 +144,20 @@ tasks.register<ReobfuscateCodeAndMixinsTask>("impetusRemapJar") {
     dependsOn(mcpTasks.taskGenerateForgeSrgMappings)
 }
 
-ShadowHelper.createShadowRemapJar(project, "impetusRemapJar")
+// Inlined from buildSrc's ShadowHelper, which existed only to hold this.
+tasks.named<ShadowJar>("shadowJar") {
+    configurations = listOf()
+}
+
+tasks.register<ShadowJar>("shadowRemapJar") {
+    archiveClassifier.set("")
+    configurations = listOf(project.configurations.getByName("shadow"))
+    from(zipTree(tasks.named<Jar>("impetusRemapJar").get().archiveFile))
+    manifest.inheritFrom(tasks.named<Jar>("jar").get().manifest)
+    relocate("org.joml", "com.bdmajora.impetus.engine.impl.shadow.joml")
+    mergeServiceFiles()
+    from("COPYING", "COPYING.LESSER", "README.md")
+}
 
 tasks.named<ShadowJar>("shadowRemapJar") {
     // Forge 1.12.2 cannot scan Java 9 module descriptors.
@@ -149,7 +173,27 @@ tasks.named<ApplySourceAccessTransformersTask>("applySourceAccessTransformers") 
     accessTransformerFiles.from("src/main/resources/META-INF/impetus_at.cfg")
 }
 
+val booterLibsJar = tasks.register<ShadowJar>("booterLibsJar") {
+    configurations = listOf(booterLibs)
+    archiveClassifier.set("booter-libs")
+    // The service declarations ship here rather than in the mod jar so that ServiceLoader cannot see
+    // Impetus' Mixin service at all unless the bundled implementation was actually extracted.
+    from("src/booterLibs/resources")
+    mergeServiceFiles()
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/MANIFEST.MF")
+    exclude("module-info.class", "**/module-info.class", "**/LICENSE*")
+    // Mixin's annotation processor and the hotswap agent are build-time only.
+    exclude("org/spongepowered/tools/**")
+    exclude("com/llamalad7/mixinextras/ap/**")
+    exclude("META-INF/services/javax.annotation.processing.Processor")
+    exclude("META-INF/services/org.spongepowered.tools.obfuscation.service.IObfuscationService")
+}
+
 tasks.named<Jar>("jar") {
+    from(booterLibsJar) {
+        into("com/bdmajora/impetus/booter")
+        rename { "impetus-booter-libs.jar" }
+    }
     manifest {
         attributes["FMLAT"] = "impetus_at.cfg"
         attributes["FMLCorePlugin"] = "com.bdmajora.impetus.core.ImpetusLoadingPlugin"

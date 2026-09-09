@@ -1,4 +1,8 @@
 .gradle/
+# buildSrc was removed; its two live helpers now live in plugins/impetus-mdg-plugin and inline in
+# build.gradle.kts. Gradle and the IDE still recreate an empty buildSrc/.gradle scratch dir on some
+# invocations, so the whole directory stays ignored to keep it from reappearing as untracked.
+buildSrc/
 **/.gradle/
 **/.kotlin/
 build/
