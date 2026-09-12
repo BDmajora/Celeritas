@@ -1,4 +1,4 @@
-<img src="src/main/resources/assets/impetus/textures/gui/impetus400.png" width="128">
+<img src="icons/impetus400.png" width="128">
 
 # Impetus
 
