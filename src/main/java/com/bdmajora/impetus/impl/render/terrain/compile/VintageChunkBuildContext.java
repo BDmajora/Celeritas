@@ -1,7 +1,5 @@
 package com.bdmajora.impetus.impl.render.terrain.compile;
 
-//? if 1.10.2 {
-//?}
 import lombok.Getter;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.WorldClient;
@@ -36,11 +34,7 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
     private final TextureMapExtension textureAtlas;
     private final net.minecraft.client.renderer.BufferBuilder[] worldRenderers = new net.minecraft.client.renderer.BufferBuilder[LAYERS.length];
     private final boolean[] usedWorldRenderers = new boolean[LAYERS.length];
-    // per layer, the block attribution of the vanilla-sourced quads (fluids and other non-model
-    // renders), as runs of (quadEndExclusive, mcEntityId, mcEntityRenderType, mcEntityMetadata,
-    // blockEmission, localX, localY, localZ)
-    // recorded while a shader pack is active so mc_Entity and at_midBlock survive the vanilla
-    // BufferBuilder round-trip - see recordVanillaBlockAttribution
+    // Per layer, block attribution of vanilla-sourced quads (fluids and other non-model renders) as runs of (quadEndExclusive, mcEntityId, renderType, metadata, emission, localX/Y/Z), recorded under a shader pack so mc_Entity and at_midBlock survive the BufferBuilder round-trip
     private final it.unimi.dsi.fastutil.ints.IntArrayList[] vanillaBlockRuns =
             new it.unimi.dsi.fastutil.ints.IntArrayList[LAYERS.length];
     private static final int VANILLA_BLOCK_RUN_STRIDE = 8;
@@ -91,11 +85,7 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
         return builder;
     }
 
-    // records which block the vanilla-buffered quads emitted since the last call belong to, so
-    // copyBlockData can fill mc_Entity, at_midBlock and block emission for the vanilla-sourced path
-    // (fluids and other non-model renders)
-    // call right after every dispatcher.renderBlock into getBufferForLayer's builder
-    // no-op when no shader pack is active
+    // Records which block the vanilla-buffered quads since the last call belong to, so copyBlockData can fill mc_Entity, at_midBlock and emission; call right after every dispatcher.renderBlock, no-op without a shader pack
     public void recordVanillaBlockAttribution(BlockRenderLayer layer, net.minecraft.block.state.IBlockState state, BlockPos pos) {
         if (!com.bdmajora.impetus.umbra.terrain.UmbraTerrainProgramOverride.areShadersActive()) {
             return;
@@ -245,11 +235,7 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
                 vertex.trueNormal = trueNormal;
             }
             if (com.bdmajora.impetus.umbra.terrain.UmbraTerrainProgramOverride.areShadersActive()) {
-                // OptiFine extended attributes for the vanilla-sourced path (fluids etc.). mc_Entity comes from the
-                // per-block attribution runs recorded during meshing; mid-tex and tangent are derivable here.
-                // Centre of the texture region mapped to this quad, not the sprite centre -- see the long note in
-                // VintageBlockRenderer.populateUmbraVertexData. The centroid is already to hand: it is what the
-                // sprite lookup above searches by.
+                // OptiFine attributes for the vanilla-sourced path: mc_Entity from the attribution runs, mid-tex as the centre of this quad's mapped region (not the sprite centre, see VintageBlockRenderer.populateUmbraVertexData), tangent derived here
                 float midU = uSum * 0.25f;
                 float midV = vSum * 0.25f;
                 int tangent = com.bdmajora.impetus.umbra.vertices.NormalHelper.computeTangent(

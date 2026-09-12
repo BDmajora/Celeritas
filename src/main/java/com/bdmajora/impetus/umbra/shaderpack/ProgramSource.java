@@ -2,12 +2,7 @@ package com.bdmajora.impetus.umbra.shaderpack;
 
 import java.util.Optional;
 
-// The flattened GLSL source for one shader program: a mandatory vertex + fragment pair, plus optional geometry and
-// tessellation control/evaluation stages
-// "Flattened" means IncludeProcessor has already resolved every #include, so each string is one self-contained
-// source rather than a file with references out
-// Still pre-compilation though: #version normalisation and #define injection both happen later, at GL-program build
-// time, because they depend on the driver and the resolved option values
+// The flattened GLSL for one program: mandatory vertex + fragment plus optional geometry/tessellation; IncludeProcessor has resolved every #include, but #version normalisation and #define injection happen later at GL build since they depend on the driver and options
 public final class ProgramSource {
     // Iris's compute-variant limit: the unsuffixed .csh plus _a through _z, so 1 + 26
     public static final int MAX_COMPUTE_VARIANTS = 27;
@@ -18,10 +13,7 @@ public final class ProgramSource {
     private final String tessControlSource;
     private final String tessEvalSource;
     private final String fragmentSource;
-    // The program's compute stages. Index 0 is <name>.csh; 1..26 are <name>_a.csh through <name>_z.csh, which is
-    // an Iris extension — Photon's deferred4_a.csh is the one that generates the skylight SH
-    // Empty when the program declares no compute stage at all, and entries inside it may still be null, since a
-    // pack can ship _a and _c without _b
+    // The program's compute stages: index 0 is <name>.csh, 1..26 are _a through _z (an Iris extension, Photon's deferred4_a.csh generates the skylight SH); empty when none, and entries may be null since a pack can ship _a and _c without _b
     private final String[] computeSources;
 
     public ProgramSource(String name,
@@ -60,8 +52,7 @@ public final class ProgramSource {
         this.computeSources = computeSources == null ? new String[0] : computeSources.clone();
     }
 
-    // The name a compute variant is compiled and logged under: variant 0 is the unsuffixed name, 1..26 append
-    // _a through _z
+    // The name a compute variant is compiled and logged under: variant 0 is unsuffixed, 1..26 append _a through _z
     public static String computeVariantName(String programName, int variant) {
         return variant == 0 ? programName : programName + "_" + (char) ('a' + variant - 1);
     }
@@ -101,8 +92,7 @@ public final class ProgramSource {
         return Optional.ofNullable(this.computeSources.length == 0 ? null : this.computeSources[0]);
     }
 
-    // Every compute stage on this program, indexed by variant — 0 unsuffixed, 1..26 for _a through _z
-    // May be empty and may contain nulls, so callers index defensively rather than iterating a dense list
+    // Every compute stage indexed by variant (0 unsuffixed, 1..26 for _a.._z); may be empty and contain nulls, so index defensively
     public String[] getComputeSources() {
         return this.computeSources.clone();
     }
@@ -117,16 +107,13 @@ public final class ProgramSource {
         return false;
     }
 
-    // A program needs BOTH a vertex and a fragment stage to be usable
-    // OptiFine treats one without the other as malformed and falls back to the parent program rather than trying to
-    // compile half a pipeline, which is what ProgramSet.get reproduces
+    // A program needs BOTH vertex and fragment stages; OptiFine treats one without the other as malformed and falls back to the parent, which ProgramSet.get reproduces
     public boolean isValid() {
         // A compute-only program (shadowcomp.csh, deferred4_a.csh) is valid without vertex/fragment stages.
         return (this.vertexSource != null && this.fragmentSource != null) || hasComputeSource();
     }
 
-    // True when the vertex+fragment pair needed to raster anything is present — distinct from isValid only in
-    // intent: this asks "can it draw", where a compute-only program legitimately cannot
+    // True when the vertex+fragment pair needed to raster is present; distinct from isValid in intent, since a compute-only program legitimately cannot draw
     public boolean hasRasterStages() {
         return this.vertexSource != null && this.fragmentSource != null;
     }

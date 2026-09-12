@@ -14,8 +14,7 @@ import java.util.function.IntSupplier;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The images one program uses, each on a unit allocated for that program alone and only when it declares the
-// uniform. The glUniform1i calls wait for the first update, since they write to the currently bound program
+// The images one program uses, each on a unit allocated for that program only when it declares the uniform; glUniform1i calls wait for the first update since they write to the bound program
 public class ProgramImages {
     private final List<ImageBinding> imageBindings;
     private List<Uniform1iCall> initializer;
@@ -30,8 +29,7 @@ public class ProgramImages {
         return new Builder(program);
     }
 
-    // Must be called with this program bound. Issues the deferred unit assignments on the first call only, then
-    // rebinds every image — the rebind is per call because a render-target image's texture changes on a flip
+    // Must be called with this program bound; issues the deferred unit assignments on the first call, then rebinds every image since a render-target image's texture changes on flip
     public void update() {
         if (this.initializer != null) {
             for (Uniform1iCall call : this.initializer) {
@@ -85,8 +83,7 @@ public class ProgramImages {
             }
 
             if (this.nextImageUnit >= this.maxImageUnits) {
-                // Umbra throws here. This port logs and drops instead: a pack that overruns the limit should lose one
-                // effect, not take the whole pipeline down mid-frame on a machine that was otherwise rendering.
+                // Umbra throws here; this port logs and drops, so a pack overrunning the limit loses one effect rather than the whole pipeline mid-frame
                 LOGGER.error("[Umbra] No image units left for '{}' (driver reports {}); it will be unbound",
                         name, this.maxImageUnits);
                 return;

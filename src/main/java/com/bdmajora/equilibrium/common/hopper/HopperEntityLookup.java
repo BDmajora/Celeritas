@@ -10,10 +10,7 @@ import net.minecraft.world.World;
 import javax.annotation.Nullable;
 import java.util.List;
 
-// The entity half of a hopper's inventory search, skipped entirely when the world holds no inventory
-// entity at all; onEntityAdded/onEntityRemoved are the only ways one enters or leaves, so a zero count
-// is exact rather than a heuristic
-// With a non-zero count the vanilla query runs unchanged, including its observable random pick
+// Entity half of a hopper's inventory search, skipped when the world holds no inventory entity; onEntityAdded/onEntityRemoved are the only entry and exit, so a zero count is exact, and otherwise vanilla's query runs unchanged
 public final class HopperEntityLookup {
     // Static-only
     private HopperEntityLookup() {

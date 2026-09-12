@@ -5,9 +5,7 @@ public enum SpriteTransparencyLevel {
     TRANSPARENT,
     TRANSLUCENT;
 
-    // Whichever of the two levels has the higher ordinal, i.e. demands the more capable render pass
-    // Used to fold a model's sprites together: one translucent sprite promotes the whole model to the translucent
-    // pass, since the pass has to accommodate the worst case
+    // Whichever level has the higher ordinal, i.e. needs the more capable pass; one translucent sprite promotes the whole model to the translucent pass
     public SpriteTransparencyLevel chooseNextLevel(SpriteTransparencyLevel level) {
         return level.ordinal() >= this.ordinal() ? level : this;
     }

@@ -7,8 +7,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.text.TextComponentString;
 import net.minecraft.util.text.TextFormatting;
 
-// /equilibrium - reports active optimizations and who disabled the rest; registered client-side
-// so it works in single-player and on servers without the mod
+// /equilibrium reports active optimizations and who disabled the rest; client-side so it works in single-player and on servers without the mod
 public class EquilibriumStatsCommand extends CommandBase {
     // Command name, so this is /equilibrium
     @Override

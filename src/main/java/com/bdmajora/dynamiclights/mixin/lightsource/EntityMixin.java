@@ -20,14 +20,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-// makes every entity a potential light source
-// this is the base implementation: burning entities glow, and anything with a registered handler glows
-// by whatever that handler reports
-// subclasses override impetus$dynamicLightTick() to add their own rules - held items for living
-// entities, a fuse ramp for TNT - but the tracking, chunk-rebuild and lightmap machinery all lives here
-// each subclass mixin keeps its own luminance field rather than sharing one: a @Unique field cannot be
-// shadowed across mixins onto different classes, so a shared field would be silently written by one
-// mixin and read by another, which is why every writer also overrides impetus$getLuminance()
+// Makes every entity a potential light source: burning entities and registered handlers glow here, subclass mixins override impetus$dynamicLightTick() and keep their own luminance field (a @Unique field cannot be shadowed across mixins) plus impetus$getLuminance()
 @Mixin(Entity.class)
 public abstract class EntityMixin implements DynamicLightSource {
     @Shadow
@@ -69,17 +62,11 @@ public abstract class EntityMixin implements DynamicLightSource {
     private double impetus$prevY;
     @Unique
     private double impetus$prevZ;
-    // the chunk sections this entity is currently lighting, allocated on first use
-    // this mixin puts these fields on every entity in the world and the overwhelming majority of them
-    // never emit light, but upstream allocates the set eagerly - which on a busy client is thousands of
-    // hash sets that only ever hold nothing
+    // Sections this entity currently lights, allocated on first use; upstream allocates eagerly, which on a busy client is thousands of empty hash sets
     @Unique
     private LongOpenHashSet impetus$trackedLitChunkPos;
 
-    // recomputes luminance once per tick
-    // onEntityUpdate rather than onUpdate because it is the shared tail every entity's tick runs
-    // through - except for the handful that override onUpdate without calling up, which is why
-    // EntityHanging and EntityMinecart carry their own hooks
+    // Recomputes luminance once per tick from onEntityUpdate, the shared tail every entity's tick runs through except those overriding onUpdate without calling up (EntityHanging, EntityMinecart carry their own)
     @Inject(method = "onEntityUpdate", at = @At("TAIL"))
     private void impetus$onTick(CallbackInfo ci) {
         if (!this.world.isRemote) {
@@ -113,9 +100,7 @@ public abstract class EntityMixin implements DynamicLightSource {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
     // DynamicLightSource
-    // ------------------------------------------------------------------------------------------
 
     @Override
     public double impetus$getDynamicLightX() {
@@ -180,13 +165,7 @@ public abstract class EntityMixin implements DynamicLightSource {
         return true;
     }
 
-    // re-lights the chunks around this entity if it has moved or changed brightness
-    // the 0.1-block movement threshold is what keeps a standing-still player from re-meshing its own
-    // chunk every frame; below that the falloff shift is not visible anyway
-    // eight sections are lit rather than one: the light reaches 7.75 blocks, so it can spill into the
-    // three neighbours the entity is closest to and the four diagonals between them
-    // which eight depends on where inside its own section the entity sits, which is what the direction
-    // walk below works out
+    // Re-lights surrounding chunks if the entity moved 0.1+ blocks (keeps a standing player from re-meshing every frame) or changed brightness; eight sections since 7.75-block reach spills into three neighbours and four diagonals, chosen by the direction walk below
     @Override
     public boolean impetus$updateDynamicLight(RenderGlobal renderer) {
         if (!this.impetus$shouldUpdateDynamicLight()) {
@@ -243,8 +222,7 @@ public abstract class EntityMixin implements DynamicLightSource {
             }
         }
 
-        // Whatever is left in the old set is a chunk this source has moved away from, and still needs
-        // rebuilding to lose the light.
+        // Whatever is left in the old set is a chunk this source moved away from and still needs rebuilding to lose the light
         this.impetus$scheduleTrackedChunksRebuild(renderer);
         this.impetus$trackedLitChunkPos = newPos;
         return true;

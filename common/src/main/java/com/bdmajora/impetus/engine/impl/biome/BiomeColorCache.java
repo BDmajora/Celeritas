@@ -90,9 +90,6 @@ public abstract class BiomeColorCache<BIOME, RESOLVER> {
     private void updateColorBuffers(int relY, RESOLVER resolver, Slice slice) {
         int worldY = this.minY + relY;
 
-        //? if <1.15
-        /*BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();*/
-
         int firstSeenColor = 0;
 
         boolean uniqueColor = true;

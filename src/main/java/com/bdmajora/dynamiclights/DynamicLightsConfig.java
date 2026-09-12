@@ -11,9 +11,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-// Every setting the Dynamic Lights page owns, persisted to config/impetus-dynamiclights.cfg
-// Booleans live in a declarative table so load and save cannot drift; enums are stored by ordinal, so
-// appending a constant is safe but reordering silently changes what a saved config means
+// Every Dynamic Lights setting, persisted to config/impetus-dynamiclights.cfg; booleans live in a declarative table so load/save cannot drift, enums are stored by ordinal so never reorder them
 public final class DynamicLightsConfig {
     private static final String CAT_GENERAL = "general";
     private static final String CAT_SOURCES = "light_sources";
@@ -48,10 +46,7 @@ public final class DynamicLightsConfig {
 
     private Configuration config;
 
-    // reads the file, adding any keys it does not yet contain
-    // a read failure yields a fresh defaults instance that is deliberately *not* written back:
-    // overwriting a config we failed to parse would destroy the user's settings along with whatever
-    // confused us
+    // Reads the file, adding missing keys; a read failure yields defaults that are NOT written back, since overwriting an unparseable config would destroy the user's settings
     public static DynamicLightsConfig load(File file) {
         DynamicLightsConfig options = new DynamicLightsConfig();
         Configuration config = new Configuration(file);

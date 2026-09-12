@@ -15,11 +15,7 @@ import com.bdmajora.impetus.lwjgl.LWJGLServiceProvider;
 
 // Uses GL indirect draw commands instead of building them CPU-side; cheaper on some drivers
 public class IndirectMultiDrawEmitter implements MultiDrawEmitter {
-    // uint  count;
-    // uint  instanceCount;
-    // uint  firstIndex;
-    // int  baseVertex;
-    // uint  baseInstance;
+    // DrawElementsIndirectCommand: uint count, uint instanceCount, uint firstIndex, int baseVertex, uint baseInstance
     private static final int COMMAND_SIZE = 4 * 5;
     private static final int BUFFER_SIZE = MultiDrawEmitter.MAX_COMMAND_COUNT * COMMAND_SIZE;
 

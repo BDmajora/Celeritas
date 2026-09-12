@@ -8,8 +8,7 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import java.util.List;
 import java.util.Set;
 
-// Announces the subsystem; gates nothing, since every Extras mixin reads its switch at call time
-// Kept as a real plugin so the load-order log line sits beside the other subsystems
+// Announces the subsystem and gates nothing, since every Extras mixin reads its switch at call time; kept as a real plugin so the load-order log line sits beside the others
 public class ExtrasMixinPlugin implements IMixinConfigPlugin {
     // Nothing to prepare; the interface requires the method
     @Override
@@ -22,14 +21,7 @@ public class ExtrasMixinPlugin implements IMixinConfigPlugin {
         return null;
     }
 
-    // applies everything
-    // an earlier version gated the Panini mixins on ShaderGroup being loadable, which was wrong twice
-    // over: this method runs during mixin config load, before Minecraft's classes are reachable
-    // through this class loader, so the probe always failed and silently disabled the option
-    // and probing by Class.forName would have force-loaded a Minecraft class ahead of the transformers
-    // that need to see it first
-    // whether the effect can actually run is a runtime question, and PaniniProjection#shouldApply is
-    // where it is asked
+    // Applies everything; an earlier version gated the Panini mixins on ShaderGroup being loadable, which always failed here (Minecraft classes are unreachable at config load) and would have force-loaded a class ahead of its transformers, so PaniniProjection#shouldApply asks at runtime instead
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         return true;

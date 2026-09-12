@@ -12,13 +12,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-// the hurt flash and the creeper charge-up are the only entity tints vanilla draws with fixed-function
-// texture combiners rather than vertex colours, so a bound shader program dropped them and damaged
-// mobs kept their normal texture
-// publish the tint as OptiFine's entityColor uniform instead - see CapturedRenderingState#getEntityColor()
-// the combiner setup is skipped outright while a pipeline is active rather than left to run harmlessly
-// alongside: setBrightness binds its white brightness texture over unit 2, which is the gbuffer stage's
-// normals sampler, and unsetBrightness leaves that unit bound to 0 afterwards
+// The hurt flash and creeper charge are the only entity tints vanilla draws with fixed-function combiners, which a bound program drops; published as OptiFine's entityColor uniform instead, and the combiner setup is skipped since setBrightness binds over unit 2, the gbuffer normals sampler
 @Mixin(RenderLivingBase.class)
 public abstract class RenderLivingBaseEntityColorMixin {
     @Shadow
@@ -69,10 +63,7 @@ public abstract class RenderLivingBaseEntityColorMixin {
         ci.cancel();
     }
 
-    // doRender swallows any exception thrown while rendering an entity, which would otherwise skip
-    // unsetBrightness and leave every later entity in the frame tinted red
-    // the blend factor is still zero on every normal entity, so this costs a float compare rather than
-    // a uniform re-upload
+    // doRender swallows exceptions thrown while rendering an entity, which would skip unsetBrightness and leave every later entity tinted red; the blend factor is zero on normal entities, so this is a float compare
     @Inject(method = "doRender(Lnet/minecraft/entity/EntityLivingBase;DDDFF)V", at = @At("RETURN"))
     private void impetus$clearStrandedEntityColor(EntityLivingBase entity, double x, double y, double z,
                                                   float entityYaw, float partialTicks, CallbackInfo ci) {

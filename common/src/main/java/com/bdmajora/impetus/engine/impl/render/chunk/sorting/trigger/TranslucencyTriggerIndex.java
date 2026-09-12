@@ -7,9 +7,7 @@ import it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap;
 
 import java.util.function.Consumer;
 
-// Global face-normal index for precise translucency re-sort scheduling: sections register their quad planes by
-// quantised normal, and camera movement is treated as a segment that triggers only the sections whose plane it crossed
-// Render thread only
+// Render-thread-only global face-normal index: sections register quad planes by quantised normal, and camera movement is a segment that triggers only the sections whose plane it crossed
 public final class TranslucencyTriggerIndex {
     // Movement components smaller than this can't meaningfully cross a plane; skips whole normal groups.
     private static final double MOVEMENT_EPSILON = 1.0E-9;
@@ -92,16 +90,14 @@ public final class TranslucencyTriggerIndex {
         }
     }
 
-    // reports every registered section whose planes the camera segment (x0,y0,z0) -> (x1,y1,z1) crossed
-    // a section may be reported more than once if several of its normal groups were crossed
+    // Reports every registered section whose planes the camera segment (x0,y0,z0) -> (x1,y1,z1) crossed; a section may repeat if several normal groups were crossed
     public void collectTriggered(double x0, double y0, double z0, double x1, double y1, double z1, Consumer<RenderSection> consumer) {
         var dx = x1 - x0;
         var dy = y1 - y0;
         var dz = z1 - z0;
 
         for (var bucket : this.buckets.values()) {
-            // The change in plane-offset is independent of each section's origin, so movement orthogonal to this
-            // normal group rules out the whole group at once.
+            // The change in plane-offset is independent of section origin, so movement orthogonal to this normal group rules out the whole group at once
             var delta = bucket.nx * dx + bucket.ny * dy + bucket.nz * dz;
 
             if (Math.abs(delta) < MOVEMENT_EPSILON) {

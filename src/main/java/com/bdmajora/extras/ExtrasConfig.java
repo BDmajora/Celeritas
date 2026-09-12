@@ -11,10 +11,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-// Every setting the Extras page owns, persisted to config/impetus-extras.cfg
-// Unlike FulgorConfig/CoartatioConfig, nothing here is read during coremod setup, so this can be a
-// normal Forge Configuration instead of a Properties file
-// Enum constant order is part of the on-disk format — appending is safe, reordering is not
+// Every Extras setting, persisted to config/impetus-extras.cfg as a normal Forge Configuration since nothing is read during coremod setup; enum constant order is on-disk format, append only
 public final class ExtrasConfig {
     private static final String CAT_ANIMATION = "animation";
     private static final String CAT_PARTICLE = "particle";
@@ -195,9 +192,7 @@ public final class ExtrasConfig {
 
     private Configuration config;
 
-    // Reads file, adding any keys it does not yet contain
-    // A read failure yields fresh defaults that are deliberately NOT written back — overwriting a
-    // config we failed to parse would destroy the user's settings along with whatever confused us
+    // Reads file, adding missing keys; a read failure yields defaults that are NOT written back, since overwriting an unparseable config would destroy the user's settings
     public static ExtrasConfig load(File file) {
         ExtrasConfig options = new ExtrasConfig();
         Configuration config = new Configuration(file);
@@ -286,9 +281,7 @@ public final class ExtrasConfig {
         return new BooleanProperty(category, key, defaultValue, comment, setter, getter);
     }
 
-    // ----------------------------------------------------------------------------------------
-    // Enums. Persisted by ordinal — append only.
-    // ----------------------------------------------------------------------------------------
+    // Enums, persisted by ordinal so append only
 
     // Where the FPS/coordinate overlay is anchored
     public enum OverlayCorner implements Localized {
@@ -358,11 +351,7 @@ public final class ExtrasConfig {
         }
     }
 
-    // The distance metric the terrain shader fogs by
-    // Sodium's baseline is cylindrical so its "Radial" is spherical; Impetus already fogs
-    // spherically like entities/particles do, so here VANILLA is spherical and RADIAL is the
-    // genuinely different horizontal-only one — non-VANILLA means terrain and entities disagree
-    // Ordinals are the u_FogShape values consumed by fog.glsl
+    // The distance metric the terrain shader fogs by; Impetus already fogs spherically like entities, so VANILLA is spherical and RADIAL is the horizontal-only one (non-VANILLA means terrain and entities disagree); ordinals are fog.glsl's u_FogShape values
     public enum FogShape implements Localized {
         VANILLA("impetus.options.extras.fog_shape.vanilla"),
         CYLINDRICAL("impetus.options.extras.fog_shape.cylindrical"),
@@ -455,12 +444,9 @@ public final class ExtrasConfig {
         }
     }
 
-    // ----------------------------------------------------------------------------------------
     // Setting groups
-    // ----------------------------------------------------------------------------------------
 
-    // Texture animation switches; "all" gates every other field, the finer ones below
-    // blockAnimations are what OptiFine breaks out separately
+    // Texture animation switches; "all" gates every other field, and blockAnimations are what OptiFine breaks out separately
     public static final class AnimationSettings {
         public boolean all = true;
         public boolean water = true;
@@ -475,8 +461,7 @@ public final class ExtrasConfig {
         public boolean sculkSensor = true;
     }
 
-    // Particle switches; "all" gates everything, named switches cover OptiFine/Sodium Extra
-    // effects, anything else goes through the per-class toggles from ParticleClassRegistry
+    // Particle switches; "all" gates everything, named switches cover OptiFine/Sodium Extra effects, the rest go through ParticleClassRegistry's per-class toggles
     public static final class ParticleSettings {
         public boolean all = true;
         public boolean rainSplash = true;
@@ -510,9 +495,7 @@ public final class ExtrasConfig {
         public boolean heldItemTooltips = true;
     }
 
-    // World-render switches and fog/cloud tuning values
-    // Cloud height/distance are deliberately absent — Impetus's Quality page already owns those;
-    // a second copy here would give two sliders for one value with no way to tell which wins
+    // World-render switches and fog/cloud tuning; cloud height/distance are absent since Impetus's Quality page owns those and two sliders for one value would fight
     public static final class RenderSettings {
         public static final int CLOUD_SCALE_MIN = 1;
         // The internal scale value that reproduces vanilla's 1.00x cloud size
@@ -573,9 +556,7 @@ public final class ExtrasConfig {
         public int autosaveInterval = AUTOSAVE_VANILLA_TICKS;
     }
 
-    // ----------------------------------------------------------------------------------------
     // Declarative property bindings
-    // ----------------------------------------------------------------------------------------
 
     // A boolean config entry bound to its in-memory field, so load and save cannot drift apart
     @Desugar

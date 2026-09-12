@@ -66,8 +66,7 @@ public class MergeSort extends AbstractSort {
         mergeSort(supp, keys, fromIndex, mid, indices);
         mergeSort(supp, keys, mid, toIndex, indices);
 
-        // If list is already sorted, just copy from supp to indices. This is an
-        // optimization that results in faster sorts for nearly ordered lists.
+        // Already sorted, so just copy supp to indices; makes nearly ordered lists sort faster
         if (keys[supp[mid]] <= keys[supp[mid - 1]]) {
             System.arraycopy(supp, fromIndex, indices, fromIndex, len);
             return;

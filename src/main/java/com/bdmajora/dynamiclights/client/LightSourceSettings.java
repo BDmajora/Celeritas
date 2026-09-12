@@ -14,9 +14,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
-// Which entity and block entity types the user has switched off
-// Built from Forge's entity registry and TileEntity's class map, which are complete before the options screen can open
-// Only the disabled sets are user data; everything else is derived on demand
+// Which entity and block entity types the user switched off, built from Forge's entity registry and TileEntity's class map; only the disabled sets are user data
 public final class LightSourceSettings {
     private static final LightSourceSettings INSTANCE = new LightSourceSettings();
 
@@ -39,9 +37,7 @@ public final class LightSourceSettings {
         return INSTANCE;
     }
 
-    // ------------------------------------------------------------------------------------------
     // Lookups on the tick path
-    // ------------------------------------------------------------------------------------------
 
     // Whether this entity's type may light up.
     public boolean isEntityEnabled(Entity entity) {
@@ -63,12 +59,7 @@ public final class LightSourceSettings {
         return id == null || !this.disabledBlockEntities.contains(id);
     }
 
-    // the registry id for this entity, or null if it has none
-    // keyed on the concrete class rather than the instance because EntityList#getKey walks a map lookup
-    // and this runs once per entity per tick
-    // a modded subclass registered under its own id resolves to that id; one that is not registered at
-    // all resolves to null and is therefore never filtered - the safe direction to fail, since an
-    // unlistable type has no toggle
+    // Registry id for this entity or null, keyed on the concrete class since EntityList#getKey is a map lookup run per entity per tick; an unregistered subclass resolves to null and is never filtered, the safe failure
     private String entityId(Entity entity) {
         Class<?> clazz = entity.getClass();
         String cached = this.entityIds.get(clazz);
@@ -96,9 +87,7 @@ public final class LightSourceSettings {
         return cached.isEmpty() ? null : cached;
     }
 
-    // ------------------------------------------------------------------------------------------
     // The disabled sets
-    // ------------------------------------------------------------------------------------------
 
     public boolean isEntityTypeDisabled(String id) {
         return this.disabledEntities.contains(id);
@@ -157,13 +146,9 @@ public final class LightSourceSettings {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
     // Enumeration, for the options page
-    // ------------------------------------------------------------------------------------------
 
-    // every registered entity type as "namespace:path" -> display name, sorted by id
-    // built on demand rather than cached: the options page reads it once per open, and holding a copy
-    // would only go stale against a registry that can change on world join
+    // Every registered entity type as "namespace:path" -> display name sorted by id; built on demand since the page reads it once per open and the registry can change on world join
     public static Map<String, String> listEntityTypes() {
         Map<String, String> types = new TreeMap<>();
 
@@ -177,9 +162,7 @@ public final class LightSourceSettings {
         return types;
     }
 
-    // every registered block entity type as "namespace:path" -> display name, sorted by id
-    // block entities are still vanilla-registered on 1.12.2 - there is no Forge registry to walk - so
-    // this reaches TileEntity.REGISTRY through an accessor mixin
+    // Every registered block entity type as "namespace:path" -> display name; block entities are vanilla-registered on 1.12.2, so this reaches TileEntity.REGISTRY via an accessor mixin
     public static Map<String, String> listBlockEntityTypes() {
         Map<String, String> types = new TreeMap<>();
 

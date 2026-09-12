@@ -9,10 +9,7 @@ import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
 
-// the chunk-level lighting operations, kept out of the mixins that call them
-// everything here is about the seam between chunks: vanilla treats a missing neighbour as a reason to
-// skip work, Fulgor treats it as a reason to record work, and this is where the recording and the
-// later replay live
+// Chunk-level lighting operations kept out of the mixins; vanilla treats a missing neighbour as a reason to skip work, Fulgor as a reason to record it, and the recording and replay live here
 public final class LightingHooks {
     private static final EnumSkyBlock[] LIGHT_TYPES = EnumSkyBlock.values();
     private static final EnumFacing.AxisDirection[] AXIS_DIRECTIONS = EnumFacing.AxisDirection.values();
@@ -20,13 +17,7 @@ public final class LightingHooks {
     private LightingHooks() {
     }
 
-    // reschedules skylight for a column whose heightmap just moved
-    // the interesting part is the second half: where the column passes through a section that does not
-    // exist, skylight has to be re-checked in the four horizontally adjacent columns as well, because
-    // light travels sideways through the empty space
-    // if an adjacent column belongs to a chunk that is not loaded, the check is recorded against the
-    // boundary instead of being dropped, and scheduleRelightChecksForChunkBoundaries replays it once
-    // that chunk arrives
+    // Reschedules skylight for a column whose heightmap moved; where the column passes through a missing section the four adjacent columns are re-checked too (light travels sideways), and an unloaded neighbour's check is recorded against the boundary for replay
     public static void relightSkylightColumn(World world, Chunk chunk, int x, int z, int height1, int height2) {
         int yMin = Math.min(height1, height2);
         int yMax = Math.max(height1, height2) - 1;
@@ -59,8 +50,7 @@ public final class LightingHooks {
             int xOffset = dir.getXOffset();
             int zOffset = dir.getZOffset();
 
-            // The 16 bit is set for both -1 and 16, so this catches either edge of the chunk in one
-            // test. Inside the chunk the neighbouring column is trivially available.
+            // The 16 bit is set for both -1 and 16, so one test catches either chunk edge; inside the chunk the neighbour column is trivially available
             boolean neighborColumnExists = (((x + xOffset) | (z + zOffset)) & 16) == 0
                     || world.getChunkProvider().getLoadedChunk(chunk.x + xOffset, chunk.z + zOffset) != null;
 
@@ -97,11 +87,7 @@ public final class LightingHooks {
         }
     }
 
-    // replays everything this chunk and its new neighbours owe each other
-    // called from Chunk.onLoad, the moment a boundary that was previously impossible to cross may have
-    // become crossable
-    // each of the four neighbours is handled in both directions, plus the diagonal case: a check in the
-    // neighbour may have been abandoned earlier precisely because *this* chunk was the missing corner
+    // Replays everything this chunk and its new neighbours owe each other, from Chunk.onLoad; each of the four neighbours in both directions plus the diagonal case, where this chunk was the missing corner
     public static void scheduleRelightChecksForChunkBoundaries(World world, Chunk chunk) {
         for (EnumFacing dir : EnumFacing.HORIZONTALS) {
             int xOffset = dir.getXOffset();
@@ -115,8 +101,7 @@ public final class LightingHooks {
 
             for (EnumSkyBlock lightType : LIGHT_TYPES) {
                 for (EnumFacing.AxisDirection axisDir : AXIS_DIRECTIONS) {
-                    // Fold each side's OUT flags into the other's IN flags, so from here on only the
-                    // IN side has to be consulted.
+                    // Fold each side's OUT flags into the other's IN flags, so only the IN side needs consulting from here
                     mergeFlags(lightType, chunk, neighbor, dir, axisDir);
                     mergeFlags(lightType, neighbor, chunk, dir.getOpposite(), axisDir);
 
@@ -153,10 +138,7 @@ public final class LightingHooks {
         // outChunk is not marked dirty: nothing was removed from it, only copied.
     }
 
-    // replays one half of one edge, if its flags say anything is outstanding and everything needed is
-    // present
-    // neighbor is the chunk across the edge and diagonal the chunk diagonally across the corner this
-    // half sits on; either is looked up if null
+    // Replays one half of one edge if its flags say anything is outstanding and everything needed is present; neighbor is across the edge, diagonal across the corner, either looked up if null
     private static void scheduleRelightChecksForBoundary(World world, Chunk chunk, Chunk neighbor, Chunk diagonal,
                                                          EnumSkyBlock lightType, int xOffset, int zOffset,
                                                          EnumFacing.AxisDirection axisDir) {
@@ -187,8 +169,7 @@ public final class LightingHooks {
                     chunk.x + (zOffset != 0 ? axisDir.getOffset() : 0),
                     chunk.z + (xOffset != 0 ? axisDir.getOffset() : 0));
 
-            // The corner columns of this half read from the diagonal, so without it the replay would
-            // produce the same wrong answer that caused the flag in the first place. Leave it flagged.
+            // The corner columns read from the diagonal, so without it the replay would repeat the wrong answer that caused the flag; leave it flagged
             if (diagonal == null) {
                 return;
             }
@@ -235,13 +216,7 @@ public final class LightingHooks {
         }
     }
 
-    // seeds a chunk's block light by scheduling every light-emitting block in it
-    // vanilla does this from Chunk.checkLight as an immediate relight of all 65536 columns; here it is
-    // 65536 cheap luminance reads and a handful of scheduled updates, which the engine then resolves in
-    // one batch
-    // deliberately does nothing unless the full 3x3 neighbourhood is loaded: light seeded against
-    // missing neighbours is exactly the wrong light, so the chunk stays uninitialised and a later
-    // attempt can do it properly
+    // Seeds a chunk's block light by scheduling every emitter (vanilla relights all 65536 columns immediately); does nothing unless the full 3x3 neighbourhood is loaded, since light seeded against missing neighbours is exactly the wrong light
     public static void initChunkLighting(World world, Chunk chunk) {
         int xBase = chunk.x << 4;
         int zBase = chunk.z << 4;
@@ -287,10 +262,7 @@ public final class LightingHooks {
         }
     }
 
-    // the replacement for Chunk.checkLight's per-column relight
-    // a chunk is only marked light-populated once it and all eight neighbours have been seeded, which
-    // is what stops the light at a chunk border from being finalised against a neighbour that has not
-    // been lit yet - the cause of the border seams during world generation
+    // Replacement for Chunk.checkLight's per-column relight; a chunk is marked light-populated only once it and all eight neighbours are seeded, which stops border seams during worldgen
     public static void checkChunkLighting(World world, Chunk chunk) {
         if (!((ChunkLightingData) chunk).fulgor$isLightInitialized()) {
             initChunkLighting(world, chunk);
@@ -313,10 +285,7 @@ public final class LightingHooks {
         chunk.setLightPopulated(true);
     }
 
-    // fills a newly created section's skylight from the heightmap
-    // stands in for Chunk.generateSkylightMap, which rebuilds the entire column stack of the chunk
-    // only the new section can possibly need filling, and only the columns whose terrain height is at
-    // or below it - everything else either already has its value or is still in shadow
+    // Fills a new section's skylight from the heightmap, standing in for Chunk.generateSkylightMap's full column-stack rebuild; only the new section and the columns at or below it can need filling
     public static void initSkylightForSection(World world, Chunk chunk, ExtendedBlockStorage section) {
         if (!world.provider.hasSkyLight()) {
             return;

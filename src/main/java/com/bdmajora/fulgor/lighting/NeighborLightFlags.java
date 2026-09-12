@@ -9,9 +9,7 @@ import net.minecraft.util.EnumFacing;
 import net.minecraft.world.EnumSkyBlock;
 import net.minecraft.world.chunk.Chunk;
 
-// Bookkeeping for the chunk-boundary fix inherited from Phosphor: vanilla drops propagation into an unloaded
-// chunk (MC-3329, MC-117067). Each chunk keeps section masks per (type, direction, half, in/out), replayed on load
-// Edges split into 8-block halves so a half can replay once its own diagonal loads instead of waiting on both
+// Bookkeeping for Phosphor's chunk-boundary fix (vanilla drops propagation into unloaded chunks, MC-3329/MC-117067): section masks per (type, direction, half, in/out) replayed on load, split into 8-block halves so one can replay once its own diagonal loads
 public final class NeighborLightFlags {
     public static final String NBT_KEY = "NeighborLightChecks";
 
@@ -61,8 +59,7 @@ public final class NeighborLightFlags {
         chunk.markDirty();
     }
 
-    // Skips writing entirely when the table is all-zero (the common case once a world settles),
-    // to avoid a 32-entry list of zeroes per chunk
+    // Skips writing when the table is all-zero (the common case once a world settles), avoiding a 32-entry list of zeroes per chunk
     public static void write(Chunk chunk, NBTTagCompound compound) {
         short[] flags = ((ChunkLightingData) chunk).fulgor$getNeighborLightChecks();
 

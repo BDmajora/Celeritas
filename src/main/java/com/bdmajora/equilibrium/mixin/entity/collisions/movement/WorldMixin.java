@@ -15,23 +15,7 @@ import org.spongepowered.asm.mixin.Overwrite;
 import javax.annotation.Nullable;
 import java.util.List;
 
-// reads the blocks around a moving entity through a chunk section cursor
-// this is the method behind every entity's movement, called several times per entity per tick - once
-// to gather what the entity might hit, and again for each axis it is pushed along
-// for a player it inspects a 4x5x4 region, for a fast minecart more, and vanilla resolves a chunk
-// from the provider for each of those positions individually
-// the loop nests x, then z, then y, so consecutive reads run *down a column* and sixteen of them
-// share a chunk section; holding the section between reads turns the inner loop's chunk lookup into
-// an array index
-// that is the whole change: the iteration order, the bounds, the world border handling and both
-// Forge collision hooks are exactly as vanilla wrote them
-// the cursor is created in non-loading mode, matching vanilla: the column is tested with
-// isBlockLoaded before anything inside it is read, so an entity walking towards ungenerated terrain
-// treats it as empty rather than generating it - getting this backwards would let a fast-moving
-// entity generate chunks ahead of itself
-// vanilla's pooled mutable block position is kept for the same reason vanilla has it: the position is
-// handed to addCollisionBoxToList and some blocks read it, so reusing one is both cheaper and closer
-// to vanilla than allocating
+// Reads the blocks around a moving entity through a chunk section cursor: the loop runs down columns so sixteen reads share a section; iteration order, bounds, border handling and Forge hooks are exactly vanilla, and the cursor is non-loading so entities cannot generate chunks ahead of themselves
 @Mixin(World.class)
 public abstract class WorldMixin {
     @Overwrite
@@ -94,8 +78,7 @@ public abstract class WorldMixin {
 
                         IBlockState state;
 
-                        // Outside the border, the world is treated as solid stone so entities cannot
-                        // walk out of it — vanilla's rule, and the reason this is not just a read.
+                        // Outside the border the world is treated as solid stone so entities cannot walk out; vanilla's rule, and why this is not just a read
                         if (!stopOnFirst && !border.contains(pos) && isInsideBorder) {
                             state = borderFiller;
                         } else {

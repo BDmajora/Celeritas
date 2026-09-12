@@ -11,9 +11,7 @@ public class TextureUtilMixin {
     // @author / @reason are Mixin's required metadata on an @Overwrite, not documentation
     @Overwrite
     private static int blendColors(int one, int two, int three, int four, boolean checkAlpha) {
-        // First blend horizontally, then blend vertically.
-        //
-        // This works well for the case where our change is the most impactful (grass side overlays)
+        // Blend horizontally first, then vertically; works well where the change matters most (grass side overlays)
         return weightedAverageColor(weightedAverageColor(one, two), weightedAverageColor(three, four));
     }
 }

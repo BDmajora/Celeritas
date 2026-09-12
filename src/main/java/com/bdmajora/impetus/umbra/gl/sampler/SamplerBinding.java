@@ -4,8 +4,7 @@ import com.bdmajora.impetus.umbra.gl.GlTextureUnits;
 
 import java.util.function.IntSupplier;
 
-// One sampler's unit and the texture it should hold, resolved at bind time since a render target's texture
-// changes when its buffer flips. Routes through GlTextureUnits; see that class for why a raw bind is unsafe here
+// One sampler's unit and the texture it should hold, resolved at bind time since a render target's texture changes on flip; routes through GlTextureUnits, see that class for why a raw bind is unsafe
 public final class SamplerBinding {
     private final int textureUnit;
     private final int textureTarget;
@@ -17,8 +16,7 @@ public final class SamplerBinding {
         this.texture = texture;
     }
 
-    // Binds this sampler's texture. Deliberately does NOT restore the texture-unit selector: this is one step of a
-    // run of bindings, and the caller restores the selector once when the whole run is done
+    // Binds this sampler's texture without restoring the selector; this is one step of a run, and the caller restores once at the end
     public void update() {
         GlTextureUnits.bindTextureInRun(this.textureUnit, this.textureTarget, this.texture.getAsInt());
     }

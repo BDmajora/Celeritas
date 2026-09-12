@@ -8,13 +8,11 @@ import com.bdmajora.impetus.engine.impl.render.chunk.vertex.format.impl.MeshChun
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// A finished build reshaped for the mesh pipeline: raw vertex bytes, quad counts per facing, and a bounding box
-// Produced on a build worker, never the render thread, since doing it in uploadChunks wrecks 1% lows
+// A finished build reshaped for the mesh pipeline (raw vertex bytes, per-facing quad counts, bounding box), produced on a build worker since doing it in uploadChunks wrecks 1% lows
 public record SectionGeometry(
         // Total quads across every facing
         int quadCount,
-        // Vertex bytes, MeshChunkVertex layout, four vertices per quad, grouped by facing in ModelQuadFacing
-        // ordinal order
+        // Vertex bytes in MeshChunkVertex layout, four per quad, grouped by facing in ModelQuadFacing ordinal order
         NativeBuffer geometry,
         // Quads per facing, indexed by ModelQuadFacing.ordinal(); slot 6 is UNASSIGNED, which is always drawn
         short[] quadsPerFacing,
@@ -29,8 +27,7 @@ public record SectionGeometry(
         this.geometry.free();
     }
 
-    // Reshapes one pass's build output. Returns null when the pass produced nothing, which is the signal to drop
-    // the section rather than upload an empty one
+    // Reshapes one pass's build output; null when the pass produced nothing, which signals dropping the section rather than uploading an empty one
     public static SectionGeometry from(BuiltSectionMeshParts mesh) {
         NativeBuffer vertices = mesh.vertexBuffer();
 
@@ -66,10 +63,7 @@ public record SectionGeometry(
                 box.minX, box.minY, box.minZ, box.sizeX, box.sizeY, box.sizeZ);
     }
 
-    // Snaps the section's geometry to a 16x16x16 grid of 1-block cells, which is the granularity the occlusion
-    // box is drawn at
-    // A tight box matters: it is what lets a section behind a wall fail the depth test instead of covering the
-    // whole chunk volume and staying visible forever
+    // Snaps the geometry to a 16x16x16 grid of 1-block cells (the occlusion box granularity); a tight box is what lets a section behind a wall fail the depth test
     private static BoundingBox computeBounds(NativeBuffer vertices, int firstVertex, int quadCount) {
         long ptr = LWJGL.memAddress(vertices.getDirectBuffer()) + (long) firstVertex * MeshChunkVertex.STRIDE;
         long end = ptr + (long) quadCount * 4L * MeshChunkVertex.STRIDE;
@@ -90,8 +84,7 @@ public record SectionGeometry(
             maxZ = Math.max(maxZ, z);
         }
 
-        // An empty span cannot happen here (quadCount > 0), but a degenerate one can if every vertex landed in a
-        // single cell; size 0 is correct in that case and the shader adds the extra block itself
+        // An empty span cannot happen (quadCount > 0) but a degenerate one can if every vertex shares a cell; size 0 is correct and the shader adds the extra block
         return new BoundingBox(minX, minY, minZ, maxX - minX, maxY - minY, maxZ - minZ);
     }
 

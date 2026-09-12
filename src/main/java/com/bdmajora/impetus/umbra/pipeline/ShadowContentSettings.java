@@ -2,8 +2,7 @@ package com.bdmajora.impetus.umbra.pipeline;
 
 import com.bdmajora.impetus.umbra.shaderpack.ShaderProperties;
 
-// What the shadow pass may draw, from the pack's shadowTerrain, shadowEntities and similar directives
-// Ignoring them costs frame time and shows shadows the pack omitted; defaults follow OptiFine
+// What the shadow pass may draw, from shadowTerrain, shadowEntities and similar directives; ignoring them costs frame time and shows shadows the pack omitted, defaults follow OptiFine
 public final class ShadowContentSettings {
     // shadow.culling — how the shadow pass decides which chunks to walk
     public enum Culling {
@@ -11,9 +10,7 @@ public final class ShadowContentSettings {
         ON,
         // No culling at all: every chunk in range is drawn
         OFF,
-        // Iris's AdvancedShadowCullingFrustum: keeps the geometry BETWEEN the light and the view frustum that a
-        // plain shadow-frustum test would drop — which is exactly what makes an off-screen object still cast a
-        // shadow into the visible scene
+        // Iris's AdvancedShadowCullingFrustum: keeps geometry BETWEEN the light and the view frustum that a plain shadow-frustum test drops, so an off-screen object still casts into the visible scene
         REVERSED
     }
 
@@ -84,8 +81,7 @@ public final class ShadowContentSettings {
         return this.entities;
     }
 
-    // True when the shadow pass has any block entity to draw at all — either all of them, or just the
-    // light-emitting subset. Lets the caller skip the whole block-entity walk when neither applies
+    // True when the shadow pass draws any block entity at all (all, or the light-emitting subset), so the caller can skip the whole walk otherwise
     public boolean shouldRenderAnyBlockEntities() {
         return this.blockEntities || this.lightBlockEntities;
     }

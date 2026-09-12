@@ -9,21 +9,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// lets an idle furnace stop ticking
-// a furnace that is unlit, has nothing part-cooked, and is missing either its fuel or its input
-// cannot do anything: vanilla's own branches all fall through, the lit-state comparison finds no
-// change, and nothing is marked dirty - the tick is a pure no-op that every furnace in every loaded
-// chunk performs twenty times a second
-// each clause of the guard corresponds to a branch that would otherwise have work to do:
-//   furnaceBurnTime == 0, because a lit furnace must burn down and may finish smelting
-//   cookTime == 0, because an unlit furnace with progress on the clock decays it by two per tick,
-//   which is visible on the arrow and must keep happening
-//   either input or fuel empty, because with both present and unlit vanilla may light the furnace
-//   this tick
-// nothing needs to wake it: the guard is four field reads and two emptiness checks evaluated on the
-// tick itself, so the moment a hopper drops fuel in, the very next tick sees it - cheaper and
-// considerably harder to get wrong than a subscription system, which is what Lithium needs on
-// versions where the equivalent predicate is expensive to evaluate
+// Lets an idle furnace skip its tick: unlit (furnaceBurnTime == 0), no progress to decay (cookTime == 0), and missing input or fuel means every vanilla branch is a no-op; the guard is re-evaluated each tick so a hopper dropping fuel in is seen next tick without a subscription system
 @Mixin(TileEntityFurnace.class)
 public abstract class TileEntityFurnaceMixin {
     @Shadow

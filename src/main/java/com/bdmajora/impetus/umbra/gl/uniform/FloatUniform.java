@@ -8,8 +8,7 @@ public class FloatUniform extends Uniform {
     private final FloatSupplier value;
     // Last value actually uploaded, so an unchanged uniform costs a supplier call instead of a GL call
     private float cachedValue;
-    // Separate from cachedValue because 0.0f is a legitimate value: without this the first upload of a zero would
-    // be skipped and the uniform would keep whatever the program was linked with
+    // Separate from cachedValue because 0.0f is a legitimate value; otherwise the first upload of a zero is skipped and the uniform keeps its linked default
     private boolean initialized;
 
     public FloatUniform(int location, FloatSupplier value) {

@@ -28,9 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
-// A fully parsed pack: every GLSL file by path, shaders.properties, and the assembled ProgramSet
-// Works over an in-memory map so it is free of Minecraft and testable; #include flattening happens here
-// world0/ overrides the root; other dimension folders are not handled
+// A fully parsed pack: every GLSL file by path, shaders.properties and the assembled ProgramSet; works over an in-memory map so it is Minecraft-free and testable, world0/ overrides the root, other dimensions unhandled
 public final class ShaderPack {
     // The conventional location of shaders.properties, relative to shaders/
     public static final AbsolutePackPath PROPERTIES_PATH = AbsolutePackPath.fromAbsolutePath("/shaders.properties");
@@ -40,8 +38,7 @@ public final class ShaderPack {
     // Matches `!defined(IS_IRIS) && MC_VERSION < <n>` — the shape detectLegacyPrograms below looks for
     private static final java.util.regex.Pattern LEGACY_BRANCH_PATTERN = java.util.regex.Pattern.compile(
             "!\\s*defined\\s*\\(?\\s*IS_IRIS\\s*\\)?\\s*&&\\s*MC_VERSION\\s*<\\s*(\\d+)");
-    // The extensions that make a pack file a shader STAGE rather than an include — everything else in the pack is
-    // library source that only reaches the driver by being included
+    // The extensions that make a pack file a shader STAGE rather than an include; everything else only reaches the driver by being included
     private static final Set<String> STAGE_EXTENSIONS =
             new java.util.HashSet<>(java.util.Arrays.asList("vsh", "fsh", "gsh", "csh", "tcs", "tes"));
 
@@ -53,25 +50,17 @@ public final class ShaderPack {
     private final IncludeProcessor includeProcessor;
     private final ShaderProperties properties;
     private final ProgramSet baseProgramSet;
-    // The features this pack DECLARED in iris.features.required/optional and that this port can honour
-    // Distinct from the IRIS_FEATURE_<NAME> GLSL defines, which advertise everything the port supports so a pack
-    // can #ifdef on availability
-    // Iris draws exactly the same distinction — its hasFeature reads the declared set, while the defines come from
-    // isUsable() — and conflating the two would tell a pack it opted into something it never asked for
+    // The features this pack DECLARED in iris.features.required/optional that this port honours; distinct from the IRIS_FEATURE_<NAME> defines, which advertise everything supported (Iris draws the same line between hasFeature and isUsable())
     private final Set<com.bdmajora.impetus.umbra.features.FeatureFlags> activeFeatures;
-    // The pack's block/item/entity.properties maps, preprocessed with the ACTIVE option values — a pack gates its
-    // ID map on its own options, so parsing them with the defaults would give the wrong ids
+    // The pack's block/item/entity.properties maps preprocessed with the ACTIVE option values, since a pack gates its ID map on its own options
     private final IdMap idMap;
 
-    // --- Custom textures (Umbra ShaderPack parity) ---
-    // texture.noise resolved to data, or null meaning "keep the generated noisetex"
+    // texture.noise resolved to data, or null meaning "keep the generated noisetex" (Umbra ShaderPack parity)
     private final CustomTextureData customNoiseTexture;
-    // texture.<stage>.<sampler> directives resolved to data, keyed by stage and then by sampler name — stage first
-    // because the same sampler name legitimately means different things in different stages
+    // texture.<stage>.<sampler> directives resolved to data, keyed by stage then sampler name, since the same sampler name means different things in different stages
     private final Map<TextureStage, Map<String, CustomTextureData>> customTextureDataMap =
             new EnumMap<>(TextureStage.class);
-    // customTexture.<name> directives resolved to data, keyed by sampler name — these are stage-independent, which
-    // is why they need no stage dimension
+    // customTexture.<name> directives resolved to data keyed by sampler name; stage-independent, so no stage dimension
     private final Map<String, CustomTextureData> irisCustomTextureDataMap = new LinkedHashMap<>();
 
     public ShaderPack(Map<AbsolutePackPath, String> sources) {
@@ -82,28 +71,21 @@ public final class ShaderPack {
         this(sources, changedConfigs, Collections.emptyMap());
     }
 
-    // sources is the pack's raw text files, keyed relative to shaders/
-    // changedConfigs is only the option values that DIFFER from the pack's defaults, loaded from <pack>.txt and the
-    // in-game menu — applied to the sources BEFORE include flattening, since an option can gate an #include
-    // binaries is the pack's binary assets, .png custom textures and their .mcmeta sidecars, keyed the same way
+    // sources is the pack's raw text keyed relative to shaders/; changedConfigs is only the option values that DIFFER from defaults (from <pack>.txt and the menu), applied BEFORE include flattening since an option can gate an #include; binaries are .png textures and .mcmeta sidecars
     public ShaderPack(Map<AbsolutePackPath, String> sources, Map<String, String> changedConfigs,
                       Map<AbsolutePackPath, byte[]> binaries) {
         this.sources = Collections.unmodifiableMap(new HashMap<>(sources));
         this.binaries = Collections.unmodifiableMap(new HashMap<>(binaries));
 
-        // Discover options across every source file except the properties file, and apply the changed values. Must
-        // run FIRST: the properties/ID-map preprocessing below needs the resolved option values as macros. The
-        // include processor then flattens the EDITED sources so that option toggles/values are already baked in.
+        // Discover options across every source except the properties file and apply the changed values FIRST, since the properties/ID-map preprocessing needs the resolved values as macros and the include processor flattens the EDITED sources
         Map<AbsolutePackPath, String> optionSources = new HashMap<>(this.sources);
         optionSources.remove(PROPERTIES_PATH);
         this.shaderPackOptions = new ShaderPackOptions(optionSources, changedConfigs);
 
-        // The macro environment Umbra feeds its PropertiesPreprocessor: MC_* environment defines plus the pack's
-        // option values (enabled booleans as flag macros, string options as value macros).
+        // The macro environment Umbra feeds its PropertiesPreprocessor: MC_* defines plus the pack's option values (enabled booleans as flags, string options as values)
         Map<String, String> propertiesDefines = getShaderDefines();
 
-        // Umbra parity: pipeline directives read from the PREPROCESSED contents (so #if MC_VERSION/option gates
-        // resolve), menu-layout directives from the original. Option EDITS still never touch this file.
+        // Umbra parity: pipeline directives read from the PREPROCESSED contents so #if gates resolve, menu-layout directives from the original; option EDITS never touch this file
         String propertiesContents = this.sources.get(PROPERTIES_PATH);
         ShaderProperties parsedProperties = propertiesContents != null
                 ? ShaderProperties.parse(propertiesContents,
@@ -116,8 +98,7 @@ public final class ShaderPack {
                 ? parsedProperties
                 : parsedProperties.withProfileDisabledPrograms(profileDisabledPrograms);
 
-        // Feature-flag validation: a pack *requiring* a flag this port cannot honor must fail loudly and visibly
-        // instead of rendering subtly wrong. Optional flags simply stay undefined for the pack to detect.
+        // Feature-flag validation: a pack *requiring* a flag this port cannot honor fails loudly rather than rendering subtly wrong; optional flags stay undefined for the pack to detect
         this.activeFeatures = com.bdmajora.impetus.umbra.features.FeatureFlags.parseDeclared(
                 this.properties.getRaw().get("iris.features.required"),
                 this.properties.getRaw().get("iris.features.optional"));
@@ -140,8 +121,7 @@ public final class ShaderPack {
 
         this.idMap = new IdMap(this.sources, propertiesDefines);
 
-        // Resolve the custom-texture directives to data, exactly like Umbra's ShaderPack constructor: a texture that
-        // fails to read is logged and dropped (the sampler then sees the normal render target / generated noise).
+        // Resolve the custom-texture directives to data like Umbra's ShaderPack constructor; a texture that fails to read is logged and dropped, and the sampler sees the normal target or generated noise
         this.customNoiseTexture = this.properties.getNoiseTexturePath().map(path -> {
             try {
                 return readTexture(path);
@@ -171,32 +151,14 @@ public final class ShaderPack {
             }
         });
 
-        // Must run before anything compiles: both the terrain and the composite compile paths ask
-        // ShaderMacros.forProgram which programs take their pre-Umbra branch.
+        // Must run before anything compiles: the terrain and composite compile paths ask ShaderMacros.forProgram which programs take their pre-Umbra branch
         ShaderMacros.setPackLegacyPrograms(detectLegacyPrograms(this.sources));
-        // Likewise for the raw-custom-texture renames: the gbuffers/terrain/shadow compile paths reach the transform
-        // from static contexts with no pack handle.
+        // Likewise for the raw-custom-texture renames: the gbuffers/terrain/shadow compile paths reach the transform from static contexts with no pack handle
         com.bdmajora.impetus.umbra.shaderpack.texture.CustomTextureTransformer.setActivePatches(
                 this.properties.getCustomTexturePatches());
     }
 
-    // Finds the programs whose source contains `!defined(IS_IRIS) && MC_VERSION < <newer than ours>` — the pack
-    // saying "here is the path I authored for an OptiFine this old"
-    // Those programs are then compiled WITHOUT IS_IRIS and IRIS_VERSION, so they take that authored path instead of
-    // the Iris one. On 1.12.2 that is both what the pack intends and what actually works: Sildur's water does its
-    // reflection inline behind IS_IRIS at F0=0.5 over 85%-opaque water, giving opaque mirror-like water, while its
-    // 1.12.2 path defers the reflection to composite1 at F0=0.25 after the water has alpha-blended with the floor,
-    // giving see-through water
-    //
-    // The && and the < are both load-bearing, and are what keep this from firing on packs that merely MENTION
-    // IS_IRIS: BSL's deferred1 has `MC_VERSION >= 10900 && !defined IS_IRIS` and Complementary's common.glsl has
-    // `!defined IS_IRIS || MC_VERSION < 12109`, and neither matches
-    // Across the nine packs on hand this selects exactly Sildur's gbuffers_water and composite1 — which is the pair
-    // that HAS to move together, since the 1.12.2 water branch writes the wave normal to gl_FragData[2] under
-    // DRAWBUFFERS:412 and composite1 reads it back from colortex2
-    //
-    // Scans the RAW un-flattened sources on purpose: a match inside an included library says nothing about which
-    // program should switch branches
+    // Finds programs containing `!defined(IS_IRIS) && MC_VERSION < <newer than ours>`, the pack's authored path for an OptiFine this old, and compiles them WITHOUT IS_IRIS; across nine packs this selects exactly Sildur's gbuffers_water and composite1 (its 1.12.2 water defers reflection to composite1 via gl_FragData[2], giving see-through water), while BSL's and Complementary's guards do not match. Scans RAW sources since an include says nothing about which program switches
     private static Set<String> detectLegacyPrograms(Map<AbsolutePackPath, String> rawSources) {
         Set<String> legacy = new java.util.HashSet<>();
         for (Map.Entry<AbsolutePackPath, String> entry : rawSources.entrySet()) {
@@ -222,8 +184,7 @@ public final class ShaderPack {
         return legacy;
     }
 
-    // Reduces a path to its program name — /world1/composite1.fsh gives composite1 — and returns null for anything
-    // that is not a shader stage at all
+    // Reduces a path to its program name (/world1/composite1.fsh -> composite1), null for anything that is not a shader stage
     private static String programName(AbsolutePackPath path) {
         String file = path.getPathString();
         int slash = file.lastIndexOf('/');
@@ -237,11 +198,7 @@ public final class ShaderPack {
         return file.substring(0, dot);
     }
 
-    // Resolves one custom-texture directive value, mirroring Iris's ShaderPack.readTexture
-    // A namespace:path value becomes a resource-location texture, looked up through the game's TextureManager at
-    // bind time rather than now — with minecraft:dynamic/lightmap_1 marking the live lightmap specially
-    // Anything else is a PNG inside the pack, with a leading / tolerated because Continuum 2.0.4 writes one, and
-    // blur/clamp flags read from the <path>.mcmeta sidecar, both defaulting to false
+    // Resolves one custom-texture directive value like Iris's readTexture: a namespace:path becomes a resource-location texture looked up at bind time (minecraft:dynamic/lightmap_1 marks the live lightmap), anything else a PNG in the pack with a tolerated leading / (Continuum 2.0.4) and blur/clamp from its .mcmeta
     private CustomTextureData readTexture(String path) throws IOException {
         String[] rawParts = path.trim().split("\\s+");
         if (rawParts.length > 1) {
@@ -259,8 +216,7 @@ public final class ShaderPack {
             return new CustomTextureData.ResourceData(parts[0], parts[1]);
         }
 
-        // NB: like Umbra, this does not guarantee the path stays inside the pack; the leading-slash strip just fixes
-        // packs that write "/lib/..." instead of "lib/...".
+        // NB: like Umbra, this does not guarantee the path stays inside the pack; the strip just fixes packs writing "/lib/..." instead of "lib/..."
         if (path.startsWith("/")) {
             path = path.substring(1);
         }
@@ -343,9 +299,7 @@ public final class ShaderPack {
         }
     }
 
-    // The macro set for preprocessing the pack's *.properties files: the GL-free MC_* environment macros PLUS the
-    // pack's current option values, matching what Iris hands its own PropertiesPreprocessor
-    // Option values belong here and deliberately not in getEnvironmentDefines below — see that method
+    // The macro set for preprocessing the pack's *.properties files: the GL-free MC_* macros PLUS the pack's option values, matching Iris's PropertiesPreprocessor; option values deliberately do not go in getEnvironmentDefines
     public Map<String, String> getShaderDefines() {
         Map<String, String> defines = ShaderMacros.standard();
         this.shaderPackOptions.getOptionSet().getBooleanOptions().forEach((name, option) -> {
@@ -358,26 +312,18 @@ public final class ShaderPack {
         return defines;
     }
 
-    // The macro set for GLSL source injection: environment macros ONLY, the MC_* and IRIS_* set
-    // Option values must never be injected into GLSL. They are already applied in place to the pack sources, which
-    // is the OptiFine and Iris semantics, so injecting them again redefines the pack's own #define lines and the
-    // driver rejects it with "macro redefined"
-    // Worse, it force-defines names packs use as stage or include guards: SuperDuperVanilla's VERTEX and FRAGMENT
-    // guards select which main() gets compiled, so defining both compiles neither correctly
+    // The macro set for GLSL injection, environment macros ONLY; option values are already applied in place to the sources (OptiFine/Iris semantics), so injecting them redefines the pack's #define lines ("macro redefined") and force-defines names like SuperDuperVanilla's VERTEX/FRAGMENT stage guards
     public Map<String, String> getEnvironmentDefines() {
         Map<String, String> macros = ShaderMacros.standard();
 
-        // OptiFine's ShaderMacros: two shaders.properties switches are exposed to GLSL as macros so a pack can adapt
-        // its own lighting to the setting it asked for. Both default to true when the pack says nothing, matching
-        // Shaders.isOldHandLight()/isOldLighting().
+        // OptiFine's ShaderMacros: two shaders.properties switches exposed to GLSL so a pack adapts its lighting to the setting; both default true, matching Shaders.isOldHandLight()/isOldLighting()
         if (this.properties.getOldHandLight().orElse(Boolean.TRUE)) {
             macros.put("MC_OLD_HAND_LIGHT", "");
         }
         if (this.properties.getOldLighting().orElse(Boolean.TRUE)) {
             macros.put("MC_OLD_LIGHTING", "");
         }
-        // `supportsColorCorrection` means the pack converts to the output colour space itself, so Umbra hands it the
-        // COLOR_SPACE_* enumeration to compare `currentColorSpace` against.
+        // `supportsColorCorrection` means the pack converts to the output colour space itself, so Umbra hands it the COLOR_SPACE_* enumeration to compare `currentColorSpace` against
         if (this.properties.getSupportsColorCorrection().orElse(Boolean.FALSE)) {
             for (com.bdmajora.impetus.umbra.pipeline.ColorSpaceConverter.ColorSpace space
                     : com.bdmajora.impetus.umbra.pipeline.ColorSpaceConverter.ColorSpace.values()) {
@@ -445,10 +391,7 @@ public final class ShaderPack {
         return this.baseProgramSet;
     }
 
-    // Whether the pack ASKED for a feature — which is a different question from whether this port can provide it
-    // Iris gates real pipeline behaviour on exactly this, and the distinction matters concretely: a pack that never
-    // opted into SEPARATE_HARDWARE_SAMPLERS expects shadowtex0 and shadowtex1 to carry hardware depth comparison
-    // themselves, rather than through the *HW aliases
+    // Whether the pack ASKED for a feature, distinct from whether this port provides it; a pack that never opted into SEPARATE_HARDWARE_SAMPLERS expects shadowtex0/1 to carry hardware comparison themselves
     public boolean hasFeature(com.bdmajora.impetus.umbra.features.FeatureFlags feature) {
         return this.activeFeatures.contains(feature);
     }
@@ -487,9 +430,7 @@ public final class ShaderPack {
         return set;
     }
 
-    // Reads and flattens one program's stages by source name
-    // Null when the pack has neither a raster stage nor any compute stage for it anywhere — which is how a program
-    // the pack simply does not ship is distinguished from one that failed to parse
+    // Reads and flattens one program's stages by source name; null when the pack has neither a raster nor a compute stage for it, distinguishing an unshipped program from a failed parse
     private ProgramSource readProgram(String sourceName) {
         String vertex = readStage(sourceName, "vsh");
         String fragment = readStage(sourceName, "fsh");
@@ -503,13 +444,7 @@ public final class ShaderPack {
         return new ProgramSource(sourceName, vertex, geometry, tessControl, tessEval, fragment, computes);
     }
 
-    // Reads a program's compute stages: <name>.csh plus the letter-suffixed <name>_a.csh through _z.csh, which is
-    // an Iris extension
-    // The letter scan STOPS at the first missing suffix, matching Iris's readComputeArray — so a pack shipping _a
-    // and _c but no _b gets only _a. That is deliberate rather than a bug: the suffixes are an ordered chain, and
-    // running _c without _b would feed it inputs _b never produced
-    // Returns an empty array when the program has no compute stage at all, and otherwise a 27-entry array which may
-    // still contain nulls
+    // Reads a program's compute stages, <name>.csh plus _a through _z (Iris extension); the letter scan STOPS at the first missing suffix like Iris's readComputeArray since the suffixes are an ordered chain, returning empty or a 27-entry array that may hold nulls
     private String[] readComputeVariants(String sourceName) {
         String[] computes = new String[ProgramSource.MAX_COMPUTE_VARIANTS];
         boolean any = false;
@@ -537,8 +472,7 @@ public final class ShaderPack {
         return String.join("\n", this.includeProcessor.process(path));
     }
 
-    // Looks in the overworld override directory FIRST and the pack root second, which is what makes a world0/
-    // program shadow the root one rather than merely coexist with it
+    // Looks in the overworld override directory FIRST and the pack root second, so a world0/ program shadows the root one
     private AbsolutePackPath locateStage(String sourceName, String extension) {
         AbsolutePackPath overworld = AbsolutePackPath.fromAbsolutePath(
                 OVERWORLD_DIR + "/" + sourceName + "." + extension);

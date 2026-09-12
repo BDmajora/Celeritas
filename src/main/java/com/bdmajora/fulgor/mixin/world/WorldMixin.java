@@ -12,23 +12,13 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-// gives every world a lighting engine and routes checkLightFor into it
-// this is the whole of the redirection: vanilla's checkLightFor is a full propagation - it walks
-// outwards from the position, reading and rewriting neighbours until the light settles, and returns
-// false when it ran out of its own iteration budget
-// Fulgor records the position and returns true, and the propagation happens later, in bulk, from
-// LightingEngine
-// cancelling at HEAD rather than @Overwrite deliberately: the vanilla body stays intact, so another
-// mod that injects into it still applies cleanly even though the code no longer runs
+// Gives every world a lighting engine and routes checkLightFor into it: vanilla propagates immediately, Fulgor records the position and returns true for LightingEngine to propagate later in bulk; cancelled at HEAD rather than @Overwrite so other mods' injections still apply
 @Mixin(World.class)
 public abstract class WorldMixin implements LightingEngineProvider {
     @Unique
     private LightingEngine fulgor$lightingEngine;
 
-    // constructed with the world so the engine can capture the owning thread
-    // that thread identity is the only way to tell a legitimate call from another mod touching the
-    // world off-thread, and it is only knowable here - by the time the first light update arrives, the
-    // call could be coming from anywhere
+    // Constructed with the world so the engine captures the owning thread, the only way to tell a legitimate call from a mod touching the world off-thread, and only knowable here
     @Inject(method = "<init>", at = @At("RETURN"))
     private void fulgor$createLightingEngine(CallbackInfo ci) {
         this.fulgor$lightingEngine = new LightingEngine((World) (Object) this);
@@ -39,8 +29,7 @@ public abstract class WorldMixin implements LightingEngineProvider {
                                             CallbackInfoReturnable<Boolean> cir) {
         this.fulgor$lightingEngine.scheduleLightUpdate(lightType, pos);
 
-        // Vanilla's false means "I gave up part-way through"; nothing sensible can be reported here
-        // because nothing has been attempted yet. True is the honest answer: the update is accepted.
+        // Vanilla's false means "gave up part-way"; nothing has been attempted yet, so true (the update is accepted) is the honest answer
         cir.setReturnValue(true);
     }
 

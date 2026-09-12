@@ -1,9 +1,6 @@
 package com.bdmajora.impetus.engine.impl.render.mesh.gl;
 
-// Anything the mesh backend can hand a shader as a raw GPU pointer, and anything UploadStream can copy into
-// Two implementations: a dense BindlessBuffer, and a SparseBindlessBuffer whose pages are committed on demand
-// The pipeline only ever sees this interface, so losing sparse support on a driver that mishandles page
-// commitment changes nothing above this line
+// Anything the mesh backend hands a shader as a raw GPU pointer and UploadStream can copy into; dense BindlessBuffer or on-demand SparseBindlessBuffer, so losing sparse support changes nothing above this
 public interface DeviceBuffer {
     int getId();
 

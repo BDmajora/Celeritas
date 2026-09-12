@@ -10,14 +10,9 @@ import com.bdmajora.impetus.lwjgl.GL41;
 import java.util.Locale;
 import java.util.Optional;
 
-// Every colour buffer format a pack can request via formatN, each with a (pixelFormat, pixelType) pair legal
-// for glTexImage2D. Integer formats need *_INTEGER client formats, so that is tracked per constant
-// Names match the OptiFine spelling so a pack's string resolves through valueOf
+// Every colour buffer format a pack can request via formatN with its (pixelFormat, pixelType) pair; integer formats need *_INTEGER client formats, and names match OptiFine's spelling for valueOf
 public enum InternalTextureFormat {
-    // Default — OptiFine's implicit format. Umbra resolves it to the SIZED RGBA8 rather than the base GL_RGBA
-    // constant, and the distinction is load-bearing: glBindImageTexture only accepts sized formats, so binding a
-    // default-format target as `colorimgN` with GL_RGBA raises GL_INVALID_VALUE and the binding never takes. Every
-    // imageStore into it is then silently dropped (Clarity's composite2 writes its finished frame that way).
+    // Default, OptiFine's implicit format, resolved to SIZED RGBA8 like Umbra: glBindImageTexture only accepts sized formats, so base GL_RGBA raises GL_INVALID_VALUE and every imageStore is silently dropped (Clarity's composite2)
     RGBA(GL11.GL_RGBA8, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, false),
 
     // 8-bit normalized
@@ -92,10 +87,7 @@ public enum InternalTextureFormat {
     R11F_G11F_B10F(GL30.GL_R11F_G11F_B10F, GL11.GL_RGB, GL11.GL_FLOAT, false),
     RGB9_E5(GL30.GL_RGB9_E5, GL11.GL_RGB, GL11.GL_FLOAT, false),
 
-    // Low-precision legacy formats. Rarely a good idea, but Umbra accepts them
-    // (`InternalTextureFormat.java:78-86`) and a pack that asks for one and silently gets RGBA8 instead is a
-    // divergence: Body Camera Shader v1.6.1 requests `colortex4Format = RGBA2`. A pack may also legitimately pick
-    // one to save bandwidth on a mask buffer, and packs sometimes *rely* on the quantisation.
+    // Low-precision legacy formats; Umbra accepts them, Body Camera v1.6.1 requests `colortex4Format = RGBA2`, and packs sometimes rely on the quantisation, so silently substituting RGBA8 is a divergence
     RGBA2(GL11.GL_RGBA2, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, false),
     RGBA4(GL11.GL_RGBA4, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, false),
     R3_G3_B2(GL11.GL_R3_G3_B2, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, false),

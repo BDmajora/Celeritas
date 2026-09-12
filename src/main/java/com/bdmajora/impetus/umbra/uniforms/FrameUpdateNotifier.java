@@ -3,9 +3,7 @@ package com.bdmajora.impetus.umbra.uniforms;
 import java.util.ArrayList;
 import java.util.List;
 
-// Per-frame callback fanout for the uniform helpers that have to advance exactly once per rendered frame
-// Needed because those helpers (the system-time counters, the eye-brightness smoother) are read by many uniforms
-// but must only STEP once — driving them from update() would advance them once per reader instead
+// Per-frame callback fanout for the uniform helpers that must advance exactly once per frame (system-time counters, eye-brightness smoother); driving them from update() would step once per reader
 public final class FrameUpdateNotifier {
     // Registered at pipeline build and never removed: the notifier dies with the pipeline it belongs to
     private final List<Runnable> listeners = new ArrayList<>();

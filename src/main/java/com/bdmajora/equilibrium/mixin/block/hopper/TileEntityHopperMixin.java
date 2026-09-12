@@ -22,23 +22,7 @@ import org.spongepowered.asm.mixin.Unique;
 
 import javax.annotation.Nullable;
 
-// stops hoppers re-discovering the same two inventories several times a second
-// every transfer attempt resolves the inventory the hopper faces and the one above it from scratch,
-// and each resolution is a block read, a tile entity lookup that constructs a tile entity as a side
-// effect if the block wants one and has none, and - whenever neither produces an inventory - an entity
-// query over the block
-// an idle hopper does all of this every single tick, because the eight-tick cooldown is only set after
-// a *successful* transfer
-// two idle hoppers side by side are therefore running six entity queries a tick between them, and a
-// storage hall is running thousands, forever, to discover nothing
-// each hopper gets two HopperInventoryCaches, one per side; what they may and may not remember is
-// documented there, but in short a non-chest tile entity is cached against the identity of the block
-// state that was present when it was found, chests are always re-resolved because forming a double
-// chest changes no block state, and the entity fallback is not cached at all - it is skipped outright
-// when the world provably holds no inventory entities
-// getInventoryAtPosition is deliberately left alone: it is public, static, and called by droppers,
-// dispensers and a great deal of mod code that has nowhere to hang a cache
-// the two instance-scoped entry points below are where the hopper's own repetition actually lives
+// Stops hoppers re-resolving the same two inventories every tick (the cooldown is only set after a SUCCESSFUL transfer, so idle hoppers run entity queries forever); two HopperInventoryCaches per hopper, and the public static getInventoryAtPosition is left alone for droppers and mod code
 @Mixin(TileEntityHopper.class)
 public abstract class TileEntityHopperMixin extends TileEntity implements IHopper, HopperCacheHolder {
     @Unique
@@ -47,10 +31,7 @@ public abstract class TileEntityHopperMixin extends TileEntity implements IHoppe
     @Unique
     private HopperInventoryCache equilibrium$source;
 
-    // created on first use rather than in a field initialiser
-    // Mixin can merge initialisers for fields a mixin adds, but it does so by rewriting the target's
-    // constructors, and this target has several inherited ones
-    // a null check on a field the hopper reads twice per tick is not worth being clever about
+    // Created on first use rather than a field initialiser, since Mixin merges initialisers by rewriting constructors and this target has several inherited ones
     @Override
     public HopperInventoryCache equilibrium$sourceCache() {
         if (this.equilibrium$source == null) {
@@ -96,12 +77,7 @@ public abstract class TileEntityHopperMixin extends TileEntity implements IHoppe
         return equilibrium$resolveUncached(hopper.getWorld(), x, y, z);
     }
 
-    // [VanillaCopy] TileEntityHopper#getInventoryAtPosition, for hoppers that cannot cache
-    // hopper minecarts reach this; they move, so a cache keyed on the block state at a fixed position
-    // would be answering about wherever the minecart used to be
-    // the only thing they gain here is HopperEntityLookup, which skips the entity query when it
-    // provably has nothing to find - and that is exactly the query a minecart running along a rail
-    // with nothing above it would otherwise repeat every tick
+    // [VanillaCopy] TileEntityHopper#getInventoryAtPosition for hoppers that cannot cache (minecarts move, so a position-keyed cache would be stale); they still gain HopperEntityLookup skipping the empty entity query
     @Unique
     @Nullable
     private static IInventory equilibrium$resolveUncached(World world, double x, double y, double z) {

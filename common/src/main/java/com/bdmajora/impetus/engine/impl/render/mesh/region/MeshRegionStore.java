@@ -14,8 +14,7 @@ import java.util.Deque;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The region and section header buffers the GPU walks to find geometry; a section id is (regionId << 8) | slot
-// Headers are staged per region and uploaded as one 8 KB block, so a mass edit is not thousands of tiny copies
+// Region and section header buffers the GPU walks to find geometry (section id = (regionId << 8) | slot); headers are staged per region and uploaded as one 8 KB block
 public class MeshRegionStore {
     // Bytes per region header: two packed uint64s
     public static final int REGION_HEADER_BYTES = 16;
@@ -80,8 +79,7 @@ public class MeshRegionStore {
         return this.regions[regionId].key;
     }
 
-    // Claims a slot for a section, creating its region if this is the first section in it
-    // Returns the section id: region id in the high bits, slot within the region in the low 8
+    // Claims a slot for a section, creating its region if needed; returns region id in the high bits and slot in the low 8
     public int allocateSection(int sectionX, int sectionY, int sectionZ) {
         long key = regionKey(sectionX, sectionY, sectionZ);
         int regionId = this.regionIdByKey.computeIfAbsent(key, k -> this.regionIds.allocate());
@@ -108,8 +106,7 @@ public class MeshRegionStore {
         return slot | (regionId << SECTION_ID_SHIFT);
     }
 
-    // Pointer to a section's 32 header bytes in the staging copy, valid until the next call on this object
-    // Marks the region dirty, so whatever the caller writes goes up on the next commit
+    // Pointer to a section's 32 header bytes in the staging copy, valid until the next call; marks the region dirty so the write goes up on the next commit
     public long beginSectionUpdate(int sectionId) {
         Region region = this.regions[sectionId >>> SECTION_ID_SHIFT];
         int index = region.slotToIndex[sectionId & 0xFF];
@@ -123,17 +120,13 @@ public class MeshRegionStore {
         return region.sectionHeaders + (long) index * SECTION_HEADER_BYTES;
     }
 
-    // Where in the region's packed section array this section ended up
-    // The GPU needs it because a section's visibility byte and its draw slot are addressed by dense index, not by
-    // its position in the region
+    // The section's index in the region's packed array; the GPU addresses its visibility byte and draw slot by dense index, not by region position
     public int getSectionIndex(int sectionId) {
         Region region = this.regions[sectionId >>> SECTION_ID_SHIFT];
         return region.slotToIndex[sectionId & 0xFF];
     }
 
-    // Removes a section, compacting the region's dense array so the live sections stay in slots 0..count-1
-    // Compaction is what lets the GPU dispatch exactly `count` meshlets per region instead of walking 256 slots
-    // looking for live ones
+    // Removes a section and compacts the region's dense array so live sections stay in 0..count-1, letting the GPU dispatch exactly `count` meshlets
     public void removeSection(int sectionId) {
         Region region = this.regions[sectionId >>> SECTION_ID_SHIFT];
 
@@ -191,8 +184,7 @@ public class MeshRegionStore {
             region.dirty = false;
 
             if (region.removed) {
-                // A new region may already have claimed the id, in which case its own upload overwrites this one
-                // and clearing here would corrupt it
+                // A new region may already have claimed the id; its own upload overwrites this one and clearing here would corrupt it
                 if (this.regions[region.id] != null) {
                     continue;
                 }
@@ -231,9 +223,7 @@ public class MeshRegionStore {
                 1 << 6, 1 << 5, 1 << 6);
     }
 
-    // Manhattan distance from the camera to the region, averaged over two opposite corners
-    // Used only to sort front-to-back, so exactness does not matter — cheapness does, since this runs for every
-    // live region every frame
+    // Manhattan distance from camera to region, averaged over two opposite corners; only used for front-to-back sorting so cheapness beats exactness
     public int distanceTo(int regionId, int cameraSectionX, int cameraSectionY, int cameraSectionZ) {
         Region region = this.regions[regionId];
 
@@ -268,11 +258,7 @@ public class MeshRegionStore {
         this.dirtyRegions.add(region);
     }
 
-    // Two packed uint64s the region rasteriser reads to draw the region's box and size its meshlet dispatch
-    //   a: [0..23] y, [24..47] x, [48..55] highest live index, [56..58] size z, [59..61] size x, [62..63] size y
-    //   b: [40..63] z
-    // Position and extent are in sections and cover only the occupied part of the region, so a region holding
-    // one section draws a one-section box rather than an 8x4x8 one
+    // Two packed uint64s for the region rasteriser: a = [0..23] y, [24..47] x, [48..55] highest live index, [56..58] size z, [59..61] size x, [62..63] size y; b = [40..63] z; extents cover only the occupied part
     private static void writeRegionHeader(long ptr, Region region) {
         int minX = Integer.MAX_VALUE, minY = Integer.MAX_VALUE, minZ = Integer.MAX_VALUE;
         int maxX = Integer.MIN_VALUE, maxY = Integer.MIN_VALUE, maxZ = Integer.MIN_VALUE;
@@ -311,8 +297,7 @@ public class MeshRegionStore {
         return PositionUtil.packSection(sectionX >> 3, sectionY >> 2, sectionZ >> 3);
     }
 
-    // Slot layout within a region: y in the top two bits, then z, then x, matching what the section rasteriser's
-    // mesh shader unpacks
+    // Slot layout within a region: y in the top two bits, then z, then x, matching what the section rasteriser's mesh shader unpacks
     private static int slotWithinRegion(int sectionX, int sectionY, int sectionZ) {
         return ((sectionY & 3) << 6) | ((sectionZ & 7) << 3) | (sectionX & 7);
     }

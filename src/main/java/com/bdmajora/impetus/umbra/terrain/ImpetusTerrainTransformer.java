@@ -5,10 +5,7 @@ import com.bdmajora.impetus.umbra.gl.program.DrawBuffers;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// Lifts an OptiFine-style GLSL-120 gbuffers_terrain program to run on Impetus's uncompressed chunk vertex format
-// (a_PosId/a_Color/a_TexCoord/a_LightCoord) and matrices instead of fixed-function state.
-// 1.12.2 analogue of modern Umbra's Sodium terrain transform: bumps the shader to #version 330 core, renames the
-// pack's main to irisMain, and generates a wrapper main that decodes the vertex into globals the gl_* #defines point at.
+// Lifts an OptiFine-style GLSL-120 gbuffers_terrain program onto Impetus's chunk vertex format (a_PosId/a_Color/a_TexCoord/a_LightCoord) and matrices, the 1.12.2 analogue of Umbra's Sodium terrain transform: #version 330 core, main renamed to irisMain, and a wrapper main decoding the vertex into globals the gl_* #defines point at
 public final class ImpetusTerrainTransformer {
     private static final Pattern VERSION = Pattern.compile("^\\s*#version[^\\n]*\\n", Pattern.MULTILINE);
 
@@ -72,15 +69,12 @@ public final class ImpetusTerrainTransformer {
             "#define ftransform() (u_ProjectionMatrix * (u_ModelViewMatrix * iris_Vertex))",
             "out float iris_FogFragCoord;",
             "#define gl_FogFragCoord iris_FogFragCoord",
-            // gl_Fog.* stand-ins: real per-frame uniforms (fed by CommonUniforms), NOT constants. See the
-            // matching note in FullscreenTransformer — const 0.0/1.0/vec4(0) forces full-strength fog for
-            // packs that read gl_Fog.start/end/color. Unused ones are stripped by the compiler.
+            // gl_Fog.* stand-ins are real per-frame uniforms fed by CommonUniforms, NOT constants (see FullscreenTransformer; const values force full-strength fog); unused ones are stripped
             "uniform vec4 iris_FogColor;",
             "uniform float iris_FogDensity;",
             "uniform float iris_FogStart;",
             "uniform float iris_FogEnd;",
-            // gl_Fog.scale is inlined as an expression by FogParameters (Umbra's 1/(end-start)), so there is
-            // deliberately no iris_FogScale declaration here.
+            // gl_Fog.scale is inlined as an expression by FogParameters, so deliberately no iris_FogScale declaration here
             "out vec4 iris_TexCoordArr[4];",
             "#define gl_TexCoord iris_TexCoordArr",
             "// OptiFine packs rely on fixed-function GL_ALPHA_TEST for cutout transparency, but Impetus disables it",
@@ -91,8 +85,7 @@ public final class ImpetusTerrainTransformer {
             ""
     ) + "\n";
 
-    // Appended after the pack body: the hoisted global initializers it runs reference pack globals/uniforms
-    // that must already be declared above it.
+    // Appended after the pack body since the hoisted global initializers reference pack globals/uniforms declared above
     private static String vertexMain(String hoistedAssignments) {
         return "\nvoid main() {\n"
                 + "    uint lightData = a_LightCoord;\n" // 'packed' is a reserved word in GLSL 330
@@ -109,30 +102,14 @@ public final class ImpetusTerrainTransformer {
                 + "    iris_AlphaCutoff = _UMBRA_ALPHA_CUTOFF[int((lightData >> 1u) & 3u)];\n"
                 + hoistedAssignments
                 + "    irisMain();\n"
-                // Robustness guard for a non-finite clip position out of the pack's vertex math.
-                //
-                // This used to collapse the vertex to vec4(0, 0, 2, 1) — behind the far plane, so the triangle clipped
-                // away. That fixed the original symptom (one flung vertex dragging a sliver "grass spike" across the
-                // screen) but created a far worse one: when the cause is a *uniform* rather than one bad vertex, every
-                // terrain vertex in the frame is non-finite, so this deleted the entire world. Both terrain passes
-                // carry this guard and the entity programs do not, which is exactly the recurring "world unloads
-                // randomly, signs and armour stands keep drawing" report.
-                //
-                // Fall back to the plain transform instead. u_ProjectionMatrix, u_ModelViewMatrix and iris_Vertex are
-                // supplied by this pipeline, not by the pack, and are finite whenever the draw itself is valid — so
-                // the vertex lands where it geometrically belongs. A single bad vertex still cannot spike (it gets its
-                // real position), and a bad uniform now costs the pack's vertex effects for a frame instead of the
-                // whole world.
+                // Guard for a non-finite clip position: collapsing to vec4(0, 0, 2, 1) fixed a single flung "grass spike" vertex but deleted the whole world when a *uniform* was bad (the "world unloads randomly, signs keep drawing" report), so fall back to the plain transform with the pipeline's own finite matrices instead
                 + "    if (any(isnan(gl_Position)) || any(isinf(gl_Position))) {\n"
                 + "        gl_Position = u_ProjectionMatrix * u_ModelViewMatrix * iris_Vertex;\n"
                 + "    }\n"
                 + "}\n";
     }
 
-    // gl_FragData replacement, only emitted when the pack body actually references gl_FragData/gl_FragColor —
-    // the location-0 array would otherwise collide with named layout(location=N) outputs (photon).
-    // Array size comes from the driver (DrawBuffers.fragmentOutputArraySize()); a hardcoded 16 exceeded
-    // GL_MAX_DRAW_BUFFERS and failed to link on Mesa/Arc.
+    // gl_FragData replacement, emitted only when the body references gl_FragData/gl_FragColor since the location-0 array collides with named layout(location=N) outputs (photon); array size from the driver, since 16 failed to link on Mesa/Arc
     private static String fragDataBlock() {
         return String.join("\n",
                 "layout(location = 0) out vec4 iris_FragData[" + DrawBuffers.fragmentOutputArraySize() + "];",
@@ -142,16 +119,12 @@ public final class ImpetusTerrainTransformer {
         );
     }
 
-    // The in-shader stand-in for the fixed-function alpha test, threshold picked to match Umbra's per-pass default
-    // (TERRAIN_SOLID = ALWAYS/no discard, TERRAIN_CUTOUT = 0.5, TERRAIN_TRANSLUCENT = 0.0001) instead of the old
-    // per-vertex material-byte cutoff, which had no counterpart in Umbra and could discard the whole world if the
-    // packed bits read 3 (cutoff 1.0, everything under full alpha dropped).
+    // In-shader stand-in for the fixed-function alpha test with Umbra's per-pass defaults (SOLID no discard, CUTOUT 0.5, TRANSLUCENT 0.0001) instead of the old per-vertex material-byte cutoff, which could discard the whole world if the packed bits read 3
     private static String alphaDiscard(String snippet) {
         return snippet == null ? "" : snippet;
     }
 
-    // Fragment prologue: promotes the GLSL 120 fragment built-ins a legacy pack uses to their 330-core equivalents,
-    // and declares the outputs and uniforms the generated code below references
+    // Fragment prologue: promotes the GLSL 120 fragment built-ins to their 330-core equivalents and declares the outputs and uniforms the generated code references
     private static final String FRAGMENT_PROLOGUE = String.join("\n",
             "#version 330 core",
             "// ---- Impetus/Umbra terrain bridge (generated) ----",
@@ -165,15 +138,12 @@ public final class ImpetusTerrainTransformer {
             "#define gl_TextureMatrix iris_TextureMatrix",
             "in float iris_FogFragCoord;",
             "#define gl_FogFragCoord iris_FogFragCoord",
-            // gl_Fog.* stand-ins: real per-frame uniforms (fed by CommonUniforms), NOT constants. See the
-            // matching note in FullscreenTransformer — const 0.0/1.0/vec4(0) forces full-strength fog for
-            // packs that read gl_Fog.start/end/color. Unused ones are stripped by the compiler.
+            // gl_Fog.* stand-ins are real per-frame uniforms fed by CommonUniforms, NOT constants (see FullscreenTransformer; const values force full-strength fog); unused ones are stripped
             "uniform vec4 iris_FogColor;",
             "uniform float iris_FogDensity;",
             "uniform float iris_FogStart;",
             "uniform float iris_FogEnd;",
-            // gl_Fog.scale is inlined as an expression by FogParameters (Umbra's 1/(end-start)), so there is
-            // deliberately no iris_FogScale declaration here.
+            // gl_Fog.scale is inlined as an expression by FogParameters, so deliberately no iris_FogScale declaration here
             "in vec4 iris_TexCoordArr[4];",
             "#define gl_TexCoord iris_TexCoordArr",
             "flat in float iris_AlphaCutoff;",
@@ -188,8 +158,7 @@ public final class ImpetusTerrainTransformer {
         body = convertVaryings(body, "out");
         body = dropAttributeStorageQualifier(body);
         body = modernizeCommon(body);
-        // Pack globals initialized from uniforms are undefined under 330 (drivers may evaluate them before uniform
-        // upload — zeros/NaNs); run those initializers at the top of the generated main, like GLSL 120 did.
+        // Pack globals initialized from uniforms are undefined under 330 (drivers may evaluate before upload, giving zeros/NaNs); run those initializers at the top of the generated main like GLSL 120 did
         GlslGlobalInitHoister.Result hoist = GlslGlobalInitHoister.hoist(body);
         return VERTEX_PROLOGUE + attributeAdapterDefines(source) + hoist.body + vertexMain(hoist.hoistedAssignments);
     }
@@ -222,21 +191,11 @@ public final class ImpetusTerrainTransformer {
 
     // ------------------------------------------------------------------ modern (#version 130+) terrain
 
-    // The same vertex bridge, but for modern single-source dual-stage packs like Complementary
-    // Kept: the attribute decode, the gl_* -> Impetus defines, and the generated main
-    // Dropped: every transform that assumes GLSL-120 Chocapic structure — no varying conversion, because the pack
-    // already flips in/out itself behind #ifdef VERTEX_SHADER; no global hoisting; and crucially NO
-    // texture -> gtexture rename, since modern packs call the texture() built-in everywhere and that rename is
-    // exactly what corrupted them
-    // The stage guards and option gates are left to the driver's own preprocessor, which the compatibility profile
-    // provides
-    // renameMain still runs: it renames BOTH stages' void main() to irisMain, and only the active one survives the
-    // driver's #ifdef anyway
+    // The same vertex bridge for modern single-source packs like Complementary: keeps the attribute decode, gl_* defines and generated main, drops every GLSL-120 Chocapic assumption (no varying conversion, no hoisting, crucially NO texture -> gtexture rename since modern packs call texture() everywhere); renameMain still renames BOTH stages' main, only the active one survives the driver's #ifdef
     public static String transformVertexShaderModern(String source) {
         String body = stripVersion(source);
         body = renameMain(body);
-        // Delete the pack's mc_Entity/mc_midTexCoord/at_tangent attribute declarations; the prologue #defines those
-        // names onto its own decoded globals, so the pack's declarations would become illegal redeclarations.
+        // Delete the pack's mc_Entity/mc_midTexCoord/at_tangent attribute declarations; the prologue #defines those names onto its own globals, so they would become illegal redeclarations
         body = dropAttributeStorageQualifier(body);
         body = rewriteFogParameters(body);
         body = ModernPackTransformer.rewriteUnsignedStrictness(body);
@@ -261,9 +220,7 @@ public final class ImpetusTerrainTransformer {
         body = rewriteFogParameters(body);
         body = ModernPackTransformer.rewriteUnsignedStrictness(body);
         body = DrawBuffers.rewriteFragmentOutputs(body, drawBuffers);
-        // Umbra parity: packs that write gl_FragData/gl_FragColor (OptiFine style) get the generated output array
-        // and the injected alpha test; packs using named layout(location) outputs (photon) keep their declarations
-        // — the 16-array would collide with their output locations — and handle cutout discard themselves.
+        // Umbra parity: packs writing gl_FragData/gl_FragColor get the generated output array and injected alpha test; packs with named layout(location) outputs (photon) keep their declarations and handle cutout discard themselves
         boolean usesFragData = Pattern.compile("\\bgl_Frag(?:Data|Color)\\b").matcher(body).find();
         String transformed = compatFor(FRAGMENT_PROLOGUE, source)
                 + (usesFragData ? fragDataBlock() : "")
@@ -278,10 +235,7 @@ public final class ImpetusTerrainTransformer {
 
     private static final Pattern DECLARED_VERSION = Pattern.compile("#version\\s+(\\d+)");
 
-    // The compatibility version to compile a modern pack at
-    // Never below 330, which the prologue itself needs; never below the pack's OWN declaration, since Photon
-    // declares 400 and relies on 400 semantics such as implicit int-to-uint conversion; and 430 when the source
-    // uses image load/store for coloured-lighting voxelization
+    // The compatibility version for a modern pack: never below 330 (the prologue needs it), never below the pack's OWN declaration (Photon declares 400 and relies on implicit int-to-uint), and 430 when the source uses image load/store
     private static String compatFor(String prologue, String packBody) {
         int version = 330;
         Matcher declared = DECLARED_VERSION.matcher(packBody);
@@ -303,13 +257,7 @@ public final class ImpetusTerrainTransformer {
                     + "(?:attribute|in)\\s+(?:(?:lowp|mediump|highp)\\s+)?(\\w+)\\s+"
                     + "(mc_Entity|mc_midTexCoord|at_tangent|at_midBlock)\\s*;");
 
-    // The OptiFine attribute defines, adapted to the type each attribute is DECLARED with in this pack's source —
-    // the declarations themselves having been deleted by dropAttributeStorageQualifier
-    // The adaptation is necessary because the two eras disagree: OptiFine-era packs declare
-    // `attribute vec4 mc_midTexCoord;` while Iris-native packs use the modern types, vec2 mc_midTexCoord, vec3
-    // mc_Entity, vec3 at_midBlock
-    // Pointing a vec2-typed usage at a vec4 global is a hard compile error, so the define has to match the pack's
-    // own view of the type. Mirrors Iris's SodiumTransformer dimension adaptation
+    // The OptiFine attribute defines adapted to the type each attribute is DECLARED with in this pack (OptiFine-era `attribute vec4 mc_midTexCoord` vs Iris-native vec2/vec3), since pointing a vec2 usage at a vec4 global is a hard error; mirrors Iris's SodiumTransformer dimension adaptation
     private static String attributeAdapterDefines(String packSource) {
         java.util.Map<String, String> declaredTypes = new java.util.HashMap<>();
         Matcher decl = SPECIAL_ATTRIBUTE_DECL.matcher(packSource);
@@ -322,8 +270,7 @@ public final class ImpetusTerrainTransformer {
                 + "#define at_midBlock " + adaptTo(declaredTypes.get("at_midBlock"), "iris_MidBlock") + "\n";
     }
 
-    // Narrows the vec4 bridge global to whatever type the pack declared, by swizzling — an absent declaration
-    // leaves it as vec4, which is the OptiFine-era default
+    // Narrows the vec4 bridge global to whatever type the pack declared by swizzling; an absent declaration leaves vec4, the OptiFine-era default
     private static String adaptTo(String declaredType, String vec4Global) {
         if (declaredType == null) {
             return vec4Global;
@@ -351,39 +298,21 @@ public final class ImpetusTerrainTransformer {
         return VERSION.matcher(source).replaceFirst("");
     }
 
-    // Renames the pack's void main() to irisMain so the generated main can wrap it
-    // EVERY occurrence, not just the first: an include-flattened source can hold several main definitions in
-    // mutually exclusive #ifdef branches, and this rewrite runs before any preprocessing, so all of them are still
-    // textually present
+    // Renames the pack's void main() to irisMain so the generated main can wrap it, EVERY occurrence since a flattened source holds several in mutually exclusive #ifdef branches and this runs before preprocessing
     private static String renameMain(String source) {
         return source.replaceAll("\\bvoid\\s+main\\s*\\(\\s*(void)?\\s*\\)", "void irisMain()");
     }
 
-    // varying becomes out in the vertex stage and in in the fragment stage, PRESERVING any qualifier in front of it
-    // Handling that prefix is not optional. GLSL 120 permits invariant and centroid before varying, and packs also
-    // write `flat varying` — illegal by the letter of GLSL 120, but NVIDIA's compatibility compiler accepts it, so
-    // packs ship it
-    // Anchoring this pattern at ^\s*varying silently skips every one of those lines, and a surviving `flat varying`
-    // is a hard error once the stage is lifted to 330 core: C7560 "does not allow 'flat' with 'varying'" plus
-    // C7561 "requires 'in/out' with 'flat'"
-    // That killed miniature-shader's gbuffers_terrain over its `flat varying float lightSourceLevel`, so terrain
-    // fell back to the Impetus default program and the whole world rendered vanilla while every other stage used
-    // the pack
-    // GLSL 330 keeps the same qualifier order — invariant, then interpolation, then storage — so emitting the
-    // captured prefix verbatim in front of in/out is correct: `flat varying` becomes `flat out`
+    // varying becomes out/in PRESERVING any prefix qualifier: GLSL 120 permits invariant and centroid, and packs ship `flat varying` (illegal but NVIDIA-accepted); anchoring at ^\s*varying skipped those and a surviving `flat varying` at 330 core is C7560/C7561, which killed miniature-shader's gbuffers_terrain. 330 keeps the same qualifier order, so `flat varying` becomes `flat out`
     private static String convertVaryings(String source, String direction) {
         return source.replaceAll(
                 "(?m)^(\\s*)((?:(?:invariant|flat|smooth|noperspective|centroid)\\s+)*)varying\\b",
                 "$1$2" + direction);
     }
 
-    // Strips the `attribute` storage qualifier off the pack's OptiFine extra-attribute declarations
-    // Two things it achieves: `attribute` is not a legal 330-core keyword at all, and removing it turns the
-    // declaration into a plain global that attributeAdapterDefines can then alias onto the real bridge value
+    // Strips the `attribute` storage qualifier off the pack's OptiFine extra-attribute declarations: not a legal 330-core keyword, and the plain global left behind is what attributeAdapterDefines aliases onto the bridge value
     private static String dropAttributeStorageQualifier(String source) {
-        // mc_Entity / mc_midTexCoord / at_tangent are now REAL attributes fed by UmbraChunkVertexType; the prologue
-        // #defines those names onto its own inputs, so the pack's declarations must be deleted outright (the define
-        // would otherwise rewrite them into duplicate declarations of the prologue globals).
+        // mc_Entity / mc_midTexCoord / at_tangent are now REAL attributes fed by UmbraChunkVertexType and the prologue #defines those names onto its inputs, so the pack's declarations must be deleted outright or become duplicates
         source = source.replaceAll("(?m)^\\s*(?:layout\\s*\\([^)]*\\)\\s*)?"
                 + "(?:(?:flat|smooth|noperspective|centroid|sample|invariant)\\s+)*"
                 + "(?:attribute|in)\\s+(?:(?:lowp|mediump|highp)\\s+)?\\w+\\s+"
@@ -395,14 +324,11 @@ public final class ImpetusTerrainTransformer {
         return source.replaceAll("(?m)^(\\s*)attribute\\s+", "$1");
     }
 
-    // The keyword modernisations both stages need for 330 core — the ones that are pure renames with no
-    // stage-specific handling
+    // The keyword modernisations both stages need for 330 core, the pure renames with no stage-specific handling
     private static String modernizeCommon(String source) {
         source = rewriteFogParameters(source);
         source = ModernPackTransformer.rewriteUnsignedStrictness(source);
-        // OptiFine's block sampler is often literally named "texture", which clashes with GLSL 330's texture() builtin.
-        // Rename the standalone sampler to "gtexture" first (word-boundary avoids touching texture2D/texture2DLod),
-        // then modernize the legacy sampling functions to the builtins.
+        // OptiFine's block sampler is often literally named "texture", clashing with the 330 texture() builtin; rename it to "gtexture" first (word boundary spares texture2D/texture2DLod), then modernize the legacy sampling functions
         source = source.replaceAll("\\btexture\\b", "gtexture");
         source = source.replaceAll("\\btexture2DLod\\b", "textureLod");
         source = source.replaceAll("\\btexture3DLod\\b", "textureLod");

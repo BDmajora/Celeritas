@@ -9,14 +9,11 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import java.util.List;
 import java.util.Set;
 
-// Gates each Fulgor mixin on its config switch and refuses to load beside world implementations it cannot
-// reason about, such as Cubic Chunks; off means never loaded, so a suspect mixin can be pulled without a rebuild
+// Gates each Fulgor mixin on its config switch and refuses to load beside world implementations it cannot reason about (Cubic Chunks); off means never loaded
 public class FulgorMixinPlugin implements IMixinConfigPlugin {
     private static final String PACKAGE = "com.bdmajora.fulgor.mixin.";
 
-    // Cubic Chunks replaces the chunk column with a cube grid + its own lighting engine, breaking every
-    // assumption Fulgor makes (16 sections, 8-bit y field, per-column heightmap); silent corruption
-    // rather than a crash, so this is a hard refusal, not a warning
+    // Cubic Chunks replaces the column with a cube grid and its own lighting engine, breaking every Fulgor assumption (16 sections, 8-bit y, per-column heightmap) as silent corruption, so this is a hard refusal
     private static final String CUBIC_CHUNKS_MARKER =
             "io.github.opencubicchunks.cubicchunks.core.asm.CubicChunksCoreContainer";
 
@@ -68,8 +65,7 @@ public class FulgorMixinPlugin implements IMixinConfigPlugin {
             case "world.ChunkProviderServerMixin":
             case "network.SPacketChunkDataMixin":
             case "client.MinecraftMixin":
-                // The engine itself. Without all of these a world would have some paths deferring and
-                // others propagating immediately, which is worse than either.
+                // The engine itself; without all of these some paths would defer and others propagate immediately, worse than either
                 return this.config.deferredLightUpdates;
             case "world.AnvilChunkLoaderMixin":
                 // Also flushes before saving, so it is needed whenever the engine is.
@@ -86,8 +82,7 @@ public class FulgorMixinPlugin implements IMixinConfigPlugin {
         }
     }
 
-    // Deliberately doesn't initialize the class (initialize=false): this runs during coremod setup,
-    // where eagerly loading a foreign class can change mod load order; only existence is wanted
+    // Deliberately does not initialize the class: this runs during coremod setup, where eagerly loading a foreign class can change mod load order
     private static boolean isClassPresent(String name) {
         try {
             Class.forName(name, false, FulgorMixinPlugin.class.getClassLoader());

@@ -1,8 +1,6 @@
 package com.bdmajora.fulgor.api;
 
-// Implemented by Block; caches whether its light values can vary with position (Phosphor's BlockStateLightInfo, ported).
-// Forge's default position-aware getLightValue/getLightOpacity re-derive from state anyway, so if a block's class
-// hasn't overridden them the engine can skip straight to the cached value. Flags derived via reflection on first use.
+// Implemented by Block; caches whether its light values vary with position (Phosphor's BlockStateLightInfo), since Forge's defaults re-derive from state and an un-overridden block can use the cached value. Flags resolved by reflection on first use
 public interface LightInfoBlock {
     // True when this block's class overrides the position-aware getLightValue
     boolean fulgor$hasPositionAwareLightValue();

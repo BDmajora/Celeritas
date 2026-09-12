@@ -6,10 +6,7 @@ import java.util.function.Supplier;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// An ivec3 uniform for Iris's cameraPositionInt, the integer half of the split camera position
-// Diffed against the last upload, since update runs for every uniform of every bind and most do not move
-// cached is set in place rather than stored by reference, since the supplier may mutate and return the same object
-// initialized forces the first upload, which equals() against a fresh zero vector would otherwise skip
+// An ivec3 uniform for Iris's cameraPositionInt, diffed against the last upload; cached is set in place since the supplier may mutate and return the same object, and initialized forces the first upload
 public class Vector3IntUniform extends Uniform {
     private final Supplier<Vector3i> value;
     private final Vector3i cached = new Vector3i();

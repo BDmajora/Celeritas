@@ -9,9 +9,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-// Debug transformer that logs the stack that triggered loading of a watched class, for diagnosing
-// "mixin target loaded too early". Watched names come from the mixinbooter.watchedClasses property; * watches all
-// Inert beyond one property read per class until the property is set
+// Debug transformer logging the stack that triggered loading of a watched class, for "mixin target loaded too early"; watched names come from the mixinbooter.watchedClasses property (* watches all), inert beyond one property read until set
 public final class ClassLoadTracer implements IClassTransformer {
 
     public static final String WATCH_PROPERTY = "mixinbooter.watchedClasses";
@@ -42,8 +40,7 @@ public final class ClassLoadTracer implements IClassTransformer {
         return parsed;
     }
 
-    // Trims the captured stack to the interesting portion. Drops the first 5 frames (transformer + classloader
-    // find/loading) Stopping at the LaunchWrapper/Minecraft entrypoint
+    // Trims the captured stack to the interesting portion: drops the first 5 frames (transformer + classloader) and stops at the LaunchWrapper/Minecraft entrypoint
     private static StackTraceElement[] trim(StackTraceElement[] elements) {
         int start = Math.min(5, elements.length);
         int end = elements.length;

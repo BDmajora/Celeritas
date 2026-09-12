@@ -14,8 +14,7 @@ import java.util.Locale;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Final-presentation conversion from sRGB to a wide-gamut target (P3, Rec.2020, Adobe RGB) as Iris does:
-// scratch copy, then a fullscreen quad through decode, 3x3 primaries transform, encode. Does not run for sRGB
+// Final-presentation conversion from sRGB to a wide-gamut target (P3, Rec.2020, Adobe RGB) like Iris: scratch copy, then a fullscreen quad through decode, 3x3 primaries transform, encode; skipped for sRGB
 public final class ColorSpaceConverter {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -35,8 +34,7 @@ public final class ColorSpaceConverter {
         }
     }
 
-    // The user's selected output colourspace, read by the pipeline every frame so a change takes effect at once
-    // Static because the options screen sets it and the pipeline reads it, with no shared instance between them
+    // The user's selected output colourspace, read by the pipeline every frame so a change takes effect at once; static since the options screen sets it and the pipeline reads it
     private static ColorSpace current = ColorSpace.SRGB;
 
     private GlProgram program;
@@ -60,9 +58,7 @@ public final class ColorSpaceConverter {
         return current != ColorSpace.SRGB && !this.broken;
     }
 
-    // Converts the currently bound draw framebuffer's colour in place
-    // Requires the presentation framebuffer bound for BOTH read and draw, with blending and depth already off —
-    // which is exactly the state the composite chain ends in, so this adds no state changes of its own
+    // Converts the bound draw framebuffer's colour in place; requires the presentation framebuffer bound for BOTH read and draw with blending and depth off, exactly the state the composite chain ends in
     public void run(int width, int height, FullscreenQuadRenderer quad) {
         if (!isActive() || width <= 0 || height <= 0) {
             return;
@@ -171,9 +167,7 @@ public final class ColorSpaceConverter {
             "    gl_Position = vec4(a_Position * 2.0 - 1.0, 0.0, 1.0);\n" +
             "}\n";
 
-    // Builds the conversion shader for one target space
-    // The chain is linear Rec.709/sRGB into XYZ at D65, then out to the target's primaries, then the target's own
-    // transfer function. Every matrix here is the published CIE data for that space, not a fitted approximation
+    // Builds the conversion shader for one target: linear Rec.709/sRGB into XYZ at D65, out to the target's primaries, then its transfer function; every matrix is published CIE data, not a fit
     private static String fragmentSource(ColorSpace space) {
         String matrix;
         String encode;

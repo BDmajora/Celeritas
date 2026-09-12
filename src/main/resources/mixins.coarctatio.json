@@ -1,0 +1,40 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "plugin": "com.bdmajora.coarctatio.mixin.CoarctatioMixinPlugin",
+  "package": "com.bdmajora.coarctatio.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [
+    "core.ClassInheritanceMultiMapMixin",
+    "core.EntityDataManagerMixin",
+    "core.LockCodeMixin",
+    "core.ObjectHolderRegistryMixin",
+    "core.RegistrySimpleMixin",
+    "nbt.NBTTagCompoundMixin",
+    "state.BlockStateContainerMixin",
+    "state.ExtendedBlockStateMixin",
+    "util.ResourceLocationMixin",
+    "world.AnvilChunkLoaderMixin",
+    "world.ChunkMixin"
+  ],
+  "client": [
+    "client.ModelManagerMixin",
+    "client.SearchTreeMixin",
+    "client.SoundRegistryMixin",
+    "client.model.CoarctatioBakedQuadMixin",
+    "client.model.ModelBakeryMixin",
+    "client.model.ModelLoaderCleanupMixin",
+    "client.model.ModelLoaderMixin",
+    "client.model.MultipartBakedModelMixin",
+    "client.model.SimpleBakedModelMixin",
+    "client.model.WeightedBakedModelMixin",
+    "client.model.multipart.ConditionAndMixin",
+    "client.model.multipart.ConditionOrMixin",
+    "client.model.multipart.ConditionPropertyValueMixin",
+    "client.texture.TextureMapMixin",
+    "util.ModelResourceLocationMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

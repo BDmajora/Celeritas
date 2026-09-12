@@ -24,27 +24,17 @@ import com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline;
 import java.util.EnumMap;
 import java.util.Map;
 
-// The ChunkShaderInterface for a shader-pack terrain program, i.e. the transformed gbuffers_terrain
-// Two jobs. It feeds the engine's own per-draw state — u_ModelViewMatrix, u_ProjectionMatrix, u_RegionOffset and
-// the block and lightmap sampler units — which the pack's shader never declares but the generated prologue does
-// And it binds the pipeline's gbuffer framebuffer, so terrain lands in the gbuffer for the deferred chain to
-// consume rather than straight into the main framebuffer
+// The ChunkShaderInterface for a pack terrain program: feeds the engine's per-draw state (u_ModelViewMatrix, u_ProjectionMatrix, u_RegionOffset, block/lightmap units) the generated prologue declares, and binds the pipeline's gbuffer so terrain lands there for the deferred chain
 public class UmbraTerrainShaderInterface implements ChunkShaderInterface {
     private final GlUniformMatrix4f uModelViewMatrix;
     private final GlUniformMatrix4f uProjectionMatrix;
     private final GlUniformFloat3v uRegionOffset;
     private final Map<ChunkShaderTextureSlot, GlUniformInt> uTextures = new EnumMap<>(ChunkShaderTextureSlot.class);
-    // The program's sanitised DRAWBUFFERS mask, re-applied to the gbuffer FBO on every bind — sanitised because a
-    // pack can name a buffer this driver does not have, and an out-of-range slot makes the whole draw fail
+    // The program's sanitised DRAWBUFFERS mask, re-applied to the gbuffer FBO on every bind; sanitised since a pack can name a buffer this driver lacks and an out-of-range slot fails the whole draw
     private final int[] drawBuffers;
     private final ProgramBlendState blendState;
     private final ProgramAlphaTest alphaTest;
-    // The pack's OptiFine uniform set — gbufferModelView and its inverse, cameraPosition, the time counters —
-    // uploaded on every bind
-    // Not optional: a pack's world-space round trip goes through gbufferModelViewInverse, and without these the
-    // multiply is against an all-zero matrix, so every terrain vertex collapses to the origin and the world
-    // disappears
-    // Attached after link by the program override, which is why it is not final
+    // The pack's OptiFine uniform set (gbufferModelView and inverse, cameraPosition, time counters) uploaded every bind; without it the world-space round trip multiplies by a zero matrix and the world disappears. Attached after link, hence not final
     private ProgramUniforms uniforms;
 
     private GlPrimitiveType primitiveType = GlPrimitiveType.TRIANGLES;
@@ -91,9 +81,7 @@ public class UmbraTerrainShaderInterface implements ChunkShaderInterface {
     public void setupState(TerrainRenderPass pass) {
         this.primitiveType = pass.primitiveType() == QuadPrimitiveType.DIRECT
                 ? GlPrimitiveType.QUADS : GlPrimitiveType.TRIANGLES;
-        // Terrain draws into the gbuffer bound by the frame pipeline; point its draw-buffer mask at this program's
-        // DRAWBUFFERS so iris_FragData[k] lands in the colortex the pack asked for. (Skipped during the shadow pass —
-        // onTerrainDraw would rebind the gbuffer over the shadow framebuffer.)
+        // Terrain draws into the frame pipeline's gbuffer; point its draw-buffer mask at this program's DRAWBUFFERS so iris_FragData[k] lands in the requested colortex (skipped in the shadow pass, where onTerrainDraw would rebind the gbuffer over the shadow framebuffer)
         UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         boolean shadowPass = UmbraShadowRenderer.isShadowPass();
         if (pipeline != null && !shadowPass) {

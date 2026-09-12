@@ -13,8 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Properties;
 
-// Feature switches for the lighting subsystem, kept as a plain Properties file because the mixin
-// plugin reads it during coremod setup before Forge and Minecraft classes are safe to touch
+// Feature switches for the lighting subsystem, a plain Properties file since the mixin plugin reads it during coremod setup before Forge/Minecraft classes are safe
 public final class FulgorConfig {
     private static final String FILE_NAME = "impetus-fulgor.cfg";
 
@@ -23,25 +22,19 @@ public final class FulgorConfig {
     // Where save() writes; null only if the config directory could not be resolved
     private Path file;
 
-    // Off means vanilla lighting, unmodified; kept separate from the individual switches so "is this
-    // bug Fulgor's fault" doesn't require understanding what the other options do
+    // Off means unmodified vanilla lighting; kept separate from the individual switches so "is this Fulgor's fault" needs no understanding of the rest
     public boolean enabled;
     // The subsystem's whole point; everything else supports this or fixes a vanilla bug the batching exposes
     public boolean deferredLightUpdates;
-    // Alfheim's headline change over Phosphor: bulk edits (worldgen, /fill, explosions) schedule the
-    // same position from several neighbours in one tick; without this each gets evaluated separately
+    // Alfheim's headline change over Phosphor: bulk edits (worldgen, /fill, explosions) schedule the same position from several neighbours in one tick, otherwise each is evaluated separately
     public boolean deduplicateUpdates;
-    // Phosphor's BlockStateLightInfo, adapted. Forge's default position-aware getLightOpacity/getLightValue
-    // still cost a virtual dispatch (and a redundant world lookup for luminance) even though most blocks'
-    // answers don't depend on position. Ignored while Dynamic Lights or Fluidlogged API is installed.
+    // Phosphor's BlockStateLightInfo, adapted; Forge's position-aware getLightOpacity/getLightValue cost a virtual dispatch (and a redundant world lookup) though most answers are position-independent. Ignored under Dynamic Lights or Fluidlogged API
     public boolean cacheBlockLightInfo;
     // Fixes MC-3329: vanilla drops boundary light updates to unloaded neighbours and never revisits them
     public boolean fixChunkBoundaryLighting;
-    // Fixes MC-116690: vanilla's emptiness test counts blocks only, so a carved-out section with real
-    // light data gets skipped by the chunk packet and the client relights it wrong
+    // Fixes MC-116690: vanilla's emptiness test counts blocks only, so a carved-out section with real light data is skipped by the chunk packet and the client relights it wrong
     public boolean sendNonTrivialSectionLight;
-    // Also fixes MC-80966: vanilla skips the render light-update drain entirely while the chunk builder
-    // is busy, so changes can sit unrendered indefinitely under load
+    // Also fixes MC-80966: vanilla skips the render light-update drain while the chunk builder is busy, so changes can sit unrendered indefinitely under load
     public boolean optimizeRenderLightUpdates;
     // Skips light processing while the game is paused
     public boolean skipUpdatesWhilePaused;
@@ -93,8 +86,7 @@ public final class FulgorConfig {
         return config;
     }
 
-    // Every switch except the two diagnostics and skipUpdatesWhilePaused decides whether a mixin is
-    // applied, so changing one takes effect on the next launch (options screen marks those with a restart flag)
+    // Every switch except the two diagnostics and skipUpdatesWhilePaused decides whether a mixin applies, so changes take effect next launch (the options screen flags those for restart)
     public void save() {
         if (this.file != null) {
             writeBack(this.file);
@@ -115,8 +107,7 @@ public final class FulgorConfig {
         return dir;
     }
 
-    // Rewrites the file with every key present so a user who never opened it still discovers the
-    // switches; values already set by the user are preserved verbatim
+    // Rewrites the file with every key so a user who never opened it still discovers the switches; user-set values are preserved verbatim
     private void writeBack(Path file) {
         Map<String, String> values = new LinkedHashMap<>();
         values.put("enabled", Boolean.toString(this.enabled));

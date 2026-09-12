@@ -32,16 +32,11 @@ public class RenderManagerEntityIdMixin {
     private void impetus$endEntity(Entity entity, float partialTicks, boolean p_188388_3_, CallbackInfo ci) {
         CapturedRenderingState.INSTANCE.setCurrentRenderedEntity(
                 this.impetus$entityIdStack.isEmpty() ? -1 : this.impetus$entityIdStack.pop());
-        // The restore matters as much as the set: without it the last entity's id stays live over everything drawn
-        // after the batch.
+        // The restore matters as much as the set: without it the last entity's id stays live over everything drawn after the batch
         impetus$pushIdToGpu();
     }
 
-    // sends the id change to the bound program
-    // setting it only on CapturedRenderingState leaves it in Java: the uniform is uploaded when a
-    // phase is bound, and one phase covers every entity in the frame, so the batch would render with
-    // whichever entity's id happened to be current at phase entry
-    // see UmbraRenderingPipeline#refreshDynamicUniforms()
+    // Sends the id change to the bound program; setting it only on CapturedRenderingState leaves it in Java, since the uniform uploads at phase bind and one phase covers every entity (see UmbraRenderingPipeline#refreshDynamicUniforms)
     @Unique
     private static void impetus$pushIdToGpu() {
         UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();

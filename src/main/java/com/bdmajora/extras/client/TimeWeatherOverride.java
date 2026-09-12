@@ -7,9 +7,7 @@ import net.minecraft.world.GameType;
 import net.minecraft.world.WorldServer;
 import net.minecraft.world.storage.WorldInfo;
 
-// OptiFine's Time and Weather locks, holding the integrated server's clock/weather where the player put them
-// Confined to single-player creative like OptiFine, since these change world state, not just what's drawn
-// Time is nudged past the boundary rather than pinned, so the daylight cycle keeps running
+// OptiFine's Time and Weather locks on the integrated server, confined to single-player creative since they change world state; time is nudged past the boundary rather than pinned so the cycle keeps running
 public final class TimeWeatherOverride {
     private static final long DAY_LENGTH = 24000L;
     private static final long DAY_START = 1000L;

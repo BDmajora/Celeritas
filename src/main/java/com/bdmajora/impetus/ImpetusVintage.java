@@ -26,10 +26,10 @@ import com.bdmajora.impetus.engine.impl.compat.environment.GlContextInfo;
 import com.bdmajora.impetus.engine.impl.gl.device.GLRenderDevice;
 import com.bdmajora.impetus.engine.impl.gui.ImpetusGameOptions;
 import com.bdmajora.impetus.engine.impl.render.chunk.region.RenderRegionManager;
-import com.bdmajora.coartatio.Coartatio;
-import com.bdmajora.coartatio.CoartatioConfig;
-import com.bdmajora.coartatio.gui.CoartatioStatsCommand;
-import com.bdmajora.coartatio.launch.ClassLoaderCleaner;
+import com.bdmajora.coarctatio.Coarctatio;
+import com.bdmajora.coarctatio.CoarctatioConfig;
+import com.bdmajora.coarctatio.gui.CoarctatioStatsCommand;
+import com.bdmajora.coarctatio.launch.ClassLoaderCleaner;
 import com.bdmajora.dynamiclights.DynamicLights;
 import com.bdmajora.equilibrium.gui.EquilibriumStatsCommand;
 import com.bdmajora.extras.Extras;
@@ -57,25 +57,19 @@ public class ImpetusVintage {
         VERSION = Loader.instance().getIndexedModList().get(MODID).getVersion();
         MinecraftForge.EVENT_BUS.register(this);
 
-        // The lighting engine branches on these on its hot path, and every world it builds an engine
-        // for is constructed after this point. Earlier than this the mod list is not yet answerable.
+        // The lighting engine branches on these on its hot path and every world is constructed after this point; earlier, the mod list is not yet answerable
         Fulgor.detectCompatibility();
 
         // Seed the engine's hot-path option snapshot from the loaded config.
         com.bdmajora.impetus.engine.impl.ImpetusRuntimeOptions.apply(CONFIG);
 
-        // Load the Extras options now rather than leaving it to whichever mixin body happens to run
-        // first. They are all read on the render or client thread, so the lazy path would otherwise
-        // do its first file read from inside a frame.
+        // Load the Extras options now rather than from whichever mixin body runs first; they are read on the render/client thread, so the lazy path would do its first file read inside a frame
         Extras.initialize();
 
-        // Same reasoning for Dynamic Lights, which additionally reads its options from the chunk
-        // builder's worker threads — the last place a lazy first-touch file read belongs. Only the
-        // config is loaded here; see DynamicLights#onClientInit for why the rest waits.
+        // Same for Dynamic Lights, which also reads options from chunk-builder workers; only the config loads here, see DynamicLights#onClientInit for why the rest waits
         DynamicLights.initialize();
 
-        // Platform compatibility: GL strings must be read on the client thread (which owns the context during
-        // FML construction); the adapter probe and overlay scan then continue on a background thread.
+        // Platform compatibility: GL strings must be read on the client thread (which owns the context during FML construction); the adapter probe and overlay scan continue on a background thread
         StartupChecks.installCrashDialog();
         StartupChecks.runAsync(GlContextInfo.capture());
     }
@@ -87,30 +81,25 @@ public class ImpetusVintage {
             ClientCommandHandler.instance.registerCommand(new TogglePassCommand());
         }
 
-        // Item light sources are read from resource packs here rather than at construction, because
-        // the registry they resolve items against does not exist until now.
+        // Item light sources are read from resource packs here rather than at construction, because the item registry does not exist until now
         DynamicLights.onClientInit();
 
-        ClientCommandHandler.instance.registerCommand(new CoartatioStatsCommand());
+        ClientCommandHandler.instance.registerCommand(new CoarctatioStatsCommand());
         ClientCommandHandler.instance.registerCommand(new FulgorStatsCommand());
         ClientCommandHandler.instance.registerCommand(new EquilibriumStatsCommand());
 
-        // Phase 1: load (parse only) the selected shader pack. No rendering changes happen here — if no pack is
-        // selected or loading fails, Impetus renders exactly as before.
+        // Phase 1: parse the selected shader pack only; no rendering changes here, and if no pack is selected or loading fails Impetus renders exactly as before
         Umbra.initialize(PlatformUtil.getGameDir().toPath());
         ResourcePackScanner.scanIfChanged(Minecraft.getMinecraft());
 
-        // Runs here rather than earlier: every class a coremod will ask LaunchWrapper for has been
-        // transformed by now, so weakening its byte cache costs nothing and reclaims the largest
-        // single block of startup memory in a modded instance.
+        // Runs here rather than earlier: every class a coremod will ask LaunchWrapper for has been transformed by now, so weakening its byte cache costs nothing and reclaims the largest block of startup memory
         ClassLoaderCleaner.run();
     }
 
     // Drives per-frame work that has no better home: toasts and the pack scanner
     @SubscribeEvent
     public void onRenderTick(TickEvent.RenderTickEvent event) {
-        // Render thread with a live GL context: build/rebuild the Umbra pipeline the first frame after a pack change.
-        // No-op unless a shader pack was (un)loaded. Safe when Umbra is disabled.
+        // Render thread with a live GL context: build/rebuild the Umbra pipeline the first frame after a pack change; no-op otherwise and safe with Umbra disabled
         if (event.phase == TickEvent.Phase.START) {
             ResourcePackScanner.tick(Minecraft.getMinecraft());
             Umbra.updatePipeline();
@@ -120,10 +109,9 @@ public class ImpetusVintage {
     // Tears down world-scoped renderer state
     @SubscribeEvent
     public void onDisconnect(FMLNetworkEvent.ClientDisconnectionFromServerEvent event) {
-        // Fires once on leaving a world or server, single-player included, which makes it the one
-        // unambiguous "the world is gone" signal on 1.12.2 — WorldEvent.Unload fires per dimension.
-        if (CoartatioConfig.get().clearPoolsOnWorldLeave) {
-            Coartatio.onWorldLeave();
+        // Fires once on leaving a world or server (single-player included), the one unambiguous "the world is gone" signal on 1.12.2 since WorldEvent.Unload fires per dimension
+        if (CoarctatioConfig.get().clearPoolsOnWorldLeave) {
+            Coarctatio.onWorldLeave();
         }
     }
 
@@ -167,8 +155,8 @@ public class ImpetusVintage {
             }
         }
 
-        if (CoartatioConfig.get().showDebugOverlay) {
-            strings.add(Coartatio.debugOverlayLine());
+        if (CoarctatioConfig.get().showDebugOverlay) {
+            strings.add(Coarctatio.debugOverlayLine());
         }
 
         if (FulgorConfig.get().showDebugOverlay) {

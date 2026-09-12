@@ -6,23 +6,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-// Translates 1.13+ flattened block names in a modern pack's block.properties to their 1.12.2 registry names
-// Packs like Photon gate their map on MC_VERSION >= 11300 with an empty else, which would leave every block
-// untagged; so IdMap uses the modern branch and runs it through here. Renames only; predicates are carried over
+// Translates 1.13+ flattened block names in a modern pack's block.properties to 1.12.2 registry names; Photon gates its map on MC_VERSION >= 11300 with an empty else, so IdMap uses the modern branch through here. Renames only, predicates carried over
 public final class ModernBlockNames {
-    // Modern name -> the 1.12.2 entry tokens covering it. An array because one flattened name can need several
-    // 1.12.2 entries, and the tokens may carry state predicates of their own
+    // Modern name -> the 1.12.2 entry tokens covering it; an array since one flattened name can need several entries, which may carry their own state predicates
     private static final Map<String, String[]> RENAMES = new HashMap<>();
 
     // light_gray was called silver in 1.12.2 — the only dye colour whose name changed
     private static final String LEGACY_LIGHT_GRAY = "silver";
 
-    // Colour-suffixed families 1.12.2 modelled as ONE block carrying a `color` property — so white_wool becomes
-    // wool:color=white rather than a block of its own
+    // Colour-suffixed families 1.12.2 modelled as ONE block with a `color` property, so white_wool becomes wool:color=white
     private static final Map<String, String> COLORED_FAMILIES = new HashMap<>();
 
-    // Colour-suffixed families that were already one block PER colour on 1.12.2, so only the colour word itself
-    // needs fixing — and in practice only light_gray does
+    // Colour-suffixed families already one block PER colour on 1.12.2, so only the colour word needs fixing, and in practice only light_gray does
     private static final String[] COLORED_BLOCK_SUFFIXES = {"_shulker_box", "_glazed_terracotta"};
 
     // The dye colours as 1.13+ spells them; light_gray is the only one 1.12.2 disagrees about
@@ -124,9 +119,7 @@ public final class ModernBlockNames {
     private ModernBlockNames() {
     }
 
-    // The 1.12.2 equivalents of one entry, or a single-element list holding the entry itself when its name needs
-    // no translation
-    // A list because one modern name can map onto several 1.12.2 blocks
+    // The 1.12.2 equivalents of one entry, or the entry itself when it needs no translation; a list since one modern name can map onto several blocks
     public static List<BlockEntry> translate(BlockEntry entry) {
         if (!"minecraft".equals(entry.getId().getNamespace())) {
             return Collections.singletonList(entry);
@@ -144,8 +137,7 @@ public final class ModernBlockNames {
 
     // 1.13+ flattened names back to 1.12.2 block:meta tokens
     private static String[] legacyTokensFor(String name, Map<String, String> predicates) {
-        // Lit states that became separate blocks. The pack names the modern block plus `lit=true`; an unlit entry has
-        // to keep pointing at the unlit 1.12.2 block, so this cannot go in the flat rename table.
+        // Lit states that became separate blocks: the pack names the modern block plus `lit=true`, and an unlit entry must keep pointing at the unlit 1.12.2 block, so this cannot live in the flat rename table
         if ("true".equals(predicates.get("lit"))) {
             if ("redstone_lamp".equals(name)) {
                 return new String[]{"lit_redstone_lamp"};
@@ -175,9 +167,7 @@ public final class ModernBlockNames {
         return null;
     }
 
-    // The 1.12.2 dye-colour word of a <color><suffix> name, or null when the name is not one
-    // The prefix is checked against the actual colour set rather than just split off, because otherwise
-    // white_glazed_terracotta would read as the "white_glazed" colour of a _terracotta family
+    // The 1.12.2 dye-colour word of a <color><suffix> name, or null; checked against the actual colour set so white_glazed_terracotta does not read as the "white_glazed" colour of a _terracotta family
     private static String colorPrefix(String name, String suffix) {
         if (!name.endsWith(suffix) || name.length() == suffix.length()) {
             return null;

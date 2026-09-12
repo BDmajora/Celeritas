@@ -1,15 +1,11 @@
 package com.bdmajora.impetus.umbra.gl.program;
 
-// A fully compiled shader-pack program: the linked GlProgram plus the colour attachments it declared it writes,
-// i.e. its DRAWBUFFERS / RENDERTARGETS set
-// Uniforms and samplers are NOT here — the pipeline attaches those separately, once the render targets exist and
-// their texture ids are known
+// A fully compiled pack program: the linked GlProgram plus its declared DRAWBUFFERS/RENDERTARGETS set; uniforms and samplers are attached separately once render targets exist
 public class UmbraProgram {
     private final GlProgram program;
     private final int[] drawBuffers;
 
-    // Both branches clone: the array is handed out again by getDrawBuffers, and DrawBuffers.DEFAULT is shared,
-    // so keeping either reference would let a caller mutate the default for every program that followed
+    // Both branches clone: the array is handed out by getDrawBuffers and DrawBuffers.DEFAULT is shared, so keeping either reference would let a caller mutate the default for every later program
     public UmbraProgram(GlProgram program, int[] drawBuffers) {
         this.program = program;
         this.drawBuffers = drawBuffers == null ? DrawBuffers.DEFAULT.clone() : drawBuffers.clone();

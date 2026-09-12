@@ -11,12 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiConsumer;
 
-// The profiles a pack declares, in declaration order
-// Order is what makes next/previous cycling meaningful — a pack lists them worst-to-best, so cycling forward is
-// "raise the quality preset"
-// Also scans in the other direction: given the current option values, work out which profile (if any) they match,
-// so the screen can show "Profile: High" rather than "Custom" when the user happens to be on a preset exactly
-// Ported from Iris
+// The profiles a pack declares in declaration order (worst-to-best, so cycling forward raises quality), plus the reverse scan matching current values to a profile so the screen shows "Profile: High" rather than "Custom". From Iris
 public class ProfileSet {
     private final LinkedHashMap<String, Profile> orderedProfiles; // The order that profiles should cycle through
     private final List<Profile> sortedProfiles; // The order that profiles should be scanned through
@@ -27,9 +22,7 @@ public class ProfileSet {
         Comparator<Profile> lowToHigh = Comparator.comparing(p -> p.precedence);
         Comparator<Profile> highToLow = lowToHigh.reversed();
 
-        // Compare profiles with many constraints (high precedence) first before comparing ones with few constraints,
-        // needed for accurate matching when one profile contains an additional constraint to another profile but is
-        // otherwise the same;
+        // Compare profiles with many constraints first, needed for accurate matching when one profile adds a constraint to another but is otherwise the same
         sorted.sort(highToLow);
 
         this.sortedProfiles = sorted;

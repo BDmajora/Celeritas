@@ -10,9 +10,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// splits entity rendering by renderer type in the F3 profiler graph
-// vanilla reports all of it as one "entities" slice, which tells you that entities are expensive but
-// not which ones; this is what turns "something is eating my frame time" into a mod name
+// Splits entity rendering by renderer type in the F3 profiler graph; vanilla's single "entities" slice cannot turn "something is eating my frame time" into a mod name
 @Mixin(RenderManager.class)
 public abstract class RenderManagerMixin {
     @Shadow

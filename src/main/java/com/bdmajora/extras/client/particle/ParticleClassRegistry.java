@@ -20,10 +20,7 @@ import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
-// The set of particle classes seen so far, and which the user has switched off
-// 1.12.2 has no particle registry, so classes are discovered three ways in decreasing authority: reflecting over
-// registered factories, recording a class when a particle spawns, and the mod captured at registerParticle time
-// Discovered classes are a persisted cache; only disabledClasses is user data
+// Particle classes seen so far and which the user disabled; 1.12.2 has no particle registry, so classes are discovered by reflecting over factories, recording at spawn, and the mod captured at registerParticle, and only disabledClasses is user data
 public final class ParticleClassRegistry {
     private static final ParticleClassRegistry INSTANCE = new ParticleClassRegistry();
 
@@ -56,18 +53,14 @@ public final class ParticleClassRegistry {
         return INSTANCE;
     }
 
-    // ------------------------------------------------------------------------------------------
     // Discovery
-    // ------------------------------------------------------------------------------------------
 
     // Records a class seen at spawn time, where there is no factory to attribute it with.
     public void recordClass(Class<?> clazz) {
         recordClass(clazz, null);
     }
 
-    // records a discovered particle class
-    // identity-guarded: the name and attribution work happens at most once per class per session, which
-    // is what makes this cheap enough to call for every particle spawned
+    // Records a discovered particle class, identity-guarded so naming and attribution happen once per class per session, cheap enough to call per spawn
     public void recordClass(Class<?> clazz, IParticleFactory factory) {
         if (clazz == null) {
             return;
@@ -97,10 +90,7 @@ public final class ParticleClassRegistry {
         }
     }
 
-    // walks ParticleManager's registered factories looking for the classes they produce
-    // two shapes are resolvable: an inner-class factory whose enclosing class is the particle, e.g.
-    // ParticleFlame.Factory, and a factory declaring a covariant return type
-    // lambda and anonymous factories match neither and are left to the spawn-time path
+    // Walks ParticleManager's factories for the classes they produce: inner-class factories (ParticleFlame.Factory) and covariant return types; lambdas and anonymous factories are left to spawn-time discovery
     public void scanFactories(ParticleManager particleManager) {
         if (particleManager == null) {
             return;
@@ -144,8 +134,7 @@ public final class ParticleClassRegistry {
         }
     }
 
-    // reconciles the persisted cache against what currently loads: drops entries whose mod is gone,
-    // keeps entries that exist but cannot be linked right now, and back-fills mod attribution
+    // Reconciles the persisted cache against what currently loads: drops entries whose mod is gone, keeps unlinkable ones, and back-fills mod attribution
     public void pruneDiscoveredCache() {
         ClassLoader loader = ParticleClassRegistry.class.getClassLoader();
 
@@ -172,9 +161,7 @@ public final class ParticleClassRegistry {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
     // Mod attribution
-    // ------------------------------------------------------------------------------------------
 
     private String resolveModId(Class<?> clazz, IParticleFactory factory) {
         String name = clazz.getName();
@@ -247,9 +234,7 @@ public final class ParticleClassRegistry {
         return fullClassName.startsWith("net.minecraft.") ? "minecraft" : null;
     }
 
-    // ------------------------------------------------------------------------------------------
     // The disabled set
-    // ------------------------------------------------------------------------------------------
 
     public boolean isClassDisabled(String fullClassName) {
         return disabledClasses.contains(fullClassName);
@@ -285,9 +270,7 @@ public final class ParticleClassRegistry {
         return disabledClasses.stream().sorted().toArray(String[]::new);
     }
 
-    // ------------------------------------------------------------------------------------------
     // Discovered-class cache
-    // ------------------------------------------------------------------------------------------
 
     // An unmodifiable fullClassName -> displayName view.
     public Map<String, String> getDiscoveredClasses() {
@@ -338,9 +321,7 @@ public final class ParticleClassRegistry {
                 .toArray(String[]::new);
     }
 
-    // ------------------------------------------------------------------------------------------
     // Naming
-    // ------------------------------------------------------------------------------------------
 
     // com.foo.Bar$Baz -> Baz, com.foo.Bar$1 -> 1.
     private static String toSimpleName(String fullName) {
@@ -349,8 +330,7 @@ public final class ParticleClassRegistry {
         return dollar >= 0 ? name.substring(dollar + 1) : name;
     }
 
-    // a display name that is always usable, even for synthetic classes whose getSimpleName() is empty
-    // or throws
+    // A display name that is always usable, even for synthetic classes whose getSimpleName() is empty or throws
     private static String simpleNameOf(Class<?> clazz) {
         String name;
         try {

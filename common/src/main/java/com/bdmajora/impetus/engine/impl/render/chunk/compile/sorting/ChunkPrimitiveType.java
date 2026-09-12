@@ -18,18 +18,10 @@ public interface ChunkPrimitiveType {
     // the number of index buffer elements per primitive, e.g. 6 for quads, 3 for triangles
     int getIndexBufferElementsPerPrimitive();
 
-    // generates a "simple" index buffer, rendering numPrimitives primitives in the order they appear in
-    // the vertex buffer
-    // the caller is responsible for providing a buffer of the size given by getIndexBufferSize(int)
-    // indexBuffer is a NativeBuffer to be populated with 32-bit integers
+    // Generates a "simple" index buffer drawing numPrimitives in vertex-buffer order; the caller supplies a buffer sized by getIndexBufferSize(int)
     void generateSimpleIndexBuffer(ByteBuffer indexBuffer, int numPrimitives);
 
-    // generates a sorted index buffer for numPrimitives primitives, with data on those primitives
-    // supplied in chunkData
-    // the caller is responsible for providing a buffer of the size given by getIndexBufferSize(int)
-    // the camera position is subchunk-relative, so it compares directly against the vertex positions
-    // held in the SortState
-    // indexBuffer is a NativeBuffer to be populated with 32-bit integers, and x/y/z are the camera
+    // Generates a sorted index buffer for numPrimitives from chunkData; x/y/z is the subchunk-relative camera so it compares directly against SortState positions
     void generateSortedIndexBuffer(ByteBuffer indexBuffer, int numPrimitives, @Nullable TranslucentQuadAnalyzer.SortState chunkData, float x, float y, float z);
 
     // Shader defines this primitive type needs

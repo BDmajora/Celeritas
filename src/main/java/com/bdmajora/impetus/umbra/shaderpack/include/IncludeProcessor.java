@@ -13,8 +13,7 @@ import java.util.regex.Pattern;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-// Inlines OptiFine-style #include recursively from a flat file map, resolving relative to the including file and
-// rejecting cycles. Textual only: #ifdef is left to GlslPreprocessor, so an include inside a false gate still inlines
+// Inlines OptiFine-style #include recursively from a flat file map, resolving relative to the including file and rejecting cycles; textual only, #ifdef is left to GlslPreprocessor so an include inside a false gate still inlines
 public final class IncludeProcessor {
     // Matches:  #include "path"   or   #include <path>   with optional surrounding whitespace.
     private static final Pattern INCLUDE_PATTERN =
@@ -23,17 +22,14 @@ public final class IncludeProcessor {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
     private final Map<AbsolutePackPath, String> sources;
-    // Targets already reported missing. A common.glsl included by forty programs would otherwise log the same
-    // unresolved include forty times
+    // Targets already reported missing, so a common.glsl included by forty programs does not log forty times
     private final Set<String> reportedMissing = new HashSet<>();
 
     public IncludeProcessor(Map<AbsolutePackPath, String> sources) {
         this.sources = sources;
     }
 
-    // Flattens the file at root, inlining everything it transitively includes
-    // Throws IllegalStateException on an unresolvable include or a cycle: both mean the pack cannot produce a
-    // compilable source, and continuing would hand the driver a truncated shader
+    // Flattens the file at root, inlining everything it transitively includes; throws IllegalStateException on an unresolvable include or cycle, since continuing hands the driver a truncated shader
     public List<String> process(AbsolutePackPath root) {
         String source = this.sources.get(root);
         if (source == null) {
@@ -58,16 +54,7 @@ public final class IncludeProcessor {
                     AbsolutePackPath target = path.resolve(matcher.group(1).trim());
                     String included = this.sources.get(target);
                     if (included == null) {
-                        // Tolerate generated/optional includes that don't exist as files. Emit a marker and continue
-                        // rather than failing the whole pack load.
-                        //
-                        // But say so loudly. Both references treat this as FATAL: Umbra throws an IOException listing
-                        // every unresolved include (ShaderPack.java: `if (!graph.getFailures().isEmpty()) throw ...`)
-                        // and OptiFine throws "Included file not found" from resolveIncludes. Skipping quietly turns
-                        // one precise error into a flood of downstream "undefined variable" compile failures with no
-                        // hint at the cause — that is exactly how miniature-shader's dropped /shader.h presented.
-                        // Across all 22 local packs, zero includes are genuinely absent, so nothing relies on this
-                        // tolerance; it could be tightened to match the references.
+                        // Tolerate optional includes that do not exist, emitting a marker and continuing, but loudly: Umbra and OptiFine both treat this as FATAL, and skipping quietly turns one precise error into a flood of undefined-variable failures (miniature-shader's dropped /shader.h). No local pack relies on this tolerance
                         if (this.reportedMissing.add(target.getPathString())) {
                             LOGGER.warn("[Umbra] Unresolved #include \"{}\" from {} — it resolved to {}, which is not in"
                                     + " the pack. Everything that file defined will be undefined at compile time.",

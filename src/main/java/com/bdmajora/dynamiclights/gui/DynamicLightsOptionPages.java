@@ -23,8 +23,7 @@ import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 
-// The Dynamic Lights page, everything on one page since the search bar makes a long page navigable
-// Sub-options are gated with setEnabledPredicate rather than hidden, so Off greys them out instead of removing them
+// The Dynamic Lights page, all on one page since the search bar keeps it navigable; sub-options are gated with setEnabledPredicate so Off greys them out rather than hiding them
 public final class DynamicLightsOptionPages {
     private static final String MOD_ID = "impetus";
     private static final String LANG = "impetus.options.dynamiclights.";
@@ -38,9 +37,7 @@ public final class DynamicLightsOptionPages {
     public static OptionPage dynamicLights() {
         List<OptionGroup> groups = new ArrayList<>();
 
-        // Built before the groups so every sub-option can gate on the pending value rather than the
-        // saved one: flipping the mode to Off greys the rest of the page out immediately, without
-        // waiting for Apply.
+        // Built before the groups so every sub-option gates on the pending value, greying the page out immediately on Off without waiting for Apply
         OptionImpl<DynamicLightsConfig, DynamicLightsMode> mode = mode();
         BooleanSupplier enabled = () -> mode.getValue().isEnabled();
 
@@ -54,9 +51,7 @@ public final class DynamicLightsOptionPages {
                 ImmutableList.copyOf(groups));
     }
 
-    // ------------------------------------------------------------------------------------------
     // Groups
-    // ------------------------------------------------------------------------------------------
 
     private static OptionGroup general(OptionImpl<DynamicLightsConfig, DynamicLightsMode> mode,
                                        BooleanSupplier enabled) {
@@ -107,15 +102,9 @@ public final class DynamicLightsOptionPages {
                 .build();
     }
 
-    // ------------------------------------------------------------------------------------------
     // Per-type toggles
-    // ------------------------------------------------------------------------------------------
 
-    // one toggle per registered entity and block entity type, grouped by the mod that owns it
-    // read straight from the registries - unlike the Extras particle toggles no discovery is needed,
-    // because 1.12.2 does register both of these by name
-    // wrapped in a guard all the same: a mod with a malformed registry entry should cost its own
-    // group, not the whole tab
+    // One toggle per registered entity and block entity type grouped by owning mod, read straight from the registries; guarded so a malformed registry entry costs its own group, not the tab
     private static void addTypeGroups(List<OptionGroup> groups, BooleanSupplier enabled) {
         try {
             addTypeGroups(groups, "entity", LightSourceSettings.listEntityTypes(), enabled,
@@ -144,8 +133,7 @@ public final class DynamicLightsOptionPages {
 
         LightSourceSettings settings = LightSourceSettings.getInstance();
 
-        // Grouped by namespace so a pack with two hundred entity types does not produce one
-        // two-hundred-row group. TreeMap keeps both the groups and the rows in a stable order.
+        // Grouped by namespace so a pack with two hundred entity types does not produce one huge group; TreeMap keeps groups and rows stably ordered
         Map<String, Map<String, String>> byNamespace = new TreeMap<>();
         for (Map.Entry<String, String> type : types.entrySet()) {
             String id = type.getKey();
@@ -161,9 +149,7 @@ public final class DynamicLightsOptionPages {
             OptionGroup.Builder builder = OptionGroup.createBuilder()
                     .setId(group(kind + "." + namespace));
 
-            // Vanilla entries drop the namespace suffix: every row in this screen is a Minecraft entity or block
-            // unless a mod added it, so "(minecraft)" on hundreds of rows is noise. A modded namespace is kept,
-            // because there the suffix is the only thing saying which mod a row came from
+            // Vanilla entries drop the namespace suffix since "(minecraft)" on hundreds of rows is noise; a modded namespace is kept because it is the only thing naming the mod
             boolean showNamespace = !"minecraft".equals(namespace);
 
             for (Map.Entry<String, String> type : namespaceEntry.getValue().entrySet()) {
@@ -192,9 +178,7 @@ public final class DynamicLightsOptionPages {
         void set(LightSourceSettings settings, String id, boolean enabled);
     }
 
-    // ------------------------------------------------------------------------------------------
     // Builders
-    // ------------------------------------------------------------------------------------------
 
     private static OptionImpl<DynamicLightsConfig, Boolean> toggle(
             String key, BooleanSupplier enabled,

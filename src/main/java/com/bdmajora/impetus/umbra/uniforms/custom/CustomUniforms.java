@@ -17,8 +17,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-// The pack's uniform.<type>.<name> and variable.<type>.<name> expressions, evaluated once per frame in
-// declaration order so later ones can reference earlier results. Only uniform. entries are uploaded
+// The pack's uniform.<type>.<name> and variable.<type>.<name> expressions, evaluated once per frame in declaration order so later ones reference earlier results; only uniform. entries are uploaded
 public final class CustomUniforms {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -35,8 +34,7 @@ public final class CustomUniforms {
         }
     }
 
-    // Evaluates every variable for this frame. Once per frame and BEFORE any program uniform update, or programs
-    // upload last frame's values
+    // Evaluates every variable for this frame, once and BEFORE any program uniform update or programs upload last frame's values
     public void update() {
         float frameTime = Math.max(SystemTimeUniforms.COUNTER.getLastFrameTime(), 1.0e-4f);
 
@@ -54,9 +52,7 @@ public final class CustomUniforms {
         }
     }
 
-    // Registers every `uniform.`-declared entry with a program's uniform builder
-    // Registered for all of them regardless of whether this program uses any: the builder drops the ones whose
-    // location resolves to -1, so offering everything is both correct and simpler than pre-filtering
+    // Registers every `uniform.`-declared entry with a program's builder regardless of use, since the builder drops locations resolving to -1
     public void assignTo(UniformCollector collector) {
         for (Variable variable : this.variables) {
             if (!variable.isUniform) {
@@ -98,10 +94,7 @@ public final class CustomUniforms {
         return this.variables.size();
     }
 
-    // Every variable's value as evaluated for the current frame, in declaration order
-    // Reporting only. What makes it worth having: a pack expression may share a name with a built-in, and the
-    // pack's version WINS at program build time — so these are the values that actually reach the shader, and
-    // comparing them against the equivalent built-in is how a divergence between the two becomes visible
+    // Every variable's value as evaluated this frame in declaration order, reporting only; a pack expression sharing a built-in's name WINS at program build, so these are the values reaching the shader and comparing against the built-in shows a divergence
     public Map<String, String> snapshot() {
         Map<String, String> out = new LinkedHashMap<>();
         for (Variable variable : this.variables) {
@@ -238,8 +231,7 @@ public final class CustomUniforms {
         // Compiles every expression, in dependency order
         public CustomUniforms build() {
             CustomUniformInputs inputs = new CustomUniformInputs();
-            // Capture the full built-in uniform surface (common + celestial + system-time are all registered
-            // through addCommonUniforms; matrices resolve per-cell, e.g. gbufferProjection.1.1).
+            // Capture the full built-in uniform surface (common + celestial + system-time all register through addCommonUniforms; matrices resolve per-cell, e.g. gbufferProjection.1.1)
             CommonUniforms.addCommonUniforms(inputs);
             com.bdmajora.impetus.umbra.uniforms.MatrixUniforms.addMatrixUniforms(inputs);
 

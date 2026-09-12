@@ -1,4 +1,4 @@
-<img src="src/main/resources/assets/impetus/textures/gui/icon.png" width="128">
+<img src="src/main/resources/assets/impetus/textures/gui/impetus400.png" width="128">
 
 # Impetus
 
@@ -45,7 +45,7 @@ Impetus ships as a single jar containing several subsystems, each with its own m
 | `impetus` | The core rendering engine and chunk pipeline |
 | `umbra` | The bundled shader pipeline, descended from Iris / Oculus |
 | `fulgor` | Lighting engine, superseding Phosphor and Alfheim |
-| `coartatio` | Memory and allocation reductions across vanilla systems |
+| `coarctatio` | Memory and allocation reductions across vanilla systems |
 | `equilibrium` | Chunk and world access caching |
 | `dynamiclights` | Dynamic light sources for held and dropped items |
 | `extras` | Optional rendering feature toggles |

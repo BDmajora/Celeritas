@@ -12,8 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Set;
 
-// Swaps the AI task/running sets for open-addressed ones; iterated every tick (running set) and every third tick (full set) per mob
-// ObjectLinkedOpenHashSet preserves insertion order, which matters here since task priority is expressed by insertion order into taskEntries
+// Swaps the AI task/running sets for open-addressed ones, iterated every tick and every third tick per mob; ObjectLinkedOpenHashSet keeps insertion order, which expresses task priority
 @Mixin(EntityAITasks.class)
 public class EntityAITasksMixin {
     @Shadow

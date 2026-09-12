@@ -1,8 +1,6 @@
 package com.bdmajora.impetus.booter;
 
-// Upstream MixinBooter generates this class at build time via RFG's injectTags. The fork is pinned
-// to one CleanMix/MixinExtras pair, so the values are static; bump them alongside the booterLibs
-// coordinates in build.gradle.kts.
+// Upstream MixinBooter generates this at build time via RFG's injectTags; the fork is pinned to one CleanMix/MixinExtras pair, so bump these alongside the booterLibs coordinates in build.gradle.kts
 public final class Tags {
 
     public static final String MOD_ID = "impetusbooter";

@@ -180,34 +180,12 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
     private static final int MODEL_NEG_Y      = ModelQuadFacing.NEG_Y.ordinal();
     private static final int MODEL_NEG_Z      = ModelQuadFacing.NEG_Z.ordinal();
 
-    // Inverts the block-face culling test, so the faces that WOULD be culled are the only ones drawn
-    // A compile-time constant, so the branch folds away entirely when it is false
+    // Inverts the block-face culling test so only the faces that WOULD be culled are drawn; compile-time constant so the branch folds away
     private static final boolean DEBUG_BLOCK_FACE_CULLING = false;
 
     // Which facings can face the camera, from the section's position relative to it
     private static int getVisibleFaces(int originX, int originY, int originZ, int chunkX, int chunkY, int chunkZ) {
-        // This is carefully written so that we can keep everything branch-less.
-        //
-        // Normally, this would be a ridiculous way to handle the problem. But the Hotspot VM's
-        // heuristic for generating SETcc/CMOV instructions is broken, and it will always create a
-        // branch even when a trivial ternary is encountered.
-        //
-        // For example, the following will never be transformed into a SETcc:
-        //   (a > b) ? 1 : 0
-        //
-        // So we have to instead rely on sign-bit extension and masking (which generates a ton
-        // of unnecessary instructions) to get this to be branch-less.
-        //
-        // To do this, we can transform the previous expression into the following.
-        //   (b - a) >> 31
-        //
-        // This works because if (a > b) then (b - a) will always create a negative number. We then shift the sign bit
-        // into the least significant bit's position (which also discards any bits following the sign bit) to get the
-        // output we are looking for.
-        //
-        // If you look at the output which LLVM produces for a series of ternaries, you will instantly become distraught,
-        // because it manages to a) correctly evaluate the cost of instructions, and b) go so far
-        // as to actually produce vector code.  (https://godbolt.org/z/GaaEx39T9)
+        // Branch-less on purpose: HotSpot never emits SETcc/CMOV for (a > b) ? 1 : 0, so use (b - a) >> 31 sign-bit extension and masking instead (compare LLVM's output: https://godbolt.org/z/GaaEx39T9)
 
         int boundsMinX = (chunkX << 4), boundsMaxX = boundsMinX + 16;
         int boundsMinY = (chunkY << 4), boundsMaxY = boundsMinY + 16;

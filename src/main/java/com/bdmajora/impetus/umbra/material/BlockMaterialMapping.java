@@ -13,10 +13,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-// Resolves a pack's block.properties entries against the 1.12.2 block registry (port of Umbra's BlockMaterialMapping).
-// Produces a flat array table instead of a BlockState map so the meshing hot path is a single array read.
-// Umbra parity: first mapping of a state wins (OptiFine behavior, Umbra issue #1327); predicates naming a property
-// the block doesn't have are ignored rather than treated as a mismatch; unresolved ids are skipped silently.
+// Resolves a pack's block.properties against the 1.12.2 block registry (port of Umbra's BlockMaterialMapping) into a flat array so the mesher does one read; first mapping wins (OptiFine behaviour, Umbra #1327), predicates naming a missing property are ignored, unresolved ids skipped
 public final class BlockMaterialMapping {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -26,8 +23,7 @@ public final class BlockMaterialMapping {
     private BlockMaterialMapping() {
     }
 
-    // Resolves the pack's layer.<rendertype> overrides to concrete blocks.
-    // Unknown ids are skipped with a warning rather than failing the pack — packs commonly list blocks from mods the user lacks.
+    // Resolves the pack's layer.<rendertype> overrides to concrete blocks; unknown ids are skipped with a warning since packs commonly list blocks from mods the user lacks
     public static java.util.Map<net.minecraft.block.Block, net.minecraft.util.BlockRenderLayer> createBlockRenderLayerTable(
             IdMap idMap) {
         java.util.Map<com.bdmajora.impetus.umbra.shaderpack.materialmap.NamespacedId,

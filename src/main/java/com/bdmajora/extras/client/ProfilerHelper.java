@@ -6,10 +6,7 @@ import net.minecraft.world.World;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-// Names profiler sections after the renderer, so the F3 pie chart splits entity/block-entity
-// rendering by type instead of one slice
-// Push/pop must stay balanced or the profiler throws, so both ends run the identical
-// shouldProfile check rather than one deciding and the other assuming
+// Names profiler sections after the renderer so the F3 pie chart splits entity/block-entity rendering by type; push/pop run the identical shouldProfile check to stay balanced
 public final class ProfilerHelper {
     private static final Map<Class<?>, String> NAME_CACHE = new WeakHashMap<>();
 

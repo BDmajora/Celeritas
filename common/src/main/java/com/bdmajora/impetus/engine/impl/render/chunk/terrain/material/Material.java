@@ -6,11 +6,7 @@ import com.bdmajora.impetus.engine.impl.render.chunk.terrain.material.parameters
 
 import java.util.Objects;
 
-// a material is the full configuration for how a geometry element renders, corresponding to the
-// vanilla RenderType configured for a block
-// the configuration is encoded alongside the rest of the vertex data, which lets several vanilla
-// RenderTypes be consolidated into a single terrain render pass on the CPU, and is recovered on the
-// GPU inside that pass
+// Full render configuration for a geometry element (the vanilla RenderType of a block), encoded alongside vertex data so several RenderTypes collapse into one terrain pass and are recovered on the GPU
 public final class Material {
     public final TerrainRenderPass pass;
     public final int packed;
@@ -18,9 +14,7 @@ public final class Material {
     public final AlphaCutoffParameter alphaCutoff;
     public final boolean mipped;
 
-    // pass is the TerrainRenderPass supplying the base configuration, alphaCutoff is the alpha level
-    // below which fragments are discarded, and mipped says whether mipmapping is enabled on geometry
-    // rendered with this material
+    // pass supplies the base configuration, alphaCutoff is the alpha level below which fragments are discarded, mipped enables mipmapping for this material
     public Material(TerrainRenderPass pass, AlphaCutoffParameter alphaCutoff, boolean mipped) {
         if (alphaCutoff != AlphaCutoffParameter.ZERO && !pass.supportsFragmentDiscard()) {
             throw new IllegalArgumentException("Pass does not support fragment discard");

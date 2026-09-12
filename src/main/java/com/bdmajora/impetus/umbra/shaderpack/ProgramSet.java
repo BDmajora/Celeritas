@@ -9,12 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-// Every program declared by one "dimension" of a pack — on 1.12.2 that is almost always the single world0 directory
-// Holds the flattened ProgramSources keyed by ProgramId, the numbered families keyed by ProgramArrayId, and the
-// pack's ShaderProperties
-// Lookups walk OptiFine's fallback chain rather than returning empty: asking for gbuffers_terrain from a pack that
-// never shipped one gives gbuffers_textured_lit, then gbuffers_textured, then gbuffers_basic. That chain is why a
-// pack with three shader files can still shade the whole world
+// Every program declared by one "dimension" of a pack (almost always world0 on 1.12.2): flattened ProgramSources by ProgramId, numbered families by ProgramArrayId, and ShaderProperties; lookups walk OptiFine's fallback chain (terrain -> textured_lit -> textured -> basic), which is why three files can shade the world
 public final class ProgramSet {
     private final Map<ProgramId, ProgramSource> programs = new EnumMap<>(ProgramId.class);
     private final Map<ProgramArrayId, ProgramSource[]> programArrays = new EnumMap<>(ProgramArrayId.class);
@@ -37,8 +32,7 @@ public final class ProgramSet {
         return this.properties;
     }
 
-    // Resolves a program by id, walking the fallback chain when the requested one is absent OR invalid — an
-    // unparseable program falls back the same way a missing one does, so one bad file does not kill a whole phase
+    // Resolves a program by id, walking the fallback chain when the requested one is absent OR invalid, so one bad file does not kill a phase
     public Optional<ProgramSource> get(ProgramId id) {
         ProgramId current = id;
         while (current != null) {
@@ -51,15 +45,13 @@ public final class ProgramSet {
         return Optional.empty();
     }
 
-    // The source declared for that id specifically, with no fallback — used where "did the pack actually ship
-    // this?" is the question, rather than "what should run for this phase?"
+    // The source declared for that id specifically with no fallback; for "did the pack ship this?" rather than "what runs for this phase?"
     public Optional<ProgramSource> getDirect(ProgramId id) {
         ProgramSource source = this.programs.get(id);
         return (source != null && source.isValid()) ? Optional.of(source) : Optional.empty();
     }
 
-    // The program at that index within a numbered family — composite, deferred, shadowcomp — or empty
-    // No fallback chain here: a missing composite3 means the chain stops, not that composite2 runs twice
+    // The program at that index within a numbered family (composite, deferred, shadowcomp) or empty; no fallback, a missing composite3 stops the chain
     public Optional<ProgramSource> get(ProgramArrayId id, int index) {
         ProgramSource[] arr = this.programArrays.get(id);
         if (arr == null || index < 0 || index >= arr.length) {
@@ -74,9 +66,7 @@ public final class ProgramSet {
         return this.programArrays.get(id);
     }
 
-    // Every directly-declared valid program keyed by source name, e.g. gbuffers_terrain or composite2
-    // Non-fallback on purpose: this drives compilation, and compiling a fallback under its own name would build the
-    // same source several times over
+    // Every directly-declared valid program keyed by source name (gbuffers_terrain, composite2); non-fallback since this drives compilation and a fallback under its own name would build the same source repeatedly
     public Map<String, ProgramSource> collectDeclaredPrograms() {
         Map<String, ProgramSource> result = new java.util.LinkedHashMap<>();
         for (Map.Entry<ProgramId, ProgramSource> e : this.programs.entrySet()) {

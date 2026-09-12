@@ -23,12 +23,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-// where the chunk stops calculating light itself and starts asking the engine
-// four vanilla methods are replaced outright: three of them - getLightFor, checkLight, recheckGaps -
-// because their vanilla bodies would fight the engine for the same data, and the fourth, relightBlock,
-// because vanilla's version silently drops the cross-chunk half of its job
-// @Overwrite is used rather than a cancelling inject in exactly the cases where leaving the vanilla
-// body reachable would be a bug rather than dead weight
+// Where the chunk stops calculating light itself and asks the engine; getLightFor, checkLight and recheckGaps are @Overwritten because their vanilla bodies would fight the engine, relightBlock because vanilla's drops the cross-chunk half of its job
 @Mixin(Chunk.class)
 public abstract class ChunkMixin implements ChunkLightingData, LightingEngineProvider {
     @Unique
@@ -91,34 +86,25 @@ public abstract class ChunkMixin implements ChunkLightingData, LightingEnginePro
     @Unique
     private boolean fulgor$lightInitialized;
 
-    // caches the world's engine on the chunk
-    // getLightFor is one of the most-called methods in the game and every call needs the engine, so
-    // going through the world each time would add an interface dispatch and a field read to all of them
+    // Caches the world's engine on the chunk; getLightFor is one of the most-called methods in the game, and going through the world each call would add an interface dispatch and a field read
     @Inject(method = "<init>(Lnet/minecraft/world/World;II)V", at = @At("RETURN"))
     private void fulgor$captureLightingEngine(World world, int x, int z, CallbackInfo ci) {
         this.fulgor$lightingEngine = ((LightingEngineProvider) world).fulgor$getLightingEngine();
     }
 
-    // getLightSubtracted reads both light types at once and is the entity/rendering path's way in, so
-    // it flushes both queues rather than going through getLightFor twice
+    // getLightSubtracted reads both light types at once and is the entity/rendering path's way in, so it flushes both queues rather than going through getLightFor twice
     @Inject(method = "getLightSubtracted", at = @At("HEAD"))
     private void fulgor$flushBeforeLightSubtracted(BlockPos pos, int amount, CallbackInfoReturnable<Integer> cir) {
         this.fulgor$lightingEngine.processLightUpdates();
     }
 
-    // replays the boundary checks this chunk and its neighbours owe each other
-    // loading a chunk is the only event that can make a previously impossible boundary crossing
-    // possible, which is why the replay hangs off here rather than off a tick
+    // Replays the boundary checks this chunk and its neighbours owe each other; loading a chunk is the only event that makes a previously impossible boundary crossing possible
     @Inject(method = "onLoad", at = @At("RETURN"))
     private void fulgor$replayBoundaryChecks(CallbackInfo ci) {
         LightingHooks.scheduleRelightChecksForChunkBoundaries(this.world, (Chunk) (Object) this);
     }
 
-    // setLightFor rebuilds the whole chunk's skylight map when it has to create a section
-    // the engine calls setLightFor for every position it writes, so leaving that in place would mean a
-    // full-column rebuild in the middle of a propagation pass - both ruinously slow and liable to
-    // overwrite what the pass just decided
-    // only the new section needs seeding
+    // setLightFor rebuilds the whole chunk's skylight map when it creates a section, and the engine calls it for every position it writes; a full-column rebuild mid-pass is ruinously slow and overwrites what the pass decided, so only the new section is seeded
     @Redirect(
             method = "setLightFor",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/chunk/Chunk;generateSkylightMap()V"),
@@ -127,11 +113,7 @@ public abstract class ChunkMixin implements ChunkLightingData, LightingEnginePro
         LightingHooks.initSkylightForSection(this.world, (Chunk) (Object) this, this.storageArrays[pos.getY() >> 4]);
     }
 
-    // vanilla relights the column but drops the part of the job that crosses into a neighbour that is
-    // not loaded, which is where world-generation skylight seams come from
-    // this version hands the column to LightingHooks#relightSkylightColumn instead, which records what
-    // it cannot do now so it can be done on load
-    // @author / @reason are Mixin's required metadata on an @Overwrite, not documentation
+    // Vanilla relights the column but drops the part crossing into an unloaded neighbour (the source of worldgen skylight seams); this hands the column to LightingHooks#relightSkylightColumn, which records what it cannot do now. @author/@reason are Mixin's required @Overwrite metadata
     @Overwrite
     private void relightBlock(int x, int y, int z) {
         int oldHeight = this.heightMap[z << 4 | x] & 255;
@@ -156,11 +138,7 @@ public abstract class ChunkMixin implements ChunkLightingData, LightingEnginePro
         }
     }
 
-    // the single point where deferral becomes visible: anything reading light gets whatever is pending
-    // resolved first
-    // only the requested type is flushed, since the two propagate independently and a block-light read
-    // has no reason to pay for pending skylight
-    // @author / @reason are Mixin's required metadata on an @Overwrite, not documentation
+    // The single point where deferral becomes visible: any light read resolves what is pending first, for the requested type only since the two propagate independently. @author/@reason are Mixin's required @Overwrite metadata
     @Overwrite
     public int getLightFor(EnumSkyBlock lightType, BlockPos pos) {
         this.fulgor$lightingEngine.processLightUpdatesForType(lightType);
@@ -168,11 +146,7 @@ public abstract class ChunkMixin implements ChunkLightingData, LightingEnginePro
         return this.fulgor$getCachedLightFor(lightType, pos);
     }
 
-    // vanilla walks all 256 columns and relights each one immediately, against whatever neighbours
-    // happen to exist
-    // this seeds the emitting blocks into the engine instead and defers declaring the chunk lit until
-    // its whole neighbourhood is lit too
-    // @author / @reason are Mixin's required metadata on an @Overwrite, not documentation
+    // Vanilla walks all 256 columns and relights each immediately against whatever neighbours exist; this seeds the emitters into the engine and defers declaring the chunk lit until its whole neighbourhood is lit. @author/@reason are Mixin's required @Overwrite metadata
     @Overwrite
     public void checkLight() {
         this.isTerrainPopulated = true;
@@ -180,10 +154,7 @@ public abstract class ChunkMixin implements ChunkLightingData, LightingEnginePro
         LightingHooks.checkChunkLighting(this.world, (Chunk) (Object) this);
     }
 
-    // functionally vanilla, but the 1024 chunk-provider lookups it performs are replaced by one 5x5
-    // snapshot; the vanilla body cannot simply be redirected because the lookups are spread across
-    // four private helpers
-    // @author / @reason are Mixin's required metadata on an @Overwrite, not documentation
+    // Functionally vanilla, but its 1024 chunk-provider lookups are replaced by one 5x5 snapshot; the lookups are spread across four private helpers so the body cannot simply be redirected. @author/@reason are Mixin's required @Overwrite metadata
     @Overwrite
     private void recheckGaps(boolean onlyOne) {
         this.world.profiler.startSection("recheckGaps");
@@ -323,9 +294,7 @@ public abstract class ChunkMixin implements ChunkLightingData, LightingEnginePro
         ExtendedBlockStorage section = this.storageArrays[y >> 4];
 
         if (section == Chunk.NULL_BLOCK_STORAGE) {
-            // No section means no stored light, so the answer is whatever the sky rule implies. Note
-            // this deliberately ignores the light type, matching vanilla: a block-light query in an
-            // empty section under open sky returns the sky default.
+            // No section means no stored light, so answer per the sky rule; deliberately ignores the light type like vanilla, so a block-light query in an empty section under open sky returns the sky default
             return this.canSeeSky(pos) ? lightType.defaultLightValue : 0;
         }
 

@@ -11,8 +11,7 @@ import com.bdmajora.impetus.engine.impl.model.quad.properties.ModelQuadFlags;
 import com.bdmajora.impetus.engine.api.util.NormI8;
 import com.bdmajora.impetus.engine.impl.util.PositionUtil;
 
-// Vanilla's smooth lighting, ported from Sodium: gathers the neighbourhood once per face and bilinearly blends
-// the four corners per vertex, with depth blending for inset and irregular quads
+// Vanilla's smooth lighting ported from Sodium: gathers the neighbourhood once per face and bilinearly blends the four corners per vertex, with depth blending for inset quads
 public class SmoothLightPipeline implements LightPipeline {
     // the cache the light data is read from
     private final LightDataAccess lightCache;
@@ -54,10 +53,7 @@ public class SmoothLightPipeline implements LightPipeline {
 
         final AoNeighborInfo neighborInfo = AoNeighborInfo.get(lightFace);
 
-        // If the model quad is aligned to the block's face and covers it entirely, we can take a fast path and directly
-        // map the corner values onto this quad's vertices. This covers most situations during rendering and provides
-        // a modest speed-up.
-        // To match vanilla behavior, also treat the face as aligned if it is parallel and the block state is a full cube
+        // Aligned quads covering the whole face take the fast path of mapping corner values straight onto the vertices; a parallel face on a full cube counts as aligned to match vanilla
         if ((flags & ModelQuadFlags.IS_ALIGNED) != 0 || ((flags & ModelQuadFlags.IS_PARALLEL) != 0 && LightDataAccess.unpackFC(this.lightCache.get(x, y, z)))) {
             if ((flags & ModelQuadFlags.IS_PARTIAL) == 0) {
                 this.applyAlignedFullFace(neighborInfo, x, y, z, lightFace, out);
@@ -87,17 +83,13 @@ public class SmoothLightPipeline implements LightPipeline {
         this.cachedPos = Long.MIN_VALUE;
     }
 
-    // quickly calculates the light data for a full grid-aligned quad
-    // this is the most common case - outward facing quads on a full-block model - and avoids
-    // interpolation between neighbours, since each corner only ever has two contributing sides
-    // flags: IS_ALIGNED, !IS_PARTIAL
+    // Fast path for a full grid-aligned quad (IS_ALIGNED, !IS_PARTIAL): the most common case, each corner has only two contributing sides so no interpolation is needed
     private void applyAlignedFullFace(AoNeighborInfo neighborInfo, int x, int y, int z, ModelQuadFacing dir, QuadLightData out) {
         AoFaceData faceData = this.getCachedFaceData(x, y, z, dir, true);
         neighborInfo.mapCorners(faceData.lm, faceData.ao, out.lm, out.br);
     }
 
-    // calculates the light data for a grid-aligned quad that does not cover the entire block volume's face
-    // flags: IS_ALIGNED, IS_PARTIAL
+    // Light data for a grid-aligned quad that does not cover the whole face (IS_ALIGNED, IS_PARTIAL)
     private void applyAlignedPartialFace(AoNeighborInfo neighborInfo, ModelQuadView quad, int x, int y, int z, ModelQuadFacing dir, QuadLightData out) {
         for (int i = 0; i < 4; i++) {
             // Clamp the vertex positions to the block's boundaries to prevent weird errors in lighting
@@ -128,8 +120,7 @@ public class SmoothLightPipeline implements LightPipeline {
             float depth = neighborInfo.getDepth(cx, cy, cz);
 
             if (applyAoDepthBlending) {
-                // Blend the occlusion factor between the blocks directly beside this face and the blocks above it
-                // based on how inset the face is. This fixes a few issues with blocks such as farmland and paths.
+                // Blend occlusion between the blocks beside this face and those above it based on how inset it is; fixes farmland and paths
                 this.applyInsetPartialFaceVertex(x, y, z, dir, depth, 1.0f - depth, weights);
             } else {
                 this.applyAlignedPartialFaceVertex(x, y, z, dir, weights, MathUtil.roughlyEqual(depth, 0.0F));
@@ -206,8 +197,7 @@ public class SmoothLightPipeline implements LightPipeline {
                 float depth = neighborInfo.getDepth(cx, cy, cz);
 
                 if (applyAoDepthBlending) {
-                    // Blend the occlusion factor between the blocks directly beside this face and the blocks above it
-                    // based on how inset the face is. This fixes a few issues with blocks such as farmland and paths.
+                    // Blend occlusion between the blocks beside this face and those above it based on how inset it is; fixes farmland and paths
                     this.applyInsetPartialFaceVertex(x, y, z, dir, depth, 1.0f - depth, weights);
                 } else {
                     // Use inset data as soon as the face is even partially inset

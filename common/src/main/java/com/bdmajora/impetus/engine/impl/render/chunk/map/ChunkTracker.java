@@ -16,8 +16,7 @@ public class ChunkTracker implements ClientChunkEventListener {
         this(1);
     }
 
-    // radius 0 is technically valid but produces wrong edge rendering for blocks that read neighbor data (fences, fluids);
-    // vanilla papers over this by re-updating chunks as neighbors load, which wastes CPU and still looks bad
+    // Radius 0 is valid but misrenders edges of blocks reading neighbour data (fences, fluids); vanilla papers over it by re-updating chunks as neighbours load
     public ChunkTracker(int requiredNeighborRadius) {
         if (requiredNeighborRadius < 0) {
             throw new IllegalArgumentException("requiredNeighborRadius must be nonnegative");

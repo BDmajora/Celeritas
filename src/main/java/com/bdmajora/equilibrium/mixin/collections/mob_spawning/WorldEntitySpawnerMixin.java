@@ -13,8 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Set;
 
-// Swaps the eligible-chunk set for an open-addressed one; rebuilt every spawn cycle over a 17x17 chunk block per player
-// Iteration order differs from HashSet, but the spawner copies to a list and shuffles before use so that's fine
+// Swaps the eligible-chunk set for an open-addressed one, rebuilt every spawn cycle over 17x17 chunks per player; iteration order differs but the spawner copies and shuffles before use
 @Mixin(WorldEntitySpawner.class)
 public class WorldEntitySpawnerMixin {
     @Shadow

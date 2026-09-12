@@ -10,8 +10,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
-// Avoids allocating a HashMap-backed set for the common case of an entity with no passengers; called every tick for ridden horses/llamas
-// ReferenceOpenHashSet is fine here since Entity doesn't override equals, so vanilla's HashSet was already deduping by identity
+// Avoids allocating a HashMap-backed set for an entity with no passengers, called every tick for ridden mounts; ReferenceOpenHashSet is fine since Entity does not override equals
 @Mixin(Entity.class)
 public abstract class EntityMixin {
     @Shadow

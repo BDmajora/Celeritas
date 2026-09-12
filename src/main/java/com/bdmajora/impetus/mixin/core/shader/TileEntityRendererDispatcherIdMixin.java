@@ -27,14 +27,7 @@ public class TileEntityRendererDispatcherIdMixin {
         state.setCurrentRenderedBlockEntity(WorldRenderingSettings.getBlockEntityId(tileEntity));
         impetus$pushIdToGpu();
 
-        // Same hazard as RenderItem, and worse here. Block entity renderers draw through ModelBase/ModelRenderer,
-        // whose vertex data carries no lightmap element either, so a generic array left enabled on slot 9
-        // (gl_MultiTexCoord1) flattens their lightmap to one constant and the whole model renders fullbright.
-        //
-        // ModelRenderer compiles into a display list on first render and glDrawArrays dereferences the bound arrays
-        // at COMPILE time, so a single poisoned compile is baked in for the rest of the session rather than for one
-        // frame — which is why player heads and other model-based block entities stay lit once they have gone wrong.
-        // Resetting before every dispatch guarantees the first compile of each model happens clean.
+        // Same hazard as RenderItem, worse: ModelRenderer vertex data has no lightmap element and compiles into a display list that dereferences the bound arrays at COMPILE time, so one poisoned compile stays fullbright all session; resetting before every dispatch keeps the first compile clean
         UmbraRenderingPipeline.resetVanillaVertexArrayState();
     }
 
@@ -42,16 +35,11 @@ public class TileEntityRendererDispatcherIdMixin {
     private void impetus$endBlockEntity(TileEntity tileEntity, float partialTicks, int destroyStage, CallbackInfo ci) {
         CapturedRenderingState.INSTANCE.setCurrentRenderedBlockEntity(
                 this.impetus$blockEntityIdStack.isEmpty() ? -1 : this.impetus$blockEntityIdStack.pop());
-        // The restore matters as much as the set: without it the last block entity's id stays live over everything
-        // drawn after the batch.
+        // The restore matters as much as the set: without it the last block entity's id stays live over everything drawn after the batch
         impetus$pushIdToGpu();
     }
 
-    // sends the id change to the bound program
-    // setting it only on CapturedRenderingState leaves it in Java: the uniform is uploaded when a
-    // phase is bound, and one phase covers every block entity in the frame, so the batch would render
-    // with whichever one's id happened to be current at phase entry
-    // see UmbraRenderingPipeline#refreshDynamicUniforms()
+    // Sends the id change to the bound program; setting it only on CapturedRenderingState leaves it in Java, since the uniform uploads at phase bind and one phase covers every block entity (see UmbraRenderingPipeline#refreshDynamicUniforms)
     @Unique
     private static void impetus$pushIdToGpu() {
         UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();

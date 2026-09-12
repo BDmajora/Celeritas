@@ -6,9 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// The option tree: every mixin.* rule, its default and what it does, declared here once
-// An option's name is its mixin package path, so a rule governs everything beneath it with no wiring
-// Deliberately smaller than Lithium's: options that cannot remove work on 1.12.2 were dropped
+// The option tree: every mixin.* rule, default and description declared once; an option's name is its mixin package path so it governs everything beneath it, and it is smaller than Lithium's since options that cannot remove work on 1.12.2 were dropped
 public final class EquilibriumOptions {
     // Immutable, in declaration order; the config file and the GUI both present them this way.
     private static final Map<String, Entry> ENTRIES = build();
@@ -311,9 +309,7 @@ public final class EquilibriumOptions {
         }
 
         Map<String, Entry> finish() {
-            // Every dependency must name a real option. A typo here would silently disable nothing,
-            // which is exactly the kind of bug that only ever shows up as "why is this mixin still
-            // applied", so it is worth failing at class-init over.
+            // Every dependency must name a real option; a typo would silently disable nothing and only show up as "why is this mixin still applied", so fail at class-init
             for (Map.Entry<String, Map<String, Boolean>> entry : this.dependencies.entrySet()) {
                 for (String dependency : entry.getValue().keySet()) {
                     if (!this.entries.containsKey(dependency)) {

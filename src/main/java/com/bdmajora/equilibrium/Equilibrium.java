@@ -9,13 +9,11 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 
-// Lithium backport for 1.12.2; owns the logger and loaded config as the single shared instance
-// Not an FML entry point - mixins are gated on options resolved earlier during coremod setup
+// Lithium backport for 1.12.2 owning the logger and shared config; not an FML entry point, mixins are gated on options resolved during coremod setup
 public final class Equilibrium {
     public static final Logger LOGGER = LogManager.getLogger("Equilibrium");
 
-    // Set once by EquilibriumMixinPlugin during coremod setup; accessor lazy-loads instead of
-    // returning null so tooling running outside the game still gets a usable config
+    // Set once by EquilibriumMixinPlugin during coremod setup; the accessor lazy-loads so tooling outside the game still gets a usable config
     private static EquilibriumConfig config;
 
     private Equilibrium() {

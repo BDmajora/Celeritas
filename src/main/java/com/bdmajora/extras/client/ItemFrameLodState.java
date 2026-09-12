@@ -8,10 +8,7 @@ import net.minecraft.util.EnumFacing;
 import java.util.Collections;
 import java.util.List;
 
-// Render-thread state for item-frame level of detail, a backport of MoreCulling's "Frame LOD"
-// Exists for walls of framed blocks in storage rooms: each submits a full block model, and four
-// of its six faces are never visible through the frame
-// Client render thread only, so a plain static flag needs no synchronization
+// Render-thread state for item-frame LOD (MoreCulling's "Frame LOD"): walls of framed blocks submit full models with four faces never visible; a plain static flag since it is render thread only
 public final class ItemFrameLodState {
     // True only while rendering the contents of a framed item beyond the LOD distance
     public static boolean active;
@@ -19,9 +16,7 @@ public final class ItemFrameLodState {
     private ItemFrameLodState() {
     }
 
-    // The model's quads for a face, minus the four side faces when LOD is active on a 3D model
-    // NORTH/SOUTH is the front/back axis: vanilla's fixed display transform has zero rotation, so
-    // viewer-facing is model-local SOUTH and away is NORTH; flat sprites have no sides to drop
+    // The model's quads for a face, minus the four side faces when LOD is active on a 3D model; NORTH/SOUTH is the front/back axis under vanilla's zero-rotation display transform, and flat sprites have no sides
     public static List<BakedQuad> filterLodQuads(IBakedModel model, IBlockState state, EnumFacing side, long rand) {
         List<BakedQuad> quads = model.getQuads(state, side, rand);
 

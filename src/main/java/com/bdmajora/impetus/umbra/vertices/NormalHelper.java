@@ -2,17 +2,12 @@ package com.bdmajora.impetus.umbra.vertices;
 
 import org.joml.Vector3f;
 
-// Pure geometry for the extended vertex data: face normals and tangents
-// The tangent routine is a semantics-preserving port from Sodium/Iris (LGPLv3). It derives the tangent basis from a
-// triangle's positions and UVs — the standard at_tangent construction OptiFine-style normal mapping needs — and
-// packs it through NormI8 with the handedness sign in w
-// No Minecraft dependencies at all, which is what makes it safe to call from the chunk-build worker threads
+// Pure geometry for the extended vertex data (face normals and tangents); the tangent routine is a semantics-preserving Sodium/Iris port (LGPLv3) building the at_tangent basis from positions and UVs, with no Minecraft dependencies so chunk-build workers can call it
 public final class NormalHelper {
     private NormalHelper() {
     }
 
-    // The quad's real face normal from its four corners, written into saveTo rather than returned so the meshing
-    // hot path can reuse one vector instead of allocating per quad
+    // The quad's real face normal from its four corners, written into saveTo so the meshing hot path reuses one vector instead of allocating per quad
     public static void computeFaceNormal(Vector3f saveTo,
                                          float x0, float y0, float z0,
                                          float x2, float y2, float z2,
@@ -30,9 +25,7 @@ public final class NormalHelper {
         saveTo.set(nx * scale, ny * scale, nz * scale);
     }
 
-    // Computes and packs the tangent for a triangle from its positions, UVs and face normal
-    // The packed w component carries bitangent handedness as +1 or -1, which the shader needs to reconstruct the
-    // third basis vector without a second attribute — a wrong sign flips normal-mapped lighting inside out
+    // Computes and packs the tangent for a triangle from positions, UVs and face normal; the packed w carries bitangent handedness (+1/-1) so the shader reconstructs the third basis vector, and a wrong sign flips normal-mapped lighting inside out
     public static int computeTangent(float normalX, float normalY, float normalZ,
                                      float x0, float y0, float z0, float u0, float v0,
                                      float x1, float y1, float z1, float u1, float v1,

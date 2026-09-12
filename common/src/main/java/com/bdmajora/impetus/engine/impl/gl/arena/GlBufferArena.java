@@ -18,8 +18,7 @@ public class GlBufferArena {
     static final boolean CHECK_ASSERTIONS = false;
 
     private static final GlBufferUsage BUFFER_USAGE = GlBufferUsage.STATIC_DRAW;
-    // Growth divisor: when the arena has to grow it adds roughly (current size / RESIZE_FACTOR), so 2 means it
-    // grows by half rather than doubling — cheaper in peak VRAM at the cost of more frequent resizes
+    // Growth divisor: the arena grows by roughly (size / RESIZE_FACTOR), so 2 grows by half rather than doubling, trading resizes for peak VRAM
     private static final int RESIZE_FACTOR = 2;
 
     private int resizeIncrement;
@@ -293,8 +292,7 @@ public class GlBufferArena {
 
     // Allocates and uploads each pending buffer, growing the arena when it fills; true if it grew
     public boolean upload(CommandList commandList, Stream<PendingUpload> stream) {
-        // Record the buffer object before we start any work
-        // If the arena needs to re-allocate a buffer, this will allow us to check and return an appropriate flag
+        // Record the buffer object first so a re-allocation during the upload can be detected and reported through the return flag
         GlBuffer buffer = this.arenaBuffer;
 
         // A linked list is used as we'll be randomly removing elements and want O(1) performance
@@ -310,9 +308,7 @@ public class GlBufferArena {
                     .mapToLong(upload -> upload.getDataBuffer().getLength())
                     .sum() / this.stride);
 
-            // Ask the arena to grow to accommodate the remaining uploads
-            // This will force a re-allocation and compaction, which will leave us a continuous free segment
-            // for the remaining uploads
+            // Grow the arena for the remaining uploads; the re-allocation compacts, leaving one continuous free segment
             this.ensureCapacity(commandList, remainingElements);
 
             // Try again to upload any buffers that failed last time
@@ -356,9 +352,7 @@ public class GlBufferArena {
 
     // Grows up front for a known batch
     public void ensureCapacity(CommandList commandList, int elementCount) {
-        // Re-sizing the arena results in a compaction, so any free space in the arena will be
-        // made into one contiguous segment, joined with the new segment of free space we're asking for
-        // We calculate the number of free elements in our arena and then subtract that frozm the total requested
+        // Resizing compacts all free space into one segment joined with the new one, so subtract the existing free elements from the request
         int elementsNeeded = elementCount - (this.capacity - this.used);
 
         // Try to allocate some extra buffer space unless this is an unusually large allocation

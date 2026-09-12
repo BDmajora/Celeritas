@@ -26,8 +26,7 @@ public class VisibilityEncoding {
         boolean canFaceSeeFace(int fromDir, int toDir);
     }
 
-    // returns the bit that encodes "you can see from the face on the 'from' side through to the face
-    // on the 'to' side"
+    // The bit encoding "visible from the face on the 'from' side through to the face on the 'to' side"
     static int bit(int from, int to) {
         return (from * 8) + to;
     }

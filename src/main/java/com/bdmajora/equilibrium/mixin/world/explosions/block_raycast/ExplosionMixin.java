@@ -24,8 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-// Rewrites the block-damage half of an explosion: skips re-reading a block state when consecutive ray steps land in the same block, using a ChunkSectionCursor to cache the chunk/section between reads
-// Entity half is transcribed unchanged - there's no injection point between the two halves that survives bytecode reordering by other mods
+// Rewrites the block-damage half of an explosion to skip re-reading a block when consecutive ray steps land in it, using a ChunkSectionCursor; the entity half is transcribed unchanged since no injection point between them survives other mods' reordering
 @Mixin(Explosion.class)
 public abstract class ExplosionMixin {
     @Shadow
@@ -65,8 +64,7 @@ public abstract class ExplosionMixin {
     public void doExplosionA() {
         Set<BlockPos> affected = new HashSet<>();
 
-        // Loading, because vanilla's getBlockState loads: a blast at the edge of the loaded area
-        // really does pull terrain in, and declining to would let it punch straight through.
+        // Loading, because vanilla's getBlockState loads: a blast at the loaded edge really pulls terrain in, and declining would let it punch straight through
         ChunkSectionCursor cursor = new ChunkSectionCursor(this.world, true);
 
         for (int rayX = 0; rayX < 16; ++rayX) {
@@ -86,9 +84,7 @@ public abstract class ExplosionMixin {
                     dirY /= length;
                     dirZ /= length;
 
-                    // Drawn from the world's random rather than the explosion's own, exactly as
-                    // vanilla does. They are different generators and swapping them would change
-                    // which blocks a given blast destroys.
+                    // Drawn from the world's random rather than the explosion's own, exactly as vanilla; swapping generators would change which blocks a blast destroys
                     float energy = this.size * (0.7F + this.world.rand.nextFloat() * 0.6F);
 
                     double stepX = this.x;
@@ -145,9 +141,7 @@ public abstract class ExplosionMixin {
 
         this.affectedBlockPositions.addAll(affected);
 
-        // ------------------------------------------------------------------ entity damage
-        // [VanillaCopy] Explosion#doExplosionA, second half. Unchanged; see the class comment for
-        // why it is transcribed rather than left in place.
+        // [VanillaCopy] Explosion#doExplosionA second half (entity damage), unchanged; see the class comment for why it is transcribed
         float radius = this.size * 2.0F;
 
         int minX = MathHelper.floor(this.x - radius - 1.0D);

@@ -10,6 +10,10 @@ public class DefaultColors {
     public static final int BACKGROUND_HOVERED = 0xE0202020;
     public static final int BACKGROUND_DISABLED = 0x60000000;
 
+    // Sidebar text accents sampled from the dominant colour of each subsystem's icon in assets/impetus/textures/gui, so the heading reads as one piece with its logo
+    private static final int COARCTATIO_ACCENT = 0xFF80CBC4;
+    private static final int FULGOR_ACCENT = 0xFFEBCB8B;
+    private static final int EQUILIBRIUM_ACCENT = 0xFF88C0D0;
     private static final int UMBRA_ACCENT = 0xFFD86AFF;
     private static final int[] MOD_ACCENT_PALETTE = {
             0xFF80CBC4,
@@ -36,6 +40,9 @@ public class DefaultColors {
 
         return switch (modId) {
             case "minecraft", "impetus", "sodium" -> ELEMENT_ACTIVATED;
+            case "coarctatio" -> COARCTATIO_ACCENT;
+            case "fulgor" -> FULGOR_ACCENT;
+            case "equilibrium" -> EQUILIBRIUM_ACCENT;
             case "umbra" -> UMBRA_ACCENT;
             default -> MOD_ACCENT_PALETTE[Math.floorMod(modId.hashCode(), MOD_ACCENT_PALETTE.length)];
         };

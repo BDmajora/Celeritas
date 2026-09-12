@@ -4,9 +4,7 @@ import net.minecraft.world.World;
 
 import javax.annotation.Nullable;
 
-// Records which world currently counts this entity in its inventory-entity total, implemented on Entity by mixin
-// onEntityAdded and onEntityRemoved are not a matched pair (a cancelled join event skips the add but not the
-// remove), so the world is held on the entity to make the accounting structural rather than inferred
+// Records which world counts this entity in its inventory-entity total (on Entity by mixin); onEntityAdded/onEntityRemoved are not a matched pair, so holding the world makes the accounting structural
 public interface CountedInventoryEntity {
     @Nullable
     World equilibrium$getCountedWorld();

@@ -6,11 +6,7 @@ import com.bdmajora.impetus.engine.impl.model.light.smooth.SmoothLightPipeline;
 
 import java.util.EnumMap;
 
-// holds the quad lighters that compute lightmap and brightness data for each quad
-// on Forge, when the experimental light pipeline is enabled, a passthrough implementation is used
-// that has Forge's QuadLighter do the lighting
-// otherwise the built-in SmoothLightPipeline and FlatLightPipeline are used, which implement a
-// lighting model very close to vanilla's logic but with several optimisations and visual fixes
+// Holds the quad lighters; on Forge with the experimental pipeline a passthrough hands lighting to Forge's QuadLighter, otherwise the built-in Smooth/Flat pipelines (vanilla-like with optimisations and fixes) are used
 public class LightPipelineProvider {
     private final EnumMap<LightMode, LightPipeline> lighters = new EnumMap<>(LightMode.class);
     private final LightDataAccess lightData;
@@ -37,8 +33,7 @@ public class LightPipelineProvider {
         return this.lightData;
     }
 
-    // resets the light pipelines, invalidating their caches
-    // called whenever the underlying world data has changed
+    // Resets the light pipelines and invalidates their caches; called whenever the underlying world data changes
     public void reset() {
         for (LightPipeline pipeline : this.lighters.values()) {
             pipeline.reset();

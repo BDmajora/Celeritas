@@ -7,10 +7,7 @@ import net.minecraft.world.WorldType;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
 
-// A cursor for reading many blocks from one region, holding the last chunk and section and re-resolving only
-// at a boundary. Short-lived and never shared, so it needs no validation
-// Whether reading an unloaded chunk loads it is the caller's choice at construction, because vanilla is inconsistent:
-// getBlockState loads, getCollisionBoxes treats unloaded as empty, and a cursor must match the path it replaces
+// Cursor for reading many blocks from one region, holding the last chunk and section and re-resolving at boundaries; short-lived and unshared, and whether unloaded chunks load is the caller's choice since vanilla is inconsistent about it
 public final class ChunkSectionCursor {
     private static final IBlockState AIR = Blocks.AIR.getDefaultState();
 
@@ -32,8 +29,7 @@ public final class ChunkSectionCursor {
     private ExtendedBlockStorage section;
     private int sectionY = Integer.MIN_VALUE;
 
-    // loadChunks true matches World#getBlockState, false treats unloaded chunks as air the way
-    // World#getCollisionBoxes does
+    // loadChunks true matches World#getBlockState, false treats unloaded chunks as air like World#getCollisionBoxes
     public ChunkSectionCursor(World world, boolean loadChunks) {
         this.world = world;
         this.access = world instanceof ChunkAccess ? (ChunkAccess) world : null;

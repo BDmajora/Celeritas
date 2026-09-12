@@ -1,16 +1,12 @@
 package com.bdmajora.impetus.umbra.vertices;
 
-// The extended per-vertex attributes a pack expects and the slots OptiFine hard-codes for them, bound at link time
-// and matched by the vertex encoders; a mismatch feeds a pack tangents where it expects entity ids
-// overlayId does not exist on 1.12.2 and is deliberately absent
+// The extended per-vertex attributes a pack expects and the slots OptiFine hard-codes for them, bound at link time and matched by the encoders (a mismatch feeds tangents where entity ids are expected); overlayId does not exist on 1.12.2
 public final class UmbraVertexAttributes {
     // Block id in x and metadata in y, both derived from the IBlockState
     public static final String MC_ENTITY = "mc_Entity";
     public static final int MC_ENTITY_SLOT = 10;
 
-    // The centre UV of the texture region this QUAD maps, the mean of its four vertex UVs
-    // Packs rebuild an atlas-local coordinate basis from it, which is what makes their texcoord maths survive
-    // sprite animation moving the region around the atlas
+    // The centre UV of the texture region this QUAD maps, the mean of its four vertex UVs; packs rebuild an atlas-local basis from it so their texcoord maths survives sprite animation
     public static final String MC_MID_TEX_COORD = "mc_midTexCoord";
     public static final int MC_MID_TEX_COORD_SLOT = 11;
 

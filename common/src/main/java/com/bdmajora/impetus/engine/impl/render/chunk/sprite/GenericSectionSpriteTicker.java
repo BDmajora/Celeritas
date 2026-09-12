@@ -58,8 +58,7 @@ public class GenericSectionSpriteTicker<T> implements SectionTicker {
                 //noinspection unchecked
                 var sprites = (List<T>) mcData.animatedSprites;
 
-                // The iterator allocation is very expensive here for large render distances.
-                //noinspection ForLoopReplaceableByForEach
+                // Indexed loop on purpose: the iterator allocation is very expensive at large render distances (noinspection ForLoopReplaceableByForEach)
                 for (int i = 0; i < sprites.size(); i++) {
                     //noinspection UseBulkOperation
                     spriteSet.add(sprites.get(i));

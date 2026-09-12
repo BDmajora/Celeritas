@@ -9,14 +9,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// routes the spider's glowing-eyes overlay through gbuffers_spidereyes
-// see UmbraRenderingPipeline#beginEyes() for why this matters: without it the layer inherits
-// gbuffers_entities, and vanilla's out-of-range full-bright lightmap sentinel turns two eye texels
-// into a screen-filling bloom flare
-// the anchor is vanilla's GlStateManager.color(1, 1, 1, 1) - it sits after the blend mode and the
-// lightmap sentinel have been set and immediately before the model draw, so the program's blend
-// override and the corrected lightmap coordinate are the last writes to win
-// all three eyes layers share that shape
+// Routes the spider's glowing-eyes overlay through gbuffers_spidereyes (see UmbraRenderingPipeline#beginEyes, otherwise the fullbright lightmap sentinel blooms); anchored on vanilla's color(1,1,1,1) right before the model draw so the program's blend override and lightmap fix win, same shape for all three eyes layers
 @Mixin(LayerSpiderEyes.class)
 public class LayerSpiderEyesMixin {
     @Inject(method = "doRenderLayer(Lnet/minecraft/entity/monster/EntitySpider;FFFFFFF)V",

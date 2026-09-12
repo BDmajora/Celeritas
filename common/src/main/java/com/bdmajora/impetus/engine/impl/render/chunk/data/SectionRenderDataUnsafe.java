@@ -2,9 +2,7 @@ package com.bdmajora.impetus.engine.impl.render.chunk.data;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Section draw data in raw native memory rather than objects, because the chunk render path is memory-bound
-// and Hotspot scatters objects across the heap. Layout: u64 slice_mask, then per facing u32 vertex_offset,
-// u32 element_count, u32 index_offset
+// Section draw data in raw native memory (the render path is memory-bound and HotSpot scatters objects): u64 slice_mask, then per facing u32 vertex_offset, u32 element_count, u32 index_offset
 public class SectionRenderDataUnsafe {
     private static final long OFFSET_SLICE_MASK = 0;
     private static final long OFFSET_SLICE_RANGES = 8;

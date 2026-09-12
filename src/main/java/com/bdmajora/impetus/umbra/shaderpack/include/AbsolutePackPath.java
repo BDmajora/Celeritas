@@ -4,11 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-// An absolute, normalised path inside a shader pack's shaders/ directory, always starting with /
-// OptiFine #include directives come in two forms: relative, resolved against the including file's directory, and
-// absolute, where a leading / resolves from the pack root
-// Normalising both into one canonical form — with . and .. segments collapsed — is what lets the include graph use
-// these as map keys, so two paths that name the same file compare equal and a cycle is detectable
+// An absolute normalised path inside shaders/, always starting with /; #include comes relative (against the including file's directory) or absolute (leading /), and collapsing . and .. into one canonical form is what makes these usable as map keys and cycles detectable
 public final class AbsolutePackPath {
     private final String path;
 
@@ -24,9 +20,7 @@ public final class AbsolutePackPath {
         return new AbsolutePackPath(normalize(path));
     }
 
-    // Resolves an #include target against this path's PARENT directory, not against this path itself — a file
-    // including "common.glsl" means the one beside it, not one beneath it
-    // A leading / on the target ignores all of that and resolves from the pack root instead
+    // Resolves an #include target against this path's PARENT directory (a file including "common.glsl" means the one beside it); a leading / resolves from the pack root instead
     public AbsolutePackPath resolve(String target) {
         if (target.startsWith("/")) {
             return fromAbsolutePath(target);

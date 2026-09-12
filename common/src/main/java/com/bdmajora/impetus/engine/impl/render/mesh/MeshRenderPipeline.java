@@ -24,14 +24,9 @@ import java.util.BitSet;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Mesh-shader terrain path: regions and sections live in bindless GPU buffers, a task shader culls regions,
-// a mesh shader culls sections and emits their quads, so the CPU issues one draw per frame
-// Requires NV_mesh_shader and bindless; MeshShaderSupport gates it
+// Mesh-shader terrain path: regions and sections live in bindless GPU buffers, a task shader culls regions and a mesh shader culls sections and emits quads, one CPU draw per frame; gated by MeshShaderSupport
 public class MeshRenderPipeline {
-    // Cap on live regions, and the thing that sizes every per-region buffer
-    // A region is 8x4x8 sections, and 1.12.2's world height fixes the vertical span at four region layers, so
-    // render distance 64 needs roughly 17*17*4 ~ 1200. 4096 leaves headroom without the section metadata buffer
-    // (256 headers of 32 bytes per region) turning into hundreds of megabytes of VRAM
+    // Cap on live regions, sizing every per-region buffer; render distance 64 needs ~17*17*4 = 1200 (8x4x8 regions, four vertical layers), and 4096 leaves headroom without the section header buffer reaching hundreds of MB
     private static final int MAX_REGIONS = 4096;
 
     // Scene uniform block, std140. Layout must match scene.glsl exactly, field for field
@@ -60,8 +55,7 @@ public class MeshRenderPipeline {
     private final SectionRasterizer sectionRasterizer;
     private final TerrainRasterizer terrainRasterizer;
 
-    // Which regions were inside the frustum last frame, so a region leaving it can have its stale section
-    // visibility bytes cleared instead of staying "visible" forever
+    // Regions inside the frustum last frame, so one leaving it has its stale section visibility bytes cleared instead of staying "visible" forever
     private final BitSet regionsInFrustum = new BitSet(MAX_REGIONS);
 
     // Reused across frames; the sort key is (distance << 16) | regionId, so iteration order is front-to-back
@@ -79,8 +73,7 @@ public class MeshRenderPipeline {
         QuadArena arena = new QuadArena(geometryBudget, MeshChunkVertex.STRIDE);
         this.sections = new MeshSectionStore(regions, arena, this.uploadStream);
 
-        // The visible region id list lives immediately after the scene struct, inside the same allocation, so the
-        // shader reaches it by pointer arithmetic off the UBO's own address
+        // The visible region id list sits right after the scene struct in the same allocation, reached by pointer arithmetic off the UBO's address
         this.sceneUniform = new BindlessBuffer(SCENE_BYTES + MAX_REGIONS * 2L);
         this.regionVisibility = new BindlessBuffer(MAX_REGIONS);
         this.sectionVisibility = new BindlessBuffer(MAX_REGIONS * (long) MeshRegionStore.SECTIONS_PER_REGION);
@@ -105,9 +98,7 @@ public class MeshRenderPipeline {
         return this.uploadStream;
     }
 
-    // Draws one frame of terrain and computes the visibility the next frame will draw from
-    // cameraX/Y/Z are the exact camera position in world space; the block atlas and lightmap are passed as GL
-    // texture names because this package deliberately knows nothing about Minecraft
+    // Draws one frame of terrain and computes next frame's visibility; camera is exact world position, atlas and lightmap are GL texture names since this package knows nothing about Minecraft
     public void renderFrame(Viewport viewport, ChunkRenderMatrices matrices,
                             double cameraX, double cameraY, double cameraZ,
                             int screenWidth, int screenHeight) {
@@ -134,8 +125,7 @@ public class MeshRenderPipeline {
         this.sections.commit();
         this.uploadStream.commit();
 
-        // Address-based binding stays live across program changes, unlike a bound UBO, so this is set once for
-        // the whole frame
+        // Address-based binding stays live across program changes, unlike a bound UBO, so it is set once per frame
         LWJGL.glEnableClientState(GLNv.GL_UNIFORM_BUFFER_UNIFIED_NV);
         LWJGL.glEnableClientState(GLNv.GL_VERTEX_ATTRIB_ARRAY_UNIFIED_NV);
         LWJGL.glEnableClientState(GLNv.GL_ELEMENT_ARRAY_UNIFIED_NV);
@@ -150,9 +140,7 @@ public class MeshRenderPipeline {
             LWJGL.glMemoryBarrier(GL42.GL_FRAMEBUFFER_BARRIER_BIT);
         }
 
-        // ---- visibility for the next frame ----
-        // Depth writes stay off: the representative fragment test needs them off, and the occlusion boxes must
-        // not pollute the depth buffer the terrain just wrote
+        // Visibility for the next frame; depth writes stay off because the representative fragment test needs it and occlusion boxes must not pollute the terrain's depth buffer
         LWJGL.glEnable(GL11.GL_DEPTH_TEST);
         LWJGL.glDepthFunc(GL11.GL_LEQUAL);
         LWJGL.glDepthMask(false);
@@ -198,9 +186,7 @@ public class MeshRenderPipeline {
         this.uploadStream.delete();
     }
 
-    // Frustum-culls regions, sorts them front-to-back and writes the id list the shaders index by workgroup
-    // Sorting matters for overdraw: the region rasteriser draws boxes with the depth test on, so near regions
-    // occlude far ones only if they are drawn first
+    // Frustum-culls regions, sorts front-to-back (near boxes only occlude far ones if drawn first) and writes the id list the shaders index by workgroup
     private int collectVisibleRegions(MeshRegionStore regions, Viewport viewport,
                                       int cameraSectionX, int cameraSectionY, int cameraSectionZ) {
         this.visibleRegions.clear();
@@ -215,8 +201,7 @@ public class MeshRenderPipeline {
                 this.visibleRegions.add((distance << 16) | regionId);
                 this.regionsInFrustum.set(regionId);
             } else if (this.regionsInFrustum.get(regionId)) {
-                // Just left the frustum: its sections were never tested this frame, so their visibility bytes
-                // still say "visible" and would resurrect the region the moment it comes back
+                // Just left the frustum: its sections were never tested this frame and their stale "visible" bytes would resurrect it the moment it returns
                 this.sectionVisibility.clearRange((long) regionId << 8, MeshRegionStore.SECTIONS_PER_REGION);
                 this.regionsInFrustum.clear(regionId);
             }
@@ -231,8 +216,7 @@ public class MeshRenderPipeline {
         long ptr = this.uploadStream.upload(this.sceneUniform, SCENE_BYTES, count * 2L);
         int index = 0;
 
-        // Explicit primitive iterator: this runs over every visible region every frame, and the boxed form of
-        // the enhanced for loop allocates an Integer per region
+        // Explicit primitive iterator; this runs over every visible region every frame and the boxed for-each allocates an Integer per region
         for (IntIterator iterator = this.visibleRegions.iterator(); iterator.hasNext(); ) {
             LWJGL.memPutShort(ptr + ((long) (index++) << 1), (short) (iterator.nextInt() & 0xFFFF));
         }
@@ -243,9 +227,7 @@ public class MeshRenderPipeline {
     private void writeSceneUniform(ChunkRenderMatrices matrices, double cameraX, double cameraY, double cameraZ,
                                    int cameraSectionX, int cameraSectionY, int cameraSectionZ,
                                    int screenWidth, int screenHeight, int visibleCount) {
-        // Geometry is section-relative, so the matrix carries the camera's offset within its own section and the
-        // shader only ever adds a small integer section delta. Keeping the big numbers out of the shader is what
-        // stops distant terrain shimmering
+        // Geometry is section-relative, so the matrix carries the camera's in-section offset and the shader adds only a small integer section delta; keeping big numbers out of the shader stops distant shimmer
         float deltaX = (float) -(cameraX - (cameraSectionX << 4));
         float deltaY = (float) -(cameraY - (cameraSectionY << 4));
         float deltaZ = (float) -(cameraZ - (cameraSectionZ << 4));
@@ -286,8 +268,7 @@ public class MeshRenderPipeline {
         ptr = putPointer(ptr, this.sections.getArena().getBuffer().getDeviceAddress());
         ptr = putPointer(ptr, 0L);
 
-        // Half-extents, because the mesh shader maps clip space to pixels with a multiply rather than a
-        // multiply-and-halve per vertex
+        // Half-extents, because the mesh shader maps clip space to pixels with a single multiply per vertex
         LWJGL.memPutFloat(ptr, screenWidth / 2.0f);
         LWJGL.memPutFloat(ptr + 4, screenHeight / 2.0f);
         ptr += 8;

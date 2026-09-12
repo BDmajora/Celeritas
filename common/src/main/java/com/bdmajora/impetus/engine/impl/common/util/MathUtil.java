@@ -1,8 +1,7 @@
 package com.bdmajora.impetus.engine.impl.common.util;
 
 public class MathUtil {
-    // True only for a number that is both greater than zero AND a power of two — the zero check matters because
-    // the bit trick alone would accept 0
+    // Greater than zero AND a power of two; the zero check matters because the bit trick alone accepts 0
     public static boolean isPowerOfTwo(int n) {
         return ((n & (n - 1)) == 0);
     }

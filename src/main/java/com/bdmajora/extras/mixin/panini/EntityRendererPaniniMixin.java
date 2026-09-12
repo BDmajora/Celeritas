@@ -10,12 +10,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// drives the Panini projection post-effect through two hooks
-// the first reads the effective field of view out of the world projection as it is built, because
-// the FOV setting alone is not enough - sprinting, speed effects and the nausea warp all scale it,
-// and Panini has to match what was actually rendered or the image swims
-// the second runs the pass at exactly the point vanilla runs its own shader group: after the world
-// and the entity-outline composite, before the GUI, with the main framebuffer still bound
+// Drives the Panini post-effect through two hooks: one reads the effective FOV out of the projection as it is built (sprinting, speed, nausea all scale it), the other runs the pass where vanilla runs its own shader group, before the GUI with the main framebuffer bound
 @Mixin(EntityRenderer.class)
 public class EntityRendererPaniniMixin {
     @WrapOperation(
@@ -26,8 +21,7 @@ public class EntityRendererPaniniMixin {
     )
     private void impetus$captureProjection(float fovDegrees, float aspect, float near, float far,
                                            Operation<Void> original) {
-        // m11 of a perspective matrix is cot(fovY/2), m00 is that over the aspect ratio; Panini wants
-        // their reciprocals, so hand over the matrix entries and let it invert them.
+        // m11 of a perspective matrix is cot(fovY/2) and m00 is that over the aspect ratio; Panini wants their reciprocals, so hand over the entries and let it invert
         float cotHalfFov = (float) (1.0D / Math.tan(Math.toRadians(fovDegrees) / 2.0D));
         PaniniProjection.captureProjection(cotHalfFov / aspect, cotHalfFov);
 

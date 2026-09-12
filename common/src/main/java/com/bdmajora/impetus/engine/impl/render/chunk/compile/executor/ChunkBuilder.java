@@ -16,30 +16,19 @@ import java.util.function.Supplier;
 
 public class ChunkBuilder {
     static final Logger LOGGER = LogManager.getLogger("ChunkBuilder");
-    // megabytes of heap required per chunk builder thread, used to cap the number of worker threads when
-    // the game is given a small heap
+    // Megabytes of heap required per builder thread, used to cap the worker count on a small heap
     private static final int MBS_PER_CHUNK_BUILDER = 64;
 
-    // the number of tasks to allow in the queue per available worker thread
-    // kept conservative so the threads do not become backlogged and fail to keep up with changes in
-    // chunk visibility, e.g. camera movement, but large enough that a thread is not spending part of the
-    // frame doing nothing - 2 seems to be a decent value, and is what Sodium 0.2 used
-    // with adaptive scheduling, this sets the floor of the target queue size
+    // Tasks allowed in the queue per worker: small enough to stay responsive to camera movement, large enough to keep threads busy (2 is what Sodium 0.2 used); the adaptive floor
     private static final int TASK_QUEUE_LIMIT_PER_WORKER = 2;
 
-    // estimate of how many tasks to allow into the queue when the chunk builder starts; the adaptive
-    // scheduling controller adjusts from here based on actual worker throughput
+    // Initial in-flight estimate at builder start; the adaptive controller adjusts from here based on actual throughput
     private static final int WARM_START_PER_WORKER = 32;
 
-    // controls how aggressively the target queue size adjusts to overprovisioning, i.e. when the workers
-    // cannot keep up
-    // in that situation the target reduces toward the floor by 1/N of the remaining gap rather than all
-    // at once, so a correction settles over roughly 1-3 frames instead of a single frame
+    // Damping for the target's decay when workers cannot keep up: it closes 1/N of the gap to the floor per frame, settling over ~1-3 frames instead of snapping
     private static final int TARGET_DECAY_DAMPING = 2;
 
-    // whether the adaptive scheduling controller is enabled
-    // when disabled the in-flight target stays pinned at the floor and the scheduler falls back to the
-    // legacy fixed per-frame budget of TASK_QUEUE_LIMIT_PER_WORKER tasks per worker
+    // Enables the adaptive scheduling controller; when off the in-flight target stays pinned at the floor (legacy fixed TASK_QUEUE_LIMIT_PER_WORKER budget)
     private static final boolean ENABLE_ADAPTIVE_SCHEDULING = true;
 
     // whether changes to the adaptive in-flight target are logged; intended for tuning only
@@ -51,14 +40,10 @@ public class ChunkBuilder {
 
     private final AtomicInteger busyThreadCount = new AtomicInteger();
 
-    // the current target number of in-flight tasks, adapted each frame by tickSchedulingBudget() to keep
-    // the workers saturated independent of frame rate
-    // bounded below by the floor but otherwise unbounded - the controller's equilibrium is self-limiting
-    // to actual worker throughput
+    // Target in-flight task count, adapted each frame by tickSchedulingBudget() to keep workers saturated regardless of frame rate; bounded below by the floor, self-limiting above
     private int targetInFlight;
 
-    // tracks whether the previous frame stopped submitting tasks because it hit the scheduling budget
-    // while work was still remaining; the in-flight target is only grown if this is true
+    // Whether the previous frame stopped submitting because it hit the budget while work remained; the target only grows when true
     private boolean lastDispatchBudgetLimited;
 
     private final ChunkBuildContext localContext;
@@ -89,9 +74,7 @@ public class ChunkBuilder {
         this.managedBlocker = managedBlocker;
 
         if (ENABLE_ADAPTIVE_SCHEDULING && !this.threads.isEmpty()) {
-            // A freshly initialized builder always starts out with a full backlog of initial builds (world join,
-            // dimension change, render-distance change, or resource reload), so begin with an estimated target
-            // rather than spending several frames ramping up.
+            // A fresh builder always starts with a full initial-build backlog (world join, dimension/render-distance change, reload), so start from an estimate instead of ramping up
             this.targetInFlight = Math.max(this.getSchedulingFloor(), WARM_START_PER_WORKER * this.threads.size());
         } else {
             // When threading or adaptive scheduling are disabled, the target should always be the smallest queue size.
@@ -99,25 +82,15 @@ public class ChunkBuilder {
         }
     }
 
-    // the steady-state floor for the in-flight target: the small queue depth that keeps the workers fed
-    // at high frame rates while preserving the freshest camera ordering
+    // Steady-state floor for the in-flight target: the small queue depth that keeps workers fed at high frame rates while preserving the freshest camera ordering
     private int getSchedulingFloor() {
         return Math.max(1, this.threads.size()) * TASK_QUEUE_LIMIT_PER_WORKER;
     }
 
-    // advances the adaptive scheduling controller by one frame
-    // must be called exactly once per frame, before the per-frame dispatch reads getSchedulingBudget()
-    // the controller keeps the worker threads saturated regardless of frame rate by sizing the in-flight
-    // target to actual worker demand rather than a fixed depth:
-    //   if a worker blocked on an empty queue while we were holding back dispatchable work
-    //   (lastDispatchBudgetLimited), the target is doubled - gating on "budget-limited" prevents the
-    //   target from ratcheting up when the workers merely ran out of work to do
-    //   if the workers left comfortable slack, the target decays gently toward the floor
-    //   otherwise, when remaining slack is below the minimum queue size, the target is left unchanged
+    // Advances the controller one frame (call exactly once, before dispatch reads getSchedulingBudget()): double the target if a worker starved while dispatch was budget-limited, decay toward the floor on comfortable slack, else leave it
     public void tickSchedulingBudget() {
         if (!ENABLE_ADAPTIVE_SCHEDULING) {
-            // Legacy behavior: the target stays pinned at the floor, so getSchedulingBudget() yields the fixed
-            // per-worker budget.
+            // Legacy behaviour: the target stays pinned at the floor, so getSchedulingBudget() yields the fixed per-worker budget
             return;
         }
 
@@ -130,10 +103,7 @@ public class ChunkBuilder {
             // Workers ran dry while we were sitting on dispatchable work: grow aggressively to escape starvation.
             this.targetInFlight = (int) Math.min(Integer.MAX_VALUE, (long) this.targetInFlight * 2);
         } else if (queued > floor) {
-            // Over-provisioned: the workers left more than the deadband's worth of slack. The ideal target is
-            // (queued - floor). We close only a damped fraction (1/TARGET_DECAY_DAMPING, at least 1) of that gap per
-            // frame, so a correction settles over a few frames instead of snapping in one, which smooths tracking
-            // when worker consumption rate is fluctuating.
+            // Over-provisioned: close only 1/TARGET_DECAY_DAMPING (at least 1) of the gap per frame so corrections settle over a few frames and track fluctuating consumption smoothly
             int gap = queued - floor;
             int decayStep = Math.max(1, gap / TARGET_DECAY_DAMPING);
             this.targetInFlight = this.targetInFlight - decayStep;
@@ -148,24 +118,17 @@ public class ChunkBuilder {
         return this.targetInFlight;
     }
 
-    // the remaining number of build tasks that should be scheduled this frame: the gap between the
-    // current in-flight target (see tickSchedulingBudget()) and the tasks already queued
-    // a pure read with no side effects, so it may be called several times per frame
+    // Build tasks still to schedule this frame: the in-flight target minus tasks already queued; a pure read, safe to call repeatedly
     public int getSchedulingBudget() {
         return Math.max(0, this.targetInFlight - this.queue.size());
     }
 
-    // records whether the most recent dispatch was limited by the scheduling budget rather than by a
-    // lack of work; consumed by the next tickSchedulingBudget() call
+    // Records whether the last dispatch was limited by budget rather than by lack of work; consumed by the next tickSchedulingBudget()
     public void setDispatchBudgetLimited(boolean budgetLimited) {
         this.lastDispatchBudgetLimited = budgetLimited;
     }
 
-    // notifies all worker threads to stop and blocks until they terminate, then cancels all tasks and
-    // clears the pending queues
-    // does nothing if the builder is already stopped
-    // after shutdown every previously scheduled job has been cancelled, but jobs that finished while
-    // waiting for the workers to shut down still have their results processed for later cleanup
+    // Stops all workers and blocks until they terminate, then cancels every task and clears the queues; no-op if already stopped, and jobs that finished meanwhile still have their results processed for cleanup
     public void shutdown() {
         if (!this.queue.isRunning()) {
             throw new IllegalStateException("Worker threads are not running");
@@ -310,8 +273,7 @@ public class ChunkBuilder {
     }
 
     private class WorkerRunnable implements Runnable {
-        // Making this thread-local provides a small boost to performance by avoiding the overhead in synchronizing
-        // caches between different CPU cores
+        // Thread-local for a small performance win: avoids synchronizing caches between CPU cores
         private final ChunkBuildContext context;
 
         public WorkerRunnable(ChunkBuildContext context) {

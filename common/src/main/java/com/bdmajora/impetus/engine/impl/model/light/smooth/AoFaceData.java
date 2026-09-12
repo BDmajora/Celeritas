@@ -151,9 +151,7 @@ class AoFaceData {
         this.flags |= AoCompletionFlags.HAS_LIGHT_DATA;
     }
 
-    // Vanilla's BlockModelRenderer.AmbientOcclusionFace.getAoBrightness, copied VERBATIM so any comparison is
-    // against the real reference rather than a paraphrase that might differ in the rounding
-    // br4 is the centre sample; the other three are the corner's neighbours
+    // Vanilla's AmbientOcclusionFace.getAoBrightness copied VERBATIM so comparisons are against the real rounding; br4 is the centre sample
     private static int vanillaAoBrightness(int br1, int br2, int br3, int br4) {
         if (br1 == 0) {
             br1 = br4;
@@ -227,8 +225,7 @@ class AoFaceData {
 
     // Vanilla's corner rule: average, ignoring zeros unless the block is emissive
     private static int calculateCornerBrightness(int a, int b, int c, int d, boolean aem, boolean bem, boolean cem, boolean dem) {
-        // FIX: Normalize corner vectors correctly to the minimum non-zero value between each one to prevent
-        // strange issues
+        // FIX: normalize corner vectors to the minimum non-zero value between each one to prevent strange issues
         if ((a == 0) || (b == 0) || (c == 0) || (d == 0)) {
             // Find the minimum value between all corners
             final int min = minNonZero(minNonZero(a, b), minNonZero(c, d));
@@ -240,8 +237,7 @@ class AoFaceData {
             d = Math.max(d, min);
         }
 
-        // FIX: Apply the fullbright lightmap from emissive blocks at the very end so it cannot influence
-        // the minimum lightmap and produce incorrect results (for example, sculk sensors in a dark room)
+        // FIX: apply the fullbright lightmap from emissive blocks at the very end so it cannot influence the minimum lightmap (e.g. sculk sensors in a dark room)
         if (aem) {
             a = LightDataAccess.FULL_BRIGHT;
         }

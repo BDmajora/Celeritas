@@ -8,8 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// Skips the whole rain-splash pass rather than filtering particles one at a time
-// addRainParticles raycasts per candidate position before spawning, so cancelling at the top avoids that search entirely
+// Skips the whole rain-splash pass rather than filtering particles; addRainParticles raycasts per candidate before spawning, so cancelling at the top avoids the search
 @Mixin(EntityRenderer.class)
 public class EntityRendererRainSplashMixin {
     @Inject(method = "addRainParticles()V", at = @At("HEAD"), cancellable = true)

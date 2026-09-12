@@ -13,26 +13,14 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
-// stops Chunk.setBlockState from doing its own skylight work
-// placing a block sends vanilla down three separate lighting paths, all of them redundant once the
-// engine exists and two of them actively harmful
-// this mixin closes all three, and seeds the one piece of state - a freshly created section's skylight
-// - that genuinely does have to be right immediately
-// split out from ChunkMixin because these are local-variable and call-site interceptions inside one
-// long vanilla method, and they read very differently from the method replacements next door
+// Stops Chunk.setBlockState doing its own skylight work: closes vanilla's three redundant (two harmful) lighting paths and seeds a freshly created section's skylight, the one thing that must be right immediately; split from ChunkMixin since these are call-site interceptions inside one long method
 @Mixin(Chunk.class)
 public abstract class ChunkSkylightMixin {
     @Shadow
     @Final
     private World world;
 
-    // seeds the skylight of a section setBlockState just created
-    // matched on the second store to the section local: the first is the read from the storage array,
-    // the second is the newly constructed one
-    // intercepting the store rather than the constructor keeps this working regardless of how the build
-    // pipeline reobfuscates constructor references
-    // this has to happen before the section is published - setBlockState goes on to relight the column,
-    // and a section full of zeroed skylight would read as genuinely dark
+    // Seeds the skylight of a section setBlockState just created, matched on the second store to the section local (the first is the array read); must happen before the section is published or the column relight reads zeroed skylight as genuinely dark
     @ModifyVariable(method = "setBlockState", at = @At(value = "STORE", ordinal = 1), index = 12)
     private ExtendedBlockStorage fulgor$seedNewSection(ExtendedBlockStorage section) {
         LightingHooks.initSkylightForSection(this.world, (Chunk) (Object) this, section);
@@ -40,30 +28,20 @@ public abstract class ChunkSkylightMixin {
         return section;
     }
 
-    // forces the "regenerate the skylight map" flag off, for two reasons
-    // generateSkylightMap rebuilds all 256 columns of the chunk when at most one of them changed, and
-    // taking that branch skips the else branch - which is where relightBlock lives, and relightBlock is
-    // the version that knows how to record work owed to unloaded neighbours
-    // forcing the flag off gets the cheaper path and the correct one at the same time
+    // Forces the "regenerate skylight map" flag off: generateSkylightMap rebuilds all 256 columns when one changed, and taking that branch skips the else branch where relightBlock (which records work owed to unloaded neighbours) lives
     @ModifyVariable(method = "setBlockState", at = @At(value = "STORE", ordinal = 1), index = 13)
     private boolean fulgor$suppressSkylightMapRegeneration(boolean generateSkylightMap) {
         return false;
     }
 
-    // vanilla's skylight occlusion pass, disabled
-    // all it does is flag the column for recheckGaps to look at later, and the engine has already been
-    // told about the position by relightBlock, so the flag would only cause the same column to be
-    // re-derived a second time
+    // Vanilla's skylight occlusion pass, disabled; it only flags the column for recheckGaps, and relightBlock has already told the engine, so the flag would re-derive the same column twice
     @Redirect(
             method = "setBlockState",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/chunk/Chunk;propagateSkylightOcclusion(II)V"))
     private void fulgor$skipSkylightOcclusion(Chunk chunk, int x, int z) {
     }
 
-    // short-circuits the light reads that decide whether to propagate occlusion
-    // with fulgor$skipSkylightOcclusion in place the answer is never used, but the question is
-    // expensive to ask because getLightFor flushes the whole pending queue - that would turn every
-    // block placement into a full lighting pass and undo the batching entirely
+    // Short-circuits the light reads deciding whether to propagate occlusion; the answer is never used with fulgor$skipSkylightOcclusion in place, but getLightFor flushes the whole queue, which would turn every placement into a full lighting pass
     @Redirect(
             method = "setBlockState",
             at = @At(value = "INVOKE",

@@ -8,14 +8,12 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-// One node of the option tree: a single mixin.* rule, ported from Lithium's Option
-// Default, user override and mod override are tracked apart so the log can say why a mixin was skipped
+// One node of the option tree, a single mixin.* rule from Lithium's Option; default, user override and mod override are tracked apart so the log can say why a mixin was skipped
 public class Option {
     // Full dotted rule name, e.g. mixin.world.explosions
     private final String name;
 
-    // Options this one requires and the value each must hold
-    // Linked because iteration order decides which unmet dependency is reported first
+    // Options this one requires and the value each must hold; linked because iteration order decides which unmet dependency is reported first
     private Object2BooleanLinkedOpenHashMap<Option> dependencies;
 
     // Mods that have overridden this option, or null if none have.
@@ -56,8 +54,7 @@ public class Option {
         return this.enabled;
     }
 
-    // This option and every ancestor; disabling mixin.world must also disable mixin.world.explosions
-    // even though the child is still nominally true
+    // This option and every ancestor; disabling mixin.world must also disable mixin.world.explosions even though the child is nominally true
     public boolean isEnabledRecursive(EquilibriumConfig config) {
         return this.enabled && (config.getParent(this) == null || config.getParent(this).isEnabledRecursive(config));
     }
@@ -100,8 +97,7 @@ public class Option {
         this.dependencies.put(dependencyOption, requiredValue);
     }
 
-    // Turns this option off if any dependency is not in its required state
-    // Returns whether it changed, so the caller knows to sweep again
+    // Turns this option off if any dependency is unmet; returns whether it changed so the caller knows to sweep again
     public boolean disableIfDependenciesNotMet(EquilibriumConfig config) {
         if (this.dependencies != null && this.isEnabled()) {
             for (Object2BooleanMap.Entry<Option> dependency : this.dependencies.object2BooleanEntrySet()) {

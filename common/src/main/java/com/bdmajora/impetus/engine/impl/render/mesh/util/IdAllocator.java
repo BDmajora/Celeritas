@@ -3,9 +3,7 @@ package com.bdmajora.impetus.engine.impl.render.mesh.util;
 import it.unimi.dsi.fastutil.ints.IntAVLTreeSet;
 import it.unimi.dsi.fastutil.ints.IntSortedSet;
 
-// Hands out the densest ids it can, and shrinks its high-water mark when the tail is released
-// Density matters here because the pipeline iterates 0..maxIndex() every frame looking for live regions; a sparse
-// id space turns that into a scan over mostly-empty slots
+// Hands out the densest ids it can and shrinks its high-water mark when the tail is released, since the pipeline scans 0..maxIndex() every frame for live regions
 public class IdAllocator {
     private final IntSortedSet released = new IntAVLTreeSet();
     private int next;
@@ -25,8 +23,7 @@ public class IdAllocator {
     public void release(int id) {
         this.released.add(id);
 
-        // Walk the high-water mark back over any released ids sitting at the tail, so freeing the last region
-        // actually shortens the per-frame scan instead of leaving a hole behind it
+        // Walk the high-water mark back over released ids at the tail, so freeing the last region actually shortens the per-frame scan
         while (!this.released.isEmpty() && this.released.lastInt() + 1 == this.next) {
             this.released.remove(--this.next);
         }

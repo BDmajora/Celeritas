@@ -16,10 +16,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-// The Mixin-facing half of the bundled booter, ported from MixinBooter's MixinBooterPlugin. Every class this
-// touches lives in org.spongepowered.asm, so it must not be loaded until BooterBootstrap has confirmed a Mixin
-// implementation is on the classpath. ImpetusLoadingPlugin enforces that ordering; do not reference this class
-// from anywhere that runs earlier
+// The Mixin-facing half of the bundled booter (from MixinBooter's MixinBooterPlugin); everything here touches org.spongepowered.asm, so it must not load until BooterBootstrap confirms a Mixin implementation exists, which ImpetusLoadingPlugin enforces
 public final class BooterCore {
 
     private BooterCore() { }
@@ -33,10 +30,7 @@ public final class BooterCore {
 
         MixinBootstrap.init();
 
-        // Upstream does this from its own mixin config's IMixinConfigPlugin#onLoad. Impetus does not
-        // ship that config, so it is bootstrapped directly here. Without it MixinExtras annotations
-        // (@Local, @WrapOperation, @ModifyExpressionValue, ...) are never processed and every Impetus
-        // mixin using them fails to apply with an "Invalid descriptor" error.
+        // Upstream does this from its own mixin config's IMixinConfigPlugin#onLoad, which Impetus does not ship; without it MixinExtras annotations (@Local, @WrapOperation, ...) are never processed and every mixin using them fails with "Invalid descriptor"
         MixinExtrasBootstrap.init();
 
         MixinBooterConfig.load();

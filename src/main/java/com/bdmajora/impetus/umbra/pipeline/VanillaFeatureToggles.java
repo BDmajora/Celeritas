@@ -10,8 +10,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Function;
 
-// The sun, moon, stars, sky, vignette, underwaterOverlay and weather switches packs use to suppress vanilla
-// features they draw themselves. Everything defaults to enabled, and to enabled with no pack loaded
+// The sun, moon, stars, sky, vignette, underwaterOverlay and weather switches packs use to suppress vanilla features they draw themselves; everything defaults to enabled, including with no pack
 public final class VanillaFeatureToggles {
     private VanillaFeatureToggles() {
     }
@@ -60,13 +59,7 @@ public final class VanillaFeatureToggles {
         return isEnabled(ShaderProperties::getRenderWeather);
     }
 
-    // The pack's `clouds = off | fast | fancy`, mapped onto GameSettings' own cloud modes (0 off, 1 fast, 2 fancy),
-    // or empty when the pack leaves the player's video setting alone
-    // Resolved once at the source rather than at each caller, the way Iris overrides Options#getCloudStatus. That
-    // matters on 1.12.2 because the mode is read in two places: EntityRenderer#renderCloudsCheck decides whether to
-    // render clouds at all AND swaps in the cloud projection, while RenderGlobal#renderClouds picks fast versus
-    // fancy. Overriding only the second leaves the two disagreeing — clouds set up but never drawn, or drawn
-    // without their projection
+    // The pack's `clouds = off | fast | fancy` mapped onto GameSettings' modes (0/1/2), or empty to leave the player's setting; resolved once at the source like Iris since renderCloudsCheck (render at all, cloud projection) and renderClouds (fast vs fancy) both read it and must agree
     public static OptionalInt getCloudMode() {
         ShaderPack pack = Umbra.getCurrentPack();
         if (pack == null || Umbra.getRenderingPipeline() == null) {

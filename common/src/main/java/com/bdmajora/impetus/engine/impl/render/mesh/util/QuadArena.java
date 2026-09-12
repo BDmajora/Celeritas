@@ -5,11 +5,9 @@ import com.bdmajora.impetus.engine.impl.render.mesh.gl.BindlessBuffer;
 import com.bdmajora.impetus.engine.impl.render.mesh.gl.DeviceBuffer;
 import com.bdmajora.impetus.engine.impl.render.mesh.gl.SparseBindlessBuffer;
 
-// Every section's geometry in one buffer, addressed by quad index so the mesh shader skips a multiply
-// Sparse-backed where the driver commits pages properly, so fragmentation costs address space rather than VRAM
+// Every section's geometry in one buffer addressed by quad index (mesh shader skips a multiply); sparse-backed where pages commit properly so fragmentation costs address space not VRAM
 public class QuadArena {
-    // Address space for the sparse buffer. Deliberately far beyond any real VRAM: it is virtual, never resident,
-    // and a huge span means the allocator never has to compact
+    // Sparse address space, deliberately far beyond real VRAM: it is virtual, never resident, and a huge span means the allocator never compacts
     private static final long SPARSE_ADDRESS_SPACE = 80L * 1024L * 1024L * 1024L;
 
     private final SegmentedAllocator allocator = new SegmentedAllocator();
@@ -31,8 +29,7 @@ public class QuadArena {
             this.allocator.setLimit(memoryBudget / (4L * bytesPerVertex));
         }
 
-        // Burn quad 0, so a zeroed section header cannot be mistaken for a section whose geometry starts at the
-        // very beginning of the arena
+        // Burn quad 0 so a zeroed section header cannot be mistaken for geometry starting at the very beginning of the arena
         this.alloc(1);
     }
 
@@ -68,8 +65,7 @@ public class QuadArena {
         }
     }
 
-    // Whether an existing allocation is exactly the right size for a rebuild, so a section that rebuilt to the
-    // same quad count can keep its address and skip the free/alloc round trip
+    // Whether an existing allocation is exactly the right size for a rebuild, so a same-count rebuild keeps its address and skips the free/alloc round trip
     public boolean canReuse(int quadAddress, int quadCount) {
         return this.allocator.getSize(quadAddress) == quadCount;
     }
@@ -80,8 +76,7 @@ public class QuadArena {
         return stream.upload(this.buffer, byteOffset(quadAddress), byteLength((int) quadCount));
     }
 
-    // What the arena physically costs right now, which for the sparse path is committed pages rather than the
-    // address space
+    // What the arena physically costs right now: committed pages on the sparse path, not the address space
     public long getResidentBytes() {
         if (this.buffer instanceof SparseBindlessBuffer sparse) {
             return sparse.getCommittedBytes();

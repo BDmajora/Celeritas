@@ -59,9 +59,7 @@ public class RenderRegion {
     @Unmodifiable
     private List<DeviceResources> allDeviceResources = List.of();
 
-    // Bumped whenever the set of render passes present in this region changes
-    // A version counter rather than a dirty flag, so several consumers can each notice the change independently
-    // without racing to clear it
+    // Bumped whenever the set of render passes in this region changes; a version counter rather than a dirty flag so several consumers can notice it without racing to clear it
     @Getter
     private int passSetUpdateCount = 0;
 

@@ -3,9 +3,7 @@ package com.bdmajora.impetus.engine.impl.texture;
 import com.bdmajora.impetus.engine.api.util.ColorARGB;
 import com.bdmajora.impetus.engine.impl.util.color.ColorSRGB;
 
-// Mipmap downsampling that blends in linear space (unlike OptiFine's sRGB blend, which loses brightness) and
-// weights by alpha (unlike vanilla's flat average, which causes dark-edge artifacts on cutout textures)
-// Ported from Umbra's MixinMipmapGenerator
+// Mipmap downsampling blending in linear space (OptiFine's sRGB blend loses brightness) and weighting by alpha (vanilla's flat average dark-edges cutouts); ported from Umbra's MixinMipmapGenerator
 public class MipmapHelper {
     // Averages two ARGB pixels per channel, in gamma space as vanilla does
     public static int weightedAverageColor(int one, int two) {
@@ -17,9 +15,7 @@ public class MipmapHelper {
             return averageRgb(one, two, alphaOne);
         }
 
-        // If one of our pixels is fully transparent, ignore it.
-        // We just take the value of the other pixel as-is. To compensate for not changing the color value, we
-        // divide the alpha value by 4 instead of 2.
+        // A fully transparent pixel is ignored and the other taken as-is; alpha is divided by 4 instead of 2 to compensate for not changing the colour
         if (alphaOne == 0) {
             return (two & 0x00FFFFFF) | ((alphaTwo >> 2) << 24);
         }

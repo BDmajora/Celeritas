@@ -1,8 +1,6 @@
 package com.bdmajora.impetus.umbra.shaderpack.texture;
 
-// One texture.<stage>.<sampler> directive, resolved the Iris way: the texture gets a minted name and only
-// programs in that stage declaring <sampler> with a matching type are renamed to it
-// The type check is what makes Photon render, whose colortex6 is sampler3D in some passes and sampler2D in others
+// One texture.<stage>.<sampler> directive resolved the Iris way: a minted name, and only that stage's programs declaring <sampler> with a matching type are renamed; the type check is what makes Photon render (colortex6 is sampler3D in some passes, sampler2D in others)
 public final class CustomTexturePatch {
     private final String samplerName;
     private final TextureStage stage;

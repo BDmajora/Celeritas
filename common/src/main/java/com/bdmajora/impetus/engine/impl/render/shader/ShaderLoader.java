@@ -9,11 +9,7 @@ import com.bdmajora.impetus.engine.impl.gl.shader.ShaderParser;
 import com.bdmajora.impetus.engine.impl.gl.shader.ShaderType;
 
 public class ShaderLoader {
-    // Compiles one of the engine's own GLSL shaders off the classpath, from /assets/{namespace}/shaders/{path}
-    // constants are specialisation defines, injected immediately AFTER the version header — which is where they
-    // have to go, since GLSL requires #version to be the first real token
-    // Specialising this way means one source file compiles to several variants rather than the engine shipping a
-    // file per combination
+    // Compiles one of the engine's GLSL shaders from /assets/{namespace}/shaders/{path}, injecting the specialisation defines right after #version so one source yields several variants
     public static GlShader loadShader(ShaderType type, String name, ShaderConstants constants) {
         return new GlShader(type, name, ShaderParser.parseShader(getShaderSource(name), ShaderLoader::getShaderSource, constants));
     }

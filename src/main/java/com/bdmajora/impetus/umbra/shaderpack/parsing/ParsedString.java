@@ -1,7 +1,6 @@
 package com.bdmajora.impetus.umbra.shaderpack.parsing;
 
-// Tiny consuming parser over a single line; each takeX method pulls a token off the front and advances the cursor
-// Ported verbatim from Umbra - the option parser depends on its exact whitespace/word/number semantics
+// Tiny consuming parser over a single line, each takeX pulling a token off the front; ported verbatim from Umbra since the option parser depends on its exact whitespace/word/number semantics
 public class ParsedString {
     private String text;
 

@@ -6,8 +6,7 @@ import com.bdmajora.impetus.umbra.shaderpack.option.OptionSet;
 
 import java.util.Optional;
 
-// Snapshot of every configurable option's current value; only values that differ from the pack default are stored
-// Ported from Umbra; Umbra.logger replaced with Umbra.logger()
+// Snapshot of every configurable option's current value, storing only those differing from the pack default; from Umbra
 public interface OptionValues {
     OptionalBoolean getBooleanValue(String name);
 

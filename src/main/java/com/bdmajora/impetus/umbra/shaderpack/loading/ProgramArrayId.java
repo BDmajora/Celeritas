@@ -1,11 +1,6 @@
 package com.bdmajora.impetus.umbra.shaderpack.loading;
 
-// The numbered shader program families: begin, prepare, shadowcomp, deferred and composite
-// Each is <base> then <base>1..N, where index 0 carries no numeric suffix — `composite` IS composite0
-// The cap is 100 per family, matching Iris. OptiFine on 1.12.2 stopped at 16, but packs written against Iris
-// routinely go past it: Photon ships composite16 (FXAA) and composite17 (the AO history copy), both of which
-// silently vanished under the old cap and took their effects with them
-// Declaration order here is the order the families run in a frame
+// The numbered program families (begin, prepare, shadowcomp, deferred, composite): <base> then <base>1..N, index 0 unsuffixed; capped at 100 like Iris rather than OptiFine's 16, since Photon ships composite16/17 and lost FXAA and its AO history under the old cap. Declaration order is frame order
 public enum ProgramArrayId {
     // Compute-only and run ONCE at pack load rather than per frame — Photon's LPV initialisation is the example
     Setup("setup", 100),
@@ -33,8 +28,7 @@ public enum ProgramArrayId {
         return this.numPrograms;
     }
 
-    // Turns a 0-based index into the source file base name: index 0 gives `composite`, index 3 gives `composite3`
-    // The suffix-less index 0 is an OptiFine convention, not an off-by-one
+    // Turns a 0-based index into the source base name: 0 gives `composite`, 3 gives `composite3`; the suffix-less 0 is an OptiFine convention
     public String getSourceName(int index) {
         if (index < 0 || index >= this.numPrograms) {
             throw new IndexOutOfBoundsException("Program index " + index + " out of range for " + this.baseName);

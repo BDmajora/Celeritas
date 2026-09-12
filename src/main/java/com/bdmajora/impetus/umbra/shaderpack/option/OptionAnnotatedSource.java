@@ -16,9 +16,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// One shader file's source plus every configurable option found inside it, both discovering them at parse time
-// and editing the source back to apply chosen values. Lines parse in isolation except #ifdef reference tracking
-// Ported from Iris with guava and fastutil replaced and the LineTransform indirection inlined
+// One shader file's source plus every configurable option in it, discovered at parse time and edited back to apply values; lines parse in isolation except #ifdef reference tracking. From Iris with guava/fastutil replaced and LineTransform inlined
 public final class OptionAnnotatedSource {
     private final List<String> lines;
 
@@ -70,8 +68,7 @@ public final class OptionAnnotatedSource {
         this(Arrays.asList(source.split("\\R")));
     }
 
-    // Parses the file line by line, recording where every option lives so apply() can rewrite exactly those lines
-    // and leave everything else byte-identical
+    // Parses line by line recording where every option lives, so apply() rewrites exactly those lines and leaves everything else byte-identical
     public OptionAnnotatedSource(final List<String> lines) {
         this.lines = Collections.unmodifiableList(new ArrayList<>(lines));
 
@@ -103,8 +100,7 @@ public final class OptionAnnotatedSource {
         ParsedString line = new ParsedString(lineText.trim());
 
         if (line.takeLiteral("#ifdef") || line.takeLiteral("#ifndef")) {
-            // The presence of #ifdef and #ifndef directives is used to determine whether a given boolean option
-            // should be recognized as a configurable option. #if and #elif directives are not checked.
+            // #ifdef/#ifndef references decide whether a boolean option is recognized as configurable; #if and #elif are not checked
             parseIfdef(builder, index, line);
         } else if (line.takeLiteral("const")) {
             parseConst(builder, index, line);
@@ -282,8 +278,7 @@ public final class OptionAnnotatedSource {
         }
 
         if (line.takeComments()) {
-            // Note that this is a bare comment, we don't need to look for the allowed values part. Obviously that part
-            // isn't necessary since boolean options only have two possible values (true and false)
+            // A bare comment with no allowed-values part, since boolean options only have two values
             String comment = line.takeRest().trim();
 
             builder.booleanOptions.put(index, new BooleanOption(OptionType.DEFINE, name, comment, !hasLeadingComment));
@@ -384,10 +379,7 @@ public final class OptionAnnotatedSource {
         return builder.build();
     }
 
-    // Applies the given values and returns the edited source
-    // Three different edits, because packs declare options three ways: a boolean #define is commented or
-    // uncommented, a string #define has its value rewritten, and a const declaration is edited in place
-    // Only the recorded option lines are touched, so an unedited pack round-trips unchanged
+    // Applies the values and returns the edited source; three edits since packs declare options three ways (boolean #define commented/uncommented, string #define value rewritten, const edited in place), and only recorded lines are touched
     public String apply(OptionValues values) {
         StringBuilder source = new StringBuilder();
 

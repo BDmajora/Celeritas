@@ -31,13 +31,9 @@ import java.util.function.Supplier;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Every uniform bound to one GL program, plus the driver that uploads them at Iris's cadence:
-// DYNAMIC every bind, ONCE on first use, PER_TICK and PER_FRAME on change. The cadence matters because the
-// previous-frame suppliers advance when sampled, so uploading more often would roll history forward
+// Every uniform bound to one program plus the driver uploading them at Iris's cadence (DYNAMIC every bind, ONCE on first use, PER_TICK/PER_FRAME on change); cadence matters since previous-frame suppliers advance when sampled
 public class ProgramUniforms {
-    // The uniforms that change per rendered OBJECT rather than per phase, re-uploaded from the per-object hooks
-    // Deliberately tiny, and not simply the whole DYNAMIC set — see updatePerObject below for why that distinction
-    // is a performance cliff rather than a preference
+    // The uniforms that change per rendered OBJECT rather than per phase, re-uploaded from the per-object hooks; deliberately tiny rather than the whole DYNAMIC set, see updatePerObject for why
     private static final java.util.Set<String> PER_OBJECT_UNIFORMS = new java.util.HashSet<>(java.util.Arrays.asList(
             "entityId", "blockEntityId", "currentRenderedItemId", "entityColor"));
 
@@ -59,21 +55,7 @@ public class ProgramUniforms {
         this.perObject = perObject;
     }
 
-    // Re-uploads only the handful of uniforms that genuinely vary per rendered object
-    //
-    // The per-object hooks originally called update(), which walks the entire DYNAMIC list. That is ruinous here,
-    // and not for the obvious reason: IntUniform caches its last value and skips the upload when nothing changed,
-    // but MatrixUniform and Matrix3Uniform have NO such check — they invoke the supplier and call
-    // glUniformMatrix*fv unconditionally
-    // Six matrix uniforms are registered DYNAMIC, and five of their suppliers read the LIVE fixed-function
-    // modelview, which costs a direct ByteBuffer allocation plus a glGetFloat(GL_MODELVIEW_MATRIX) pipeline query
-    // EACH
-    // At two calls per object across items, entities and block entities, a scene with a few thousand of them
-    // becomes tens of thousands of stalling GL queries and native allocations every frame
-    //
-    // Those matrices are genuinely per-draw state and still have to be right, but the phase-level update() already
-    // covers them for the whole batch. Only the material ids and the hurt-flash colour actually differ from one
-    // object to the next
+    // Re-uploads only the uniforms that vary per object (material ids, hurt-flash colour); calling update() here walked the whole DYNAMIC list, and MatrixUniform uploads unconditionally with five suppliers each doing a glGetFloat(GL_MODELVIEW_MATRIX) query, tens of thousands of stalls per frame across a few thousand objects
     public void updatePerObject() {
         updateStage(this.perObject);
     }
@@ -144,8 +126,7 @@ public class ProgramUniforms {
         private static final int GL_UNSIGNED_INT_SAMPLER_2D_T = 0x8DD2;
         private static final int GL_UNSIGNED_INT_SAMPLER_3D_T = 0x8DD3;
 
-        // The GL type family a builder setter uploads with, compared against what the program actually declared —
-        // see declaredTypes below for what a mismatch costs
+        // The GL type family a builder setter uploads with, compared against what the program declared; see declaredTypes for what a mismatch costs
         private enum ProvidedType {
             FLOAT, INT, VEC2, VEC2I, VEC3, VEC3I, VEC4, VEC4I, MAT3, MAT4
         }
@@ -155,8 +136,7 @@ public class ProgramUniforms {
             final ProvidedType provided;
             final UniformUpdateFrequency frequency;
             final Uniform uniform;
-            // Scalar suppliers + location are retained so a FLOAT/INT type mismatch against the program's declared
-            // type can be adapted (re-uploaded through the other family) instead of dropped. Null/-1 for non-scalars.
+            // Scalar suppliers + location are retained so a FLOAT/INT mismatch against the declared type can be adapted through the other family instead of dropped; null/-1 for non-scalars
             final int location;
             final FloatSupplier floatSupplier;
             final IntSupplier intSupplier;
@@ -175,15 +155,7 @@ public class ProgramUniforms {
 
         private final String name;
         private final int program;
-        // Keyed by uniform NAME so a later registration REPLACES an earlier one, rather than stacking a second
-        // provider onto the same GL location
-        // That ordering is meaningful: build sites call CommonUniforms.addCommonUniforms and then
-        // ActiveCustomUniforms.assignTo, so a pack-declared custom uniform wins over a built-in of the same name —
-        // which is Iris's rule, since it has no built-in for names packs define themselves, e.g. Sildur's
-        // uniform.int.framemod8 = fmod(frameCounter, 8)
-        // With a plain list both providers uploaded to the same location every frame and which one won depended on
-        // registration order
-        // Linked so insertion order is still preserved for the layout report
+        // Keyed by uniform NAME so a later registration REPLACES an earlier one: addCommonUniforms runs before ActiveCustomUniforms.assignTo, so a pack-declared custom uniform wins over a built-in of the same name (Iris's rule, e.g. Sildur's framemod8); linked so the layout report keeps insertion order
         private final java.util.LinkedHashMap<String, PendingUniform> pending = new java.util.LinkedHashMap<>();
 
         private Builder(String name, int program) {
@@ -303,8 +275,7 @@ public class ProgramUniforms {
             return this;
         }
 
-        // The provider family a declared GL type needs, or null for types this port cannot supply at all —
-        // matching Iris's own mapping
+        // The provider family a declared GL type needs, or null for types this port cannot supply; matches Iris's mapping
         private static ProvidedType expectedType(int glType) {
             switch (glType) {
                 case GL_FLOAT_T:
@@ -341,13 +312,7 @@ public class ProgramUniforms {
             }
         }
 
-        // Reads every ACTIVE uniform's declared type out of the linked program, so a provider whose family does not
-        // match can be disabled with a log line rather than left to fail
-        // Necessary because uploading through the wrong glUniform* family — glUniform1i into a `uniform float` —
-        // raises GL_INVALID_OPERATION on EVERY upload, which is the "1282 @ Post render" spam
-        // And it genuinely happens: packs disagree about the declared types of the OptiFine uniforms, with
-        // worldTime, isEyeInWater and others declared int by some and float by others
-        // Same approach as Iris's ProgramUniforms.buildUniforms
+        // Reads every ACTIVE uniform's declared type so a mismatched provider is disabled with a log line rather than raising GL_INVALID_OPERATION on EVERY upload (the "1282 @ Post render" spam); packs disagree on int vs float for worldTime, isEyeInWater etc. Same as Iris's buildUniforms
         private java.util.Map<String, ProvidedType> declaredTypes() {
             java.util.Map<String, ProvidedType> declared = new java.util.HashMap<>();
             int activeUniforms = LWJGL.glGetProgrami(this.program, GL_ACTIVE_UNIFORMS);
@@ -378,10 +343,7 @@ public class ProgramUniforms {
                 Uniform uniform = entry.uniform;
                 ProvidedType declaredType = declared.get(entry.uniformName);
                 if (declared.containsKey(entry.uniformName) && declaredType != entry.provided) {
-                    // Packs disagree on whether OptiFine scalars (framemod8, worldTime, isEyeInWater, ...) are int
-                    // or float. Rather than drop the uniform on a scalar int<->float mismatch — which leaves the
-                    // program reading GLSL's default 0 (e.g. Sildur declares `uniform int framemod8`, breaking TAA
-                    // jitter) — re-upload through the family the program actually declares.
+                    // Packs disagree on whether OptiFine scalars (framemod8, worldTime, isEyeInWater) are int or float; rather than drop the uniform and leave GLSL's default 0 (Sildur's `uniform int framemod8` breaking TAA jitter), re-upload through the declared family
                     if (entry.provided == ProvidedType.FLOAT && declaredType == ProvidedType.INT
                             && entry.floatSupplier != null) {
                         FloatSupplier fs = entry.floatSupplier;
@@ -406,8 +368,7 @@ public class ProgramUniforms {
                 } else {
                     perFrame.add(uniform);
                 }
-                // Also indexed separately, staying in its frequency list above: the per-object hooks re-upload just
-                // these between draws, while the phase-level update still covers them with everything else.
+                // Also indexed separately while staying in its frequency list: the per-object hooks re-upload just these between draws, and the phase-level update still covers them
                 if (PER_OBJECT_UNIFORMS.contains(entry.uniformName)) {
                     perObject.add(uniform);
                 }

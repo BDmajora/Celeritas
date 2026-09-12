@@ -22,9 +22,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
-// Port of Lithium's LithiumConfig, diverges in two ways: the tree comes from EquilibriumOptions
-// (Java, not a build-generated properties resource), and mod overrides come from ModCompatibility's
-// class detection instead of mod metadata, since nothing has parsed a mod list yet at coremod time
+// Port of Lithium's LithiumConfig; the tree comes from EquilibriumOptions (Java, not a generated resource) and mod overrides from ModCompatibility's class detection, since no mod list exists at coremod time
 public class EquilibriumConfig {
     private static final String FILE_NAME = "equilibrium.properties";
 
@@ -48,8 +46,7 @@ public class EquilibriumConfig {
         }
     }
 
-    // Written file lists every option with its default commented out (unlike Lithium's empty file),
-    // since a 1.12.2 user opening this is usually bisecting a bug and needs to see what can be toggled
+    // The written file lists every option with its default commented out (unlike Lithium's empty file), since a user opening it is usually bisecting a bug
     public static EquilibriumConfig load(Path file) {
         EquilibriumConfig config = new EquilibriumConfig();
         config.file = file;
@@ -77,10 +74,7 @@ public class EquilibriumConfig {
         return config;
     }
 
-    // Where the config file lives, resolved the same way Fulgor and Coartatio resolve theirs
-    // Launch.minecraftHome is null under a test harness or a launcher that never set it, so the working
-    // directory stands in — the file still loads and saves, it just lands next to the process instead
-    // The directory is created eagerly so save() does not have to care whether it exists yet
+    // Config file location resolved like Fulgor and Coarctatio; Launch.minecraftHome is null under a test harness so the working directory stands in, and the directory is created eagerly so save() need not care
     public static Path defaultFile() {
         File home = Launch.minecraftHome;
         Path dir = (home == null ? Paths.get(".") : home.toPath()).resolve("config");
@@ -94,8 +88,7 @@ public class EquilibriumConfig {
         return dir.resolve(FILE_NAME);
     }
 
-    // Registers one rule; a duplicate key means the option tree declares the same mixin twice, which is a
-    // programming error rather than anything a user can cause, so it throws instead of overwriting
+    // Registers one rule; a duplicate key means the option tree declares a mixin twice, a programming error, so it throws instead of overwriting
     private void addMixinRule(String mixin, boolean enabled) {
         if (this.options.put(mixin, new Option(mixin, enabled, false)) != null) {
             throw new IllegalStateException("Mixin rule already defined: " + mixin);
@@ -107,8 +100,7 @@ public class EquilibriumConfig {
         Option option = this.options.get(rule);
         Option dependencyOption = this.options.get(dependency);
 
-        // EquilibriumOptions validates this at class-init, so reaching either branch means the tree
-        // and this loader have gone out of sync rather than that a user typed something wrong.
+        // EquilibriumOptions validates this at class-init, so reaching either branch means the tree and this loader drifted, not user error
         if (option == null || dependencyOption == null) {
             Equilibrium.LOGGER.error("Dependency '{} depends on {}={}' names an option that does not exist, skipping",
                     rule, dependency, requiredValue);
@@ -119,8 +111,7 @@ public class EquilibriumConfig {
         this.optionsWithDependencies.add(option);
     }
 
-    // Folds a loaded properties file onto the defaults; unknown keys are warned about and skipped so an
-    // old config from a previous version still loads
+    // Folds a loaded properties file onto the defaults; unknown keys are warned and skipped so an old config still loads
     private void readProperties(Properties props) {
         for (Map.Entry<Object, Object> entry : props.entrySet()) {
             String key = (String) entry.getKey();
@@ -149,9 +140,7 @@ public class EquilibriumConfig {
         }
     }
 
-    // Applies one installed mod's request to force an option on or off
-    // Disabling wins over enabling: when two mods disagree, believe the one calling the patch unsafe, because
-    // the cost of wrongly keeping a patch (a crash or corruption) is worse than wrongly dropping one (lost perf)
+    // Applies one installed mod's request to force an option; disabling wins over enabling, since wrongly keeping a patch (crash) is worse than wrongly dropping one (lost perf)
     void applyModOverride(ModCompatibility.Override override) {
         Option option = this.options.get(override.option());
 
@@ -165,10 +154,7 @@ public class EquilibriumConfig {
             return;
         }
 
-        // A user who has explicitly set an option has had the last word; a mod does not get to
-        // silently undo it. Lithium takes the opposite view, but Lithium's overrides come from mod
-        // metadata the user chose to install, whereas ours come from detection the user never asked
-        // for, and being overridden without explanation is worse than a mod incompatibility warning.
+        // A user who explicitly set an option has the last word; unlike Lithium, our overrides come from detection the user never asked for, and silent overriding is worse than an incompatibility warning
         if (option.isUserDefined()) {
             Equilibrium.LOGGER.warn("{} is installed and wants '{}={}', but the config file sets it to {}. "
                             + "Leaving the configured value; expect problems if it turns out to be wrong.",
@@ -185,11 +171,7 @@ public class EquilibriumConfig {
         }
     }
 
-    // Finds the option that governs a mixin class, by walking its package path from the root downwards
-    // Every prefix of the class name is tried as "mixin.<prefix>"; the first DISABLED rule found short-circuits
-    // and wins, otherwise the deepest rule that exists wins
-    // The short-circuit is the point: mixin.world=false kills everything under it whatever the child keys say
-    // Null means no rule on the path matched, which the caller reads as "no opinion, leave it on"
+    // Finds the option governing a mixin class by trying every package prefix as "mixin.<prefix>"; the first DISABLED rule short-circuits (mixin.world=false kills everything under it), else the deepest rule wins, null means no opinion
     public Option getEffectiveOptionForMixin(String mixinClassName) {
         int lastSplit = 0;
         int nextSplit;
@@ -221,9 +203,7 @@ public class EquilibriumConfig {
         return option != null && option.isEnabledRecursive(this);
     }
 
-    // Used by the options screen, which edits values in place and then calls save()
-    // Silently does nothing for an unknown name rather than throwing, since the screen is built from the same
-    // option tree and a miss here means the two drifted, not that the caller did anything wrong
+    // Used by the options screen, which edits in place then save()s; an unknown name is a silent no-op since a miss means the screen and tree drifted
     public void setOptionEnabled(String optionName, boolean enabled) {
         Option option = this.options.get(optionName);
 
@@ -263,8 +243,7 @@ public class EquilibriumConfig {
         return count;
     }
 
-    // Repeats until a pass changes nothing, since disabling one option can break a dependency already visited
-    // Terminates because nothing here re-enables an option, so the enabled count strictly decreases
+    // Repeats until a pass changes nothing, since disabling one option can break an already-visited dependency; terminates because nothing re-enables, so the enabled count strictly decreases
     private void applyDependencies() {
         //noinspection StatementWithEmptyBody
         while (this.applyDependenciesOnce()) {
@@ -282,8 +261,7 @@ public class EquilibriumConfig {
         return changed;
     }
 
-    // Rewrites every key, not just changed ones, so the file doubles as documentation of what exists
-    // A null file (test, failed resolve) is a no-op, and IO failure is logged: losing settings must not stop launch
+    // Rewrites every key so the file doubles as documentation; a null file is a no-op and IO failure is logged, since losing settings must not stop launch
     public void save() {
         if (this.file == null) {
             return;
@@ -353,8 +331,7 @@ public class EquilibriumConfig {
 
             writer.write("# Default: " + entry.enabledByDefault() + "\n");
 
-            // Options the user has never touched stay commented out, so the file keeps saying what the
-            // default is rather than freezing today's default into the user's config forever.
+            // Untouched options stay commented out so the file keeps saying what the default is instead of freezing today's default into the user's config
             if (option != null && option.isUserDefined()) {
                 writer.write(entry.name() + "=" + option.isEnabled() + "\n");
             } else {

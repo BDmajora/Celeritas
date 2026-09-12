@@ -38,9 +38,7 @@ public class RenderListManager {
     private final Long2ReferenceMap<OcclusionNode> occlusionNodes = new Long2ReferenceOpenHashMap<>();
     private final SectionTree sectionTree = new SectionTree();
 
-    // Non-null for the duration of an in-progress async graph search. Acts as a flag:
-    // structural mutations to occlusionNodes (attach/detach/rewire) are forbidden while set,
-    // and visibilityData updates are deferred to updateTasks rather than applied immediately.
+    // Non-null while an async graph search runs; structural mutations to occlusionNodes are forbidden and visibilityData updates are deferred to updateTasks while set
     private CompletableFuture<VisibleChunkCollector> currentOcclusionFuture;
 
     @Getter
@@ -52,8 +50,7 @@ public class RenderListManager {
 
     private int pendingLastUpdatedFrame;
 
-    // Tasks deferred by submitUpdateTask() while an async search is running. Drained on the
-    // render thread in finishPreviousGraphUpdate() after join() establishes happens-before.
+    // Tasks deferred by submitUpdateTask() during an async search, drained on the render thread in finishPreviousGraphUpdate() after join() establishes happens-before
     private final ArrayDeque<Runnable> updateTasks = new ArrayDeque<>();
 
     private final ExecutorService asyncGraphExecutor;
@@ -140,8 +137,7 @@ public class RenderListManager {
             this.debugStatistics = null;
         }
 
-        // Run tasks deferred during the async search. The join() above establishes happens-before,
-        // so writes to OcclusionNode fields by the async thread are visible here.
+        // Run tasks deferred during the async search; the join() above establishes happens-before for the async thread's OcclusionNode writes
         Runnable task;
 
         while ((task = updateTasks.poll()) != null) {
@@ -200,8 +196,7 @@ public class RenderListManager {
         }
     }
 
-    // Structural mutations to occlusionNodes (adding/removing nodes, rewiring neighbor links)
-    // are unsafe while the async thread holds a reference to the map via OcclusionCuller.
+    // Structural mutations to occlusionNodes are unsafe while the async thread holds the map via OcclusionCuller
     private void assertOcclusionNotRunning() {
         if (this.currentOcclusionFuture != null) {
             throw new IllegalStateException("Attempted to update occlusion graph during occlusion!");
@@ -244,8 +239,7 @@ public class RenderListManager {
         this.needsUpdate = true;
     }
 
-    // Runs the task immediately if no async search is active, otherwise defers it to
-    // finishPreviousGraphUpdate() to prevent concurrent writes to OcclusionNode fields.
+    // Runs immediately if no async search is active, otherwise defers to finishPreviousGraphUpdate() to avoid concurrent OcclusionNode writes
     private void submitUpdateTask(Runnable runnable) {
         if (this.currentOcclusionFuture == null) {
             runnable.run();
@@ -273,10 +267,7 @@ public class RenderListManager {
             return false;
         }
 
-        // lastUpdatedFrame only advances in finishPreviousGraphUpdate(), so during an in-progress
-        // async search this reflects the previous frame's committed result. A section can appear
-        // visible slightly early (if the async thread has already written its lastVisibleFrame for
-        // the new frame), but can never appear invisible too early.
+        // lastUpdatedFrame only advances in finishPreviousGraphUpdate(), so mid-search this reflects the previous committed frame: a section may appear visible slightly early but never invisible too early
         return render.getLastVisibleFrame() >= this.lastUpdatedFrame;
     }
 

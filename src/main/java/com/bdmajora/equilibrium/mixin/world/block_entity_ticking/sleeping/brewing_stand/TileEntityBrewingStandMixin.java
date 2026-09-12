@@ -8,25 +8,13 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
-// stops idle brewing stands walking the entire brewing recipe registry once per tick
-// update calls canBrew() unconditionally, and on Forge that call is diverted straight into
-// BrewingRecipeRegistry.canBrew, which iterates every registered brewing recipe - vanilla's plus
-// whatever every mod in the pack has added
-// a modpack with a few hundred recipes and a few dozen brewing stands is scanning tens of thousands
-// of recipes a second to conclude, every time, that an empty stand cannot brew anything
-// the guard is the first thing the registry itself checks: with no ingredient in the top slot,
-// nothing can be brewed, so answering that here rather than after a full scan gives the same answer
-// the rest of update still runs, which matters - it is what keeps the bottle silhouettes on the
-// block in sync with the inventory, and skipping the whole tick would leave a stand that was filled
-// while idle showing empty until something else touched it
+// Stops idle brewing stands walking the entire brewing recipe registry every tick (Forge diverts canBrew() into BrewingRecipeRegistry): with no ingredient nothing can brew, but the rest of update still runs so bottle silhouettes stay in sync
 @Mixin(TileEntityBrewingStand.class)
 public abstract class TileEntityBrewingStandMixin {
     @Shadow
     private NonNullList<ItemStack> brewingItemStacks;
 
-    // Private in the target, so it cannot be shadowed as abstract; the body is never reached.
-    // Calls to it from here are not themselves redirected — injectors only rewrite their target
-    // method's bytecode, so this reaches the real implementation rather than recursing.
+    // Private in the target so it cannot be shadowed as abstract; the body is never reached, and calls from here are not redirected since injectors only rewrite their target method
     @Shadow
     private boolean canBrew() {
         throw new AssertionError();

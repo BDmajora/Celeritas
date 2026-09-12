@@ -8,8 +8,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 
-// a generic vertex format holding attributes, so other code can retrieve them and work with encoded
-// data generically rather than depending on one specific format
+// Generic vertex format holding attributes, so other code can work with encoded data without depending on one specific format
 @AllArgsConstructor
 public class GlVertexFormat {
     // magic value that has GlVertexFormat calculate the next pointer to use
@@ -26,8 +25,7 @@ public class GlVertexFormat {
         return new Builder(stride);
     }
 
-    // the GlVertexAttribute of this format bound to the type "name"
-    // throws NullPointerException if the attribute does not exist in this format
+    // The GlVertexAttribute bound to "name"; throws NullPointerException if the format has no such attribute
     public GlVertexAttribute getAttribute(String name) {
         GlVertexAttribute attr = this.attributesKeyed.get(name);
 
@@ -86,8 +84,7 @@ public class GlVertexFormat {
             return this.addElement(new GlVertexAttribute(format, name, count, normalized, pointer, this.stride, intType));
         }
 
-        // adds a vertex attribute, bound to the given generic attribute type
-        // throws IllegalStateException if an attribute is already bound to that generic type
+        // Adds a vertex attribute bound to the given generic type; throws IllegalStateException if that type is already bound
         private Builder addElement(GlVertexAttribute attribute) {
             if (attribute.getPointer() >= this.stride) {
                 throw new IllegalArgumentException("Element " + attribute.getName() + " starts outside vertex format (" + attribute.getPointer() + ", stride is " + this.stride + ")");
@@ -127,8 +124,7 @@ public class GlVertexFormat {
 
             var lastAttribute = allAttributes.get(allAttributes.size() - 1);
 
-            // The stride must be large enough to cover all attributes. This still allows for additional padding
-            // to be added to the end of the vertex to accommodate alignment restrictions.
+            // The stride must cover all attributes, but may still include trailing padding for alignment restrictions
             if (this.stride < (lastAttribute.getPointer() + lastAttribute.getSize())) {
                 throw new IllegalArgumentException("Stride is too small");
             }

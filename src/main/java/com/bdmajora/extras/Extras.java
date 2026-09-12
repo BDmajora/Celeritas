@@ -6,9 +6,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 
-// Sodium Extra's option set, ported to Impetus on 1.12.2
-// Owns no rendering itself, so unlike Fulgor/Coartatio none of its mixins need coremod gating —
-// they all read options() live, so switches take effect immediately
+// Sodium Extra's option set on 1.12.2; owns no rendering, so none of its mixins need coremod gating and all read options() live
 public final class Extras {
     public static final Logger LOGGER = LogManager.getLogger("Impetus/Extras");
 
@@ -19,8 +17,7 @@ public final class Extras {
     private Extras() {
     }
 
-    // Called from mixin bodies on render/client threads, so first-call safety matters;
-    // ImpetusVintage warms this during construction well before that can happen
+    // Called from mixin bodies on render/client threads, so first-call safety matters; ImpetusVintage warms it during construction well before that
     public static ExtrasConfig options() {
         ExtrasConfig loaded = config;
         if (loaded == null) {

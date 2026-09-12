@@ -17,17 +17,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// takes the debug-world test out of the block read path
-// every single getBlockState in the game reaches this method, and the first thing vanilla does with
-// it is ask the world what type it is and compare that against DEBUG_ALL_BLOCK_STATES - a field load,
-// a virtual call and a reference comparison, to establish something that was decided when the world
-// was created and cannot change while it exists
-// the answer is resolved once, in the constructor, and the hot path becomes a boolean test the branch
-// predictor gets right every time; the debug world itself still behaves exactly as before, it is just
-// no longer paid for by every other world
-// the try/catch that wraps vanilla's lookup is preserved: it costs nothing when nothing is thrown, and
-// the crash report it builds - with the chunk, the position and the offending section - is the
-// difference between a diagnosable corruption bug and an anonymous ArrayIndexOutOfBoundsException
+// Takes the debug-world test out of getBlockState, which every block read reaches: resolved once in the constructor into a boolean instead of a world-type lookup per read; the try/catch stays since its crash report is what makes a corruption diagnosable
 @Mixin(Chunk.class)
 public abstract class ChunkMixin {
     @Shadow
@@ -41,10 +31,7 @@ public abstract class ChunkMixin {
     @Unique
     private boolean equilibrium$debugWorld;
 
-    // matches both constructors deliberately: the four-argument one delegates to the three-argument
-    // one, so this runs twice for it and assigns the same value both times
-    // naming a descriptor instead would mean writing an obfuscated signature for Mixin to remap, for
-    // no benefit
+    // Matches both constructors deliberately: the four-arg one delegates to the three-arg one so this runs twice and assigns the same value; a descriptor would need an obfuscated signature for no benefit
     @Inject(method = "<init>", at = @At("RETURN"))
     private void equilibrium$resolveWorldType(CallbackInfo ci) {
         this.equilibrium$debugWorld = this.world.getWorldType() == WorldType.DEBUG_ALL_BLOCK_STATES;

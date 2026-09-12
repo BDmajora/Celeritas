@@ -1,7 +1,6 @@
 package com.bdmajora.impetus.umbra.uniforms.custom;
 
-// A custom-uniform value: 1 to 4 float components, with scalars and booleans at width 1
-// Arithmetic broadcasts a scalar across a vector, GLSL's own rule; compact original rather than a port of Iris's library
+// A custom-uniform value of 1 to 4 float components (scalars and booleans width 1); arithmetic broadcasts a scalar across a vector per GLSL, a compact original rather than a port of Iris's library
 public final class CustomUniformValue {
     public final float[] components;
     public final int width;
@@ -39,8 +38,7 @@ public final class CustomUniformValue {
         return this.components[0] != 0.0f;
     }
 
-    // Component-wise binary op with width-1 broadcasting; the result takes the wider of the two widths
-    // Two operands of differing widths where NEITHER is 1 is a pack error, not something to guess at
+    // Component-wise binary op with width-1 broadcasting, the result taking the wider width; differing widths where NEITHER is 1 is a pack error, not something to guess at
     public static CustomUniformValue combine(CustomUniformValue a, CustomUniformValue b, java.util.function.DoubleBinaryOperator op) {
         int width = Math.max(a.width, b.width);
         float[] out = new float[width];

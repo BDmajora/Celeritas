@@ -11,9 +11,7 @@ import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 import java.util.Locale;
 import java.util.Optional;
 
-// The alphaTest.<program> directive. Iris compiles it to a discard; on 1.12.2 the alpha test is real GL state
-// vanilla sets per render type, so it is overridden while the program is bound and restored after
-// Photon sets off everywhere; ignoring that leaves vanilla's threshold culling fragments the pack meant to keep
+// The alphaTest.<program> directive; Iris compiles it to a discard, but on 1.12.2 the alpha test is real GL state vanilla sets per render type, so it is overridden while bound and restored after (Photon sets off everywhere)
 public final class ProgramAlphaTest {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -21,11 +19,7 @@ public final class ProgramAlphaTest {
     private static final int GL_ALPHA_TEST_FUNC = 0x0BC1;
     private static final int GL_ALPHA_TEST_REF = 0x0BC2;
 
-    // The alpha state that was live when apply() ran, captured so restore() puts back exactly that rather than a
-    // constant
-    // It has to be captured because vanilla sets alphaFunc to different references at different phases — 0.1 for
-    // most, 0.5 for the cutout pass — so any single assumed value would be wrong for some phase
-    // OptiFine sidesteps this by letting vanilla re-set the state itself; this port restores it explicitly
+    // The alpha state live when apply() ran, captured because vanilla uses different references per phase (0.1 most, 0.5 cutout) so no constant would be right; OptiFine lets vanilla re-set it, this port restores explicitly
     private boolean savedEnabled;
     private int savedFunction;
     private float savedReference;
@@ -34,8 +28,7 @@ public final class ProgramAlphaTest {
     private static final ProgramAlphaTest EMPTY = new ProgramAlphaTest(false, false, 0, 0.0f);
 
     private final boolean specified;
-    // Set by `alphaTest.<program> = off`, which disables the test outright rather than giving it a function —
-    // distinct from ALWAYS, which is a function that happens to pass everything
+    // Set by `alphaTest.<program> = off`, which disables the test outright; distinct from ALWAYS, a function that passes everything
     private final boolean disabled;
     private final int function;
     private final float reference;
@@ -117,13 +110,7 @@ public final class ProgramAlphaTest {
         return this.specified;
     }
 
-    // This alpha test as a GLSL discard, or an empty string when it passes everything
-    // Mirrors Iris's AlphaTest.toExpression, including its NEGATED form: `if (!(a > ref)) discard;` rather than
-    // `if (a < ref) discard;`
-    // The two differ on NaN — the negated form discards a non-finite alpha, the direct comparison keeps it — and
-    // Iris's is the stricter and correct one
-    // ALWAYS emits nothing at all, which is what leaves an unspecified solid pass carrying no discard; NEVER
-    // discards unconditionally
+    // This alpha test as a GLSL discard, or empty when it passes everything; mirrors Iris's NEGATED `if (!(a > ref)) discard;` form, which unlike the direct comparison discards NaN alpha, and NEVER discards unconditionally
     public String toGlslDiscard(String alphaAccessor, String indent) {
         if (!this.specified || this.disabled || this.function == GL11.GL_ALWAYS) {
             return "";
@@ -147,8 +134,7 @@ public final class ProgramAlphaTest {
                 + indent + "}\n";
     }
 
-    // GL comparison enum to its GLSL operator, matching Iris's AlphaTestFunction
-    // Null for ALWAYS and NEVER, which have no operator because they do not compare anything
+    // GL comparison enum to GLSL operator matching Iris's AlphaTestFunction; null for ALWAYS and NEVER, which compare nothing
     private static String glslOperatorFor(int function) {
         switch (function) {
             case GL11.GL_LESS: return "<";
@@ -166,15 +152,12 @@ public final class ProgramAlphaTest {
         return this.disabled ? 0.0f : this.reference;
     }
 
-    // Applies the override, capturing the previous state first so restore() can put it back exactly
-    // Goes through GlStateManager rather than raw GL, so vanilla's own state cache stays coherent and its later
-    // enable/disable calls are not silently skipped
+    // Applies the override after capturing the previous state for restore(); goes through GlStateManager so vanilla's cache stays coherent
     public void apply() {
         if (!this.specified) {
             return;
         }
-        // Read the live state once so restore() is exact. Only runs for a program that actually declares an
-        // override, so the cost of the query is bounded by how many the pack declares.
+        // Read the live state once so restore() is exact; only runs for programs declaring an override, so the query cost is bounded
         this.savedEnabled = LWJGL.glGetBoolean(GL_ALPHA_TEST);
         this.savedFunction = LWJGL.glGetInteger(GL_ALPHA_TEST_FUNC);
         this.savedReference = LWJGL.glGetFloat(GL_ALPHA_TEST_REF);
@@ -187,8 +170,7 @@ public final class ProgramAlphaTest {
         GlStateManager.alphaFunc(this.function, this.reference);
     }
 
-    // Puts back whatever alpha state was live before apply(). Must run before the composite chain or vanilla's GUI
-    // pass, or the pack's threshold leaks into geometry it was never meant to affect
+    // Puts back whatever alpha state was live before apply(); must run before the composite chain or the GUI pass, or the pack's threshold leaks into unrelated geometry
     public void restore() {
         if (!this.specified || !this.saved) {
             return;

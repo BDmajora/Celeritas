@@ -15,16 +15,11 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 
 import java.util.Set;
 
-// Mixes into RenderGlobal to replace vanilla's HashSet<BlockPos> light-update collection (MC-80966:
-// vanilla only drains it from updateClouds when the chunk builder is idle and no rebuilds are queued,
-// which under load never happens, so light changes go unrendered and the set grows unbounded)
-// Swaps in a DeduplicatedLongQueue and moves the drain to the client tick unconditionally;
-// see MinecraftMixin for the required ordering
+// Replaces RenderGlobal's HashSet<BlockPos> light-update set (MC-80966: vanilla only drains it from updateClouds when the chunk builder is idle, which under load never happens) with a DeduplicatedLongQueue drained unconditionally from the client tick; see MinecraftMixin for ordering
 @SideOnly(Side.CLIENT)
 @Mixin(RenderGlobal.class)
 public abstract class RenderGlobalMixin implements LightUpdateProcessor {
-    // One tick's worth of changed positions; always deduplicating (unlike the engine's queues) since
-    // a single light change routinely notifies the same position from several sides
+    // One tick's worth of changed positions, always deduplicating (unlike the engine's queues) since one light change routinely notifies the same position from several sides
     @Unique
     private final DeduplicatedLongQueue fulgor$lightUpdates =
             new DeduplicatedLongQueue(new DeduplicatedLongQueue.Pool(), 1024, true);
@@ -39,17 +34,14 @@ public abstract class RenderGlobalMixin implements LightUpdateProcessor {
         this.fulgor$lightUpdates.enqueue(pos.toLong());
     }
 
-    // Disables vanilla's updateClouds drain by claiming its light-update set is always empty (ordinal 0;
-    // the second isEmpty() in that method is the pending-rebuild check and is left alone)
+    // Disables vanilla's updateClouds drain by claiming its light-update set is always empty (ordinal 0; the second isEmpty() is the pending-rebuild check and is left alone)
     @Redirect(method = "updateClouds",
             at = @At(value = "INVOKE", target = "Ljava/util/Set;isEmpty()Z", ordinal = 0))
     private boolean fulgor$disableVanillaDrain(Set<?> lightUpdates) {
         return true;
     }
 
-    // Drains the queue into chunk rebuilds; dedup reset happens after the drain (not before, as in the
-    // engine) since nothing is enqueued mid-drain here, and resetting early would drop a position that
-    // changed on two consecutive ticks
+    // Drains the queue into chunk rebuilds; dedup reset happens after the drain (not before, as in the engine) since nothing is enqueued mid-drain and resetting early would drop a position that changed on two consecutive ticks
     @Override
     public void fulgor$processLightUpdates() {
         while (!this.fulgor$lightUpdates.isEmpty()) {
@@ -59,8 +51,7 @@ public abstract class RenderGlobalMixin implements LightUpdateProcessor {
             int y = pos.getY();
             int z = pos.getZ();
 
-            // A one-block margin, matching vanilla: a light change at a section edge alters the
-            // ambient occlusion of the neighbouring section's face too.
+            // A one-block margin matching vanilla: a light change at a section edge alters the neighbouring section's face AO too
             this.markBlocksForUpdate(x - 1, y - 1, z - 1, x + 1, y + 1, z + 1, false);
         }
 

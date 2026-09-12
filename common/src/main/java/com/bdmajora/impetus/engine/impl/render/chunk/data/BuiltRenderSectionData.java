@@ -5,9 +5,7 @@ import org.jetbrains.annotations.MustBeInvokedByOverriders;
 
 import java.util.Objects;
 
-// What a finished build produced for one render section
-// Extended per game version rather than being final, so a version-specific renderer can hang its own data off a
-// section without the shared engine having to know about it
+// What a finished build produced for one render section; extended per game version so a version-specific renderer can hang its own data off it
 public class BuiltRenderSectionData {
     public boolean hasBlockGeometry;
     public long visibilityData;

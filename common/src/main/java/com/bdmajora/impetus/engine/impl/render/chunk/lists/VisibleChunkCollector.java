@@ -53,8 +53,7 @@ public class VisibleChunkCollector implements OcclusionCuller.Visitor {
     public void visit(OcclusionNode node, boolean visible) {
         var section = node.getRenderSection();
 
-        // Note: even if a section does not have render objects, we must ensure the render list is initialized and put
-        // into the sorted queue of lists, so that we maintain the correct order of draw calls.
+        // Even a section without render objects must initialise its render list and enter the sorted queue, to keep draw call order correct
         int regionId = node.getRenderRegionId();
         ChunkRenderList renderList = this.renderListsByRegion[regionId];
 
@@ -75,9 +74,7 @@ public class VisibleChunkCollector implements OcclusionCuller.Visitor {
     private void addToRebuildLists(RenderSection section) {
         ChunkUpdateType type = section.getPendingUpdate();
 
-        // Skip sections with an in-flight build to avoid redundant work. This is an advisory
-        // check only: submitRebuildTasks() will validate getPendingUpdate() independently before
-        // scheduling, so a stale null read of the token here cannot cause a double submission.
+        // Skip sections with an in-flight build; advisory only, since submitRebuildTasks() re-validates getPendingUpdate() so a stale null token cannot double-submit
         if (type != null && section.getBuildCancellationToken() == null) {
             Queue<RenderSection> queue = this.sortedRebuildLists.get(type);
 

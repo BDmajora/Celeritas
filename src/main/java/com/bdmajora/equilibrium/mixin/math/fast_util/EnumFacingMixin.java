@@ -8,14 +8,7 @@ import org.spongepowered.asm.mixin.Shadow;
 
 import java.util.Random;
 
-// removes the array copies and modulo arithmetic from the two most-called EnumFacing helpers
-// getOpposite routes through byIndex, which computes MathHelper.abs(index % VALUES.length) - a
-// division on a value that is already a valid index, stored in the enum precisely so it would not
-// need computing
-// random is worse: it calls values() twice, and values() on a Java enum clones the backing array
-// every time, so that is two six-element allocations per call on a method that block ticking, mob AI
-// and particle spawning all reach for
-// the public VALUES field holds the same array in the same order and is never handed out for mutation
+// Removes the array copies and modulo from getOpposite (byIndex divides an already-valid index) and random (values() clones the array twice per call); the public VALUES field is the same never-mutated array
 @Mixin(EnumFacing.class)
 public class EnumFacingMixin {
     @Shadow

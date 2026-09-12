@@ -4,26 +4,18 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 
-// OptiFine MC_* preprocessor macros injected into every shader stage
-// GL-dependent vendor/renderer macros need a live context and go through withGlInfo once the render thread
-// is up; standard() holds everything else computable without GL
+// OptiFine MC_* preprocessor macros injected into every stage; GL-dependent vendor/renderer macros go through withGlInfo on the render thread, standard() holds the rest
 public final class ShaderMacros {
     // Minecraft version encoded the OptiFine way: 1.12.2 -> 11202
     public static final int MC_VERSION = 11202;
 
-    // Programs forced to compile as plain OptiFine 1.12.2 (IS_IRIS/IRIS_VERSION withheld) so they take the
-    // path they authored for this MC version instead of the Umbra path. Sildur's gbuffers_water/composite1 pair
-    // must be listed together — one writes the wave normal to gl_FragData[2] (DRAWBUFFERS:412), the other reads
-    // it from colortex2 — but setPackLegacyPrograms detects that pairing automatically from the pack's own guards.
-    // This set is only the manual override via -Dimpetus.umbra.legacyPrograms=...; empty by default.
+    // Programs forced to compile as plain OptiFine 1.12.2 (IS_IRIS/IRIS_VERSION withheld) so they take their authored path; only the manual -Dimpetus.umbra.legacyPrograms override, empty by default, since setPackLegacyPrograms detects pairings like Sildur's gbuffers_water/composite1 automatically
     private static final java.util.Set<String> FORCED_LEGACY_PROGRAMS = parseLegacyPrograms();
 
-    // Programs the loaded pack itself marked as having an authored pre-Umbra path (see ShaderPack.detectLegacyPrograms)
-    // Replaced on every pack load, so must not be final
+    // Programs the loaded pack itself marked as having an authored pre-Umbra path (see ShaderPack.detectLegacyPrograms); replaced on every pack load
     private static volatile java.util.Set<String> packLegacyPrograms = java.util.Collections.emptySet();
 
-    // Installs the pack-detected legacy program list; called once per pack load before any program compiles
-    // so the terrain and composite compile paths see the same set
+    // Installs the pack-detected legacy program list, once per pack load before any program compiles so the terrain and composite paths see the same set
     public static void setPackLegacyPrograms(java.util.Set<String> names) {
         java.util.Set<String> lowered = new java.util.HashSet<>();
         for (String name : names) {
@@ -48,10 +40,7 @@ public final class ShaderMacros {
         return names;
     }
 
-    // Macro set programName compiles against — identical to input unless the program is a legacy program, in
-    // which case the Umbra identity macros are withheld. Callers MUST use this same returned map for both
-    // DrawBuffers.parseActive and injectDefines on the same program, since the two branches disagree on
-    // DRAWBUFFERS and mixing them points a gl_FragData write at an unbound slot.
+    // Macro set programName compiles against, identical to the input unless it is a legacy program (Umbra identity macros withheld); callers MUST use the same map for DrawBuffers.parseActive and injectDefines, since mixing points a gl_FragData write at an unbound slot
     public static Map<String, String> forProgram(Map<String, String> macros, String programName) {
         if (programName == null) {
             return macros;
@@ -74,35 +63,16 @@ public final class ShaderMacros {
         macros.put("MC_RENDER_QUALITY", "1.0");
         macros.put("MC_SHADOW_QUALITY", "1.0");
         macros.put("MC_HAND_DEPTH", "0.125");
-        // PBR sampler availability (OptiFine semantics: defined when the normal/specular map feature is enabled,
-        // which is OptiFine's default-on). The `normals`/`specular` samplers are always bound — either the
-        // stitched _n/_s companion atlases or the neutral 1×1 defaults — so sampling them is always well-defined.
+        // PBR sampler availability (OptiFine's default-on normal/specular feature); the `normals`/`specular` samplers are always bound to either the stitched companion atlases or the neutral 1x1 defaults
         macros.put("MC_NORMAL_MAP", "");
         macros.put("MC_SPECULAR_MAP", "");
-        // Resource-pack-declared PBR texture format (assets/minecraft/optifine/texture.properties `format=`),
-        // e.g. MC_TEXTURE_FORMAT_LAB_PBR + MC_TEXTURE_FORMAT_LAB_PBR_1_3. Umbra parity.
+        // Resource-pack-declared PBR texture format (optifine/texture.properties `format=`), e.g. MC_TEXTURE_FORMAT_LAB_PBR + _1_3; Umbra parity
         com.bdmajora.impetus.umbra.pbr.TextureFormatLoader.addFormatMacros(macros);
-        // Feature flags for the subset of the Iris extensions this port implements, one IRIS_FEATURE_<NAME>
-        // define each. Packs gate on `#ifdef IRIS_FEATURE_<NAME>` — Complementary's colored lighting hangs off
-        // IRIS_FEATURE_CUSTOM_IMAGES, and without that define its shadowcomp pass never declares voxel_sampler.
+        // One IRIS_FEATURE_<NAME> define per implemented Iris extension; Complementary's colored lighting gates on IRIS_FEATURE_CUSTOM_IMAGES and its shadowcomp pass never declares voxel_sampler without it
         com.bdmajora.impetus.umbra.features.FeatureFlags.addUsableDefines(macros);
-        // The three names below (IS_IRIS, IRIS_VERSION, and the IRIS_FEATURE_* prefix above) are what shader packs
-        // read to tell an Iris-class pipeline from plain OptiFine. They are the pack-facing contract, NOT our own
-        // naming: this subsystem is called Umbra everywhere else, but renaming these makes every pack fall back to
-        // its OptiFine path — Complementary puts up its "Colored Lighting is not supported on Optifine" screen and
-        // drops colored lighting entirely. Leave them spelled exactly as Iris spells them.
-        // IS_IRIS specifically gates the pack's Iris-exclusive uniform DECLARATIONS (Complementary's uniforms.glsl
-        // declares renderStage/is_invisible behind it); everything that block declares at MC_VERSION 11202 is
-        // uploaded by CommonUniforms, so claiming it is honest.
+        // IS_IRIS, IRIS_VERSION and the IRIS_FEATURE_* prefix are the pack-facing contract, NOT our naming: renaming them drops every pack onto its OptiFine path (Complementary's "not supported on Optifine" screen); IS_IRIS gates Iris-exclusive uniform DECLARATIONS, all of which CommonUniforms uploads at MC_VERSION 11202
         macros.put("IS_IRIS", "");
-        // Iris version, encoded major*10000 + minor*100 + bugfix (StandardMacros.getFormattedIrisVersion). Packs gate
-        // real behavior on this: Complementary's common.glsl takes `cameraPositionBestFract = cameraPositionFract`
-        // (the precise double-derived split we now upload) at `IRIS_VERSION >= 10800`, instead of the OptiFine
-        // `fract(cameraPosition)` path whose float precision loss makes the colored-lighting voxel grid — and thus
-        // block-edge lighting — shimmer at world coordinates far from origin. 10805 is the lowest value that both
-        // enables that path AND leaves every legacy `IRIS_VERSION < N` workaround exactly where undefined(=0) left it
-        // (the 10800..10804 skybasic moon-discard stays off; the <10902 skytextured sun fallback stays on — that
-        // geometric fallback is more reliable than our still-partial fixed-function renderStage mapping).
+        // Iris version as major*10000 + minor*100 + bugfix; Complementary takes the precise cameraPositionFract split at >= 10800 (fixing colored-lighting shimmer far from origin), and 10805 is the lowest value enabling that while leaving every legacy `IRIS_VERSION < N` workaround where undefined left it
         macros.put("IRIS_VERSION", "10805");
         // Umbra render-stage constants (WorldRenderingPhase ordinals, exact Umbra order) for the renderStage uniform.
         macros.put("MC_RENDER_STAGE_NONE", "0");
@@ -139,11 +109,7 @@ public final class ShaderMacros {
         withGpuIdentity(macros, vendor, renderer);
     }
 
-    // Adds only the vendor/renderer identity macros (MC_GL_VENDOR_*, MC_GL_RENDERER_*), which packs use to gate
-    // hardware workarounds (Clarity's NVIDIA immut, Photon/Solas Intel paths, Complementary's AMD path).
-    // Deliberately skips MC_GL_VERSION/MC_GLSL_VERSION — this pipeline compiles individual programs at 120,
-    // 330 or 460 depending on path, so advertising the real driver version would invite GLSL-120 programs
-    // to use syntax they can't take.
+    // Adds only the vendor/renderer identity macros packs gate hardware workarounds on; skips MC_GL_VERSION/MC_GLSL_VERSION since programs compile at 120, 330 or 460 depending on path and advertising the real version invites GLSL-120 programs to use syntax they cannot take
     public static void withGpuIdentity(Map<String, String> macros, String vendor, String renderer) {
         String vendorMacro = vendorMacro(vendor);
         if (vendorMacro != null) {
@@ -155,8 +121,7 @@ public final class ShaderMacros {
         }
     }
 
-    // Inserts #define lines right after the #version directive (or at the top if there is none)
-    // Used by the fullscreen/terrain/compute paths, which skip ShaderProgramCompiler's define application
+    // Inserts #define lines right after #version (or at the top); used by the fullscreen/terrain/compute paths that skip ShaderProgramCompiler's define application
     public static String injectDefines(String source, Map<String, String> macros) {
         StringBuilder defines = new StringBuilder();
         for (Map.Entry<String, String> macro : macros.entrySet()) {
@@ -204,8 +169,7 @@ public final class ShaderMacros {
         return "MC_OS_OTHER";
     }
 
-    // Matches Umbra StandardMacros.getVendor() exactly (which matches OptiFine's documented behaviour)
-    // Prefix tests, not substring — the distinction matters, see rendererMacro below
+    // Matches Umbra's StandardMacros.getVendor() exactly (OptiFine's documented behaviour); prefix tests, not substring, see rendererMacro
     private static String vendorMacro(String vendor) {
         if (vendor == null) {
             return "MC_GL_VENDOR_OTHER";
@@ -218,9 +182,7 @@ public final class ShaderMacros {
         } else if (v.startsWith("nvidia")) {
             return "MC_GL_VENDOR_NVIDIA";
         } else if (v.startsWith("amd")) {
-            // Umbra reports AMD separately from ATI. Folding it into ATI still satisfied Complementary's
-            // `#if defined MC_GL_VENDOR_AMD || defined MC_GL_VENDOR_ATI`, but only by luck — a pack testing
-            // MC_GL_VENDOR_AMD alone would have silently taken the wrong branch.
+            // Umbra reports AMD separately from ATI; folding it into ATI only satisfied Complementary's `AMD || ATI` test by luck, and a pack testing MC_GL_VENDOR_AMD alone would take the wrong branch
             return "MC_GL_VENDOR_AMD";
         } else if (v.startsWith("x.org")) {
             return "MC_GL_VENDOR_XORG";
@@ -228,10 +190,7 @@ public final class ShaderMacros {
         return "MC_GL_VENDOR_OTHER";
     }
 
-    // Matches Umbra StandardMacros.getRenderer() exactly, including test order.
-    // Must be prefix tests, not substring — contains("intel") used to misfire on Mesa Intel Arc strings
-    // ("Mesa Intel(R) Arc(tm) B580...") and match MC_GL_RENDERER_INTEL before the mesa branch, silently
-    // advertising modern Arc hardware as an ancient Intel iGPU and pushing it down degraded pack paths.
+    // Matches Umbra's StandardMacros.getRenderer() exactly including test order; prefix tests, since contains("intel") misfired on "Mesa Intel(R) Arc(tm)" and advertised Arc as an ancient iGPU
     private static String rendererMacro(String renderer) {
         if (renderer == null) {
             return "MC_GL_RENDERER_OTHER";

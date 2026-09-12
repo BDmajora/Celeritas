@@ -12,9 +12,7 @@ import net.minecraft.world.World;
 
 import javax.annotation.Nullable;
 
-// An allocation-free transcription of World.rayTraceBlocks, which allocates a Vec3d and BlockPos per step
-// The traversal is transcribed, not replaced: its odd fixups are what keep block selection agreeing between client
-// and server. Only the running position is held in doubles, and the MISS result is built only when asked for
+// Allocation-free transcription of World.rayTraceBlocks (which allocates a Vec3d and BlockPos per step); the odd fixups are kept since they keep client and server block selection agreeing
 public final class FastRayCaster {
     private FastRayCaster() {
     }
@@ -32,17 +30,14 @@ public final class FastRayCaster {
             return null;
         }
 
-        // Loading, because World#getBlockState loads. A ray that stopped at the edge of the loaded
-        // area would let mobs see through unloaded terrain.
+        // Loading, because World#getBlockState loads; a ray stopping at the loaded edge would let mobs see through unloaded terrain
         ChunkSectionCursor cursor = new ChunkSectionCursor(world, true);
 
         return trace(world, cursor, start, end, stopOnLiquid, ignoreBlockWithoutBoundingBox,
                 returnLastUncollidableBlock);
     }
 
-    // the same traversal against a caller-supplied cursor
-    // explosion exposure fires dozens of rays that all converge on the same point, so they cross mostly
-    // the same blocks - sharing one cursor between them is where most of that win comes from
+    // The same traversal against a caller-supplied cursor; explosion exposure fires dozens of converging rays over mostly the same blocks, and sharing the cursor is most of the win
     @Nullable
     public static RayTraceResult trace(World world, ChunkSectionCursor cursor, Vec3d start, Vec3d end,
                                        boolean stopOnLiquid, boolean ignoreBlockWithoutBoundingBox,
@@ -139,8 +134,7 @@ public final class FastRayCaster {
                 tZ = (planeZ - curZ) / deltaZ;
             }
 
-            // Negative zero would compare as the smallest candidate and stall the ray in place;
-            // nudging it negative forces progress. Vanilla's fixup, kept exactly.
+            // Negative zero would compare as the smallest candidate and stall the ray; nudging it negative forces progress, vanilla's fixup kept exactly
             if (tX == -0.0D) {
                 tX = -1.0E-4D;
             }
@@ -179,10 +173,7 @@ public final class FastRayCaster {
 
             IBlockState state = cursor.getBlockState(x, y, z);
 
-            // Air is the overwhelming majority of what a ray crosses and can never collide, so it is
-            // worth answering before anything is allocated for it. Not taken when the caller asked
-            // for the last uncollidable block: vanilla records air positions as misses, and a caller
-            // that wants those wants the air ones too.
+            // Air is most of what a ray crosses and never collides, so answer before allocating; skipped when the caller wants the last uncollidable block, since vanilla records air positions as misses
             if (!returnLastUncollidableBlock && state.getMaterial() == Material.AIR) {
                 continue;
             }

@@ -5,11 +5,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
-// A configurable option whose value is a token: a number, a word, or a const value
-// The allowed values come from the trailing `//[a b c]` comment on the declaration line, which is what lets the
-// config screen offer a cycle control instead of free text
-// An option with no such comment still works; it just has no constrained list, and the screen treats it as open
-// Ported from Iris; guava ImmutableList replaced with an unmodifiable List
+// A configurable option whose value is a token (number, word, const value) with allowed values from the trailing `//[a b c]` comment, which lets the screen offer a cycle control; without one it is open text. From Iris with an unmodifiable List
 public class StringOption extends BaseOption {
     private final String defaultValue;
     private final List<String> allowedValues;

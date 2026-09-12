@@ -2,10 +2,7 @@ package com.bdmajora.impetus.engine.impl.util.rand;
 
 import java.util.Random;
 
-// XoRoShiRo128** implementation from DSI Utilities, adopted in a minimal implementation to not
-// import Apache Commons.
-//
-// http://xoshiro.di.unimi.it/
+// Minimal XoRoShiRo128** from DSI Utilities (http://xoshiro.di.unimi.it/) to avoid importing Apache Commons
 public class XoRoShiRoRandom extends Random {
     private static final long serialVersionUID = 1L;
 
@@ -126,8 +123,7 @@ public class XoRoShiRoRandom extends Random {
     // Expands the seed through SplitMix so the two state words are independent
     @Override
     public void setSeed(final long seed) {
-        // Restore the previous initial state if the seed hasn't changed
-        // Setting and mixing the seed is expensive, so this saves some CPU cycles
+        // Restore the saved initial state when the seed is unchanged, since setting and mixing the seed is expensive
         if (this.hasSavedState && this.seed == seed) {
             this.s0 = this.p0;
             this.s1 = this.p1;

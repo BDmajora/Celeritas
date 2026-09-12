@@ -9,10 +9,7 @@ import com.bdmajora.impetus.mixin.ImpetusVintageMixinPlugin;
 
 import java.nio.charset.StandardCharsets;
 
-// TODO: Delete this translation layer and implement LWJGL 3 directly via Cleanroom.
-// 1. Update build.gradle to use LWJGL 3 dependencies instead of LWJGL 2.
-// 2. Globally replace 'org.lwjgl' imports with 'org.lwjgl3' (or standard LWJGL 3).
-// 3. Manually rewrite legacy Display, Mouse, and Keyboard calls to use GLFW.
+// TODO: delete this translation layer and target LWJGL 3 directly via Cleanroom (LWJGL 3 deps in build.gradle, org.lwjgl -> org.lwjgl3 imports, Display/Mouse/Keyboard rewritten to GLFW)
 
 public class ImpetusLWJGLRelocationTransformer implements IClassTransformer {
     // Reused instance to prevent memory allocation overhead on every class load

@@ -2,20 +2,15 @@ package com.bdmajora.impetus.engine.impl.render.chunk;
 
 // the type of chunk update task
 public enum ChunkUpdateType {
-    // chunk is being built for the first time
-    // the maximum queue size is somewhat arbitrarily chosen: large enough to keep a reasonably sized
-    // worker pool saturated with initial builds during world load, while bounding the per-frame
-    // snapshot burst on the render thread
+    // First-time build; the queue size is arbitrary but keeps a worker pool saturated during world load while bounding the per-frame snapshot burst
     INITIAL_BUILD,
     // chunk geometry is being sorted because the camera position changed
     SORT,
-    // like SORT, but blocks the main thread if the camera is near enough to guarantee the sort results
-    // are reflected quickly
+    // Like SORT, but blocks the main thread if the camera is near enough that the sort must be reflected quickly
     IMPORTANT_SORT,
     // chunk data has changed and remeshing is required
     REBUILD,
-    // like REBUILD, but blocks the main thread if the camera is near enough to guarantee the rebuild is
-    // seen quickly
+    // Like REBUILD, but blocks the main thread if the camera is near enough that the rebuild must be seen quickly
     IMPORTANT_REBUILD;
 
     // Whether a new request outranks the one already queued

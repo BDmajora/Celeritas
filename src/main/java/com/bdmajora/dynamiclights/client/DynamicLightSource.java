@@ -4,8 +4,7 @@ import com.bdmajora.dynamiclights.DynamicLights;
 import net.minecraft.client.renderer.RenderGlobal;
 import net.minecraft.world.World;
 
-// Something that emits light the world does not know about
-// Implemented by mixins onto Entity and TileEntity, so every entity/block entity is one of these; getLuminance() returning zero is how most opt out
+// Something that emits light the world does not know about; implemented by mixin on Entity and TileEntity, with getLuminance() returning zero as the opt-out
 public interface DynamicLightSource {
     double impetus$getDynamicLightX();
 
@@ -22,8 +21,7 @@ public interface DynamicLightSource {
                 && DynamicLights.engine().containsLightSource(this);
     }
 
-    // Starts or stops tracking this source; called internally by DynamicLightsEngine#updateTracking as luminance crosses zero
-    // Calling directly will desynchronise the tracked set from the sources' own state
+    // Starts or stops tracking; called internally by DynamicLightsEngine#updateTracking as luminance crosses zero, and calling directly desynchronises the tracked set
     default void impetus$setDynamicLightEnabled(boolean enabled) {
         this.impetus$resetDynamicLight();
         if (enabled) {

@@ -13,15 +13,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-// folds dynamic light into the terrain lightmap - this is where dynamic lights actually reach the world
-// Impetus' chunk builder asks each block state for its packed lightmap coordinate (LightDataCache#compute),
-// caches the answer for the section being compiled, and the smooth and flat light pipelines
-// interpolate from there, so raising the value here is what makes a held torch light the floor
-// runs on chunk-builder worker threads, which is why the engine's source set is behind a read/write
-// lock and why the empty-set case short-circuits before taking it
-// the opaque-cube test mirrors what the light pipelines expect: brightening the interior of a solid
-// block does nothing useful and makes ambient occlusion disagree with the light it is shading
-// light-emitting blocks are exempt because they are read for their own glow
+// Folds dynamic light into the terrain lightmap coordinate the chunk builder asks each state for (LightDataCache#compute), on worker threads hence the engine's read/write lock; opaque cubes are skipped since brightening a solid interior breaks AO, and emitters are exempt
 @SideOnly(Side.CLIENT)
 @Mixin(BlockStateContainer.StateImplementation.class)
 public abstract class StateImplementationMixin {
@@ -32,9 +24,7 @@ public abstract class StateImplementationMixin {
             return;
         }
 
-        // LightDataCache probes every block state against an empty world to decide whether it is
-        // emissive. That probe is not a position in the world, so there is no dynamic light to add
-        // and iterating the light sources for it would be pure waste on the chunk-build hot path.
+        // LightDataCache probes every state against an empty world to detect emissives; that is not a world position, so iterating sources for it is pure waste on the chunk-build hot path
         if (source == EmptyBlockAccess.INSTANCE) {
             return;
         }

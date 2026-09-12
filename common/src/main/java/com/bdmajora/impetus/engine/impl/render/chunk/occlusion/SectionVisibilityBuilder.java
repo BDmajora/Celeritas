@@ -5,8 +5,7 @@ import it.unimi.dsi.fastutil.ints.IntArrayList;
 
 import java.util.BitSet;
 
-// computes the visibility graph for a section, following the approach in Tommaso Checchi's writeup
-// at https://tomcc.github.io/2014/08/31/visibility-1.html
+// Computes a section's visibility graph, following Tommaso Checchi's writeup at https://tomcc.github.io/2014/08/31/visibility-1.html
 public class SectionVisibilityBuilder {
     private static final int SECTION_AXIS_SIZE = 16;
     private static final int SECTION_AXIS_MASK = SECTION_AXIS_SIZE - 1;
@@ -48,8 +47,7 @@ public class SectionVisibilityBuilder {
             // everything is opaque, so we can't see anything anywhere
             return VisibilityEncoding.NULL;
         } else if (opaqueCount < BLOCKS_ON_ONE_FACE) {
-            // There are not enough blocks set to even fully cover one face. Therefore, we must be able
-            // to see everything from everything.
+            // Not enough blocks set to fully cover even one face, so everything must be visible from everything
             return VisibilityEncoding.EVERYTHING;
         } else {
             return computeWithFloodFill();

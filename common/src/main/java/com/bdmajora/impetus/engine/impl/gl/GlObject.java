@@ -1,9 +1,6 @@
 package com.bdmajora.impetus.engine.impl.gl;
 
-// Base class for the engine's GL objects, hiding the raw handle behind an accessor that checks validity first
-// The check catches the common mistake — using an object after it was deleted — but it is not a guarantee: nothing
-// stops a caller copying the int handle out and using that afterwards, so this is a guard rail rather than a
-// safety property to lean on
+// Base for the engine's GL objects; the handle accessor checks validity to catch use-after-delete, but a copied-out int handle escapes it, so it is a guard rail not a guarantee
 public abstract class GlObject {
     private static final int INVALID_HANDLE = 0;
 

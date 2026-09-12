@@ -8,8 +8,7 @@ import com.bdmajora.impetus.engine.impl.util.Dim2i;
 
 import java.util.List;
 
-// One flat tile on a shader-option screen: label left and coloured value right, or a centred sub-screen link
-// Left-click cycles forward, right-click backward, as OptiFine does; label and value are captured at build time
+// One flat tile on a shader-option screen: label left and coloured value right, or a centred sub-screen link; left-click cycles forward, right-click backward like OptiFine
 public class OptionButtonWidget extends AbstractWidget {
     private static final int BG_DEFAULT = 0x40101010;
     private static final int BG_HOVERED = 0x90101010;

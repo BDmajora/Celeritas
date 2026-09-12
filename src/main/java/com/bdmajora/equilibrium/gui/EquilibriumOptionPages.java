@@ -17,8 +17,7 @@ import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;
 
-// Optimizations page in Impetus' video options, built by walking EquilibriumOptions so new entries appear for free
-// Every toggle needs REQUIRES_GAME_RESTART: options are read by the mixin plugin before the window exists
+// Optimizations page in Impetus' video options, built by walking EquilibriumOptions so new entries appear for free; every toggle is REQUIRES_GAME_RESTART since the mixin plugin reads options before the window exists
 public final class EquilibriumOptionPages {
     private static final String MOD_ID = "equilibrium";
 
@@ -85,8 +84,7 @@ public final class EquilibriumOptionPages {
         return builder.build();
     }
 
-    // Impact assigned per category, not per option; utility categories get no badge since they enable
-    // other options rather than removing work themselves
+    // Impact assigned per category, not per option; utility categories get no badge since they enable other options rather than removing work
     private static OptionImpact impactOf(EquilibriumOptions.Entry entry) {
         switch (entry.category()) {
             case "world":

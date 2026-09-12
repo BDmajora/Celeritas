@@ -1,7 +1,6 @@
 package com.bdmajora.impetus.engine.impl.model.quad.properties;
 
-// defines the orientation of vertices in a model quad, used to re-orient them into a consistent order
-// and so eliminate a number of shading issues caused by anisotropy problems
+// Vertex orientation of a model quad, used to re-order vertices consistently and eliminate anisotropy shading issues
 public enum ModelQuadOrientation {
     NORMAL(new int[] { 0, 1, 2, 3 }),
     FLIP(new int[] { 1, 2, 3, 0 });

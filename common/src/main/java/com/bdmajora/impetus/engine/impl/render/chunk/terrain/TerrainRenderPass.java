@@ -13,11 +13,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Map;
 import java.util.Objects;
 
-// a terrain render pass corresponds to one draw call rendering some subset of terrain geometry
-// passes are generally used for fixed configuration that will not change from quad to quad, which lets
-// the terrain shader optimize at compile time - omitting the fragment discard conditional entirely on
-// the solid pass, for instance
-// geometry sharing a pass can still specify more dynamic properties; see Material
+// One draw call over a subset of terrain geometry; passes carry fixed configuration so the shader can optimise at compile time (e.g. no discard on the solid pass), while Material carries the dynamic properties
 @Accessors(fluent = true)
 @EqualsAndHashCode
 public class TerrainRenderPass {

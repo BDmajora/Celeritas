@@ -8,28 +8,23 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.LongAdder;
 
-// Entry points for the lighting subsystem, a Phosphor backport folding in Alfheim's corrections
-// Not an FML entry point; the mixins do the work and each World owns a LightingEngine
+// Entry points for the lighting subsystem, a Phosphor backport with Alfheim's corrections; not an FML entry point, mixins do the work and each World owns a LightingEngine
 public final class Fulgor {
     public static final Logger LOGGER = LogManager.getLogger("Fulgor");
 
-    // 2 light types * 4 directions * 2 halves * (inwards + outwards); width of a chunk's neighbour-light-check
-    // table, also the length it must have when read back from NBT
+    // 2 light types * 4 directions * 2 halves * (inwards + outwards): width of a chunk's neighbour-light-check table, and its required length when read from NBT
     public static final int BOUNDARY_FLAG_COUNT = 32;
 
-    // Reports luminance for blocks with none of their own (dropped torch, held lantern); when present the
-    // engine must ask it instead of the block state
+    // Reports luminance for blocks with none of their own (dropped torch, held lantern); when present the engine must ask it instead of the block state
     private static boolean dynamicLights;
 
-    // A fluidlogged block has two states at one position; real opacity/luminance is the max of both, so
-    // no block can use the cached fast path while this is installed
+    // A fluidlogged block has two states at one position and real opacity/luminance is the max of both, so no block can use the cached fast path while it is installed
     private static boolean fluidloggedApi;
 
     // Whether the per-block light-info cache is usable; see useCachedBlockLightInfo()
     private static boolean cachedBlockLightInfo;
 
-    // LongAdder rather than plain fields: single-player runs two engines (client world + integrated
-    // server) on two threads, and a lost update under contention would make dedup look better than it is
+    // LongAdder rather than plain fields: single-player runs two engines (client + integrated server) on two threads, and a lost update would make dedup look better than it is
     private static final LongAdder SCHEDULED = new LongAdder();
     private static final LongAdder DEDUPLICATED = new LongAdder();
     private static final LongAdder PROCESSED = new LongAdder();
@@ -37,14 +32,12 @@ public final class Fulgor {
     private Fulgor() {
     }
 
-    // Called from FMLConstructionEvent, the earliest point Loader can answer and still safely
-    // before the first World (and its LightingEngine) is constructed
+    // Called from FMLConstructionEvent, the earliest point Loader can answer and still before the first World and its LightingEngine exist
     public static void detectCompatibility() {
         dynamicLights = Loader.isModLoaded("dynamiclights");
         fluidloggedApi = Loader.isModLoaded("fluidlogged_api");
 
-        // The config switch also gates the Block mixin, so without it the cast the fast path performs
-        // would fail rather than merely mislead.
+        // The config switch also gates the Block mixin, so without it the fast path's cast would fail rather than merely mislead
         cachedBlockLightInfo = FulgorConfig.get().cacheBlockLightInfo && !dynamicLights && !fluidloggedApi;
     }
 
@@ -58,10 +51,7 @@ public final class Fulgor {
         return fluidloggedApi;
     }
 
-    // Resolved once in detectCompatibility() rather than checked lazily, since this is read for six
-    // neighbours of every position in every batch. Dynamic Lights and Fluidlogged API both answer
-    // "what is at this position" rather than "what is this state", breaking the cache's assumption,
-    // so the cache is bypassed entirely rather than consulted and second-guessed.
+    // Resolved once in detectCompatibility() since this is read for six neighbours of every position per batch; Dynamic Lights and Fluidlogged API answer per position rather than per state, so the cache is bypassed rather than second-guessed
     public static boolean useCachedBlockLightInfo() {
         return cachedBlockLightInfo;
     }
@@ -93,8 +83,7 @@ public final class Fulgor {
         return lines;
     }
 
-    // Single line Impetus adds to the F3 overlay; the deduplication rate is the interesting number —
-    // it's the share of lighting work that never happened, since vanilla would've evaluated all of it
+    // Single line added to F3; the deduplication rate is the share of lighting work that never happened, since vanilla would have evaluated all of it
     public static String debugOverlayLine() {
         return String.format("Fulgor: %s updates, %s deduped (/fulgor for detail)",
                 compact(SCHEDULED.sum()), percentOfScheduled(DEDUPLICATED.sum()));

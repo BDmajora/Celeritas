@@ -12,20 +12,7 @@ import org.spongepowered.asm.mixin.Shadow;
 
 import java.util.Set;
 
-// removes the repeated block reads from redstone dust power propagation
-// vanilla's calculateCurrentChanges reads the world more often than it needs to, in two ways that
-// compound: each of the four horizontal neighbours has its state fetched twice, once for the
-// isNormalCube test and once again for the negated form of the same test in the else-if
-// and the block directly above the wire, which does not depend on the direction being examined, is
-// fetched inside the loop - so up to four times per call, each time allocating a position to fetch it
-// the rewrite reads each neighbour once and resolves the block above lazily, on first use, so a call
-// that never reaches the test still does not pay for it
-// that laziness is not premature: the common case for dust is a flat line where no horizontal
-// neighbour is a solid cube, and hoisting the read unconditionally would add work to exactly that case
-// everything else is preserved as written, including the ordering of the three getMaxCurrentStrength
-// calls and the canProvidePower toggle around the neighbour power query - dust propagation is the
-// most contraption-sensitive code in the game and the shape of this method is load-bearing, so only
-// the redundant reads are gone
+// Removes the repeated block reads from calculateCurrentChanges: each horizontal neighbour was fetched twice and the block above up to four times; now each neighbour reads once and the block above lazily, with the load-bearing ordering of getMaxCurrentStrength and canProvidePower kept verbatim
 @Mixin(BlockRedstoneWire.class)
 public abstract class BlockRedstoneWireMixin {
     @Shadow
@@ -59,8 +46,7 @@ public abstract class BlockRedstoneWireMixin {
 
         int wirePower = 0;
 
-        // Tri-state: 0 not yet resolved, 1 solid, -1 not solid. Resolved at most once per call, and
-        // only if some horizontal neighbour turns out to be a solid cube.
+        // Tri-state: 0 unresolved, 1 solid, -1 not solid; resolved at most once per call and only if some horizontal neighbour is a solid cube
         int aboveIsNormalCube = 0;
 
         for (EnumFacing facing : EnumFacing.Plane.HORIZONTAL) {
@@ -102,8 +88,7 @@ public abstract class BlockRedstoneWireMixin {
         if (previousPower != power) {
             state = state.withProperty(BlockRedstoneWire.POWER, power);
 
-            // Only write if nothing else changed the block underneath us while the strengths above
-            // were being gathered — vanilla's guard, kept verbatim.
+            // Only write if nothing else changed the block underneath while strengths were gathered; vanilla's guard, kept verbatim
             if (worldIn.getBlockState(pos1) == previousState) {
                 worldIn.setBlockState(pos1, state, 2);
             }

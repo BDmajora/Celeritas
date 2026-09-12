@@ -11,17 +11,13 @@ import java.nio.FloatBuffer;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Replays the block selection box after the composite chain, for packs with no gbuffers_line
-// Drawn in the world pass it lands in colortex0, which is albedo, and the composite lighting turns vanilla's
-// black line dark red beside a torch. Only darkening the finished image reproduces vanilla, so the world matrices
-// are captured at the original draw and restored here
+// Replays the block selection box after the composite chain for packs with no gbuffers_line; drawn in the world pass it hits albedo and composite lighting turns the black line dark red beside a torch, so the world matrices are captured and restored here
 public final class DeferredBlockOutline {
     private static final FloatBuffer PROJECTION = BufferUtils.createFloatBuffer(16);
     private static final FloatBuffer MODELVIEW = BufferUtils.createFloatBuffer(16);
 
     private static boolean pending;
-    // Set while the replay below is calling vanilla's own drawSelectionBox, so the capture hook lets that one
-    // through instead of cancelling and re-capturing it into an infinite loop
+    // Set while the replay calls vanilla's drawSelectionBox, so the capture hook lets it through instead of re-capturing into an infinite loop
     private static boolean replaying;
 
     private static EntityPlayer player;
@@ -36,9 +32,7 @@ public final class DeferredBlockOutline {
         return replaying;
     }
 
-    // Records the pending outline and the exact matrices it would have been drawn with
-    // Called from the CANCELLED drawSelectionBox, which is the only point where the projection and modelview are
-    // still the world camera's — by the time the replay runs the composite chain has overwritten both
+    // Records the pending outline and its exact matrices, from the CANCELLED drawSelectionBox, the only point where the projection and modelview are still the world camera's
     public static void capture(EntityPlayer capturedPlayer, RayTraceResult capturedTarget, float capturedPartialTicks) {
         PROJECTION.clear();
         MODELVIEW.clear();
@@ -53,18 +47,14 @@ public final class DeferredBlockOutline {
         pending = true;
     }
 
-    // Drops a captured outline without drawing it, for when the frame ended early or the pipeline went away
-    // Without this a stale capture would be replayed into the next frame, drawing a box around a block the player
-    // is no longer looking at
+    // Drops a captured outline without drawing, for an early-ended frame or a vanished pipeline; otherwise a stale capture replays into the next frame around a block no longer looked at
     public static void discard() {
         pending = false;
         player = null;
         target = null;
     }
 
-    // Draws the captured outline into the finished image
-    // Must run after the final pass, with Minecraft's own framebuffer bound — and its world depth, since the box
-    // is depth-tested so its far edges stay hidden behind the block exactly as vanilla draws them
+    // Draws the captured outline into the finished image after the final pass, with Minecraft's framebuffer and its world depth bound so the far edges stay hidden behind the block like vanilla
     public static void drawIfPending() {
         if (!pending) {
             return;
@@ -80,9 +70,7 @@ public final class DeferredBlockOutline {
             return;
         }
 
-        // The final pass leaves ITS framebuffer bound, not the one that gets presented. Measured: without this the
-        // replay runs (the log line below fires) and lands zero pixels on screen. Bind Minecraft's own framebuffer so
-        // the box darkens the image the player actually sees.
+        // The final pass leaves ITS framebuffer bound, not the presented one; measured, without this the replay lands zero pixels, so bind Minecraft's own
         if (mc.getFramebuffer() != null) {
             mc.getFramebuffer().bindFramebuffer(false);
         }
@@ -102,9 +90,7 @@ public final class DeferredBlockOutline {
         GlStateManager.multMatrix(MODELVIEW);
         MODELVIEW.rewind();
 
-        // finishWorldRendering leaves depth off for the fullscreen passes; the box is depth-tested against the world
-        // so its far edges stay hidden behind the block, exactly as vanilla draws it. It writes no depth of its own
-        // (drawSelectionBox sets depthMask(false) itself).
+        // finishWorldRendering leaves depth off for the fullscreen passes; the box is depth-tested against the world so far edges stay hidden, and writes no depth itself (drawSelectionBox sets depthMask(false))
         GlStateManager.enableDepth();
 
         replaying = true;

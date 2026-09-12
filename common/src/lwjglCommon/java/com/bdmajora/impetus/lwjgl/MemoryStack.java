@@ -6,10 +6,7 @@ import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 import java.nio.ShortBuffer;
 
-// A thread-local stack allocator, for the short-lived native buffers GL calls need
-// Always use it through try-with-resources — LWJGL.stackPush() opens a frame and close() pops it, so a buffer
-// allocated inside is freed automatically when the block ends
-// Anything allocated here must NOT outlive the block: the memory is reused by the next frame on that thread
+// Thread-local stack allocator for short-lived native buffers; always use via try-with-resources and never let an allocation outlive the frame
 public abstract class MemoryStack implements AutoCloseable {
 
     // Pushes a frame on the current backend's stack; pair with close

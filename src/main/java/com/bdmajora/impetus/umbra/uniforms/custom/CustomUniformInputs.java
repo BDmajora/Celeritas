@@ -17,8 +17,7 @@ import java.util.Map;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-// A UniformCollector that captures suppliers instead of uploading, so custom expressions read every built-in
-// through the exact registration path real programs use. Matrices are accepted and ignored
+// A UniformCollector that captures suppliers instead of uploading, so custom expressions read every built-in through the exact registration path real programs use; matrices are accepted and ignored
 public final class CustomUniformInputs implements UniformCollector {
     private final Map<String, Supplier<CustomUniformValue>> inputs = new HashMap<>();
 
@@ -128,9 +127,7 @@ public final class CustomUniformInputs implements UniformCollector {
     // Matrices are not expression inputs; ignored
     @Override
     public UniformCollector uniformMatrix(UniformUpdateFrequency frequency, String uniformName, Supplier<Matrix4fc> value) {
-        // A matrix is not representable as an expression value, but OptiFine/Umbra custom uniforms can read single
-        // cells with GLSL-style indexing, e.g. MakeUp's `1.0 / atan(1.0 / gbufferProjection.1.1)` (column.row).
-        // Register one scalar input per cell under the exact dotted name the expression parser produces.
+        // A matrix is not an expression value, but custom uniforms can read single cells with GLSL-style indexing (MakeUp's `gbufferProjection.1.1`, column.row), so register one scalar input per cell under the dotted name the parser produces
         for (int column = 0; column < 4; column++) {
             for (int row = 0; row < 4; row++) {
                 final int index = column * 4 + row;

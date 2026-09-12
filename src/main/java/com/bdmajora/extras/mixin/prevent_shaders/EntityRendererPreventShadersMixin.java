@@ -8,11 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// Stops vanilla's own post-processing chain from ever loading
-// This is the spectator/creeper/entity-view effect chain, NOT the shader-pack pipeline: it is easy to switch on
-// by accident (F4 while spectating) and it fights Impetus' framebuffer handling. Nothing here touches Umbra
-// The 1.12.2 method names are loadShader and switchUseShader; the 1.20 equivalents, for anyone porting this,
-// are GameRenderer.loadPostProcessor and togglePostProcessorEnabled
+// Stops vanilla's own post-processing chain (the spectator/creeper/entity-view effects, NOT the shader-pack pipeline) from loading, since F4 turns it on by accident and it fights Impetus' framebuffers; 1.20 equivalents are GameRenderer.loadPostProcessor/togglePostProcessorEnabled
 @Mixin(EntityRenderer.class)
 public class EntityRendererPreventShadersMixin {
     // Cancelled at HEAD so the chain JSON is never parsed and no framebuffers are allocated for it
@@ -24,8 +20,7 @@ public class EntityRendererPreventShadersMixin {
         }
     }
 
-    // The F4 cycle path. Blocked separately because it picks the next chain itself instead of going through
-    // loadShader with a name, so cancelling loadShader alone would still let it advance its internal index
+    // The F4 cycle path, blocked separately since it picks the next chain itself and cancelling loadShader alone would still advance its index
     @Inject(method = "switchUseShader", at = @At("HEAD"), cancellable = true)
     private void impetus$preventSwitchUseShader(CallbackInfo ci) {
         if (Extras.options().render.preventShaders) {

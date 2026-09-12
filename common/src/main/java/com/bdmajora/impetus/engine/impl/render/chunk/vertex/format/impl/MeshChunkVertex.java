@@ -10,8 +10,7 @@ import java.util.Map;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The 16-byte terrain vertex the mesh shader reads as one uvec4: shade is folded into 24-bit colour on the CPU
-// and light drops to two bytes. The GlVertexFormat exists only because ChunkVertexType demands one; nothing binds it
+// 16-byte terrain vertex read by the mesh shader as one uvec4: shade folded into 24-bit colour on the CPU, light in two bytes; the GlVertexFormat exists only because ChunkVertexType demands one
 public class MeshChunkVertex implements ChunkVertexType {
     public static final int STRIDE = 16;
 
@@ -98,9 +97,7 @@ public class MeshChunkVertex implements ChunkVertexType {
         return LWJGL.memGetInt(ptr + 4) & 0xFFFF;
     }
 
-    // Packed position back to which 1-block cell of the section it falls in, clamped to 0..15
-    // Vertices legitimately sit slightly outside the section (a fence post model, say), and the occlusion box is
-    // per-section, so anything outside is folded onto the boundary cell
+    // Packed position back to its 1-block cell in the section, clamped to 0..15 since vertices may sit slightly outside the section (fence posts) and the occlusion box is per-section
     public static int decodeBlockCoord(int packed) {
         int block = (packed - PACKED_ORIGIN) / UNITS_PER_BLOCK;
         return Math.max(0, Math.min(15, block));
@@ -121,8 +118,7 @@ public class MeshChunkVertex implements ChunkVertexType {
         return Math.round(value * TEXTURE_MAX_VALUE) & 0xFFFF;
     }
 
-    // Folds the shade factor (which the mesher stashes in alpha) into RGB, so the shader never has to read it
-    // and the fourth byte is free for the sky light level
+    // Folds the shade factor (stashed in alpha by the mesher) into RGB, freeing the fourth byte for sky light
     private static int packShadedColor(int color) {
         float shade = ColorU8.byteToNormalizedFloat(ColorABGR.unpackAlpha(color));
 
@@ -133,9 +129,7 @@ public class MeshChunkVertex implements ChunkVertexType {
         return ColorABGR.pack(r, g, b, 0x00);
     }
 
-    // 16-bit lightmap coordinates down to one byte each
-    // Clamped to 8..248 for the same reason the lightmap is sampled with CLAMP_TO_EDGE: the outermost texels of
-    // the lightmap are not meant to be reached, and rounding to a byte would otherwise land on them
+    // 16-bit lightmap coordinates down to a byte each, clamped to 8..248 so rounding never lands on the lightmap's outermost texels (same reason it samples CLAMP_TO_EDGE)
     private static int packLight(int light) {
         int sky = clamp((light >>> 16) & 0xFF, 8, 248);
         int block = clamp(light & 0xFF, 8, 248);

@@ -24,8 +24,7 @@ import com.bdmajora.impetus.impl.compat.modernui.MuiGuiScaleHook;
 import java.util.ArrayList;
 import java.util.List;
 
-// General and Quality option pages, laid out to match modern Sodium (0.9.1) exactly: same groups, options, order
-// every option here is real and functional (backed by vanilla GameSettings or the Impetus engine), no placeholders
+// General and Quality pages laid out to match Sodium 0.9.1 exactly; every option is real and backed by vanilla GameSettings or the engine, no placeholders
 public class ImpetusGameOptionPages {
     private static final ImpetusGameOptions sodiumOpts = ImpetusVintage.options();
     private static final MinecraftOptionsStorage vanillaOpts = new MinecraftOptionsStorage();
@@ -319,9 +318,7 @@ public class ImpetusGameOptionPages {
                         .build())
                 .build());
 
-        // Group 4: texture filtering. Minification is deliberately not offered: the block atlas has no border
-        // between sprites, so anisotropic and GL_LINEAR_MIPMAP_* minification both sample neighbouring sprites
-        // at grazing angles and paint the block grid on distant terrain. See BlockAtlasFiltering.
+        // Group 4, texture filtering; minification is deliberately not offered since the atlas has no sprite borders, so anisotropic and mipmapped minification paint the block grid on distant terrain (see BlockAtlasFiltering)
         groups.add(OptionGroup.createBuilder()
                 .setId(StandardOptions.Group.FILTERING)
                 .add(OptionImpl.createBuilder(ImpetusGameOptions.PixelFilteringMode.class, sodiumOpts)

@@ -102,8 +102,7 @@ public final class QuadPrimitiveType implements ChunkPrimitiveType {
         for (int quadIdx = 0; quadIdx < quadCount; ++quadIdx) {
             int centerIdx = quadIdx * 3;
 
-            // Compute distance using projection of vector from camera->quad center onto shared normal, flipped by sign
-            // to accommodate backwards-facing quads in the same plane extensions
+            // Distance is the projection of camera->quad-centre onto the shared normal, sign-flipped for backwards-facing quads in the same plane
 
             float qX = centers[centerIdx + 0] - x;
             float qY = centers[centerIdx + 1] - y;
@@ -157,8 +156,7 @@ public final class QuadPrimitiveType implements ChunkPrimitiveType {
                     quadCount,
                     chunkData.normalSigns());
         } else {
-            // Quad splitting (BSP exact ordering) can be disabled via the Performance options, in which case we
-            // fall back to per-quad centroid distance sorting.
+            // Quad splitting (BSP exact ordering) can be disabled in Performance options, falling back to per-quad centroid distance sorting
             if (com.bdmajora.impetus.engine.impl.ImpetusRuntimeOptions.quadSplittingEnabled) {
                 int[] bspOrder = BspTranslucencySorter.sort(centers, chunkData.normals(), quadCount, x, y, z);
                 if (bspOrder != null) {

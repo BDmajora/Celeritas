@@ -1,8 +1,6 @@
 package com.bdmajora.impetus.lwjgl;
 
-// The GL extensions the engine ever asks about, queried through LWJGLService.isExtensionSupported
-// One constant per extension, named to match the GL_ string exactly minus the GL_ prefix, so the service can
-// resolve a constant back to its extension string by name instead of carrying a lookup table
+// Every GL extension the engine asks about; names match the GL_ string minus the prefix so the service resolves them by name
 public enum GLExtension {
     // Immutable buffer allocation; the backing store for persistently mapped streaming buffers
     ARB_buffer_storage,
@@ -34,14 +32,10 @@ public enum GLExtension {
     ARB_base_instance,
     // Presence of the compatibility profile, which decides whether fixed-function state is still usable
     ARB_compatibility,
-    // NVIDIA-only query for free video memory; Umbra refuses oversized shader storage buffer allocations when it
-    // is present and simply hopes for the best when it is not
+    // NVIDIA-only free-VRAM query; Umbra refuses oversized SSBO allocations when present and hopes for the best when not
     NVX_gpu_memory_info,
 
-    // ---- mesh-shader terrain backend ----
-    // Everything below is queried only by MeshShaderSupport. None of it exists in LWJGL 2, so the LWJGL2 backend
-    // answers false for the whole group and the backend is simply never offered there
-    // Task/mesh shader stages; the backend's entire draw path is glDrawMeshTasksNV and its indirect form
+    // Mesh-shader terrain backend extensions, queried only by MeshShaderSupport; none exist in LWJGL 2 so that backend answers false
     NV_mesh_shader,
     // Buffer GPU addresses and residency, so shaders reach buffers through raw 64-bit pointers instead of bindings
     NV_shader_buffer_load,
@@ -49,8 +43,7 @@ public enum GLExtension {
     NV_vertex_buffer_unified_memory,
     // The same, for the scene uniform block, which survives shader changes because it is bound by address
     NV_uniform_buffer_unified_memory,
-    // Stops the occlusion rasterizer shading every covered fragment; one representative fragment per primitive is
-    // enough to record "this box was visible"
+    // One representative fragment per primitive is enough for the occlusion rasterizer to record "this box was visible"
     NV_representative_fragment_test,
     // Indirect mesh draws sourced from a GPU-written command buffer, which is what removes the CPU from the loop
     NV_bindless_multi_draw_indirect,

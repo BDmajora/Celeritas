@@ -9,14 +9,12 @@ import java.util.Random;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The `noisetex` sampler: a tiling RGBA random-noise texture, OptiFine's generated noise
-// Packs lean on it constantly — dithering, cloud shapes, water wave offsets
+// The `noisetex` sampler, OptiFine's generated tiling RGBA noise; packs lean on it for dithering, cloud shapes and wave offsets
 public class NoiseTexture extends GlResource {
     // OptiFine's default; a pack overrides it with noiseTextureResolution
     public static final int DEFAULT_RESOLUTION = 256;
 
-    // LINEAR, not NEAREST: packs sample this at non-integer coordinates and expect the values to blend
-    // REPEAT is what makes it tile, which is the whole point of a small noise texture
+    // LINEAR since packs sample at non-integer coordinates and expect blending; REPEAT is what makes a small noise texture tile
     public NoiseTexture(int resolution) {
         setHandle(LWJGL.glGenTextures());
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, getGlId());
@@ -27,8 +25,7 @@ public class NoiseTexture extends GlResource {
 
         // Direct and native-ordered because it goes straight to glTexImage2D; a heap buffer would be copied
         ByteBuffer data = ByteBuffer.allocateDirect(resolution * resolution * 4).order(ByteOrder.nativeOrder());
-        // Fixed seed, deliberately. The noise has to be identical across pipeline rebuilds, or switching packs
-        // (or reloading one) would make every dither pattern in the scene jump
+        // Fixed seed, deliberately: the noise must be identical across pipeline rebuilds or switching packs makes every dither pattern jump
         Random random = new Random(0);
         byte[] pixels = new byte[resolution * resolution * 4];
         random.nextBytes(pixels);

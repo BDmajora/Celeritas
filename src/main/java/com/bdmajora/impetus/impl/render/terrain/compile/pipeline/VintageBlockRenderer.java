@@ -230,9 +230,7 @@ public class VintageBlockRenderer {
             out.vanillaNormal = vanillaNormal;
             out.trueNormal = trueNormal;
 
-            // at_midBlock: offset from this vertex to the center of its block. quad.getX/Y/Z(srcIndex) is the vertex's
-            // position within the block model, so (0.5 - that) points at the block center regardless of chunk/region
-            // offset. Colored-lighting voxelization samples at the block center to stay off voxel-cell boundaries.
+            // at_midBlock: (0.5 - model-local vertex position) points at the block centre regardless of chunk/region offset; colored-lighting voxelization samples there to stay off voxel-cell boundaries
             out.midBlockX = 0.5f - quad.getX(srcIndex);
             out.midBlockY = 0.5f - quad.getY(srcIndex);
             out.midBlockZ = 0.5f - quad.getZ(srcIndex);
@@ -246,13 +244,9 @@ public class VintageBlockRenderer {
         vertexBuffer.push(vertices, material);
     }
 
-    // Fills the OptiFine per-vertex attributes (mc_midTexCoord, at_tangent, mc_Entity) that UmbraChunkVertexType
-    // encodes while a shader pack is active. All four vertices of a quad share the values.
+    // Fills the OptiFine per-vertex attributes (mc_midTexCoord, at_tangent, mc_Entity) UmbraChunkVertexType encodes under a shader pack; all four vertices share the values
     private void populateUmbraVertexData(ChunkVertexEncoder.Vertex[] vertices, BakedQuadView quad, int trueNormal, BlockPos pos) {
-        // mc_midTexCoord must be the centre of THIS QUAD's mapped region, not the sprite centre -- they diverge on
-        // any face mapping a sub-rect (e.g. torch cap faces), and Chocapic-derived packs (RedHat, BSL, Sildur's)
-        // rebuild their sprite basis from this value, so feeding the sprite centre broke torch caps into a smeared
-        // 1px band via wrong-LOD derivatives. Umbra computes it the same way (sum of the four UVs * 0.25).
+        // mc_midTexCoord must be the centre of THIS QUAD's mapped region (sum of UVs * 0.25, as Umbra does), not the sprite centre; Chocapic-derived packs rebuild their sprite basis from it, and the sprite centre smeared torch caps into a 1px band
         float midU = 0.0f, midV = 0.0f;
         for (int i = 0; i < 4; i++) {
             midU += quad.getTexU(i);
@@ -261,11 +255,7 @@ public class VintageBlockRenderer {
         midU *= 0.25f;
         midV *= 0.25f;
 
-        // Read positions/UVs straight off the source quad, never off `vertices`: those have already been rewritten in
-        // ModelQuadOrientation order (the AO diagonal flip), and a rotated vertex triple yields a tangent turned 90°
-        // about the face normal. Umbra computes this from the unrotated ModelQuadView for the same reason — with the
-        // rotated triple, water blocks alternate tangents block-to-block and Sildur's wave normals (bump * tbnMatrix)
-        // checkerboard, which is invisible head-on but glaring once grazing-angle fresnel drives the reflection.
+        // Read positions/UVs off the source quad, never `vertices`, which are already rotated into ModelQuadOrientation order; a rotated triple yields a tangent turned 90° and made Sildur's water wave normals checkerboard under grazing fresnel
         int tangent = NormalHelper.computeTangent(
                 NormI8.unpackX(trueNormal), NormI8.unpackY(trueNormal), NormI8.unpackZ(trueNormal),
                 quad.getX(0), quad.getY(0), quad.getZ(0), quad.getTexU(0), quad.getTexV(0),

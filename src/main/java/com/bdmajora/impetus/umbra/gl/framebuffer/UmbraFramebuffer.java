@@ -11,9 +11,7 @@ import java.util.Map;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// A framebuffer owned by the shader pipeline, not vanilla's single-attachment Framebuffer, since a pack needs
-// many colour attachments with independent draw-buffer masks. Logical colortex indices map onto whichever
-// attachment slots are free. No DSA in the LWJGL abstraction, so every call binds this FBO as a side effect
+// A pipeline-owned framebuffer (not vanilla's single-attachment one) since a pack needs many colour attachments with independent draw-buffer masks; logical colortex indices map onto free slots, and every call binds this FBO since the LWJGL abstraction has no DSA
 public class UmbraFramebuffer extends GlResource {
     private final Map<Integer, Integer> colorAttachments = new HashMap<>();
     private final Map<Integer, Integer> logicalAttachmentPoints = new HashMap<>();
@@ -79,14 +77,7 @@ public class UmbraFramebuffer extends GlResource {
         this.hasDepthAttachment = true;
     }
 
-    // Narrows the FBO's LIVE colour attachments to exactly the given logical set: everything else previously added
-    // is physically detached, and everything in the set is re-attached from the stored texture map
-    // This mirrors Iris, which gives each gbuffer program a framebuffer holding only the buffers that program
-    // writes, and it is a correctness requirement rather than tidiness
-    // A gbuffer program that SAMPLES a colortex it does not write — gbuffers_terrain reading gaux4, i.e. colortex7,
-    // as the atmosphere and fog colour — must not have that texture attached at the same time, or the driver hits a
-    // rendering feedback loop and the read returns garbage. Here it returned the in-progress colortex1, which is
-    // why distant terrain fog blended toward the ~50 clamp and blew the horizon white
+    // Narrows the FBO's LIVE colour attachments to exactly the given logical set, as Iris gives each gbuffer program a framebuffer of only what it writes; a program SAMPLING a colortex it does not write (gbuffers_terrain reading gaux4 for fog) must not have it attached, or the feedback loop returned in-progress colortex1 and blew the horizon white
     public void retainColorAttachments(java.util.Set<Integer> keepLogical) {
         bind();
         for (Map.Entry<Integer, Integer> entry : this.colorAttachments.entrySet()) {
@@ -107,10 +98,7 @@ public class UmbraFramebuffer extends GlResource {
         LWJGL.glDrawBuffers(GL11.GL_NONE);
     }
 
-    // Sets the draw-buffer mask from colour attachment indices
-    // A negative entry writes GL_NONE for that slot rather than being skipped, which keeps the shader's slot
-    // numbering DENSE when an optional target turns out to be unavailable — dropping the entry instead would
-    // renumber every slot after it and send each gl_FragData write to the wrong attachment
+    // Sets the draw-buffer mask from colour attachment indices; a negative entry writes GL_NONE rather than being skipped, keeping the slot numbering DENSE so an unavailable optional target does not renumber every later gl_FragData write
     public void drawBuffers(int[] colorIndices) {
         if (colorIndices == null) {
             colorIndices = new int[0];

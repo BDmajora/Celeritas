@@ -10,11 +10,7 @@ import java.util.List;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Assembles a GlProgram from compiled GlShader stages: create the program object, attach the stages, bind the
-// OptiFine vertex-attribute slots (mc_Entity 10, mc_midTexCoord 11, at_tangent 12), link, validate, detach
-// The abstraction-layer equivalent of OptiFine's Shaders.setupProgram
-// It is a builder rather than methods on GlProgram because attribute binding has to happen BEFORE linking, so
-// there is a window where the program object exists but is not yet a usable GlProgram
+// Assembles a GlProgram from compiled stages: attach, bind OptiFine attribute slots (mc_Entity 10, mc_midTexCoord 11, at_tangent 12), link, validate, detach (OptiFine's setupProgram); a builder because attribute binding must precede linking
 public class ProgramBuilder {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -43,8 +39,7 @@ public class ProgramBuilder {
         return this;
     }
 
-    // Binds a vertex attribute name to a fixed location. Before link() — glBindAttribLocation only takes effect at
-    // the next link, so calling it afterwards silently does nothing
+    // Binds a vertex attribute name to a fixed location; must precede link(), since glBindAttribLocation only takes effect at the next link
     public ProgramBuilder bindAttributeLocation(int index, CharSequence attributeName) {
         LWJGL.glBindAttribLocation(this.program, index, attributeName);
         return this;
@@ -56,10 +51,7 @@ public class ProgramBuilder {
         return this;
     }
 
-    // Links and validates
-    // On success the stages are DETACHED but not deleted — the caller still owns them and is expected to destroy
-    // them, since one compiled stage is often attached to several programs
-    // On failure the program object is deleted before throwing, so a rejected link leaks nothing
+    // Links and validates; on success the stages are DETACHED but not deleted (the caller owns them, one stage often serves several programs), on failure the program is deleted before throwing
     public GlProgram link() {
         LWJGL.glLinkProgram(this.program);
 
@@ -73,8 +65,7 @@ public class ProgramBuilder {
                     + (log.isEmpty() ? "(no info log)" : log.trim()));
         }
 
-        // NVIDIA returns a wall of deprecation warnings in the link log for legacy #version 120 packs; only surface
-        // the log when it actually reports an error, otherwise it's just noise.
+        // NVIDIA returns a wall of deprecation warnings for legacy #version 120 packs; only surface the log when it actually reports an error
         if (!log.isEmpty() && log.toLowerCase(java.util.Locale.ROOT).contains("error")) {
             LOGGER.warn("Program link log for '{}': {}", this.name, log.trim());
         }

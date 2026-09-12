@@ -1,10 +1,8 @@
 package com.bdmajora.impetus.umbra.gl.uniform;
 
-// How often a uniform's value has to be recomputed and re-uploaded
-// The collector groups uniforms by this so a frame does not re-evaluate suppliers whose answer cannot have moved
+// How often a uniform's value must be recomputed; the collector groups by this so a frame does not re-evaluate suppliers whose answer cannot have moved
 public enum UniformUpdateFrequency {
-    // Can change between program binds WITHIN one frame — render stage, fog mode, the per-object material ids.
-    // Re-evaluated on every bind, which is why these are the ones worth keeping few
+    // Can change between binds WITHIN a frame (render stage, fog mode, per-object material ids); re-evaluated every bind, which is why these are worth keeping few
     DYNAMIC,
     // Constant for the lifetime of the program; uploaded the first time it is used and never again
     ONCE,

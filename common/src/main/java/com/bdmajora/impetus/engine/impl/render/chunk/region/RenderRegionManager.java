@@ -82,7 +82,7 @@ public class RenderRegionManager {
         return this.uploadDurationEstimator;
     }
 
-    /* Copied from fastutil 8 as we don't have access to it when limited to fastutil 7 */
+    // Copied from fastutil 8, which is unavailable when limited to fastutil 7
     private static <K, V> ObjectIterable<Reference2ReferenceMap.Entry<K, V>> fastIterable(Reference2ReferenceMap<K, V> map) {
         final ObjectSet<Reference2ReferenceMap.Entry<K, V>> entries = map.reference2ReferenceEntrySet();
         return entries instanceof Reference2ReferenceMap.FastEntrySet ? () -> ((Reference2ReferenceMap.FastEntrySet<K, V>)entries).fastIterator() : entries;
@@ -176,8 +176,7 @@ public class RenderRegionManager {
             }
 
 
-            // If any of the buffers changed, the tessellation will need to be updated
-            // Once invalidated the tessellation will be re-created on the next attempted use
+            // Any buffer change invalidates the tessellation, which is re-created on next use
             if (bufferChanged) {
                 region.refresh(commandList);
             }

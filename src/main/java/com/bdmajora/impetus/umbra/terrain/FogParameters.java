@@ -2,22 +2,12 @@ package com.bdmajora.impetus.umbra.terrain;
 
 import java.util.regex.Matcher;
 
-// The one definition of how gl_Fog.* is substituted, shared by all three transformers so they cannot drift
-// Packs need live fog values as under OptiFine and Iris; each field is substituted inline rather than through a
-// uniform-initialised global, which this port has already seen evaluated before the uniforms were uploaded
+// The one definition of how gl_Fog.* is substituted, shared by all three transformers so they cannot drift; each field is inlined rather than a uniform-initialised global, which this port has seen evaluated before upload
 final class FogParameters {
-    // gl_Fog.scale is the one field that cannot be a stand-alone declaration: it is 1.0 / (end - start) computed
-    // from two uniforms, so it is neither a constant nor expressible as a const float. It is inlined as an
-    // expression instead
-    // The max() guard is ours, not Iris's: a zero-width fog range is reachable before the first setupFog, when
-    // both uniforms are still 0, and the resulting infinity poisons the pack's entire fog term for that frame
-    // An earlier `const float iris_FogScale = 1.0;` here was simply wrong — with this port's fog range (start =
-    // far * 0.8, end = far) the correct value is 5 / far, so every pack reading gl_Fog.scale got a fog term off by
-    // that factor
+    // gl_Fog.scale is 1.0 / (end - start) from two uniforms, so it is inlined as an expression; the max() guard is ours, since a zero-width range before the first setupFog yields infinity, and an earlier `const 1.0` was off by 5 / far for every pack reading it
     static final String SCALE_EXPRESSION = "(1.0 / max(iris_FogEnd - iris_FogStart, 1e-6))";
 
-    // The uniform declarations the substitution depends on. Injected into every program the rewrite touches, and
-    // filled per frame by CommonUniforms
+    // The uniform declarations the substitution depends on, injected into every program the rewrite touches and filled per frame by CommonUniforms
     static final String[] DECLARATIONS = {
             "uniform vec4 iris_FogColor;",
             "uniform float iris_FogDensity;",

@@ -10,8 +10,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-// Enumerates real fullscreen video modes from LWJGL for the Fullscreen Resolution option
-// Index 0 is always "Current" (desktop resolution); indices 1..N are distinct modes sorted by resolution
+// Enumerates real fullscreen video modes from LWJGL; index 0 is always "Current" (desktop resolution), 1..N are distinct modes sorted by resolution
 public final class FullscreenResolutions {
     private static List<DisplayMode> modes;
 

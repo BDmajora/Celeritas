@@ -92,8 +92,7 @@ public class GlProgram<T> extends GlObject implements ShaderBindingContext {
             return this;
         }
 
-        // links the attached shaders and hands the program to the caller's factory, which wraps it in
-        // a user-defined container - typically one exposing typed setters for that shader set's uniforms
+        // Links the attached shaders and hands the program to the factory, typically a container exposing typed setters for that shader set's uniforms
         public <U> GlProgram<U> link(Function<ShaderBindingContext, U> factory) {
             LWJGL.glLinkProgram(this.program);
             String log = LWJGL.glGetProgramInfoLog(this.program, 4096);

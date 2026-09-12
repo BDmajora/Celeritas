@@ -8,10 +8,7 @@ import org.lwjgl.opengl.EXTTextureFilterAnisotropic;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GLContext;
 
-// Applies the block atlas sampler state whenever the atlas is rebuilt or options are applied
-// Minification is fixed at vanilla's NEAREST_MIPMAP_LINEAR: the atlas has no sprite borders, so any filter that
-// samples past a sprite edge, including anisotropy, bleeds neighbouring blocks as coloured dashes on distant terrain
-// Magnification stays configurable since GL_LINEAR only reaches one texel past the border
+// Applies the block atlas sampler state on rebuild and options apply; minification is pinned to NEAREST_MIPMAP_LINEAR since the atlas has no sprite borders and any wider filter bleeds neighbours, while magnification stays configurable
 public final class BlockAtlasFiltering {
     private static Boolean anisotropySupported;
 
@@ -48,8 +45,7 @@ public final class BlockAtlasFiltering {
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, minFilter);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, magFilter);
 
-        // Written every time rather than left alone: the parameter lives on the texture object, so a level set by
-        // a driver profile or another mod would otherwise survive and bleed the atlas.
+        // Written every time: the parameter lives on the texture object, so a level set by a driver profile or another mod would otherwise survive and bleed the atlas
         if (isAnisotropySupported()) {
             GL11.glTexParameterf(GL11.GL_TEXTURE_2D,
                     EXTTextureFilterAnisotropic.GL_TEXTURE_MAX_ANISOTROPY_EXT, 1.0f);

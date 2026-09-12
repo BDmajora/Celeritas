@@ -6,10 +6,7 @@ import org.joml.Vector3d;
 import org.joml.Vector3f;
 import org.joml.Vector3i;
 
-// Camera-position tracking, matching modern Iris's precision contract
-// Packs get a BOUNDED float cameraPosition plus the exact integer and fractional parts of the unshifted position.
-// The split exists because a float loses sub-block precision tens of thousands of blocks out, and packs that
-// recombine the two halves keep full precision anywhere in the world
+// Camera-position tracking matching Iris's precision contract: a BOUNDED float cameraPosition plus exact integer and fractional parts of the unshifted position, since a float loses sub-block precision tens of thousands of blocks out
 public final class CameraUniforms {
     private static final CameraPositionTracker TRACKER = new CameraPositionTracker();
 
@@ -71,9 +68,7 @@ public final class CameraUniforms {
     }
 
     private static final class CameraPositionTracker {
-        // Iris's camera shift policy: the shader-facing float position is kept inside this range so it never
-        // grows large enough to lose precision, and the shift is applied to the current AND previous position
-        // together so the delta packs use for motion vectors is unaffected by the shift
+        // Iris's camera shift policy: the shader-facing float stays inside this range so it never loses precision, and the shift applies to current AND previous position together so motion-vector deltas are unaffected
         private static final double WALK_RANGE = 30000.0;
         private static final double TP_RANGE = 1000.0;
 

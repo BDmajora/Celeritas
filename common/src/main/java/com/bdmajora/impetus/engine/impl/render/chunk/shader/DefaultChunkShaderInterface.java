@@ -18,9 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-// The engine's own forward-rendering chunk shader interface, used whenever no shader pack is active
-// Umbra swaps in UmbraTerrainShaderInterface in its place, which is why the per-draw state is behind an interface
-// at all
+// The engine's own forward-rendering chunk shader interface, used when no shader pack is active; Umbra swaps in UmbraTerrainShaderInterface, hence the interface
 public class DefaultChunkShaderInterface implements ChunkShaderInterface {
     private static final long MAX_CHUNK_AGE = TimeUnit.SECONDS.toMillis(30);
 

@@ -13,8 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Set;
 
-// Swaps the pending-tick dedup set for an open-addressed one; hot path for redstone/liquids/crops rescheduling every tick
-// The ordered TreeSet of pending ticks is deliberately left alone - its insertion-order tie-break is what keeps redstone deterministic
+// Swaps the pending-tick dedup set for an open-addressed one, hot for redstone/liquids/crops; the ordered TreeSet is left alone since its insertion-order tie-break keeps redstone deterministic
 @Mixin(WorldServer.class)
 public class WorldServerMixin {
     @Shadow

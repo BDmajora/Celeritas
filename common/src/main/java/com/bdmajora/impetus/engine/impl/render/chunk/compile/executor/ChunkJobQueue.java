@@ -14,8 +14,7 @@ class ChunkJobQueue {
 
     private final AtomicBoolean isRunning = new AtomicBoolean(true);
 
-    // Set by a worker whenever it has to block waiting for work, i.e. the queue ran dry. Read and cleared once
-    // per frame by the scheduling controller to detect under-provisioning of the in-flight target.
+    // Set by a worker whenever it blocks on an empty queue; read and cleared once per frame by the scheduler to detect under-provisioning
     private final AtomicBoolean workerBlocked = new AtomicBoolean(false);
 
     // False after shutdown
@@ -56,8 +55,7 @@ class ChunkJobQueue {
         }
 
         if (!this.semaphore.tryAcquire()) {
-            // No work was immediately available, so we are about to block. Record this so the scheduler can grow
-            // the in-flight target and keep us fed on subsequent frames.
+            // No work available and about to block, so record it so the scheduler can grow the in-flight target
             this.workerBlocked.set(true);
             this.semaphore.acquire();
         }
@@ -65,10 +63,7 @@ class ChunkJobQueue {
         return this.getNextTask();
     }
 
-    // Whether any worker has blocked on an empty queue since this was last called, clearing the flag atomically so
-    // the next call measures a fresh window
-    // The adaptive scheduler uses it as its starvation signal: a worker that blocked means the queue target is too
-    // low, and reading-and-clearing in one step is what keeps two consecutive windows from counting the same block
+    // Whether any worker blocked on an empty queue since the last call, read-and-cleared atomically so two windows never count the same block; the scheduler's starvation signal
     public boolean checkAndClearWorkerBlocked() {
         return this.workerBlocked.getAndSet(false);
     }

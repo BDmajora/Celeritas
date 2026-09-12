@@ -14,10 +14,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
 
-// Advances the mixin environment to org.spongepowered.asm.mixin.MixinEnvironment.Phase#INIT INIT at the one
-// point in the boot where it is both safe and complete to do so, which is inside
-// FMLDeobfTweaker#injectIntoClassLoader, after DeobfuscationTransformer and the access transformers have been
-// registered, and before net.minecraftforge.fml.common.Loader is loaded and initialized
+// Advances the mixin environment to Phase.INIT at the one safe and complete point in boot: inside FMLDeobfTweaker#injectIntoClassLoader, after the deobf and access transformers register and before Loader initializes
 public final class InitPhaseTrigger implements InvocationHandler {
 
     private static final String DEOBF_TWEAKER = "net.minecraftforge.fml.common.launcher.FMLDeobfTweaker";

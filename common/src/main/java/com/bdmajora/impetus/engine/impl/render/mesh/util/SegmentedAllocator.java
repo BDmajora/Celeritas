@@ -3,12 +3,9 @@ package com.bdmajora.impetus.engine.impl.render.mesh.util;
 import it.unimi.dsi.fastutil.longs.LongBidirectionalIterator;
 import it.unimi.dsi.fastutil.longs.LongRBTreeSet;
 
-// First-fit free-list allocator with coalescing and in-place growth, used for quads and staging bytes
-// (address, size) packs into one long kept in two sorted sets with the fields swapped: FREE by size for
-// first-fit, TAKEN by address so coalescing is a look at the two neighbours
+// First-fit free-list allocator with coalescing and in-place growth; (address, size) packs into one long kept in two sorted sets, FREE by size for first-fit and TAKEN by address so coalescing checks two neighbours
 public class SegmentedAllocator {
-    // Returned by alloc() when the request cannot be satisfied within the limit; -1 rather than an exception
-    // because running out is a normal, recoverable condition for the geometry arena
+    // Returned by alloc() when the request exceeds the limit; -1 rather than an exception because running out is normal and recoverable for the geometry arena
     public static final long OUT_OF_SPACE = -1L;
 
     // 34 address bits and 30 size bits: a single allocation caps at 2^30 units, the space at 2^34
@@ -23,8 +20,7 @@ public class SegmentedAllocator {
     private long sizeLimit = Long.MAX_VALUE;
     private long totalSize;
 
-    // Whether the last alloc/free/expand moved the high-water mark, so a caller backed by a real allocation knows
-    // when it has to grow or can shrink
+    // Whether the last alloc/free/expand moved the high-water mark, so a caller backed by a real allocation knows when to grow or shrink
     private boolean resized;
 
     // Caps growth
@@ -83,8 +79,7 @@ public class SegmentedAllocator {
         return slotAddress;
     }
 
-    // Releases an allocation and merges it with any free space immediately before or after it
-    // Returns the size that was freed, which is how callers recover an allocation's length without tracking it
+    // Releases an allocation, merging with adjacent free space; returns the freed size so callers need not track allocation lengths
     public int free(long address) {
         address &= ADDR_MASK;
 
@@ -98,8 +93,7 @@ public class SegmentedAllocator {
         long size = slot & SIZE_MASK;
         iterator.remove();
 
-        // A previous allocation exists, so the gap between where it ends and where this one starts is either
-        // nothing or exactly one free block that must be absorbed
+        // A previous allocation exists, so the gap before this one is either nothing or exactly one free block to absorb
         if (iterator.hasPrevious()) {
             long previous = iterator.previousLong();
             long previousEnd = (previous >>> SIZE_BITS) + (previous & SIZE_MASK);
@@ -113,8 +107,7 @@ public class SegmentedAllocator {
             // Step the iterator back to where it was, so the hasNext() below looks at the right neighbour
             iterator.nextLong();
         } else if (!this.free.isEmpty()) {
-            // No previous allocation means this one starts the space; anything free before it must be the block
-            // that begins at address 0
+            // No previous allocation means this one starts the space, so any free block before it begins at address 0
             if (this.free.remove(address << ADDR_BITS)) {
                 slot = address + size;
             }
@@ -142,8 +135,7 @@ public class SegmentedAllocator {
         return (int) size;
     }
 
-    // Grows an existing allocation in place, which is what lets consecutive staging writes share one allocation
-    // instead of one per upload; false when the following space is taken and the caller has to start a new one
+    // Grows an allocation in place so consecutive staging writes share one allocation; false when the following space is taken
     public boolean expand(long address, int extra) {
         address &= ADDR_MASK;
 

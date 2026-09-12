@@ -6,9 +6,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.chunk.Chunk;
 
-// Folds Fluidlogged API's second block state (the fluid sharing the position) into light calc;
-// real opacity/luminance is the max of the block and fluid states, so a fluidlogged sea lantern still glows.
-// Kept isolated so the Fluidlogged classes only resolve when Fulgor.hasFluidloggedApi() is true.
+// Folds Fluidlogged API's second block state into light calc (opacity/luminance is the max of both, so a fluidlogged sea lantern still glows); isolated so its classes only resolve when Fulgor.hasFluidloggedApi()
 final class FluidLightCompat {
     private FluidLightCompat() {
     }

@@ -50,8 +50,7 @@ public class LightDataCache extends LightDataAccess {
         // FIX: Do not apply AO from blocks that emit light
         float ao;
         if (lu == 0) {
-            // `const float ambientOcclusionLevel` lets a pack dial vanilla's baked AO down (usually to 0) so its own
-            // AO is not stacked on top of it. Umbra does this by rewriting shade brightness in a mixin.
+            // `const float ambientOcclusionLevel` lets a pack dial vanilla's baked AO down (usually to 0) so its own AO is not stacked on top; Umbra does this by rewriting shade brightness in a mixin
             ao = com.bdmajora.impetus.umbra.material.WorldRenderingSettings
                     .applyAmbientOcclusionLevel(state.getAmbientOcclusionLightValue());
         } else {

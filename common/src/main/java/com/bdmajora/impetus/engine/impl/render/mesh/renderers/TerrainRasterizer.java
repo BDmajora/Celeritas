@@ -6,8 +6,7 @@ import com.bdmajora.impetus.lwjgl.GLNv;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The terrain draw, sourced entirely from a command buffer the GPU wrote last frame; one multi-draw by address
-// The one-frame lag is the price of never reading GPU state back on the CPU
+// The terrain draw, one multi-draw by address from a command buffer the GPU wrote last frame; the one-frame lag is the price of never reading GPU state back
 public class TerrainRasterizer {
     // Each command is a uvec2: meshlet count and the section index base
     private static final int COMMAND_BYTES = 8;

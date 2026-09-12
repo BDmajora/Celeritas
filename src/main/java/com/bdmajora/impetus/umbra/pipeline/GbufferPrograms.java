@@ -25,14 +25,11 @@ import java.util.Optional;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The pack's fixed-function gbuffer programs: sky, entities, damage, particles, weather, clouds, hand
-// Those sections still render immediate-mode, so gl_Vertex and friends remain the contract on this context
-// OptiFine's fallback chain is honoured and phases resolving to the same source share one compiled program
+// The pack's fixed-function gbuffer programs (sky, entities, damage, particles, weather, clouds, hand), still immediate-mode so gl_Vertex remains the contract; OptiFine's fallback chain is honoured and phases with the same source share one program
 public class GbufferPrograms {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
-    // The phases driven from the vanilla render-loop anchors in EntityRendererMixin — this list IS the set of
-    // points where a program gets bound, so a phase absent here is never selected however the pack declares it
+    // The phases driven from the vanilla render-loop anchors in EntityRendererMixin; this list IS the set of bind points, so a phase absent here is never selected however the pack declares it
     private static final ProgramId[] PHASES = {
             ProgramId.SkyBasic, ProgramId.SkyTextured, ProgramId.Entities, ProgramId.EntitiesTrans,
             ProgramId.SpiderEyes, ProgramId.DamagedBlock,
@@ -40,8 +37,7 @@ public class GbufferPrograms {
             ProgramId.HandWater, ProgramId.Line, ProgramId.ArmorGlint
     };
 
-    // One compiled gbuffer program with everything needed to bind it: its uniform driver, its sanitised DRAWBUFFERS
-    // mask, and its alpha-test override
+    // One compiled gbuffer program with everything needed to bind it: uniform driver, sanitised DRAWBUFFERS mask, alpha-test override
     public static final class Entry {
         final UmbraProgram program;
         final ProgramUniforms uniforms;
@@ -80,8 +76,7 @@ public class GbufferPrograms {
             return this.blendState;
         }
 
-        // The pack's alphaTest.<program> override, or an empty one when it declared none — never null, so the
-        // bind path applies and restores unconditionally
+        // The pack's alphaTest.<program> override, or an empty one when undeclared, never null so the bind path applies and restores unconditionally
         public ProgramAlphaTest getAlphaTest() {
             return this.alphaTest;
         }
@@ -96,13 +91,10 @@ public class GbufferPrograms {
 
     private final Map<ProgramId, Entry> byPhase = new EnumMap<>(ProgramId.class);
     private final List<Entry> ownedEntries = new ArrayList<>();
-    // Phases the pack ships an actual file for, as opposed to ones that only resolved through the fallback chain
-    // The distinction matters where a caller needs to know whether the pack MEANT to handle a phase
+    // Phases the pack ships an actual file for, as opposed to ones resolved through the fallback chain; matters where a caller needs to know whether the pack MEANT to handle a phase
     private final java.util.Set<ProgramId> directPhases = java.util.EnumSet.noneOf(ProgramId.class);
 
-    // samplerOverrides holds the pack's gbuffers-stage custom-texture units as sampler name -> dedicated unit,
-    // layered over the standard table — so `texture.gbuffers.gaux4` redirects that one sampler while every other
-    // name keeps its usual unit
+    // samplerOverrides holds the gbuffers-stage custom-texture units as sampler name -> dedicated unit over the standard table, so `texture.gbuffers.gaux4` redirects one sampler while every other keeps its unit
     GbufferPrograms(ShaderPack pack, Map<String, Integer> samplerUnits, Map<String, Integer> samplerOverrides) {
         Map<String, String> defines = pack.getEnvironmentDefines();
         // Fixed-function stages sample the bound atlas/lightmap on the vanilla units, plus OptiFine's aux slots.
@@ -133,11 +125,7 @@ public class GbufferPrograms {
             if (bySourceName.containsKey(sourceName)) {
                 entry = bySourceName.get(sourceName); // may be null: a failed compile is not retried
             } else {
-                // A ProgramId's default blend mode belongs to that program's own file. When the phase resolved through
-                // the fallback chain the source is some *other* program, which keeps its own (absent) blend
-                // directives — Umbra attaches the default at the direct read for exactly that reason. Keeping the
-                // default direct-only also guarantees a phase carrying one can never share an Entry with another
-                // phase, since the source name is then the program's own.
+                // A ProgramId's default blend mode belongs to its own file; a phase resolved through the fallback chain uses some other program's source with its own directives (Umbra attaches the default at the direct read), and direct-only also means a phase with a default never shares an Entry
                 BlendMode defaultBlend = direct.isPresent() ? phase.getDefaultBlendMode() : null;
                 entry = compile(source.get(), defines, gbufferSamplers,
                         ProgramBlendState.from(pack.getProperties(), sourceName, defaultBlend),
@@ -156,8 +144,7 @@ public class GbufferPrograms {
         }
     }
 
-    // Package-visible because UmbraShadowRenderer compiles the fixed-function flavour of the shadow program through
-    // the same path — entity and block-entity shadows go through vanilla's renderers just as the camera pass does
+    // Package-visible because UmbraShadowRenderer compiles the fixed-function flavour of the shadow program through the same path, since entity and block-entity shadows go through vanilla's renderers
     static Entry compile(ProgramSource source, Map<String, String> defines, Map<String, Integer> samplerUnits) {
         return compile(source, defines, samplerUnits, ProgramBlendState.empty(), ProgramAlphaTest.empty());
     }
@@ -191,20 +178,17 @@ public class GbufferPrograms {
         }
     }
 
-    // The compiled program for a phase, or null when the pack has none — null meaning "let vanilla's
-    // fixed-function path draw it", not an error
+    // The compiled program for a phase, or null meaning "let vanilla's fixed-function path draw it", not an error
     public Entry get(ProgramId phase) {
         return this.byPhase.get(phase);
     }
 
-    // Whether the pack ships a file for this phase ITSELF, rather than the phase only resolving through the
-    // fallback chain onto some other program's source
+    // Whether the pack ships a file for this phase ITSELF rather than resolving through the fallback chain onto another program's source
     public boolean hasDirect(ProgramId phase) {
         return this.directPhases.contains(phase);
     }
 
-    // Every DISTINCT compiled entry — distinct because several phases share one program, and both the draw-buffer
-    // union and teardown must visit each program once rather than once per phase
+    // Every DISTINCT compiled entry, since several phases share one program and the draw-buffer union and teardown must visit each once
     public List<Entry> entries() {
         return this.ownedEntries;
     }

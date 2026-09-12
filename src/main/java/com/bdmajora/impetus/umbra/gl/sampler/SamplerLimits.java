@@ -2,9 +2,7 @@ package com.bdmajora.impetus.umbra.gl.sampler;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Driver sampler limits, queried once. GL_MAX_TEXTURE_IMAGE_UNITS caps how many distinct samplers a program
-// can address (32 on tested hardware) — Complementary at COLORED_LIGHTING=512 declares 49 names, so no static
-// unit assignment fits and units must be allocated per program over only the names it actually uses.
+// Driver sampler limits, queried once; GL_MAX_TEXTURE_IMAGE_UNITS (32 on tested hardware) caps distinct samplers per program, and Complementary at COLORED_LIGHTING=512 declares 49, so units must be allocated per program over the names it uses
 public final class SamplerLimits {
     private static final int GL_MAX_TEXTURE_IMAGE_UNITS = 0x8872;
     private static final int GL_MAX_DRAW_BUFFERS = 0x8824;

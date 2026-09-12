@@ -19,11 +19,7 @@ import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.TimeUnit;
 
-// orchestrates the platform-compatibility startup sequence
-// GlContextInfo#capture() is done by the caller on the render thread - it is cheap and needs the context
-// everything else (OS adapter probe, workaround selection, overlay scan) runs on a daemon thread so
-// process spawns and file reads never lengthen startup
-// all failures degrade to "no diagnostics"; this layer must never be able to break launch
+// Platform-compatibility startup sequence: GL context capture is done by the caller on the render thread, everything else on a daemon thread, and no failure may break launch
 public final class StartupChecks {
     private static final Logger LOGGER = LogManager.getLogger("Impetus");
     private static final AtomicBoolean CRASH_DIALOG_INSTALLED = new AtomicBoolean(false);
@@ -49,8 +45,7 @@ public final class StartupChecks {
                             String.valueOf(throwable.getMessage()) + "\n\n" +
                             "The full crash details are still written to the game log/crash report.");
                 } catch (Throwable dialogFailure) {
-                    // The dialog is a courtesy on top of the crash report; if it cannot be shown, the crash
-                    // handling below still runs and the report is still written
+                    // The dialog is a courtesy on top of the crash report; if it cannot be shown the crash handling below still runs
                 }
             }
 
@@ -77,8 +72,7 @@ public final class StartupChecks {
             runBugChecks(context, adapters);
             scanForFrameHookOverlays();
         } catch (Throwable t) {
-            // Best-effort: these checks only decide which workarounds to enable and which advisory dialogs to
-            // show, so a probe that blows up must not take the load down with it
+            // Best-effort: these only pick workarounds and advisory dialogs, so a probe that blows up must not take the load down
         }
     }
 
@@ -205,9 +199,7 @@ public final class StartupChecks {
         }
     }
 
-    // detects frame-hooking overlay software that injects into the GL presentation path
-    // Impetus replaces enough of the render loop that these are a leading cause of "crashes only on
-    // my machine" reports, so being loud about them up front short-circuits a lot of debugging
+    // Detects frame-hooking overlays in the GL presentation path, a leading cause of "crashes only on my machine" reports with a replaced render loop
     private static void scanForFrameHookOverlays() {
         if (OsKind.current() != OsKind.WINDOWS) {
             return;

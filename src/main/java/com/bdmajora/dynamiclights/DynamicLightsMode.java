@@ -1,9 +1,6 @@
 package com.bdmajora.dynamiclights;
 
-// How often a moving light source is allowed to re-light the chunks around it
-// The delay is NOT a frame budget — it is a floor on how often one source may schedule a chunk rebuild
-// Rebuilding a section is the expensive half of dynamic lighting, and a source that moves every tick sits at the
-// corner of eight sections, so without a floor it queues eight sections' worth of work every tick
+// How often a moving source may re-light nearby chunks; a floor on rebuild scheduling, not a frame budget, since a source at a section corner would otherwise queue eight rebuilds every tick
 public enum DynamicLightsMode implements DynamicLightsConfig.Localized {
     OFF(0, "impetus.options.dynamiclights.mode.off"),
     SLOW(500, "impetus.options.dynamiclights.mode.slow"),

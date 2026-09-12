@@ -8,11 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-// A named preset from shaders.properties: a bundle of option values plus the programs the preset switches off
-// Packs ship these as the Low/Medium/High/Ultra presets the config screen offers as one control
-// The disabled-program list matters as much as the values: a preset turns effects off by dropping whole passes,
-// not just by setting their options to zero
-// Ported from Iris; guava collections replaced with unmodifiable Java ones
+// A named preset from shaders.properties (the Low/Medium/High/Ultra presets): a bundle of option values plus the programs the preset switches off, since presets drop whole passes rather than zeroing options. From Iris
 public final class Profile {
     public final String name;
     public final int precedence; // Used for prioritizing during matching

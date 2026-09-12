@@ -13,8 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Set;
 
-// Swaps the tracked-player set for an open-addressed one; one of these per tracked entity, iterated every tick it moves
-// ReferenceOpenHashSet not ObjectOpenHashSet - EntityPlayerMP doesn't override equals so identity comparison is already correct
+// Swaps the tracked-player set for an open-addressed one, one per tracked entity iterated every tick it moves; ReferenceOpenHashSet since EntityPlayerMP does not override equals
 @Mixin(EntityTrackerEntry.class)
 public class EntityTrackerEntryMixin {
     @Shadow

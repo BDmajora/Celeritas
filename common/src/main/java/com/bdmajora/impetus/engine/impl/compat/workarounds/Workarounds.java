@@ -13,12 +13,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
-// registry of driver/environment issues detected on the current machine
-// other engine code consults isActive(Issue) to steer around known-broken driver paths
-// unlike upstream renderers that patch the process environment through native APIs, Impetus
-// deliberately limits itself to in-process behaviour changes plus loud, actionable diagnostics: the
-// legacy LWJGL2/Java 8 targets leave no portable way to mutate the native environment before the
-// driver loads
+// Registry of driver/environment issues on this machine; limited to in-process behaviour changes plus loud diagnostics, since LWJGL2/Java 8 cannot mutate the native environment before the driver loads
 public final class Workarounds {
     private static final Logger LOGGER = LogManager.getLogger("Impetus-Workarounds");
 
@@ -28,16 +23,11 @@ public final class Workarounds {
     }
 
     public enum Issue {
-        // NVIDIA's "Threaded Optimization" is known to corrupt state when a second thread issues GL
-        // commands; detection-only, surfaced as a warning telling the user to disable it in the driver
-        // control panel if they see crashes
+        // NVIDIA "Threaded Optimization" corrupts state when a second thread issues GL commands; detection-only, surfaced as a warning to disable it in the driver panel
         NVIDIA_THREADED_OPTIMIZATIONS,
-        // requesting a KHR_no_error context is unsafe on this driver - older Intel Windows drivers
-        // crash or render incorrectly - so consumers must not request no-error contexts while active
+        // KHR_no_error contexts crash or misrender on older Intel Windows drivers, so consumers must not request them while active
         NO_ERROR_CONTEXT_UNSAFE,
-        // a frame-hooking overlay (e.g. RivaTuner Statistics Server) was detected; these inject into
-        // the GL frame path and are a common source of otherwise-unexplainable crashes with modified
-        // renderers
+        // A frame-hooking overlay (e.g. RivaTuner Statistics Server) was detected; a common source of unexplainable crashes with modified renderers
         FRAME_HOOK_OVERLAY_PRESENT
     }
 
@@ -91,8 +81,7 @@ public final class Workarounds {
             return false;
         }
 
-        // Intel's legacy (pre-DCH, Gen7-era) Windows drivers report versions of the form 10.18.x.x or lower.
-        // Those drivers ship a GL implementation that misbehaves with no-error contexts.
+        // Intel's legacy pre-DCH (Gen7-era) Windows drivers report versions 10.18.x.x or lower and misbehave with no-error contexts
         for (var adapter : adapters) {
             if (adapter.vendor() != GraphicsVendor.INTEL) {
                 continue;
@@ -105,8 +94,7 @@ public final class Workarounds {
             }
         }
 
-        // Without OS driver info, err on the safe side for Intel + Windows: no-error contexts gain little and
-        // the failure mode (hard crash in the driver) is much worse than the win.
+        // Without OS driver info, err on the safe side for Intel + Windows: no-error contexts gain little and a driver crash is far worse
         return adapters.isEmpty();
     }
 }

@@ -29,29 +29,10 @@ public class RenderItemItemIdMixin {
         state.setCurrentRenderedItem(WorldRenderingSettings.getItemId(stack));
         impetus$pushIdToGpu();
 
-        // Item models are submitted through client arrays, which on the compatibility profile alias generic
-        // attribute slots 8..15 (gl_MultiTexCoord0..7). A generic array left enabled on one of those slots BEATS the
-        // aliased conventional array and flattens the attribute to a single value for the entire draw — the exact
-        // mechanism documented on UmbraRenderingPipeline#resetVanillaVertexArrayState, which already guards the
-        // first-person arm against it for gl_MultiTexCoord0.
-        //
-        // Slot 9 is gl_MultiTexCoord1: the lightmap. DefaultVertexFormats.ITEM carries no lightmap element, so an
-        // item model has nothing per-vertex to fall back on — flatten that slot and every fragment lights from one
-        // constant coordinate, which reads as fullbright. Chunk terrain is immune because Sodium draws it from its
-        // own VAO with a real per-vertex lightmap. That asymmetry is the tell: servers that build scenery out of
-        // custom item models in item frames light up while the vanilla blocks beside them stay correct.
+        // Item models use client arrays, which alias generic attribute slots 8..15; a generic array left enabled on slot 9 (gl_MultiTexCoord1, the lightmap) flattens it to one constant and items render fullbright, which is why custom item-frame scenery lights up while vanilla blocks beside it stay correct (see resetVanillaVertexArrayState)
         UmbraRenderingPipeline.resetVanillaVertexArrayState();
 
-        // No phase is bound here. OptiFine does not set one at the item level either: an item model is always drawn
-        // inside some enclosing renderer (an item frame, a held item on an armor stand, a dropped item entity, a block
-        // entity), and Shaders.nextEntity/nextBlockEntity have already selected that renderer's program by the time
-        // RenderItem runs, so binding anything here would override the enclosing choice.
-        //
-        // Impetus does NOT yet make that enclosing choice per object: EntityRendererMixin sets ProgramId.Entities once
-        // for the whole pass and ProgramId.BlockEntities (gbuffers_block) is never selected in the camera pass at all,
-        // so block entities are drawn by gbuffers_entities. Umbra routes them separately. Restoring that means a
-        // per-object setPhase, which is the change that previously shredded water and terrain by firing inside the
-        // shadow pass — setPhase now carries an isShadowPass() guard, so it is safe to retry, but as its own change.
+        // No phase is bound here, like OptiFine: an item model is always drawn inside an enclosing renderer whose program is already selected. Impetus does not yet select per object (block entities draw via gbuffers_entities); a per-object setPhase previously fired inside the shadow pass, now guarded, so it is safe to retry as its own change
     }
 
     @Inject(method = "renderItem(Lnet/minecraft/item/ItemStack;Lnet/minecraft/client/renderer/block/model/IBakedModel;)V",
@@ -59,17 +40,11 @@ public class RenderItemItemIdMixin {
     private void impetus$endItem(ItemStack stack, IBakedModel model, CallbackInfo ci) {
         CapturedRenderingState.INSTANCE.setCurrentRenderedItem(
                 this.impetus$itemIdStack.isEmpty() ? -1 : this.impetus$itemIdStack.pop());
-        // The restore matters as much as the set. This is the case the ride scenery hits: an item model nested inside
-        // an item frame or armor stand leaves its id live over the rest of the batch if it is not popped to the GPU,
-        // so one emissive custom item makes every entity drawn after it emissive too.
+        // The restore matters as much as the set: an item model nested in an item frame or armor stand would otherwise leave its id live over the rest of the batch, making every later entity emissive
         impetus$pushIdToGpu();
     }
 
-    // sends the id change to the bound program
-    // setting it only on CapturedRenderingState leaves it in Java: the uniform is uploaded when a
-    // phase is bound, and one phase covers every item in the frame, so the batch would render with
-    // whichever item's id happened to be current at phase entry
-    // see UmbraRenderingPipeline#refreshDynamicUniforms()
+    // Sends the id change to the bound program; setting it only on CapturedRenderingState leaves it in Java, since the uniform uploads at phase bind and one phase covers every item (see UmbraRenderingPipeline#refreshDynamicUniforms)
     @Unique
     private static void impetus$pushIdToGpu() {
         UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();

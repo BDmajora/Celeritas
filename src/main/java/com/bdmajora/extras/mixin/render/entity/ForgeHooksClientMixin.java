@@ -12,14 +12,10 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 
 import java.util.List;
 
-// Item-frame LOD on Forge's emissive-item render path; ForgeModContainer.allowEmissiveItems defaults to true, so most
-// item rendering goes through renderLitItem instead of RenderItem.renderModel — hooking both makes the LOD work either way
+// Item-frame LOD on Forge's emissive-item path; allowEmissiveItems defaults to true, so most item rendering goes through renderLitItem instead of RenderItem.renderModel, and both are hooked
 @Mixin(ForgeHooksClient.class)
 public class ForgeHooksClientMixin {
-    // Not remap = false, tempting as it looks on a Forge class: the enclosing method is Forge's and
-    // needs no remapping, but IBakedModel.getQuads is Minecraft's and becomes func_188616_a in
-    // production. Suppressing remapping wholesale would leave the redirect looking for a method
-    // name that does not exist outside the development environment.
+    // Not remap = false despite the Forge class: the enclosing method is Forge's, but IBakedModel.getQuads is Minecraft's and becomes func_188616_a in production
     @Redirect(
             method = "renderLitItem(Lnet/minecraft/client/renderer/RenderItem;Lnet/minecraft/client/renderer/block/model/IBakedModel;ILnet/minecraft/item/ItemStack;)V",
             at = @At(value = "INVOKE",

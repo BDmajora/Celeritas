@@ -15,9 +15,7 @@ import net.minecraft.tileentity.TileEntity;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-// Registry of per-type light handlers, plus the questions the tick path asks of it
-// Lookup walks up the class hierarchy instead of matching the concrete class like upstream does; on 1.12.2 the registry key is the class itself, so a subclassed EntityItem would otherwise lose its glow
-// The walk result is memoised per concrete class, so it costs one map lookup after the first sighting of each type
+// Registry of per-type light handlers; lookup walks up the class hierarchy (a subclassed EntityItem would otherwise lose its glow) and memoises per concrete class
 public final class DynamicLightHandlers {
     private static final Map<Class<?>, DynamicLightHandler<?>> ENTITY_HANDLERS = new ConcurrentHashMap<>();
     private static final Map<Class<?>, DynamicLightHandler<?>> TILE_ENTITY_HANDLERS = new ConcurrentHashMap<>();
@@ -47,12 +45,9 @@ public final class DynamicLightHandlers {
         registerEntityHandler(EntitySpectralArrow.class, entity -> 8);
     }
 
-    // ------------------------------------------------------------------------------------------
     // Registration
-    // ------------------------------------------------------------------------------------------
 
-    // Registers a handler for entityClass and everything that extends it
-    // Registering over an existing entry combines the two by taking the brighter result, so two mods can both contribute without either winning outright
+    // Registers a handler for entityClass and its subclasses; registering over an existing entry combines them by taking the brighter result
     public static <T extends Entity> void registerEntityHandler(Class<T> entityClass,
                                                                 DynamicLightHandler<T> handler) {
         register(ENTITY_HANDLERS, ENTITY_LOOKUP, entityClass, handler);
@@ -84,9 +79,7 @@ public final class DynamicLightHandlers {
         lookup.clear();
     }
 
-    // ------------------------------------------------------------------------------------------
     // Lookup
-    // ------------------------------------------------------------------------------------------
 
     @SuppressWarnings("unchecked")
     public static <T extends Entity> DynamicLightHandler<T> getDynamicLightHandler(T entity) {
@@ -118,9 +111,7 @@ public final class DynamicLightHandlers {
         return found;
     }
 
-    // ------------------------------------------------------------------------------------------
     // Gating
-    // ------------------------------------------------------------------------------------------
 
     // Whether this entity is allowed to light up at all; player is gated on the first-person switch, everything else on its per-type toggle
     public static boolean canEntityLightUp(Entity entity) {

@@ -16,10 +16,7 @@ import net.minecraftforge.fml.relauncher.SideOnly;
 import javax.annotation.Nullable;
 import java.util.List;
 
-// appends the owning mod's display name to item tooltips, as mezz's ModNameTooltip does
-// runs off ItemTooltipEvent, which fires inside ItemStack#getTooltip, so it also covers JEI/HEI
-// ingredient tooltips - they gather their lines through the same call - with no JEI-specific hook
-// EventPriority#LOW puts the line last, after every other mod has added its own
+// Appends the owning mod's name to item tooltips like mezz's ModNameTooltip via ItemTooltipEvent, which also covers JEI/HEI tooltips; EventPriority#LOW puts the line last
 @Mod.EventBusSubscriber(Side.CLIENT)
 @SideOnly(Side.CLIENT)
 public final class ModNameTooltipHandler {
@@ -55,8 +52,7 @@ public final class ModNameTooltipHandler {
         }
 
         Item item = stack.getItem();
-        // Honours items that reassign their creator (tools spawned by another mod, say); it falls
-        // back to the registry-name namespace otherwise.
+        // Honours items that reassign their creator (tools spawned by another mod), falling back to the registry-name namespace
         String modId = item.getCreatorModId(stack);
         if (modId == null) {
             return null;
@@ -66,9 +62,7 @@ public final class ModNameTooltipHandler {
         return container != null ? container.getName() : null;
     }
 
-    // whether the last line already is the mod name
-    // JEI reaches item tooltips through this same event and appends the mod name in its own overlay;
-    // this guard is what stops the two from stacking
+    // Whether the last line already is the mod name; JEI appends it through the same event, and this stops the two stacking
     private static boolean alreadyPresent(List<String> tooltip, String modName) {
         if (tooltip.size() <= 1) {
             return false;

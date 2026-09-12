@@ -16,17 +16,13 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// brightens primed TNT as its fuse burns down
-// in ExplosiveLightingMode#FANCY the ramp is quadratic in remaining fuse, so the glow is barely there
-// when it is lit and floods the area just before it goes off
+// Brightens primed TNT as the fuse burns; in FANCY the ramp is quadratic in remaining fuse, barely there when lit and flooding just before it goes off
 @Mixin(EntityTNTPrimed.class)
 public abstract class EntityTNTPrimedMixin extends Entity implements DynamicLightSource {
     @Shadow
     public abstract int getFuse();
 
-    // the fuse this TNT started with, so the ramp is a fraction of its own life
-    // defaults to vanilla's 80 for TNT that arrives already primed - one spawned by a command, or one
-    // already burning when the chunk loaded - since those never run the constructor hook
+    // The fuse this TNT started with so the ramp is a fraction of its own life; defaults to vanilla's 80 for already-primed arrivals (command, chunk load) that skip the constructor hook
     @Unique
     private int impetus$startFuse = 80;
 
@@ -74,8 +70,7 @@ public abstract class EntityTNTPrimedMixin extends Entity implements DynamicLigh
         }
 
         if (DynamicLights.options().tntLighting == ExplosiveLightingMode.FANCY) {
-            // A guard against a zero start fuse, which would otherwise divide by zero and hand the
-            // falloff a NaN.
+            // Guard against a zero start fuse, which would divide by zero and hand the falloff a NaN
             int start = this.impetus$startFuse > 0 ? this.impetus$startFuse : 80;
             float remaining = (float) this.getFuse() / (float) start;
             this.impetus$tntLuminance = (int) (-(remaining * remaining) * 10.0F) + 10;

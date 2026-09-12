@@ -12,8 +12,7 @@ import org.apache.logging.log4j.Logger;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Where a finished build lands: geometry into the quad arena, a 32-byte header into the region store
-// Position, extent and draw ranges fit those 32 bytes so the section rasteriser decides visibility from one cache line
+// Where a finished build lands: geometry into the quad arena, a 32-byte header into the region store so the section rasteriser decides visibility from one cache line
 public class MeshSectionStore {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/MeshBackend");
 
@@ -21,9 +20,7 @@ public class MeshSectionStore {
     private final QuadArena arena;
     private final UploadStream uploadStream;
 
-    // Section key -> id in the region store, and -> the first quad of its geometry
-    // Two maps rather than one object because both are hit on every build result and neither wants a pointer
-    // chase
+    // Section key -> region store id, and -> first quad of its geometry; two maps rather than one object because both are hit per build result and neither wants a pointer chase
     private final Long2IntOpenHashMap sectionIds = new Long2IntOpenHashMap();
     private final Long2IntOpenHashMap sectionQuads = new Long2IntOpenHashMap();
 
@@ -45,8 +42,7 @@ public class MeshSectionStore {
         return this.arena;
     }
 
-    // Uploads one section's geometry and metadata; a null geometry means the section built to nothing and should
-    // be dropped
+    // Uploads one section's geometry and metadata; null geometry means the section built to nothing and should be dropped
     public void upload(int sectionX, int sectionY, int sectionZ, SectionGeometry geometry) {
         long key = PositionUtil.packSection(sectionX, sectionY, sectionZ);
 
@@ -57,8 +53,7 @@ public class MeshSectionStore {
 
         int quadAddress = this.sectionQuads.get(key);
 
-        // A rebuild that produced exactly as many quads as last time keeps its allocation, which is the common
-        // case for a block change and saves an arena round trip plus a sparse page recommit
+        // A rebuild with exactly as many quads as before keeps its allocation (the common block-change case), saving an arena round trip and a sparse page recommit
         if (quadAddress != -1 && !this.arena.canReuse(quadAddress, geometry.quadCount())) {
             this.sectionQuads.remove(key);
             this.arena.free(quadAddress);
@@ -107,8 +102,7 @@ public class MeshSectionStore {
         }
     }
 
-    // Drops every section in a region, used when the region is evicted for being out of range or when the arena
-    // needs its memory back
+    // Drops every section in a region, when it is evicted for range or the arena needs its memory back
     public void removeRegion(int regionId) {
         if (!this.regions.regionExists(regionId)) {
             return;
@@ -138,17 +132,14 @@ public class MeshSectionStore {
         long ptr = this.regions.beginSectionUpdate(sectionId);
         int sectionIndex = this.regions.getSectionIndex(sectionId);
 
-        // Chunk Y is masked to 9 bits and sign-extended in the shader, which covers every build height the game
-        // has ever had while leaving the top bits for the section index
+        // Chunk Y is masked to 9 bits and sign-extended in the shader, covering every build height the game has had while leaving the top bits for the section index
         LWJGL.memPutInt(ptr, (sectionX << 8) | (geometry.sizeX() << 4) | geometry.minX());
         LWJGL.memPutInt(ptr + 4, ((sectionY & 0x1FF) << 8) | (geometry.sizeY() << 4) | geometry.minY()
                 | (sectionIndex << 18));
         LWJGL.memPutInt(ptr + 8, (sectionZ << 8) | (geometry.sizeZ() << 4) | geometry.minZ());
         LWJGL.memPutInt(ptr + 12, quadAddress);
 
-        // Eight uint16s: six directional quad counts, the unassigned count, then the section's own base quad
-        // The task shader accumulates these into absolute offsets, so only counts are stored and a section can
-        // hold far more quads than a 16-bit absolute offset would allow
+        // Eight uint16s: six directional quad counts, the unassigned count, then the base quad; the task shader accumulates them into absolute offsets so a section can exceed a 16-bit offset
         short[] counts = geometry.quadsPerFacing();
         long ranges = ptr + 16;
 
@@ -162,9 +153,7 @@ public class MeshSectionStore {
         LWJGL.memPutInt(ranges + 12L, unassigned | (Short.toUnsignedInt(geometry.baseQuad()) << 16));
     }
 
-    // PositionUtil.packSection has no matching unpackers, and only the region eviction path needs them
-    // Layout is x in bits 42..63 (22), z in bits 20..41 (22), y in bits 0..19 (20); the shifts sign-extend each
-    // field back out of its slot
+    // PositionUtil.packSection has no unpackers and only region eviction needs them; x in bits 42..63, z in 20..41, y in 0..19, shifts sign-extend each field
     private static int unpackSectionX(long key) {
         return (int) (key >> 42);
     }

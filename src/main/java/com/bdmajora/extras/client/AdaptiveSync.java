@@ -7,9 +7,7 @@ import org.lwjgl.opengl.Display;
 
 import java.lang.reflect.Method;
 
-// Adaptive VSync: swap interval -1 honours VSync above the refresh rate and disengages below it
-// Applied from outside rather than by mixin, since org.lwjgl. is class-loader excluded on stock Forge 1.12.2
-// GLFW is reached reflectively; on LWJGL2 there is no swap-interval API, so the option is not offered
+// Adaptive VSync (swap interval -1 honours VSync above the refresh rate, disengages below); applied from outside via reflective GLFW since org.lwjgl. is class-loader excluded on Forge, and not offered on LWJGL2
 public final class AdaptiveSync {
     private static final String GLFW_CLASS = "org.lwjgl.glfw.GLFW";
 
@@ -19,9 +17,7 @@ public final class AdaptiveSync {
     private AdaptiveSync() {
     }
 
-    // whether the driver advertises tear control, i.e. whether a swap interval of -1 means anything
-    // resolved once: a driver that gains the extension mid-session is not a case worth paying a lookup
-    // per frame for
+    // Whether the driver advertises tear control, i.e. whether -1 means anything; resolved once since a driver gaining it mid-session is not worth a lookup per frame
     public static boolean isSupported() {
         Boolean cached = supported;
         if (cached != null) {
@@ -62,10 +58,7 @@ public final class AdaptiveSync {
                 : ExtrasConfig.VerticalSync.OFF;
     }
 
-    // applies a mode, updating the vanilla setting alongside it so the two never disagree
-    // ADAPTIVE turns vanilla VSync on first and then overrides the interval, because that is what
-    // "adaptive" degrades to when the driver ignores -1
-    // choosing it without driver support falls back to plain ON rather than silently doing nothing
+    // Applies a mode and updates the vanilla setting so the two never disagree; ADAPTIVE turns vanilla VSync on then overrides the interval, and falls back to plain ON without driver support
     public static void apply(ExtrasConfig.VerticalSync mode) {
         ExtrasConfig options = Extras.options();
         Minecraft minecraft = Minecraft.getMinecraft();
@@ -84,9 +77,7 @@ public final class AdaptiveSync {
         minecraft.gameSettings.saveOptions();
     }
 
-    // re-asserts the adaptive interval
-    // anything that calls Display.setVSyncEnabled - the vanilla video settings screen, Impetus' own
-    // VSync tickbox - resets the interval to 0 or 1 behind our back
+    // Re-asserts the adaptive interval, since anything calling Display.setVSyncEnabled (vanilla video settings, Impetus' VSync tickbox) resets it behind our back
     public static void reapply() {
         if (Extras.options().extra.useAdaptiveSync && isSupported()) {
             setSwapInterval(-1);

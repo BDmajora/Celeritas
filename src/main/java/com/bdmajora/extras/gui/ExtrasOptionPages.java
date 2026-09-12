@@ -28,8 +28,7 @@ import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 
-// The Extras page: Sodium Extra plus the finer OptiFine switches as one tab, since Impetus already has eight
-// Sub-options use setEnabledPredicate instead of hiding, so a master switch greys out its children
+// The Extras page: Sodium Extra plus the finer OptiFine switches as one tab; sub-options use setEnabledPredicate so a master switch greys out its children
 public final class ExtrasOptionPages {
     private static final String MOD_ID = "impetus";
     private static final String LANG = "impetus.options.extras.";
@@ -43,9 +42,7 @@ public final class ExtrasOptionPages {
     public static OptionPage extras() {
         List<OptionGroup> groups = new ArrayList<>();
 
-        // Built here rather than inside particles() so the per-class toggles can gate on the same
-        // instance: reading the saved config instead would leave them lit until Apply, while every
-        // other sub-option on the page greys out the moment its master is unticked.
+        // Built here rather than in particles() so the per-class toggles gate on the same instance and grey out immediately like every other sub-option, not after Apply
         OptionImpl<ExtrasConfig, Boolean> particlesMaster = toggle("particles.all",
                 (config, value) -> config.particle.all = value,
                 config -> config.particle.all,
@@ -68,9 +65,7 @@ public final class ExtrasOptionPages {
                 ImmutableList.copyOf(groups));
     }
 
-    // ------------------------------------------------------------------------------------------
     // Groups
-    // ------------------------------------------------------------------------------------------
 
     private static OptionGroup animations() {
         OptionImpl<ExtrasConfig, Boolean> master = toggle("animations.all",
@@ -362,13 +357,9 @@ public final class ExtrasOptionPages {
         return builder.build();
     }
 
-    // ------------------------------------------------------------------------------------------
     // Options that do not bind to the Extras config
-    // ------------------------------------------------------------------------------------------
 
-    // Vertical sync, folding adaptive sync in with the vanilla on/off pair
-    // Available values resolve once at page build rather than being fixed — offering ADAPTIVE
-    // where the driver has no tear control would give a setting that silently does nothing
+    // Vertical sync folding adaptive sync in with vanilla's on/off; values resolve at page build, since offering ADAPTIVE without driver tear control would silently do nothing
     private static OptionImpl<ExtrasConfig, ExtrasConfig.VerticalSync> verticalSync() {
         ExtrasConfig.VerticalSync[] available = AdaptiveSync.isSupported()
                 ? ExtrasConfig.VerticalSync.values()
@@ -385,9 +376,7 @@ public final class ExtrasOptionPages {
                 .build();
     }
 
-    // Vanilla's advanced tooltips, which otherwise have no home but the F3+H chord
-    // Bound straight to the vanilla setting rather than mirrored into the Extras config, so F3+H
-    // and this control cannot disagree
+    // Vanilla's advanced tooltips, otherwise homeless but for F3+H; bound straight to the vanilla setting so the two cannot disagree
     private static OptionImpl<ExtrasConfig, Boolean> advancedItemTooltips() {
         return OptionImpl.createBuilder(boolean.class, STORAGE)
                 .setId(option("advanced_item_tooltips", boolean.class))
@@ -403,13 +392,9 @@ public final class ExtrasOptionPages {
                 .build();
     }
 
-    // ------------------------------------------------------------------------------------------
     // Per-class particle toggles
-    // ------------------------------------------------------------------------------------------
 
-    // One toggle per discovered particle class, grouped by owning mod
-    // Everything here is discovered at runtime (see ParticleClassRegistry), so a scan failure is
-    // caught here to cost only its own group, not the whole tab
+    // One toggle per discovered particle class grouped by owning mod; everything is runtime-discovered (see ParticleClassRegistry), so a scan failure costs only its own group
     private static void addParticleClassGroups(List<OptionGroup> groups, BooleanSupplier particlesOn) {
         try {
             ParticleClassRegistry registry = ParticleClassRegistry.getInstance();
@@ -434,9 +419,7 @@ public final class ExtrasOptionPages {
                 OptionGroup.Builder builder = OptionGroup.createBuilder()
                         .setId(group("particles." + modId));
 
-                // Vanilla particles drop the mod suffix; "(minecraft)" repeated down the whole list says nothing
-                // the user does not already know. A modded id stays, since that is the only marker of where a
-                // particle class came from
+                // Vanilla particles drop the mod suffix since "(minecraft)" down the whole list says nothing; a modded id stays as the only marker of origin
                 boolean showModId = !"minecraft".equals(modId);
 
                 for (Map.Entry<String, String> classEntry : classes) {
@@ -463,9 +446,7 @@ public final class ExtrasOptionPages {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
     // Builders
-    // ------------------------------------------------------------------------------------------
 
     // A texture-animation sub-switch: always asset-reloading, always gated on the master
     private static OptionImpl<ExtrasConfig, Boolean> animationToggle(

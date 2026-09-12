@@ -14,9 +14,7 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.Map;
 
-// Builds the normals and specular PBR atlases alongside the block atlas, with the exact same layout so base
-// UVs address the PBR data directly. Sprites without _n/_s companions keep the flat-normal and no-reflectance defaults
-// Rebuilt on every stitch; animated sprites contribute only their first frame
+// Builds the normals and specular PBR atlases with the block atlas's exact layout so base UVs address them directly; sprites without _n/_s keep the flat-normal and no-reflectance defaults, rebuilt every stitch, animated sprites contribute their first frame
 public final class PBRAtlasManager {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -38,8 +36,7 @@ public final class PBRAtlasManager {
     private PBRAtlasManager() {
     }
 
-    // The normals atlas GL id, or the caller's fallback when no resource pack shipped a single normal map — the
-    // fallback being the neutral 1x1 texture, so the sampler is bound either way
+    // The normals atlas GL id, or the caller's fallback (the neutral 1x1) when no resource pack shipped a normal map, so the sampler is bound either way
     public static int getNormalsAtlas(int fallback) {
         return normalsCount > 0 ? normalsAtlas : fallback;
     }
@@ -71,9 +68,7 @@ public final class PBRAtlasManager {
                 }
             }
 
-            // AFTER every upload, not inside allocateAtlas: TextureUtil.uploadTextureMipmap re-applies the filter and
-            // wrap modes from its own blur/clamp arguments on each call, so anything set at allocation time is
-            // overwritten by the first companion sprite. This has to be the last word on both textures.
+            // AFTER every upload, not in allocateAtlas: TextureUtil.uploadTextureMipmap re-applies filter and wrap modes on each call, so anything set at allocation is overwritten by the first companion sprite
             GlStateManager.bindTexture(normalsAtlas);
             applyPbrSampling(mipmapLevels);
             GlStateManager.bindTexture(specularAtlas);
@@ -113,28 +108,9 @@ public final class PBRAtlasManager {
         return texture;
     }
 
-    // Pins the PBR atlas sampler to nearest filtering plus clamp-to-edge, which is what Iris does in
-    // PBRAtlasTexture#upload via getSamplerCache().getClampToEdge(FilterMode.NEAREST)
-    //
-    // It has to be re-applied because the uploads leave something else behind: TextureUtil.uploadTextureMipmap
-    // applies its own sampling on every call, and this class passes blur=false, clamp=false. Through
-    // setTextureBlurMipmap(false, true) that gives magnification NEAREST — already correct — but minification
-    // NEAREST_MIPMAP_LINEAR, and setTextureClamped(false) leaves wrapping at REPEAT. The magnification filter was
-    // never the problem; the other two are
-    //
-    // NEAREST_MIPMAP_LINEAR interpolates BETWEEN MIP LEVELS. These atlases hold labPBR channels rather than colour,
-    // and in labPBR the specular alpha channel IS emissiveness. Coarser mips average neighbouring sprites together,
-    // so a sprite with no _s companion — which should read the neutral fill and never glow — starts blending in its
-    // atlas neighbours' emission as soon as the sampler drops to a coarser level
-    // Mip level is chosen from screen-space UV derivatives, so it changes with VIEWING ANGLE: the glow appears when
-    // the camera turns and vanishes when it turns back, while the draw call itself is byte-for-byte identical.
-    // That is the failure servers hit when their scenery is built out of custom item models
-    //
-    // CLAMP_TO_EDGE matters for the neighbouring reason: a UV a hair past a sprite's edge must clamp inside that
-    // sprite rather than wrap around to the far side of the atlas
+    // Pins the PBR atlas sampler to nearest filtering plus clamp-to-edge like Iris; uploadTextureMipmap leaves NEAREST_MIPMAP_LINEAR and REPEAT, and the level blend averages neighbouring sprites' labPBR emissiveness into sprites that should never glow, view-angle dependent, which is what servers with custom item-model scenery hit
     private static void applyPbrSampling(int mipmapLevels) {
-        // Nearest in both directions. With mipmaps present minification must be NEAREST_MIPMAP_NEAREST, not plain
-        // NEAREST_MIPMAP_LINEAR — the "_LINEAR" half is the level blend, and that is the whole bug.
+        // Nearest in both directions; with mipmaps present minification must be NEAREST_MIPMAP_NEAREST, since the "_LINEAR" level blend is the whole bug
         GlStateManager.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         GlStateManager.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
                 mipmapLevels > 0 ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST);
@@ -171,8 +147,7 @@ public final class PBRAtlasManager {
             return false;
         }
 
-        // Sprite sizes are already constrained by the atlas's chosen mip level count, so the same generator the
-        // base atlas uses is safe here.
+        // Sprite sizes are already constrained by the atlas's mip level count, so the base atlas's generator is safe here
         int[][] levels;
         try {
             levels = mipmapLevels > 0
@@ -187,10 +162,7 @@ public final class PBRAtlasManager {
         return true;
     }
 
-    // Scales the companion image to the sprite's base resolution and crops to the first animation frame
-    // Nearest-neighbour scaling specifically: companion maps routinely ship at a different resolution than the base
-    // texture, and any smoothing filter would blend LabPBR's ENCODED channel values into each other — averaging two
-    // material ids gives a third, unrelated material rather than something in between
+    // Scales the companion image to the sprite's base resolution and crops to the first frame, nearest-neighbour specifically since smoothing would blend LabPBR's ENCODED channel values (averaging two material ids gives an unrelated third)
     private static int[] extractFrame(BufferedImage image, int iconWidth, int iconHeight) {
         int srcWidth = image.getWidth();
         int srcHeight = image.getHeight();

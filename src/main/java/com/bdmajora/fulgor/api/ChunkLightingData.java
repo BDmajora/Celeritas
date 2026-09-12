@@ -5,8 +5,7 @@ import net.minecraft.world.EnumSkyBlock;
 
 // Lighting state Fulgor adds to every Chunk; all three fields share the chunk's lifetime (save/load together)
 public interface ChunkLightingData {
-    // Vanilla drops updates to unloaded neighbours (MC-3329); Fulgor stores the section mask and replays it on load.
-    // Null until fulgor$initNeighborLightChecks() allocates it; indexed by NeighborLightFlags.index(...), BOUNDARY_FLAG_COUNT wide.
+    // Vanilla drops updates to unloaded neighbours (MC-3329); Fulgor stores the section mask and replays it on load. Null until fulgor$initNeighborLightChecks(), indexed by NeighborLightFlags.index, BOUNDARY_FLAG_COUNT wide
     short[] fulgor$getNeighborLightChecks();
 
     void fulgor$setNeighborLightChecks(short[] data);
@@ -22,7 +21,6 @@ public interface ChunkLightingData {
     // Exposes Chunk.setSkylightUpdated(), which is protected
     void fulgor$setSkylightUpdated();
 
-    // Reads stored light without flushing queues first; getLightFor flushes then calls this,
-    // while the engine (mid-update, must not recurse) calls this directly
+    // Reads stored light without flushing queues; getLightFor flushes then calls this, the engine (mid-update, must not recurse) calls it directly
     int fulgor$getCachedLightFor(EnumSkyBlock lightType, BlockPos pos);
 }

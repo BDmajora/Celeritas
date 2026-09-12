@@ -7,11 +7,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
-// One block match from a `block.<id>` line: a block identifier plus optional blockstate property predicates,
-// e.g. `double_plant:half=lower`
-// Predicates are a FILTER, not a full specification: any property the entry does not name matches any value, so
-// `double_plant:half=lower` matches every lower half regardless of which plant variant it is
-// Port of Iris's BlockEntry
+// One block match from a `block.<id>` line, an identifier plus optional blockstate predicates (`double_plant:half=lower`); predicates are a FILTER, unnamed properties match any value. Port of Iris's BlockEntry
 public final class BlockEntry implements Entry {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -23,11 +19,7 @@ public final class BlockEntry implements Entry {
         this.propertyPredicates = propertyPredicates;
     }
 
-    // Parses one entry token, following Iris's BlockEntry.parse exactly
-    // Accepted forms: `name`, `namespace:name`, `name:key=value:...` and `namespace:name:key=value:...`
-    // The same forms prefixed with % are tag references and produce a TagEntry instead, which is why the return
-    // type is the Entry interface rather than BlockEntry
-    // The token must not be empty; the caller splits on whitespace and skips blanks before getting here
+    // Parses one entry token exactly like Iris: `name`, `namespace:name`, `name:key=value:...`, `namespace:name:key=value:...`; a % prefix is a tag reference yielding a TagEntry, hence the Entry return type. Never empty, the caller skips blanks
     public static Entry parse(String entry) {
         if (entry.isEmpty()) {
             throw new IllegalArgumentException("Called BlockEntry::parse with an empty string");
@@ -37,9 +29,7 @@ public final class BlockEntry implements Entry {
         if (isTag) {
             entry = entry.replace("%", "");
         }
-        // Some OptiFine-era packs accidentally write mod IDs as "namespace::block". Vanilla/Umbra block IDs only use a
-        // single namespace separator; without this tolerance the empty segment is parsed as the block name and the real
-        // name is misreported as a malformed blockstate predicate.
+        // Some OptiFine-era packs write mod IDs as "namespace::block"; without this tolerance the empty segment parses as the block name and the real name is misreported as a malformed predicate
         entry = entry.replaceAll(":{2,}", ":");
 
         String[] splitStates = entry.split(":");

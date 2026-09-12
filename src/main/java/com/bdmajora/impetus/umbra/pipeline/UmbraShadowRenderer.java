@@ -35,12 +35,7 @@ import java.util.Map;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Second render of the world each frame from the sun/moon's POV, before the gbuffer pass samples it.
-// Order matches Umbra's ShadowRenderer: solid+cutout terrain, then entities/block entities (fixed-function,
-// shadow matrices on the FF stack), then depth copied to shadowtex1 (pre-translucent), then translucent
-// terrain writes colored/water shadows into shadowcolor0/1 while landing depth in shadowtex0.
-// Shadow camera is an ortho frustum of shadowDistance half-extent, rotated by shadow angle, snapped to
-// shadowIntervalSize so texels don't swim.
+// Second render of the world from the sun/moon's POV before the gbuffer pass samples it, in Umbra's ShadowRenderer order: solid+cutout terrain, fixed-function entities/block entities, depth copied to shadowtex1, then translucent terrain into shadowcolor0/1 and shadowtex0; the ortho shadow camera is snapped to shadowIntervalSize so texels do not swim
 public class UmbraShadowRenderer {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
     public static final float DEFAULT_NEAR_PLANE = -100.05f;
@@ -53,8 +48,7 @@ public class UmbraShadowRenderer {
     private static final int GL_CULL_FACE = 0x0B44;
     private static final int GL_DEPTH_FUNC = 0x0B74;
 
-    // True while the shadow pass is drawing. Consulted by the matrix, program and draw-buffer seams, which each
-    // need to answer differently for the shadow pass than for the camera pass
+    // True while the shadow pass is drawing; consulted by the matrix, program and draw-buffer seams, which answer differently for the shadow and camera passes
     private static boolean shadowPassActive;
 
     private final int resolution;
@@ -67,19 +61,15 @@ public class UmbraShadowRenderer {
 
     // shadowtex0: every shadow caster, translucents included
     private final DepthTexture depthTexture;
-    // shadowtex1: a copy of shadowtex0 taken just BEFORE translucent shadow geometry draws, so the difference
-    // between the two is exactly "what is occluded only by glass and water" — which is how packs tint light shafts
+    // shadowtex1: a copy of shadowtex0 taken just BEFORE translucent shadow geometry draws, so the difference is exactly "occluded only by glass and water", which is how packs tint light shafts
     private final DepthTexture depthTextureNoTranslucents;
     // What the pack permits this pass to draw: shadowTerrain, shadowEntities, shadowBlockEntities and friends
     private final ShadowContentSettings content;
-    // The pack's voxelDistance, i.e. the safe-zone radius used when shadow.culling = reversed; 0 when undeclared,
-    // which degenerates that mode to plain advanced culling
+    // The pack's voxelDistance, the safe-zone radius under shadow.culling = reversed; 0 when undeclared, degenerating that mode to plain advanced culling
     private final float voxelDistance;
-    // Whether the pack voxelizes during the shadow pass, inferred the way Iris infers it — from the presence of a
-    // geometry stage or custom images rather than from a declaration
+    // Whether the pack voxelizes during the shadow pass, inferred like Iris from a geometry stage or custom images rather than a declaration
     private final boolean packVoxelizes;
-    // shadowDistance * shadowDistanceRenderMul — the distance the pass culls against, which is deliberately not the
-    // same as the distance the projection covers
+    // shadowDistance * shadowDistanceRenderMul, the distance the pass culls against, deliberately not the distance the projection covers
     private final float cullDistance;
     private final int colorTexture0;
     private final int colorTexture1;
@@ -90,27 +80,15 @@ public class UmbraShadowRenderer {
     private final boolean separateHardwareSamplers;
     // Both shadowcolor attachments, for the frame-start clear — only 0 and 1 exist on this version
     private static final int[] CLEAR_MASK = {0, 1};
-    // Texture unit for one-off raw work: creating and configuring the shadow textures, generating mipmaps, copying
-    // depth
-    // Chosen above GlTextureUnits.CACHED_UNITS and clear of every unit the pipeline assigns, so this work can never
-    // rewrite a slot GlStateManager is tracking
-    // Always pair a selectScratch on it with a releaseScratch
+    // Texture unit for one-off raw work (creating shadow textures, mipmaps, depth copies), above CACHED_UNITS and clear of every pipeline unit so it never rewrites a tracked slot; always pair selectScratch with releaseScratch
     private static final int TEXTURE_SETUP_UNIT = 31;
-    // The pack's shadow DRAWBUFFERS mask, applied for the geometry draws — sanitised down to shadowcolor0 and 1,
-    // which are the only two that exist
+    // The pack's shadow DRAWBUFFERS mask for the geometry draws, sanitised down to shadowcolor0 and 1, the only two that exist
     private final int[] shadowDrawBuffers;
     private final Runnable shaderPackResourceRestorer;
-    // The FIXED-FUNCTION flavour of the pack's shadow program, for entities and block entities
-    // A separate compile is necessary because those draw through immediate mode, and the Impetus-format terrain
-    // shadow program cannot consume that geometry at all
-    // Null when it failed to compile, in which case entity shadows are skipped rather than drawn wrong
+    // The FIXED-FUNCTION flavour of the pack's shadow program for entities and block entities, a separate compile since they draw immediate-mode and the Impetus-format terrain program cannot consume that; null when it failed, and entity shadows are then skipped
     private final GbufferPrograms.Entry entityShadowProgram;
 
-    // shadow_block's flavour, for the block-entity loop. Iris gives block entities their own shadow program rather
-    // than reusing the entity one
-    // When the pack ships neither, both ids resolve through the fallback chain onto the same `shadow` source and
-    // this holds the very same compiled Entry object — which is what blockEntityProgramShared below exists to
-    // detect, so teardown does not free it twice
+    // shadow_block's flavour for the block-entity loop (Iris gives block entities their own shadow program); when the pack ships neither, both resolve onto the same `shadow` source and this holds the same Entry, which blockEntityProgramShared detects so teardown does not free it twice
     private final GbufferPrograms.Entry blockEntityShadowProgram;
 
     // Whether the two program fields hold the SAME object, which teardown checks before destroying either
@@ -121,20 +99,14 @@ public class UmbraShadowRenderer {
 
     private int failureCount;
     private boolean failed;
-    // Monotonic frame tag for the shadow pass's own render-list graph updates, kept independent of the camera
-    // pass's counter so neither can satisfy the other's dirty check
+    // Monotonic frame tag for the shadow pass's own render-list graph updates, independent of the camera pass's counter so neither satisfies the other's dirty check
     private int shadowListFrame;
     private boolean destroyed;
 
     private final Matrix4f shadowModelView = new Matrix4f();
     private final Matrix4f shadowProjection = new Matrix4f();
 
-    // shadowSource is the pack's shadow program source, compiled here into the fixed-function entity flavour
-    // samplerUnits is the standard sampler-unit table with the gbuffers-stage custom-texture overrides already
-    // applied, since the shadow pass belongs to that stage
-    // hardwareFiltering, mipmapDepth and nearestDepth are all PER TEXTURE, index 0 being shadowtex0 and index 1
-    // shadowtex1 — a pack routinely wants hardware compare on one and raw depth on the other
-    // separateHardwareSamplers says whether hardware compare is exposed through the shadowtex*HW aliases instead
+    // shadowSource compiles into the fixed-function entity flavour; samplerUnits already carries the gbuffers-stage overrides since the shadow pass belongs to that stage; hardwareFiltering, mipmapDepth and nearestDepth are PER TEXTURE (0 = shadowtex0, 1 = shadowtex1), and separateHardwareSamplers moves compare onto the *HW aliases
     public UmbraShadowRenderer(int resolution, float shadowDistance, float nearPlane, float farPlane,
                               float intervalSize, Float shadowMapFov, float sunPathRotation,
                               ProgramSource shadowSource,
@@ -176,16 +148,13 @@ public class UmbraShadowRenderer {
         this.framebuffer.addDepthAttachment(this.depthTexture.getTextureId());
         this.framebuffer.drawBuffers(CLEAR_MASK);
 
-        // The shadow program's DRAWBUFFERS (0, or 01 when it also writes shadowcolor1); indices past the two
-        // shadowcolor attachments would make the FBO mask reference missing images, so they are dropped.
+        // The shadow program's DRAWBUFFERS (0, or 01 when it also writes shadowcolor1); indices past the two shadowcolor attachments would reference missing images, so they are dropped
         this.shadowDrawBuffers = shadowSource.getFragmentSource()
                 .map(source -> DrawBuffers.parseActive(source, shaderDefines))
                 .map(buffers -> DrawBuffers.sanitize(buffers, 2))
                 .orElse(new int[]{0});
 
-        // shadow_entities / shadow_block, both falling back to plain `shadow`. The callers resolve them through the
-        // ProgramSet fallback chain, so for a pack shipping only `shadow` these are the identical ProgramSource
-        // object and the second compile is skipped outright — same program, same rendering as before this split.
+        // shadow_entities / shadow_block, both falling back to plain `shadow` through the ProgramSet chain; for a pack shipping only `shadow` these are the identical ProgramSource and the second compile is skipped
         ProgramSource entitiesSource = shadowEntitiesSource != null ? shadowEntitiesSource : shadowSource;
         ProgramSource blockSource = shadowBlockSource != null ? shadowBlockSource : shadowSource;
 
@@ -204,10 +173,7 @@ public class UmbraShadowRenderer {
                                                          boolean separateHardwareSamplers) {
         DepthTexture texture = new DepthTexture(resolution, resolution,
                 GL14.GL_DEPTH_COMPONENT24, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT);
-        // Configure on a scratch unit. Binding raw on the selected unit (unit 0 at startup, holding whatever vanilla
-        // last bound) would change the real binding without updating GlStateManager's record for that slot; the
-        // trailing unbind then leaves the cache asserting a texture that is no longer there, and every later cached
-        // bind of it no-ops. See GlTextureUnits.
+        // Configure on a scratch unit: a raw bind on the selected unit 0 changes the real binding without updating GlStateManager's slot record, and the trailing unbind leaves the cache asserting a texture no longer there (see GlTextureUnits)
         GlTextureUnits.selectScratch(TEXTURE_SETUP_UNIT);
         try {
             LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture.getTextureId());
@@ -236,8 +202,7 @@ public class UmbraShadowRenderer {
         return nearest ? GL11.GL_NEAREST : GL11.GL_LINEAR;
     }
 
-    // The internal format of shadowcolor0 and 1, which glBindImageTexture needs in order to expose them as
-    // shadowcolorimgN
+    // The internal format of shadowcolor0 and 1, which glBindImageTexture needs to expose them as shadowcolorimgN
     public static final int SHADOW_COLOR_INTERNAL_FORMAT = GL11.GL_RGBA8;
 
     // One shadowcolor texture at the shadow resolution
@@ -288,11 +253,7 @@ public class UmbraShadowRenderer {
         return this.resolution;
     }
 
-    // Renders the shadow map for this frame
-    // Ordering is fixed: called right AFTER the camera matrices are captured, so the shadow angle and camera
-    // position are current, and BEFORE any world geometry draws into the gbuffer, so the deferred chain can sample
-    // a finished shadow map
-    // Leaves the shadow framebuffer and viewport bound; the caller rebinds the gbuffer afterwards
+    // Renders the shadow map, called right AFTER the camera matrices are captured and BEFORE any gbuffer geometry so the deferred chain samples a finished map; leaves the shadow framebuffer and viewport bound for the caller to rebind
     public void render() {
         if (this.failed || this.destroyed) {
             return;
@@ -328,39 +289,20 @@ public class UmbraShadowRenderer {
             GlStateManager.clearColor(1.0f, 1.0f, 1.0f, 1.0f);
             LWJGL.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
             this.framebuffer.drawBuffers(this.shadowDrawBuffers);
-            // Put the clear colour back immediately — leaking white out of this method is what caused the white
-            // screen flash. The clear colour is GLOBAL and GlStateManager caches it, and vanilla only ever sets it
-            // once per frame, at EntityRenderer.renderWorldPass "clear" (updateFogColor + clear(16640), line ~1326).
-            // That runs BEFORE the "frustum" section this shadow pass hooks, so nothing restores it afterwards and
-            // white survives to the top of the NEXT frame — where Minecraft.runGameLoop does
-            // `GlStateManager.clear(16640)` against the DEFAULT framebuffer (the real screen) before binding
-            // framebufferMc. So every frame cleared the window to white; it is normally hidden because
-            // framebufferRender blits the world over it, and becomes visible as a flash whenever that blit is
-            // delayed or skipped — e.g. while a screenshot stalls the game loop encoding the PNG.
-            // The mixin sets this fog colour immediately before calling us, so it is exactly the value vanilla
-            // had in the clear-colour slot a moment ago; alpha 0 matches vanilla's own clearColor(r, g, b, 0.0F).
+            // Put the clear colour back immediately: it is GLOBAL, cached by GlStateManager, and vanilla sets it once per frame BEFORE the "frustum" section this hooks, so leaked white survived to the next frame's clear of the DEFAULT framebuffer and flashed whenever the blit was delayed (screenshots); the mixin sets the fog colour just before calling, alpha 0 like vanilla
             org.joml.Vector3f fog = CapturedRenderingState.INSTANCE.getFogColor();
             GlStateManager.clearColor(fog.x, fog.y, fog.z, 0.0f);
 
             GlStateManager.disableBlend();
-            // The shadow program alpha-tests foliage against the block atlas; make sure it is what unit 0 holds
-            // (this runs before vanilla's own "prepareterrain" atlas bind).
+            // The shadow program alpha-tests foliage against the block atlas; make sure unit 0 holds it, since this runs before vanilla's own "prepareterrain" bind
             bindBlockAtlas(mc);
 
             Vector3d camera = CapturedRenderingState.INSTANCE.getCameraPosition();
 
-            // Umbra `shadow.culling = reversed` parity: build the DEDICATED shadow render list containing every
-            // built section within render distance — no camera frustum, no occlusion culling (isInShadowPass()
-            // routes both this update and the draws below onto the shadow RenderListManager). Reusing the main
-            // pass's culled lists made marginal/occluded sections (cave interiors especially) blink in and out of
-            // the pack's voxelization, so the colored-lighting floodfill chased a different voxel field every
-            // frame and never converged — visible as permanent strobing on every colored-lit surface.
+            // Umbra `shadow.culling = reversed` parity: build the DEDICATED shadow render list of every built section in range with no frustum or occlusion culling (isInShadowPass() routes updates and draws onto the shadow RenderListManager); reusing the culled main lists made cave sections blink in the pack's voxelization and the floodfill strobed forever
             RenderDevice.enterManagedCode();
             try {
-                // `shadow.culling`: `off` keeps every loaded section, otherwise the pass is bounded to a box of the
-                // pack's own shadowDistance (Umbra BoxCuller). Position-only, so the section set stays frame-stable.
-                // The advanced/safe-zone frustums are derived from THIS frame's camera matrices, so the filter is
-                // rebuilt every pass rather than cached.
+                // `shadow.culling`: `off` keeps every loaded section, otherwise a box of the pack's shadowDistance (Umbra BoxCuller), position-only so the section set stays frame-stable; the advanced/safe-zone frustums derive from THIS frame's matrices and are rebuilt every pass
                 worldRenderer.setupTerrain(
                         new com.bdmajora.impetus.engine.impl.render.viewport.Viewport(
                                 com.bdmajora.impetus.umbra.pipeline.shadow.ShadowFrustums.create(
@@ -393,17 +335,7 @@ public class UmbraShadowRenderer {
             // 3) shadowtex1 = depth without translucents (Umbra copyPreTranslucentDepth).
             copyDepthTo(this.depthTextureNoTranslucents);
 
-            // 4) Translucent terrain: writes the shadow tint into shadowcolor0/1 and its depth into shadowtex0.
-            //
-            // UNBLENDED, deliberately. OptiFine calls disableBlend() immediately before this draw
-            // (ShadersRender.renderShadowMap) and Umbra's ShadowRenderer never enables blending in the shadow pass at
-            // all, so in both the shadow program's colour output REPLACES the buffer. Blending it instead mixes every
-            // translucent texel back toward the white shadowcolor clear, using the fragment's alpha as the weight —
-            // and Complementary's alpha there is not an opacity at all, it is the scene-aware light-shaft HEIGHT
-            // (`color2.a = 0.25 + max0(positionYM * 0.05)`). The washed-out result then feeds the light shafts'
-            // translucent-occluder branch as `pow2(shadowcolor1.rgb * 4.0)`, which turns a neutral 0.25 into ~16x
-            // overbright over exactly the texels where a translucent surface shadows solid ground — measured at 8.4%
-            // of the shadow map in this world. That is the sunlight that appeared to leak through terrain.
+            // 4) Translucent terrain writes the shadow tint into shadowcolor0/1 and depth into shadowtex0, UNBLENDED like OptiFine (disableBlend before the draw) and Umbra: blending mixed every texel toward the white clear weighted by Complementary's alpha, which is its light-shaft HEIGHT not opacity, and pow2(rgb * 4.0) then went ~16x overbright wherever glass shadowed ground (8.4% of the map), the "sunlight leaking through terrain"
             if (this.content.shouldRenderTranslucent() && this.content.shouldRenderTerrain()) {
                 bindBlockAtlas(mc);
                 GlStateManager.disableBlend();
@@ -417,8 +349,7 @@ public class UmbraShadowRenderer {
             }
             generateMipmaps();
         } catch (Throwable t) {
-            // The very first frames can race renderer setup (no viewport/render lists yet) — only give up for good
-            // after repeated failures.
+            // The first frames can race renderer setup (no viewport or render lists yet), so only give up for good after repeated failures
             if (++this.failureCount >= 3) {
                 this.failed = true;
                 LOGGER.error("[Umbra] Shadow pass failed repeatedly; disabling shadows for this pack", t);
@@ -462,11 +393,7 @@ public class UmbraShadowRenderer {
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
     }
 
-    // Binds one of the fixed-function shadow programs and refreshes its uniforms
-    // The resource restorer runs on BOTH sides of the bind, because binding a program is what re-points the
-    // shader-pack sampler units, and the entity renderers running in between will have rebound textures of their own
-    // A null entry means that program failed to compile; falling back to the entity one is deliberate, since
-    // leaving whatever was bound before would draw block entities under an unrelated program
+    // Binds one fixed-function shadow program and refreshes its uniforms; the resource restorer runs on BOTH sides since binding re-points the sampler units and the entity renderers in between rebind textures, and a null entry falls back to the entity program rather than leaving an unrelated one bound
     private void bindShadowGeometryProgram(GbufferPrograms.Entry program) {
         GbufferPrograms.Entry target = program != null ? program : this.entityShadowProgram;
         if (target == null) {
@@ -478,11 +405,7 @@ public class UmbraShadowRenderer {
         target.getUniforms().update();
     }
 
-    // Renders entities and block entities into the shadow map the way OptiFine does: fixed-function geometry with
-    // the untransformed shadow program bound, the shadow matrices pushed onto the fixed-function matrix stack, and
-    // the render origin at the camera so it matches the grid-snapped shadow model-view
-    // Culling is a plain horizontal box of the shadow frustum's half-extent, which is OptiFine's default — it has
-    // no per-entity shadow frustum either
+    // Renders entities and block entities into the shadow map like OptiFine: fixed-function geometry under the untransformed shadow program, shadow matrices on the fixed-function stack, render origin at the camera to match the snapped model-view; culling is a plain horizontal box like OptiFine's
     private void renderEntityShadows(Minecraft mc, Vector3d camera) {
         if (this.entityShadowProgram == null) {
             return;
@@ -508,8 +431,7 @@ public class UmbraShadowRenderer {
         loadMatrix(this.shadowModelView);
 
         try {
-            // Anchor the render origin at the interpolated camera position (what the shadow model-view was built
-            // around). Both dispatchers cache it; vanilla re-caches for the main pass right after this hook.
+            // Anchor the render origin at the interpolated camera position the shadow model-view was built around; both dispatchers cache it, and vanilla re-caches for the main pass right after
             mc.getRenderManager().cacheActiveRenderInfo(world, mc.fontRenderer, viewEntity, mc.pointedEntity,
                     mc.gameSettings, partialTicks);
             mc.getRenderManager().setRenderPosition(camera.x, camera.y, camera.z);
@@ -518,11 +440,7 @@ public class UmbraShadowRenderer {
 
             bindShadowGeometryProgram(this.entityShadowProgram);
 
-            // Entities and TESRs draw fixed-function, straight after Embeddium rendered shadow terrain from its own
-            // VAO. Hand the vertex pipeline back clean, or a leftover generic attribute array wins over the aliased
-            // client array (see UmbraRenderingPipeline#resetVanillaVertexArrayState). This is also where the player
-            // model's ModelRenderer display lists are first compiled — and a display list bakes its vertex data at
-            // compile time, so a bad state here would flatten the first-person arm's texcoords for the whole session.
+            // Entities and TESRs draw fixed-function straight after shadow terrain rendered from its own VAO; hand the vertex pipeline back clean (see resetVanillaVertexArrayState), especially since the player model's display lists first compile here and bake the state for the session
             UmbraRenderingPipeline.resetVanillaVertexArrayState();
 
             if (this.content.shouldRenderEntities() || this.content.shouldRenderPlayer()) {
@@ -543,8 +461,7 @@ public class UmbraShadowRenderer {
             }
 
             if (this.content.shouldRenderAnyBlockEntities()) {
-                // Umbra draws block entities in the shadow pass under shadow_block, not the entity program. When the
-                // pack ships neither this is the same object already bound above and the rebind is a no-op.
+                // Umbra draws block entities in the shadow pass under shadow_block, not the entity program; with neither shipped this is the same object and the rebind is a no-op
                 bindShadowGeometryProgram(this.blockEntityShadowProgram);
                 boolean lightOnly = this.content.shouldRenderLightBlockEntitiesOnly();
                 for (TileEntity tileEntity : world.loadedTileEntityList) {
@@ -555,8 +472,7 @@ public class UmbraShadowRenderer {
                     if (Math.abs(pos.getX() - camera.x) > cullRange || Math.abs(pos.getZ() - camera.z) > cullRange) {
                         continue;
                     }
-                    // shadowLightBlockEntities without shadowBlockEntities: only emitters, so a pack doing voxel
-                    // lighting still sees light sources without paying for every chest and sign.
+                    // shadowLightBlockEntities without shadowBlockEntities: only emitters, so a voxel-lighting pack sees light sources without paying for every chest and sign
                     if (lightOnly && tileEntity.getBlockType().getLightValue(
                             world.getBlockState(pos), world, pos) <= 0) {
                         continue;
@@ -584,13 +500,7 @@ public class UmbraShadowRenderer {
         GlStateManager.multMatrix(this.matrixBuffer);
     }
 
-    // The distortion functions the installed packs use
-    // A pack applies its distortion TWICE — per vertex in shadow.vsh while rasterising, and per pixel in the
-    // composite lookup — so the two cancel, and anything assuming the wrong one manufactures a mismatch that exists
-    // nowhere but in the assumption
-    // Not hypothetical: this list previously had COMPLEMENTARY hardcoded with no indication that it had, and the
-    // result was read as evidence of a ~19-block shadow offset in miniature and Body Camera, both of which actually
-    // use LOLIP_P. The "offset" was the model disagreeing with itself
+    // The distortion functions the installed packs use; a pack applies its distortion TWICE (shadow.vsh and the composite lookup) so they cancel, and hardcoding COMPLEMENTARY here manufactured a phantom ~19-block offset on packs that actually use LOLIP_P
     private static final String[] SHADOW_DISTORTION_MODELS = {"COMPLEMENTARY", "LOLIP_P"};
 
     // Debug: share of the shadow map still at clear depth
@@ -604,10 +514,7 @@ public class UmbraShadowRenderer {
         return (float) cleared / depth.length;
     }
 
-    // shadowcolor1 read back as interleaved RGBA
-    // Both halves matter and they mean different things: the red channel feeds the light shafts' tint branch
-    // through pow2(rgb * 4.0), where 0.25 is neutral, while the ALPHA channel carries the scene-aware light-shaft
-    // height as 0.25 + max0(positionYM * 0.05), which is what actually drives vlFactor
+    // shadowcolor1 read back as interleaved RGBA; red feeds the light shafts' tint through pow2(rgb * 4.0) with 0.25 neutral, while ALPHA carries the light-shaft height (0.25 + max0(positionYM * 0.05)) that drives vlFactor
     private float[] readShadowColor1() {
         int texels = this.resolution * this.resolution;
         ByteBuffer pixels = ByteBuffer.allocateDirect(texels * 4 * 4).order(ByteOrder.nativeOrder());
@@ -625,29 +532,18 @@ public class UmbraShadowRenderer {
         return String.format("%.3f", 100.0 * count / total);
     }
 
-    // Copies the shadow framebuffer's depth into the destination texture
-    // Requires the shadow FBO to be bound as this pass's framebuffer at call time, which is what makes the copy a
-    // framebuffer read rather than a texture-to-texture blit
+    // Copies the shadow framebuffer's depth into destination; requires the shadow FBO bound as this pass's framebuffer, making it a framebuffer read rather than a texture blit
     private void copyDepthTo(DepthTexture destination) {
         GlTextureUnits.selectScratch(TEXTURE_SETUP_UNIT);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, destination.getTextureId());
         LWJGL.glCopyTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 0, 0, this.resolution, this.resolution);
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
         GlTextureUnits.resetToUnit0();
-        // Unit 31 can belong to a custom texture or custom-image sampler on 32-unit drivers. Umbra rebinds these
-        // resources per program use; restore them before translucent shadow terrain/voxelization continues.
+        // Unit 31 can belong to a custom texture or image sampler on 32-unit drivers; Umbra rebinds per program use, so restore before translucent shadow terrain continues
         this.shaderPackResourceRestorer.run();
     }
 
-    // The shadow camera, a verbatim port of Iris's ShadowMatrices — createModelViewMatrix, which is
-    // createBaselineModelViewMatrix followed by snapModelViewToGrid, plus createOrthoMatrix
-    // The port is direct because the operation order maps one-to-one: Mojang's PoseStack.multiply and mulPose
-    // post-multiply exactly as JOML's translate and rotate* do, and Vector3f.XP/ZP.rotationDegrees(d) is
-    // rotateX/rotateZ(toRadians(d))
-    // The GRID SNAP is the part that matters and the part that was wrong before. Offsetting by the fractional
-    // camera position and centring by half a cell is what keeps shadow-map texels from swimming as the camera
-    // moves; the previous hand-rolled snap omitted the centring and had the sign backwards, which is what made the
-    // shadows flicker
+    // The shadow camera, a verbatim port of Iris's ShadowMatrices (baseline model-view, snapModelViewToGrid, ortho); the GRID SNAP is what matters, since the previous hand-rolled snap omitted the half-cell centring and had the sign backwards, which made shadows flicker
     private void computeMatrices() {
         if (this.shadowMapFov != null) {
             // ShadowMatrices.createPerspectiveMatrix(fov).
@@ -711,8 +607,7 @@ public class UmbraShadowRenderer {
         this.depthTextureNoTranslucents.destroy();
         LWJGL.glDeleteTextures(this.colorTexture0);
         LWJGL.glDeleteTextures(this.colorTexture1);
-        // Only when it is genuinely a second program: with no shadow_block in the pack this is the same object as
-        // entityShadowProgram, and destroying it here would leave the line below freeing an already-deleted program.
+        // Only when it is genuinely a second program: with no shadow_block this is the same object as entityShadowProgram, and destroying it would double-free
         if (!this.blockEntityProgramShared && this.blockEntityShadowProgram != null) {
             this.blockEntityShadowProgram.getProgram().destroy();
         }

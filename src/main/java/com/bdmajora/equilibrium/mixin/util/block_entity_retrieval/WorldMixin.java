@@ -10,13 +10,7 @@ import org.spongepowered.asm.mixin.Mixin;
 
 import javax.annotation.Nullable;
 
-// gives World a non-creating tile entity lookup
-// deliberately additive: nothing vanilla is replaced, so World#getTileEntity keeps its creating
-// behaviour for the callers that depend on it, and only code that has explicitly opted in - the
-// hopper - reads through this
-// EnumCreateEntityType.CHECK is the mode that answers honestly: IMMEDIATE builds and registers a
-// tile entity, QUEUED schedules one to be built later which is just as much a side effect, and
-// CHECK returns what is actually there
+// Gives World a non-creating tile entity lookup, purely additive so World#getTileEntity keeps creating for callers that depend on it; EnumCreateEntityType.CHECK returns what is actually there, unlike IMMEDIATE and QUEUED
 @Mixin(World.class)
 public abstract class WorldMixin implements TileEntityAccess {
     @Nullable
@@ -24,8 +18,7 @@ public abstract class WorldMixin implements TileEntityAccess {
     public TileEntity equilibrium$getExistingTileEntity(BlockPos pos) {
         World world = (World) (Object) this;
 
-        // Outside the build height a chunk has nothing to answer with, and vanilla's own guard here
-        // is the reason getTileEntity does not index out of bounds.
+        // Outside the build height a chunk has nothing to answer with; vanilla's own guard here is why getTileEntity does not index out of bounds
         if (world.isOutsideBuildHeight(pos)) {
             return null;
         }
@@ -40,8 +33,7 @@ public abstract class WorldMixin implements TileEntityAccess {
 
         TileEntity tileEntity = chunk.getTileEntity(pos, Chunk.EnumCreateEntityType.CHECK);
 
-        // The chunk hands back invalidated tile entities until something prunes them; the hopper
-        // would otherwise cache one and keep transferring into a block that no longer exists.
+        // The chunk hands back invalidated tile entities until pruned; the hopper would otherwise cache one and keep transferring into a block that no longer exists
         return tileEntity != null && !tileEntity.isInvalid() ? tileEntity : null;
     }
 }

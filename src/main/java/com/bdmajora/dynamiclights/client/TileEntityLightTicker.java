@@ -9,8 +9,7 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
 
 import java.util.List;
 
-// Ticks block entity light sources once per client tick, since unlike entities they have no shared update hook
-// The walk is skipped unless a mod registered a block entity handler, so a default install pays one map check
+// Ticks block entity light sources once per client tick since they have no shared update hook; the walk is skipped unless a mod registered a block entity handler
 public final class TileEntityLightTicker {
     private TileEntityLightTicker() {
     }
@@ -42,8 +41,7 @@ public final class TileEntityLightTicker {
 
         List<TileEntity> tileEntities = world.loadedTileEntityList;
 
-        // Indexed rather than for-each: a handler is free to invalidate a block entity, and the
-        // resulting removal would fail a live iterator with a ConcurrentModificationException.
+        // Indexed rather than for-each: a handler may invalidate a block entity, and the removal would throw ConcurrentModificationException on a live iterator
         for (int i = 0, size = tileEntities.size(); i < size; i++) {
             TileEntity tileEntity;
             try {

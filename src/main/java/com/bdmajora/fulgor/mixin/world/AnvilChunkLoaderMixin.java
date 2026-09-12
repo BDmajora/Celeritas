@@ -13,13 +13,10 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-// Mixes into AnvilChunkLoader to persist the two lighting-state pieces Fulgor adds to a chunk: pending
-// neighbour boundary checks, and whether the chunk was ever fully lit. Reuses vanilla's own
-// LightPopulated tag (rather than a new one) so a world stays consistent moving between Fulgor and vanilla
+// Persists the two lighting-state pieces Fulgor adds to a chunk (pending boundary checks, whether it was ever fully lit), reusing vanilla's LightPopulated tag so a world stays consistent moving between Fulgor and vanilla
 @Mixin(AnvilChunkLoader.class)
 public abstract class AnvilChunkLoaderMixin {
-    // A second flush after ChunkProviderServer's; not redundant since autosave, world unload, and mods
-    // calling the loader directly all bypass the provider
+    // A second flush after ChunkProviderServer's; not redundant since autosave, world unload and mods calling the loader directly bypass the provider
     @Inject(method = "saveChunk", at = @At("HEAD"))
     private void fulgor$flushBeforeSave(World world, Chunk chunk, CallbackInfo ci) {
         ((LightingEngineProvider) world).fulgor$getLightingEngine().processLightUpdates();

@@ -7,9 +7,7 @@ import com.bdmajora.impetus.engine.impl.gl.GlObject;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-// One compiled shader stage
-// Separate from the linked program because a single compiled stage is routinely attached to several programs, and
-// each owns its own lifetime
+// One compiled shader stage, separate from the linked program because a stage is routinely attached to several programs with their own lifetimes
 public class GlShader extends GlObject {
     private static final Logger LOGGER = LogManager.getLogger(GlShader.class);
 

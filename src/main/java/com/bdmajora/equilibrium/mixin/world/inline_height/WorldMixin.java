@@ -6,13 +6,7 @@ import net.minecraft.world.chunk.Chunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
-// removes the doubled chunk lookup from world height queries
-// same shape as mixin.entity.fast_retrieval: vanilla tests isChunkLoaded and then fetches the chunk
-// it just confirmed
-// height is read by weather, by mob spawning, by sky-light checks and by every canSeeSky call, so it
-// is asked far more often than its simplicity suggests
-// the out-of-bounds branch is preserved exactly, including the odd asymmetry that vanilla returns the
-// sea level for coordinates outside the world border but zero for an unloaded chunk inside it
+// Removes the doubled chunk lookup from world height queries (isChunkLoaded then getChunk), asked by weather, spawning, sky-light and every canSeeSky; the out-of-bounds asymmetry (sea level outside the border, zero for unloaded inside) is preserved exactly
 @Mixin(World.class)
 public abstract class WorldMixin implements ChunkAccess {
     // Overwrite: reads the heightmap directly instead of going through getChunk

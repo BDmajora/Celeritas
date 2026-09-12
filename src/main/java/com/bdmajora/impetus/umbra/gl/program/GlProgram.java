@@ -4,15 +4,12 @@ import com.bdmajora.impetus.umbra.gl.GlResource;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// A linked GL program: a .vsh/.fsh pair, optionally with geometry or tessellation stages
-// Owns nothing but the handle and the bind/unbind/destroy lifecycle. Uniforms and samplers are layered on top by
-// ProgramUniforms and ProgramSamplers, so this stays usable for the engine's own programs as well as pack ones
+// A linked GL program (.vsh/.fsh, optionally geometry or tessellation) owning only the handle and bind/unbind/destroy; uniforms and samplers layer on top, so this serves the engine's own programs too
 public class GlProgram extends GlResource {
     // Only for log messages and debugging; GL never sees it
     private final String name;
 
-    // Package-private: ProgramBuilder is the only legitimate way to get one, because a handle that has not been
-    // link-checked is indistinguishable from a working one until the first draw silently renders nothing
+    // Package-private: ProgramBuilder is the only way to get one, since an unchecked handle is indistinguishable from a working one until the first draw renders nothing
     GlProgram(int handle, String name) {
         this.name = name;
         setHandle(handle);
@@ -23,14 +20,12 @@ public class GlProgram extends GlResource {
         LWJGL.glUseProgram(getGlId());
     }
 
-    // Binds program 0, which is "no program" — this deliberately does NOT restore whatever was bound before, so
-    // the caller is responsible for rebinding if it had something
+    // Binds program 0; deliberately does NOT restore what was bound before, so the caller rebinds if it had something
     public void unbind() {
         LWJGL.glUseProgram(0);
     }
 
-    // -1 when the name does not exist in the linked program, which includes uniforms the GLSL compiler optimised
-    // out for being unused. Callers treat that as "skip this uniform" rather than as an error
+    // -1 when the name is not in the linked program, including uniforms the compiler optimised out; callers treat that as "skip", not an error
     public int getUniformLocation(CharSequence name) {
         return LWJGL.glGetUniformLocation(getGlId(), name);
     }

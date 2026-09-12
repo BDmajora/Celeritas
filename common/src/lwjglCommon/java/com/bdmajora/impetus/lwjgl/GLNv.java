@@ -1,10 +1,6 @@
 package com.bdmajora.impetus.lwjgl;
 
-// The NV and ARB enum values the mesh-shader terrain backend needs
-// The GL11..GL46 wrapper classes next to this one are generated from LWJGL's core GL classes, so they carry no
-// extension enums at all; these are transcribed from the extension specs instead
-// Values only — the entry points themselves live on LWJGLService, because they have to be dispatched through the
-// LWJGL2/LWJGL3 split like everything else
+// NV/ARB enum values for the mesh-shader backend, transcribed from the specs since the generated GL wrappers carry no extension enums
 public final class GLNv {
     private GLNv() {}
 
@@ -25,8 +21,7 @@ public final class GLNv {
     public static final int GL_UNIFORM_BUFFER_UNIFIED_NV = 0x936E;
     public static final int GL_UNIFORM_BUFFER_ADDRESS_NV = 0x936F;
 
-    // ---- NV_bindless_multi_draw_indirect ----
-    // Not in a header LWJGL exposes as constants on the extension class, so spelled out here
+    // NV_bindless_multi_draw_indirect constants, spelled out because LWJGL exposes no extension class for them
     public static final int GL_DRAW_INDIRECT_UNIFIED_NV = 0x8F40;
     public static final int GL_DRAW_INDIRECT_ADDRESS_NV = 0x8F41;
 

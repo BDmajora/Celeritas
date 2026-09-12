@@ -19,8 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-// Entry point and state holder for the shader layer: the parsed ShaderPack, the compiled UmbraPipeline and the
-// per-frame UmbraRenderingPipeline, each with its own lifetime. Nothing here throws; every failure leaves shaders off
+// Entry point and state holder for the shader layer: the parsed ShaderPack, compiled UmbraPipeline and per-frame UmbraRenderingPipeline, each with its own lifetime; nothing here throws, every failure leaves shaders off
 public final class Umbra {
     public static final String MODNAME = "Impetus/Umbra";
     private static final Logger LOGGER = LogManager.getLogger(MODNAME);
@@ -28,24 +27,18 @@ public final class Umbra {
     private static UmbraConfig config;
     private static ShaderPack currentPack;
 
-    // Option values queued by the in-game menu, applied and merged into <pack>.txt on the next reload
-    // Queued rather than applied immediately because changing an option means recompiling the pack, which can only
-    // happen on the render thread
+    // Option values queued by the in-game menu, applied and merged into <pack>.txt on the next reload; queued because changing an option recompiles the pack, which only happens on the render thread
     private static final Map<String, String> shaderPackOptionQueue = new HashMap<>();
     // When set, the next reload discards every changed option value and takes the pack's own defaults
     private static boolean resetShaderPackOptions;
 
-    // The compiled programs for the current pack. Built lazily on the render thread, since compiling needs a GL
-    // context
+    // The compiled programs for the current pack, built lazily on the render thread since compiling needs a GL context
     private static UmbraPipeline pipeline;
     private static boolean pipelineNeedsInit;
 
-    // The frame pipeline: render targets, the gbuffer, and the composite/final chain
-    // Built at renderWorld HEAD rather than alongside the compile, because it sizes its targets from the current
-    // framebuffer dimensions
+    // The frame pipeline (render targets, gbuffer, composite/final chain), built at renderWorld HEAD rather than with the compile because it sizes targets from the current framebuffer
     private static UmbraRenderingPipeline renderingPipeline;
-    // Latched when construction failed for the current pack, so the attempt is not repeated — and re-logged — on
-    // every single frame for the rest of the session
+    // Latched when construction failed for the current pack, so the attempt is not repeated and re-logged every frame
     private static boolean renderingPipelineFailed;
 
     private Umbra() {
@@ -61,10 +54,7 @@ public final class Umbra {
         return config;
     }
 
-    // Brings Umbra up against a game directory: loads optionsshaders.txt, creates shaderpacks/ if absent, and
-    // parses whichever pack is currently selected
-    // Never throws. A failure here logs and leaves Umbra disabled, because a broken pack must not stop the game
-    // from starting
+    // Brings Umbra up against a game directory (optionsshaders.txt, shaderpacks/, parse the selected pack); never throws, since a broken pack must not stop the game starting
     public static void initialize(Path gameDirectory) {
         config = new UmbraConfig(gameDirectory);
         try {
@@ -80,9 +70,7 @@ public final class Umbra {
         }
     }
 
-    // Loads, or reloads, the pack the config names
-    // Existing state is cleared FIRST, so a failed load cannot leave half of the previous pack live alongside none
-    // of the new one
+    // Loads or reloads the pack the config names; existing state is cleared FIRST so a failed load cannot leave half the previous pack live
     public static synchronized void loadCurrentShaderpack() {
         unloadShaderpack();
 
@@ -130,8 +118,7 @@ public final class Umbra {
         }
     }
 
-    // Queues option changes from the in-game menu and reloads so they take effect and get persisted
-    // Keyed by option name; the value is "true"/"false" for a boolean option or the raw token for a string one
+    // Queues option changes from the in-game menu and reloads so they take effect and persist; keyed by option name, value "true"/"false" or the raw token
     public static synchronized void queueShaderPackOptions(Map<String, String> changes) {
         shaderPackOptionQueue.putAll(changes);
         loadCurrentShaderpack();
@@ -150,8 +137,7 @@ public final class Umbra {
             return result;
         }
         Properties properties = new Properties();
-        // NB: OptiFine specifies these config files as ISO-8859-1, but Properties.load defaults to that for byte
-        //     streams, so no special handling is needed.
+        // NB: OptiFine specifies these config files as ISO-8859-1, which Properties.load already defaults to for byte streams
         try (InputStream is = Files.newInputStream(path)) {
             properties.load(is);
         } catch (IOException e) {
@@ -171,27 +157,19 @@ public final class Umbra {
         }
     }
 
-    // Render-thread hook: builds or rebuilds the compiled pipeline the first frame after a pack change
-    // A cheap no-op when nothing changed, so it is safe to call unconditionally each frame
-    // Requires a current GL context — a RenderTickEvent is the intended caller. A compile failure logs and leaves
-    // shaders off rather than throwing
+    // Render-thread hook building or rebuilding the compiled pipeline the first frame after a pack change; cheap no-op otherwise, needs a GL context, and a compile failure logs and leaves shaders off
     public static synchronized void updatePipeline() {
         if (!pipelineNeedsInit) {
             return;
         }
-        // When the pack was switched off entirely there will be no renderWorld-driven rebuild, so tear down here
-        // (this runs on the render thread with a GL context). When a pack IS active, leave the flag set for
-        // beginFrame() so teardown and rebuild happen together at renderWorld HEAD.
+        // With the pack switched off entirely there is no renderWorld-driven rebuild, so tear down here; with a pack active, leave the flag for beginFrame() so teardown and rebuild happen together
         if (currentPack == null) {
             pipelineNeedsInit = false;
             destroyPipelines();
         }
     }
 
-    // Render-thread hook for renderWorld HEAD: builds the frame pipeline on the first frame after a pack change,
-    // then returns it
-    // Null when shaders are off OR the pack failed to build, and the caller treats both the same way — render
-    // vanilla
+    // Render-thread hook for renderWorld HEAD: builds the frame pipeline on the first frame after a pack change and returns it; null when shaders are off OR the build failed, both meaning render vanilla
     public static synchronized UmbraRenderingPipeline beginFrame() {
         if (pipelineNeedsInit) {
             pipelineNeedsInit = false;
@@ -212,8 +190,7 @@ public final class Umbra {
         return renderingPipeline;
     }
 
-    // The frame pipeline for the mid-frame and end-of-frame hooks, or null when shaders are off
-    // Unlike beginFrame this never BUILDS anything, so it is safe from any hook regardless of ordering
+    // The frame pipeline for mid-frame and end-of-frame hooks, or null when shaders are off; never BUILDS anything, so safe from any hook regardless of ordering
     public static UmbraRenderingPipeline getRenderingPipeline() {
         return renderingPipeline;
     }
@@ -242,8 +219,7 @@ public final class Umbra {
         pipelineNeedsInit = true;
     }
 
-    // Whether a pack is parsed and active. This is what IrisApi reports to other mods, so it means "shaders are
-    // running", not merely "a pack is selected"
+    // Whether a pack is parsed and active; this is what IrisApi reports to other mods, so it means "shaders are running", not "a pack is selected"
     public static boolean isShaderPackInUse() {
         return currentPack != null;
     }
@@ -253,8 +229,7 @@ public final class Umbra {
         return currentPack;
     }
 
-    // The selected pack's name, or the "off" sentinel when none is — selection is config state and exists even
-    // when nothing loaded successfully
+    // The selected pack's name or the "off" sentinel; selection is config state and exists even when nothing loaded
     public static String getSelectedPackName() {
         return config == null ? UmbraConfig.NO_PACK : config.getShaderPackName();
     }
@@ -264,10 +239,7 @@ public final class Umbra {
         return config == null ? java.util.Collections.emptyList() : config.listShaderpacks();
     }
 
-    // Selects a pack by name, or the NO_PACK sentinel to disable, persists the choice to optionsshaders.txt, and
-    // re-parses
-    // Deliberately does NO GL work, which is what makes it safe to call straight from the GUI thread — the pipeline
-    // is rebuilt on the next render frame by updatePipeline
+    // Selects a pack by name (or NO_PACK to disable), persists to optionsshaders.txt and re-parses; does NO GL work so it is safe from the GUI thread, and updatePipeline rebuilds next frame
     public static synchronized void setShaderpackAndReload(String name) {
         if (config == null) {
             return;

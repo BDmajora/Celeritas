@@ -14,9 +14,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Predicate;
 
-// Gates each animated sprite's tick on its category switch, so disabling lava animation stops paying for it, not just hiding it
-// 1.12.2 sprites carry only an icon name, so the category is recovered by substring match; unmatched names fall through to "animate it"
-// Table is built once per atlas on first use, not static, since sprite names aren't known until the atlas is stitched
+// Gates each animated sprite's tick on its category switch so disabling lava animation stops paying for it; 1.12.2 sprites carry only a name, so categories match by substring, and the table is built per atlas on first use
 @Mixin(TextureMap.class)
 public abstract class TextureMapMixin {
     @Unique
@@ -60,8 +58,7 @@ public abstract class TextureMapMixin {
             }
         }
 
-        // Anything unrecognised is covered by the general block-animation switch, which is what
-        // makes that switch mean "everything else" rather than "a handful of vanilla blocks".
+        // Anything unrecognised is covered by the general block-animation switch, making it mean "everything else" rather than "a handful of vanilla blocks"
         return settings.blockAnimations;
     }
 

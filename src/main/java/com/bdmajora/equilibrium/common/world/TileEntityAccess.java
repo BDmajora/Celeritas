@@ -5,13 +5,9 @@ import net.minecraft.util.math.BlockPos;
 
 import javax.annotation.Nullable;
 
-// Reads a tile entity without creating one, implemented on World by mixin
-// World.getTileEntity uses IMMEDIATE, which constructs and registers one for a block that should have it; wrong for a
-// caller only asking whether one is there, which is what the hopper does on every transfer attempt
+// Reads a tile entity without creating one (on World by mixin); World.getTileEntity uses IMMEDIATE and constructs one, wrong for a hopper only asking whether one exists
 public interface TileEntityAccess {
-    // the tile entity at this position if one already exists, otherwise null
-    // never constructs, never registers, never queues, and never loads a chunk: an unloaded position
-    // answers null rather than dragging terrain in
+    // The tile entity at this position if it already exists, else null; never constructs, registers, queues or loads a chunk
     @Nullable
     TileEntity equilibrium$getExistingTileEntity(BlockPos pos);
 }

@@ -44,10 +44,7 @@ public class VintageRenderSectionManager extends RenderSectionManager {
         this.sectionCache = new ClonedChunkSectionCache(world);
     }
 
-    // the Umbra shadow pass re-drives this render path from the sun's point of view
-    // routing it onto the dedicated shadow render lists, instead of the main camera's culled lists, is
-    // what lets the shadow pass draw every section in range regardless of player-view frustum and
-    // occlusion culling - the stability requirement behind Complementary's shadow.culling = reversed
+    // The Umbra shadow pass re-drives this path from the sun; routing it onto the dedicated shadow lists lets it draw every section in range regardless of player-view culling, the stability Complementary's shadow.culling = reversed needs
     @Override
     public boolean isInShadowPass() {
         return com.bdmajora.impetus.umbra.pipeline.UmbraShadowRenderer.isShadowPass();
@@ -80,13 +77,10 @@ public class VintageRenderSectionManager extends RenderSectionManager {
     @Override
     protected boolean shouldUseOcclusionCulling(Viewport positionedViewport, boolean spectator) {
         if (isInShadowPass()) {
-            // Voxelization must see a FRAME-STABLE section set: occlusion culling (especially async) lets cave
-            // interiors and other marginal sections blink in and out of the shadow draw, which makes the pack's
-            // colored-lighting floodfill chase a different voxel field every frame (permanent strobing).
+            // Voxelization must see a FRAME-STABLE section set: occlusion culling lets marginal sections blink in and out of the shadow draw, so the pack's colored-lighting floodfill chases a different voxel field every frame and strobes
             return false;
         }
-        // `occlusion.culling = false`: the pack needs geometry the player cannot see (it is sampling the gbuffer
-        // from another angle, e.g. for reflections or its own shadow logic).
+        // `occlusion.culling = false`: the pack needs geometry the player cannot see, since it samples the gbuffer from another angle (reflections, its own shadow logic)
         com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline pipeline =
                 com.bdmajora.impetus.umbra.Umbra.getRenderingPipeline();
         if (pipeline != null && pipeline.shouldDisableOcclusionCulling()) {
@@ -117,9 +111,7 @@ public class VintageRenderSectionManager extends RenderSectionManager {
         if (y < 0 || y >= array.length) {
             return true;
         }
-        // Deliberately not isEmpty(): Fulgor widens that to mean "has nothing worth sending to the
-        // client", which is true of a blockless section only when its light is trivial too. The
-        // visibility graph wants the narrower question of whether there is any geometry.
+        // Deliberately not isEmpty(): Fulgor widens that to "nothing worth sending to the client", and the visibility graph wants the narrower question of whether there is any geometry
         return array[y] == Chunk.NULL_BLOCK_STORAGE || FulgorRenderBridge.isEmptyOfBlocks(array[y]);
     }
 
@@ -154,9 +146,7 @@ public class VintageRenderSectionManager extends RenderSectionManager {
         super.updateChunks(updateImmediately);
     }
 
-    // ridiculous workaround: some mods rely on side effects of calling getRenderBoundingBox to
-    // initialize tile entity state
-    // can be removed if we start using getRenderBoundingBox for TE rendering again
+    // Ridiculous workaround: some mods rely on getRenderBoundingBox's side effects to initialise tile entity state; removable if we use it for TE rendering again
     @SuppressWarnings("unchecked")
     private static void retrieveBBForList(List<?> blockEntities) {
         if (!blockEntities.isEmpty()) {
@@ -187,18 +177,7 @@ public class VintageRenderSectionManager extends RenderSectionManager {
             super(device, renderPassConfiguration);
         }
 
-        // never in the shadow pass - Umbra disables this the same way, in
-        // MixinDefaultChunkRenderer#umbra$disableBlockFaceCullingInShadowPass
-        // getVisibleFaces drops each section's quads by facing relative to the OCCLUSION camera, which
-        // is always the player's; that is correct for the gbuffer pass and completely wrong for the
-        // shadow pass, which draws the same geometry from the sun
-        // standing 20 blocks underground, every section above the player fails
-        // originY > boundsMinY - 3, so MODEL_POS_Y is cleared and every upward-facing block top in
-        // those sections is dropped - precisely the surfaces the sun hits
-        // the ground overhead then never reaches the shadow map, those texels keep the 1.0 depth clear,
-        // and Complementary's light-shaft march reads clamp((1.0 - shadowPos.z) * 65536.0, 0.0, 1.0)
-        // == 1.0, fully lit, for samples sitting under solid rock
-        // that is the sunlight leaking through the ground into caves
+        // Never in the shadow pass (Umbra does the same in MixinDefaultChunkRenderer): getVisibleFaces culls by facing relative to the player's occlusion camera, which from underground drops every upward block top above the player, so the ground never reaches the shadow map and sunlight leaks into caves
         @Override
         public boolean useBlockFaceCulling(){
             if (com.bdmajora.impetus.umbra.pipeline.UmbraShadowRenderer.isShadowPass()) {

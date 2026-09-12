@@ -4,8 +4,7 @@ import com.bdmajora.impetus.umbra.gl.program.DrawBuffers;
 
 import java.util.regex.Pattern;
 
-// Rewrites a GLSL-120 composite, deferred or final program to 330 core: injects quad attributes, aliases the gl_*
-// built-ins onto them including an ortho MVP so ftransform() still maps the quad, and promotes fragment outputs
+// Rewrites a GLSL-120 composite, deferred or final program to 330 core: injects quad attributes, aliases the gl_* built-ins onto them with an ortho MVP so ftransform() still maps the quad, and promotes fragment outputs
 public final class FullscreenTransformer {
     private static final Pattern VERSION = Pattern.compile("^\\s*#version[^\\n]*\\n", Pattern.MULTILINE);
 
@@ -25,8 +24,7 @@ public final class FullscreenTransformer {
             "vec3 iris_VertNormal = vec3(0.0, 0.0, 1.0);",
             "mat4 iris_Identity = mat4(1.0);",
             "mat3 iris_Identity3 = mat3(1.0);",
-            // Ortho that maps the [0,1] fullscreen quad to NDC [-1,1] (column-major; M*(x,y,z,1)=(2x-1,2y-1,0,1)),
-            // matching Umbra's composite gl_ProjectionMatrix and the modern path's pushFullscreenFixedFunctionMatrices.
+            // Ortho mapping the [0,1] quad to NDC (column-major, M*(x,y,z,1)=(2x-1,2y-1,0,1)), matching Umbra's composite gl_ProjectionMatrix and the modern path's pushFullscreenFixedFunctionMatrices
             "mat4 iris_FullscreenProj = mat4(vec4(2.0, 0.0, 0.0, 0.0), vec4(0.0, 2.0, 0.0, 0.0), vec4(0.0), vec4(-1.0, -1.0, 0.0, 1.0));",
             "#define gl_Vertex iris_Vertex",
             "#define gl_MultiTexCoord0 iris_MultiTexCoord0",
@@ -51,9 +49,7 @@ public final class FullscreenTransformer {
             ""
     ) + "\n";
 
-    // The generated vertex main is APPENDED after the pack body rather than being part of the prologue
-    // It has to be: the hoisted global initialisers it runs reference the pack's own globals and uniforms, which
-    // must already be declared above the point where they are assigned
+    // The generated vertex main is APPENDED after the pack body, since the hoisted global initialisers it runs reference pack globals and uniforms that must already be declared
     private static String vertexMain(String hoistedAssignments) {
         return "\nvoid main() {\n"
                 + "    iris_Vertex = a_Position;\n"
@@ -63,9 +59,7 @@ public final class FullscreenTransformer {
                 + "}\n";
     }
 
-    // The fragment output array's length is queried from the driver rather than hardcoded
-    // A fixed 16 demands 16 contiguous fragment-output locations, which exceeds GL_MAX_DRAW_BUFFERS on plenty of
-    // drivers and fails to link outright on Mesa
+    // The fragment output array length is queried from the driver; a fixed 16 demands 16 contiguous locations, exceeding GL_MAX_DRAW_BUFFERS and failing to link on Mesa
     private static String fragmentPrologue() {
         return String.join("\n",
             "#version 330 core",
@@ -76,19 +70,12 @@ public final class FullscreenTransformer {
             "#define gl_TexCoord iris_TexCoord",
             "in float iris_FogFragCoord;",
             "#define gl_FogFragCoord iris_FogFragCoord",
-            // gl_Fog.* stand-ins. These MUST be real per-frame uniforms (fed by CommonUniforms), not
-            // constants: on OptiFine 1.12.2 (where IS_IRIS is undefined and MC_VERSION < 11802) packs such
-            // as Sildur's read gl_Fog.start/end/color in their composite fog and expect the live linear
-            // terrain-fog values. Emitting them as const 0.0/1.0/vec4(0) forces (dist - 0)/(1 - 0) >= 1 ->
-            // full-strength fog, washing the whole scene to the sky colour (the "everything above water is
-            // blue" haze). Unused ones are stripped by the compiler, so this is a no-op for packs that
-            // don't reference gl_Fog.
+            // gl_Fog.* stand-ins MUST be real per-frame uniforms fed by CommonUniforms, not constants: on OptiFine 1.12.2 packs like Sildur's read gl_Fog.start/end/color in composite fog, and const 0/1 forces full-strength fog (the "everything above water is blue" haze). Unused ones are stripped
             "uniform vec4 iris_FogColor;",
             "uniform float iris_FogDensity;",
             "uniform float iris_FogStart;",
             "uniform float iris_FogEnd;",
-            // gl_Fog.scale is inlined as an expression by FogParameters (Umbra's 1/(end-start)), so there is
-            // deliberately no iris_FogScale declaration here.
+            // gl_Fog.scale is inlined as an expression by FogParameters (Umbra's 1/(end-start)), so deliberately no iris_FogScale declaration here
             "vec4 iris_shadow2D(sampler2DShadow s, vec3 p) { return vec4(texture(s, p)); }",
             "vec4 iris_shadow2DLod(sampler2DShadow s, vec3 p, float l) { return vec4(textureLod(s, p, l)); }",
             ""
@@ -102,22 +89,18 @@ public final class FullscreenTransformer {
         body = convertVaryings(body, "out");
         body = dropAttribute(body);
         body = modernize(body);
-        // Pack globals initialized from uniforms are undefined under 330 (drivers may evaluate them before uniform
-        // upload — zeros/NaNs); run those initializers at the top of the generated main, like GLSL 120 did.
+        // Pack globals initialized from uniforms are undefined under 330 (drivers may evaluate before upload, giving zeros/NaNs); run those initializers at the top of the generated main like GLSL 120 did
         GlslGlobalInitHoister.Result hoist = GlslGlobalInitHoister.hoist(body);
         return VERTEX_PROLOGUE + hoist.body + vertexMain(hoist.hoistedAssignments);
     }
 
-    // Fragment epilogue: wraps the pack's main and scrubs non-finite components out of every slot the pass writes
-    // A NaN left in place spreads — it survives the composite chain, poisons the TAA history buffer, and turns a
-    // one-pixel divide-by-zero into a permanent smear — so replacing it with 0 is the robust behaviour
+    // Fragment epilogue wrapping the pack's main and scrubbing non-finite components from every written slot; a NaN survives the chain, poisons TAA history and turns one divide-by-zero into a permanent smear
     private static String fragmentEpilogue(int[] drawBuffers) {
         StringBuilder out = new StringBuilder("\nvoid main() {\n    irisMain();\n");
         int slots = drawBuffers == null ? 1 : Math.max(1, drawBuffers.length);
         for (int slot = 0; slot < slots; slot++) {
             String target = "iris_FragData[" + slot + "]";
-            // Per-component so a NaN in one channel does not discard the other three. Two mixes rather than one:
-            // `||` is a scalar-bool operator in GLSL, there is no component-wise or() for bvec4.
+            // Per-component so a NaN in one channel does not discard the other three; two mixes since `||` is scalar in GLSL and there is no component-wise or() for bvec4
             out.append("    ").append(target).append(" = mix(").append(target)
                     .append(", vec4(0.0), isnan(").append(target).append("));\n");
             out.append("    ").append(target).append(" = mix(").append(target)
@@ -149,15 +132,12 @@ public final class FullscreenTransformer {
         return VERSION.matcher(source).replaceFirst("");
     }
 
-    // Renames EVERY void main(), not just the first: a flattened source routinely holds several of them in
-    // mutually exclusive #ifdef branches, and leaving any one named main collides with the generated one
+    // Renames EVERY void main(), not just the first: a flattened source holds several in mutually exclusive #ifdef branches, and any left named main collides with the generated one
     private static String renameMain(String source) {
         return source.replaceAll("\\bvoid\\s+main\\s*\\(\\s*(void)?\\s*\\)", "void irisMain()");
     }
 
-    // varying becomes out or in, KEEPING whatever qualifier sits in front of it — flat, centroid, invariant
-    // Anchoring the match at ^\s*varying skips `flat varying` entirely, and a surviving `varying` at 330 core is a
-    // hard compile error (C7560/C7561). See ImpetusTerrainTransformer.convertVaryings for the full story
+    // varying becomes out or in KEEPING any qualifier in front (flat, centroid, invariant); anchoring at ^\s*varying skips `flat varying`, and a surviving `varying` at 330 core is a hard error (see ImpetusTerrainTransformer.convertVaryings)
     private static String convertVaryings(String source, String direction) {
         return source.replaceAll(
                 "(?m)^(\\s*)((?:(?:invariant|flat|smooth|noperspective|centroid)\\s+)*)varying\\b",
@@ -173,8 +153,7 @@ public final class FullscreenTransformer {
     private static String modernize(String source) {
         source = rewriteLegacyProjectionProducts(source);
         source = rewriteFogParameters(source);
-        // A sampler literally named "texture" clashes with the 330 builtin; rename it first (the word boundary keeps
-        // texture2D/texture2DLod untouched). The sampler-unit table maps "gtexture" to the same unit.
+        // A sampler literally named "texture" clashes with the 330 builtin, so rename it first (the word boundary keeps texture2D/texture2DLod); the unit table maps "gtexture" to the same unit
         source = source.replaceAll("\\btexture\\b", "gtexture");
         source = source.replaceAll("\\btexture2DLod\\b", "textureLod");
         source = source.replaceAll("\\btexture2D\\b", "texture");
@@ -185,12 +164,7 @@ public final class FullscreenTransformer {
         return source;
     }
 
-    // Some GLSL 120 OptiFine-era packs project a view-space direction as vec4(dir, 1.0) * gbufferProjection — the
-    // row-vector form
-    // With the column-major matrices this port uploads, that multiplication reads the perspective matrix as if it
-    // were transposed, which sends effects like Sildur's godray source far off screen
-    // Rewritten to the GLSL column-vector form. Model-view and inverse maths are deliberately left alone: those are
-    // often row-vector on purpose, and "fixing" them would break packs that are already correct
+    // Some GLSL 120 packs project as vec4(dir, 1.0) * gbufferProjection (row-vector form), which with column-major matrices reads the projection transposed and sends Sildur's godray source off screen; rewritten to column-vector form, while model-view and inverse maths are left alone since those are often row-vector on purpose
     private static String rewriteLegacyProjectionProducts(String source) {
         return source.replaceAll(
                 "\\bvec4\\s*\\(([^;\\n]+)\\)\\s*\\*\\s*\\b(gbufferProjection|gbufferPreviousProjection|shadowProjection)\\b",

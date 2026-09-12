@@ -9,7 +9,7 @@
     "updateUrl": "",
     "authorList": ["bdmajora"],
     "credits": "embeddedt (Celeritas/Embeddium), the Sodium project, and the Iris project",
-    "logoFile": "icon.png",
+    "logoFile": "assets/impetus/textures/gui/impetus.png",
     "screenshots": [],
     "dependencies": []
   }

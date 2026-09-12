@@ -12,10 +12,7 @@ import java.util.function.IntConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// Parses the directive a fragment shader uses to declare which colour attachments it writes
-// Two spellings: OptiFine's DRAWBUFFERS, one decimal digit per attachment and therefore limited to targets 0-9,
-// and Iris's newer RENDERTARGETS, a comma-separated list which is the only way to reach targets 10-15
-// A program declaring neither is assumed to write colortex0 alone
+// Parses the directive a fragment shader uses to declare which attachments it writes: OptiFine's DRAWBUFFERS (one digit each, targets 0-9) or Iris's RENDERTARGETS (comma list, the only way to reach 10-15); neither means colortex0 alone
 public final class DrawBuffers {
     private static final Pattern DRAWBUFFERS = Pattern.compile("/\\*\\s*DRAWBUFFERS:([0-9]+)\\s*\\*/");
     private static final Pattern RENDERTARGETS = Pattern.compile("/\\*\\s*RENDERTARGETS:\\s*([0-9,\\s]+)\\*/");
@@ -38,18 +35,7 @@ public final class DrawBuffers {
     private DrawBuffers() {
     }
 
-    // The length to declare `out vec4 iris_FragData[N]` with, queried from the driver rather than fixed
-    // An array fragment output occupies N CONTIGUOUS output locations, so N may not exceed GL_MAX_DRAW_BUFFERS,
-    // which is 8 on essentially all hardware
-    // This was hardcoded to 16. NVIDIA tolerates that silently because it only allocates the locations actually
-    // written, but Mesa enforces the rule and fails the link with "insufficient contiguous locations available for
-    // fragment shader output 'iris_FragData'", taking the whole terrain override down on Intel Arc
-    // Clamping loses nothing: DRAWBUFFERS and RENDERTARGETS indices are DENSE OUTPUT SLOTS, so the highest slot a
-    // program can reference is one less than the number of attachments it declares, and no framebuffer can carry
-    // more than GL_MAX_DRAW_BUFFERS of those anyway
-    // Iris sidesteps the question by emitting a separate layout(location = i) out vec4 per index the shader
-    // actually uses, never an array — that needs per-index reference analysis, which this port's
-    // `#define gl_FragData iris_FragData` approach deliberately trades away
+    // Length for `out vec4 iris_FragData[N]`, queried from the driver: an array output needs N CONTIGUOUS locations capped by GL_MAX_DRAW_BUFFERS (8), and the old hardcoded 16 linked on NVIDIA but failed on Mesa/Intel Arc; clamping loses nothing since directive indices are dense output slots
     public static int fragmentOutputArraySize() {
         if (fragmentOutputArraySize < 0) {
             int reported = LWJGL.glGetInteger(GL_MAX_DRAW_BUFFERS);
@@ -59,13 +45,7 @@ public final class DrawBuffers {
         return fragmentOutputArraySize;
     }
 
-    // Parses the directive from source whose preprocessor conditionals have been evaluated first, which is what
-    // Iris does
-    // It matters because a pack can declare several DRAWBUFFERS/RENDERTARGETS variants behind option gates —
-    // Complementary's deferred1 does exactly that across its coloured-lighting gates
-    // The raw-source parse below takes the first TEXTUAL match, so whenever the active variant is not the first one
-    // the flip accounting desynchronises from what the GPU actually writes, and a gl_FragData write lands on an
-    // attachment nothing expected
+    // Parses the directive from source whose preprocessor conditionals were evaluated first, as Iris does; packs declare several variants behind option gates (Complementary's deferred1), and a first-textual-match parse desynchronises the flip accounting from what the GPU writes
     public static int[] parseActive(String fragmentSource) {
         return parseActive(fragmentSource, com.bdmajora.impetus.umbra.gl.shader.ShaderMacros.standard());
     }
@@ -82,8 +62,7 @@ public final class DrawBuffers {
                             ? com.bdmajora.impetus.umbra.gl.shader.ShaderMacros.standard()
                             : defines);
             List<Directive> activeDirectives = directives(evaluated);
-            // The conditional evaluator cannot expand every shader-pack macro shape. If evaluation removes every
-            // target directive, keep the source-order fallback instead of inventing a default target mask.
+            // The conditional evaluator cannot expand every macro shape; if evaluation removes every target directive, keep the source-order fallback rather than invent a default mask
             return activeDirectives.isEmpty()
                     ? raw
                     : activeDirectives.get(activeDirectives.size() - 1).buffers.clone();
@@ -134,11 +113,7 @@ public final class DrawBuffers {
         return result;
     }
 
-    // Render targets are packed into DENSE framebuffer colour attachments before drawing, the same way Iris does it
-    // So a directive like DRAWBUFFERS:03648 means "output slot 0 writes colortex0, slot 1 writes colortex3, ..." —
-    // it does NOT mean leave holes up to location 8
-    // gl_FragData[N] and layout(location = N) already name those dense slots, so this pass only has to normalise
-    // gl_FragColor and the implicit named outputs
+    // Render targets are packed into DENSE attachments like Iris: DRAWBUFFERS:03648 means slot 0 writes colortex0, slot 1 colortex3, with no holes; gl_FragData[N] and layout(location = N) already name dense slots, so only gl_FragColor and implicit named outputs are normalised
     public static String rewriteFragmentOutputs(String fragmentSource, int[] drawBuffers) {
         if (fragmentSource == null) {
             return fragmentSource;
@@ -168,13 +143,7 @@ public final class DrawBuffers {
         return String.join("\n", lines);
     }
 
-    // Named fragment outputs stay as real `out` declarations, exactly as Iris keeps them
-    // An explicit layout(location = N) already names the dense output slot — the Nth entry of the RENDERTARGETS
-    // list — so it passes through untouched; a declaration without a layout gets layout(location = <declaration
-    // order>) added in place
-    // The earlier approach replaced the declaration with `#define <name> gl_FragData[slot]`, which corrupts any
-    // shader reusing that output's name as a local or a function parameter — Photon's `result` and
-    // `fragment_color` — because a macro rewrites every occurrence rather than just the declaration
+    // Named fragment outputs stay as real `out` declarations like Iris: an explicit layout(location = N) passes through, one without gets the declaration order; the old `#define <name> gl_FragData[slot]` corrupted shaders reusing the name as a local (Photon's `result`)
     private static String rewriteNamedFragmentOutputs(String source) {
         Matcher matcher = NAMED_FRAGMENT_OUTPUT.matcher(source);
         StringBuffer rewritten = new StringBuffer(source.length());
@@ -201,11 +170,7 @@ public final class DrawBuffers {
         return rewritten.toString();
     }
 
-    // Even preprocessed source can legitimately still hold several target directives, when the pack layers nested
-    // option gates — Complementary's water/lava path does this for coloured lighting and reflections
-    // The LAST surviving directive is the right one: the earlier ones are the fallback declarations that appear
-    // before the active optional writes, so taking the first would describe a narrower attachment set than the
-    // program actually writes
+    // Preprocessed source can still hold several target directives under nested option gates (Complementary's water/lava); the LAST is right, since earlier ones are fallback declarations narrower than what the program actually writes
     private static int[] parseLastDirective(String fragmentSource) {
         List<Directive> directives = directives(fragmentSource);
         if (directives.isEmpty()) {

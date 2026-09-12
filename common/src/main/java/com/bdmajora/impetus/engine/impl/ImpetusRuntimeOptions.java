@@ -2,8 +2,7 @@ package com.bdmajora.impetus.engine.impl;
 
 import com.bdmajora.impetus.engine.impl.gui.ImpetusGameOptions;
 
-// A snapshot of the option values the engine reads on hot paths, as plain static fields
-// Populated at startup and on every Apply, so a mesh worker reading an option never touches a config object
+// Snapshot of hot-path option values as plain statics, refreshed at startup and on every Apply so mesh workers never touch a config object
 public final class ImpetusRuntimeOptions {
     private ImpetusRuntimeOptions() {
     }
@@ -19,8 +18,7 @@ public final class ImpetusRuntimeOptions {
     public static ImpetusGameOptions.DeferChunkUpdatesMode deferMode = ImpetusGameOptions.DeferChunkUpdatesMode.ONE_FRAME;
     public static ImpetusGameOptions.InactivityFpsLimit inactivityFpsLimit = ImpetusGameOptions.InactivityFpsLimit.AFK;
 
-    // Texture sampling (block atlas). Only magnification is configurable; minification is pinned to vanilla's
-    // filter because the atlas has no border between sprites. See BlockAtlasFiltering.
+    // Block atlas sampling; only magnification is configurable, minification is pinned to vanilla's because the atlas has no sprite borders (see BlockAtlasFiltering)
     public static ImpetusGameOptions.PixelFilteringMode pixelFiltering = ImpetusGameOptions.PixelFilteringMode.NEAREST;
 
     // Copies the hot-path subset out of the config

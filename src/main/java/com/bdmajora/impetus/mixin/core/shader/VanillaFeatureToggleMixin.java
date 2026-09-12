@@ -7,8 +7,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// the "weather" shaders.properties toggle, wired through VanillaFeatureToggles: a pack that renders
-// its own precipitation asks vanilla to stop drawing rain and snow particles
+// The "weather" shaders.properties toggle via VanillaFeatureToggles: a pack rendering its own precipitation asks vanilla to stop drawing rain and snow
 @Mixin(EntityRenderer.class)
 public class VanillaFeatureToggleMixin {
     @Inject(method = "renderRainSnow", at = @At("HEAD"), cancellable = true, require = 0)

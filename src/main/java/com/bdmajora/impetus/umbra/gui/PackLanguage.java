@@ -6,8 +6,7 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
-// The pack's shaders/lang/<locale>.lang strings, layering the active locale over en_us per key so a partial
-// translation falls back cleanly; every lookup falls back to the raw name, so a pack with no lang still works
+// The pack's shaders/lang/<locale>.lang strings, layering the active locale over en_us per key; every lookup falls back to the raw name so a pack with no lang still works
 public final class PackLanguage {
     private final Map<String, String> entries = new HashMap<>();
 
@@ -43,8 +42,7 @@ public final class PackLanguage {
         }
     }
 
-    // Case-insensitive lookup, because packs are genuinely inconsistent about en_us versus en_US and an exact
-    // match silently finds nothing for half of them
+    // Case-insensitive lookup, because packs are inconsistent about en_us versus en_US and an exact match finds nothing for half of them
     private static String findLangFile(Map<AbsolutePackPath, String> sources, String localeName) {
         String target = "/lang/" + localeName + ".lang";
         for (Map.Entry<AbsolutePackPath, String> entry : sources.entrySet()) {
@@ -55,8 +53,7 @@ public final class PackLanguage {
         return null;
     }
 
-    // Converts &-prefixed formatting codes to the section sign, leaving any other ampersand alone — a label
-    // reading "Sun & Moon" must not lose its ampersand
+    // Converts &-prefixed formatting codes to the section sign, leaving other ampersands alone ("Sun & Moon" keeps its)
     private static String translateColorCodes(String value) {
         StringBuilder sb = new StringBuilder(value.length());
         for (int i = 0; i < value.length(); i++) {
@@ -84,8 +81,7 @@ public final class PackLanguage {
         return fallback != null ? fallback : name;
     }
 
-    // The display label for one specific VALUE of an option, e.g. turning RP_MODE's "1" into "Integrated PBR+",
-    // falling back to the raw value string
+    // The display label for one specific VALUE of an option (RP_MODE's "1" -> "Integrated PBR+"), falling back to the raw value
     public String valueLabel(String name, String value) {
         String label = get("value." + name + "." + value);
         return label != null ? label : value;
@@ -109,8 +105,7 @@ public final class PackLanguage {
         return value != null ? value : name;
     }
 
-    // The tooltip for an option, or null when the pack provides none — null rather than the raw name, because a
-    // tooltip repeating the label is worse than no tooltip
+    // The tooltip for an option, or null when the pack provides none, since a tooltip repeating the label is worse than none
     public String comment(String name) {
         return get("option." + name + ".comment");
     }

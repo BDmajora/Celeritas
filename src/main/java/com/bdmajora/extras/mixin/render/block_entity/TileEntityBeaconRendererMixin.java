@@ -11,9 +11,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// Beacon beam visibility and height; the height clamp is applied at the per-segment draw rather than where segments
-// are computed, since renderBeacon just gets a list of segments and this is the only place that sees consumed height so far
-// The beacon is cached across that call because renderBeacon doesn't receive it, and its world height gives the ceiling
+// Beacon beam visibility and height; the clamp is applied at the per-segment draw since renderBeacon only gets a segment list, and the beacon is cached across the call for its world height ceiling
 @Mixin(TileEntityBeaconRenderer.class)
 public class TileEntityBeaconRendererMixin {
     @Unique

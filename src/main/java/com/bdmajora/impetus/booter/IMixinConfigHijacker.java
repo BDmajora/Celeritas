@@ -2,8 +2,7 @@ package com.bdmajora.impetus.booter;
 
 import java.util.Set;
 
-// Hijackers are used to stop certain mixin configurations from ever being applied. Usage is similar to
-// IEarlyMixinLoader, implement it in your coremod class. Requested by: @Desoroxxx
+// Hijackers stop certain mixin configurations from ever being applied; implement in your coremod class like IEarlyMixinLoader (requested by @Desoroxxx)
 @Deprecated
 public interface IMixinConfigHijacker {
 

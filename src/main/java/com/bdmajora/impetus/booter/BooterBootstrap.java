@@ -11,8 +11,7 @@ import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
 
-// Decides whether Impetus supplies the Mixin subsystem itself or stands down for a real MixinBooter
-// References no org.spongepowered.asm type, since it runs before any Mixin implementation is guaranteed to exist
+// Decides whether Impetus supplies the Mixin subsystem itself or stands down for a real MixinBooter; references no org.spongepowered.asm type since it runs before any Mixin implementation is guaranteed to exist
 public final class BooterBootstrap {
 
     // A real MixinBooter (or any other service provider) already owns Mixin; do nothing at all.
@@ -20,17 +19,13 @@ public final class BooterBootstrap {
     // No Mixin on the classpath; we extracted our own copy and are responsible for booting it.
     public static final int MIXIN_OWNED = 1;
 
-    // Probed as resources rather than Class.forName so that detection never triggers static init
-    // on a foreign booter, which would bootstrap Mixin as a side effect of us merely looking.
+    // Probed as resources rather than Class.forName so detection never triggers static init on a foreign booter, which would bootstrap Mixin as a side effect of looking
     private static final String FOREIGN_BOOTER = "zone/rong/mixinbooter/MixinBooterPlugin.class";
     private static final String MIXIN_MARKER = "org/spongepowered/asm/launch/MixinBootstrap.class";
-    // BooterCore excludes com.bdmajora.impetus.booter.service.* from the LaunchClassLoader, so this
-    // class has to be resolvable from the system class loader before we may claim the Mixin service.
+    // BooterCore excludes com.bdmajora.impetus.booter.service.* from the LaunchClassLoader, so this class must resolve from the system class loader before we may claim the Mixin service
     private static final String SERVICE_MARKER = "com/bdmajora/impetus/booter/service/MixinServiceBootstrap.class";
 
-    // CleanMix + MixinExtras, shaded at build time and embedded unextracted. Kept as a nested jar
-    // rather than loose classes so that on installs which do have MixinBooter we contribute zero
-    // org.spongepowered.asm classes to the classpath, and the duplicate-class race cannot happen.
+    // CleanMix + MixinExtras, shaded and embedded unextracted as a nested jar so that on installs with MixinBooter we contribute zero org.spongepowered.asm classes and the duplicate-class race cannot happen
     private static final String NESTED_LIBS = "/com/bdmajora/impetus/booter/impetus-booter-libs.jar";
 
     private static int state = -1;
@@ -71,16 +66,10 @@ public final class BooterBootstrap {
             return DEFERRED;
         }
 
-        // BooterCore excludes com.bdmajora.impetus.booter.service.* from the LaunchClassLoader so Mixin's
-        // service layer resolves it from the parent. The Impetus jar is a coremod and lives only on the
-        // LaunchClassLoader, so without this the AppClassLoader cannot see our own service classes and
-        // MixinService.runBootServices dies with ClassNotFoundException. Upstream MixinBooter does the
-        // same in injectSelfIntoAppClassLoader().
+        // BooterCore excludes the service package from the LaunchClassLoader so Mixin resolves it from the parent, but the coremod jar lives only on the LaunchClassLoader; without this MixinService.runBootServices dies with ClassNotFoundException (MixinBooter does the same)
         injectSelfIntoAppClassLoader();
 
-        // Verify rather than assume. If our service classes are not reachable from the system class
-        // loader, BooterCore's exclusions make Mixin's Class.forName fail and kill the game during
-        // coremod construction. Standing down leaves the game playable with a clear message.
+        // Verify rather than assume: if our service classes are unreachable from the system loader, BooterCore's exclusions make Mixin's Class.forName kill the game during coremod construction, and standing down leaves it playable with a clear message
         if (ClassLoader.getSystemClassLoader().getResource(SERVICE_MARKER) == null) {
             log("Impetus' Mixin service could not be exposed to the system class loader; standing down. "
                     + "Install MixinBooter alongside Impetus on this setup.");
@@ -88,8 +77,7 @@ public final class BooterBootstrap {
         }
 
         if (!extractAndAttachLibs()) {
-            // Left un-owned on purpose: better to let the mod fail loudly on a missing Mixin than to
-            // half-boot a subsystem other coremods will build on.
+            // Left un-owned on purpose: better to fail loudly on a missing Mixin than to half-boot a subsystem other coremods will build on
             log("No Mixin implementation available and the bundled copy could not be attached.");
             return DEFERRED;
         }
@@ -126,8 +114,7 @@ public final class BooterBootstrap {
         }
     }
 
-    // Puts the Impetus jar itself on the AppClassLoader. Harmless if already present (dev runs from a
-    // classes directory that is on it), so this is deliberately unguarded.
+    // Puts the Impetus jar itself on the AppClassLoader; harmless if already present (dev runs from a classes directory on it), so deliberately unguarded
     private static void injectSelfIntoAppClassLoader() {
         URL self = selfJarUrl();
         if (self == null) {
@@ -137,10 +124,7 @@ public final class BooterBootstrap {
         addToAppClassLoader(self);
     }
 
-    // LaunchClassLoader hands out a CodeSource pointing at the jar *entry*
-    // (jar:file:/...impetus.jar!/com/...class), which is useless to URLClassLoader.addURL. Derive the
-    // jar root from the resource URL instead, and only fall back to the CodeSource in dev, where
-    // classes come from a plain directory.
+    // LaunchClassLoader's CodeSource points at the jar *entry* (jar:file:/...jar!/...class), useless to URLClassLoader.addURL, so derive the jar root from the resource URL and fall back to CodeSource only in dev
     private static URL selfJarUrl() {
         URL resource = BooterBootstrap.class.getResource("BooterBootstrap.class");
         if (resource != null) {
@@ -158,8 +142,7 @@ public final class BooterBootstrap {
         return source != null ? source.getLocation() : null;
     }
 
-    // Mixin's service layer resolves through the AppClassLoader, mirroring MixinBooter's own
-    // injectSelfIntoAppClassLoader; without this the ServiceLoader lookup will not see our jar.
+    // Mixin's service layer resolves through the AppClassLoader, mirroring MixinBooter's injectSelfIntoAppClassLoader; without this the ServiceLoader lookup will not see our jar
     private static void addToAppClassLoader(URL url) {
         ClassLoader appClassLoader = ClassLoader.getSystemClassLoader();
         if (!(appClassLoader instanceof URLClassLoader)) {

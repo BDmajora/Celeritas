@@ -2,10 +2,7 @@ package com.bdmajora.impetus.booter;
 
 import java.util.List;
 
-// Early mixins are defined as mixins that affects vanilla or forge classes. Or technically, classes that can be
-// queried via the current state of net.minecraft.launchwrapper.LaunchClassLoader Implement this in your
-// net.minecraftforge.fml.relauncher.IFMLLoadingPlugin. Return all early mixin configs you want MixinBooter to
-// queue and send to Mixin library
+// Early mixins affect vanilla or Forge classes (anything queryable via the current LaunchClassLoader state); implement in your IFMLLoadingPlugin and return the early mixin configs MixinBooter should queue
 @Deprecated
 public interface IEarlyMixinLoader {
 

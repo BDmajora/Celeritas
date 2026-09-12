@@ -13,8 +13,7 @@ import java.util.Deque;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The only path to a device buffer: upload hands back a staging address, commit flushes and batches the copies
-// Staging space is fenced so the CPU never overwrites bytes in flight; consecutive uploads extend one allocation
+// The only path to a device buffer: upload hands back a fenced staging address (never overwritten in flight), commit flushes and batches the copies
 public class UploadStream {
     private final SegmentedAllocator allocator = new SegmentedAllocator();
     private final MappedUploadBuffer staging;
@@ -27,8 +26,7 @@ public class UploadStream {
     private final LongArrayList inFlight = new LongArrayList();
     private final Deque<Frame> frames = new ArrayDeque<>();
 
-    // The allocation the next upload will try to extend, and how far into it we have written; -1 when there is
-    // none, which forces a fresh allocation
+    // The allocation the next upload tries to extend and how far into it we have written; -1 forces a fresh allocation
     private long currentAllocation = -1L;
     private long currentOffset;
 
@@ -37,8 +35,7 @@ public class UploadStream {
         this.staging = new MappedUploadBuffer(size);
     }
 
-    // Reserves size bytes of staging space and returns the address to write them to
-    // The address is valid until the next commit(); nothing may hold on to it across a frame
+    // Reserves size bytes of staging space and returns the address to write to; valid only until the next commit()
     public long upload(DeviceBuffer target, long targetOffset, long size) {
         if (size <= 0 || size > Integer.MAX_VALUE) {
             throw new IllegalArgumentException("Bad upload size: " + size);
@@ -69,8 +66,7 @@ public class UploadStream {
         return this.staging.getClientAddress() + address;
     }
 
-    // Flushes the staging writes and issues every queued copy
-    // Called once per frame from the pipeline, and again by reclaimSpace when the ring fills mid-frame
+    // Flushes staging writes and issues every queued copy; once per frame from the pipeline, and again from reclaimSpace when the ring fills mid-frame
     public void commit() {
         if (!this.toFlush.isEmpty()) {
             for (int i = 0; i < this.toFlush.size(); i++) {
@@ -99,8 +95,7 @@ public class UploadStream {
         this.currentOffset = 0L;
     }
 
-    // Closes out the frame: commits anything left, fences it, and reclaims the staging space of every earlier
-    // frame the GPU has finished with
+    // Closes the frame: commits what is left, fences it, and reclaims staging space of every earlier frame the GPU finished
     public void endFrame() {
         this.commit();
 
@@ -139,9 +134,7 @@ public class UploadStream {
         }
     }
 
-    // The staging ring filled up inside a single frame, which happens when a lot of chunks finish at once
-    // Push what is queued, then stall until enough earlier frames retire; a hitch here is much better than
-    // silently dropping geometry
+    // The staging ring filled inside one frame (many chunks finishing at once): push what is queued, then stall until earlier frames retire; a hitch beats dropping geometry
     private long reclaimSpace(int size) {
         this.commit();
 

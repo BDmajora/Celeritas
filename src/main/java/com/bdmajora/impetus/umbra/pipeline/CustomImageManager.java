@@ -18,8 +18,7 @@ import java.util.Map;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The pack's writable image.* directives, Complementary's coloured-lighting voxel and floodfill volumes
-// Each gets a GL 4.2 image unit bound READ_WRITE every frame; contents persist since the floodfill ping-pongs history
+// The pack's writable image.* directives (Complementary's coloured-lighting voxel and floodfill volumes); each gets a GL 4.2 image unit bound READ_WRITE every frame, and contents persist since the floodfill ping-pongs history
 public class CustomImageManager {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
     private static final int MAX_DECLARED_IMAGES = 16;
@@ -62,8 +61,7 @@ public class CustomImageManager {
     }
 
     private final List<Image> images = new ArrayList<>();
-    // Two mappings in one table: image uniform name -> image unit, and sampler name -> texture unit
-    // They share a map because both are consumed the same way, as plain glUniform1i assignments at program build
+    // Two mappings in one table (image uniform name -> image unit, sampler name -> texture unit) since both are consumed as plain glUniform1i assignments at program build
     private final Map<String, Integer> uniformOverrides = new LinkedHashMap<>();
     // The driver's GL_MAX_IMAGE_UNITS — the exclusive ceiling the render-target images allocate up to
     private final int hardwareImageUnits;
@@ -112,8 +110,7 @@ public class CustomImageManager {
             LWJGL.glTexParameteri(target, GL11.GL_TEXTURE_MAG_FILTER, filter);
             LWJGL.glTexParameteri(target, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
             LWJGL.glTexParameteri(target, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
-            // Umbra' GlImage pins custom images to mip level 0. Letting a 3D floodfill texture inherit any mip/LOD
-            // state makes sampler3D lookups read undefined levels, which shows up as every-other-frame colored noise.
+            // Umbra's GlImage pins custom images to mip level 0; a 3D floodfill texture inheriting mip/LOD state makes sampler3D read undefined levels, seen as every-other-frame colored noise
             LWJGL.glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, 0);
             LWJGL.glTexParameteri(target, GL_TEXTURE_MIN_LOD, 0);
             LWJGL.glTexParameteri(target, GL_TEXTURE_MAX_LOD, 0);
@@ -127,9 +124,7 @@ public class CustomImageManager {
                         0, format, pixelType, (ByteBuffer) null);
             }
             LWJGL.glBindTexture(target, 0);
-            // Zero-initialize regardless of the per-frame clear flag: glTexImage with null data is UNDEFINED memory,
-            // and packs deliberately skip writing some texels (Complementary's behind-player floodfill optimization),
-            // so creation-time garbage would otherwise survive — and flicker once the ping-pong alternates sides.
+            // Zero-initialize regardless of the per-frame clear flag: glTexImage with null data is UNDEFINED, and packs deliberately skip texels (Complementary's behind-player floodfill), so creation garbage would survive and flicker
             clearTexture(texture, format, pixelType);
 
             int imageUnit = this.images.size();
@@ -155,9 +150,7 @@ public class CustomImageManager {
         }
     }
 
-    // Resolved through the SHARED render-target format table rather than a local list, which is what Iris does too
-    // The local list this replaced covered only the seven formats Complementary's floodfill uses, so an SMAA pack
-    // asking for a perfectly ordinary rg8 or rgba16 edge buffer had its images silently dropped
+    // Resolved through the SHARED render-target format table like Iris; the local list this replaced covered only Complementary's seven floodfill formats, so an SMAA pack's rg8 or rgba16 edge buffer was silently dropped
     private static int glInternalFormat(String name) {
         return com.bdmajora.impetus.umbra.gl.texture.InternalTextureFormat.fromString(name)
                 .map(com.bdmajora.impetus.umbra.gl.texture.InternalTextureFormat::getInternalFormat)
@@ -211,11 +204,7 @@ public class CustomImageManager {
         return definition.relative ? Math.max(1, (int) (this.renderHeight * definition.relativeY)) : definition.sizeY;
     }
 
-    // Reallocates the viewport-relative images at the new render size, matching Iris's GlImage.Relative
-    // Contents are NOT preserved, because the storage is genuinely reallocated — which is what a screen-space image
-    // wants anyway, and bindAll re-establishes every binding on the next frame regardless
-    // The work happens on a scratch unit far above GlStateManager's eight cached ones, since a raw bind on units
-    // 0-7 desyncs that cache and turns a later bindTexture there into a silent no-op
+    // Reallocates the viewport-relative images at the new size like Iris's GlImage.Relative, without preserving contents (bindAll re-establishes bindings next frame); done on a scratch unit above GlStateManager's eight cached ones
     public void onResize(int width, int height) {
         if (width == this.renderWidth && height == this.renderHeight) {
             return;
@@ -254,9 +243,7 @@ public class CustomImageManager {
         return this.uniformOverrides;
     }
 
-    // The first image unit no image.<name> directive has taken
-    // The render-target images — colorimgN, Iris's addRenderTargetImages — allocate upward from here, so the pack's
-    // own declarations always win the low units
+    // The first image unit no image.<name> directive has taken; the render-target images (colorimgN) allocate upward from here so the pack's declarations win the low units
     public int getNextAvailableImageUnit() {
         return this.images.size();
     }
@@ -266,8 +253,7 @@ public class CustomImageManager {
         return this.hardwareImageUnits;
     }
 
-    // The first 3D image's dimensions, which is how the shadowcomp dispatch size is derived — the voxel volume
-    // divided by the compute shader's local size
+    // The first 3D image's dimensions, from which the shadowcomp dispatch size is derived (volume divided by the compute local size)
     public int[] getFirst3DImageSize() {
         for (Image image : this.images) {
             if (image.definition.sizeZ > 0) {
@@ -277,8 +263,7 @@ public class CustomImageManager {
         return null;
     }
 
-    // Start-of-frame reset, and only for the images the pack itself marked clear=true — see the note at the top
-    // about why nothing else is cleared
+    // Start-of-frame reset, only for images the pack marked clear=true; see the class comment for why nothing else is cleared
     public void clearAll() {
         boolean cleared = false;
         for (Image image : this.images) {
@@ -294,19 +279,11 @@ public class CustomImageManager {
 
     // Zero-fills via a blank upload
     private void clearTexture(int texture, int format, int pixelType) {
-        // Umbra clears custom images with a null data pointer, which means "clear to zero" and avoids any
-        // interaction with client memory or a currently-bound pixel-unpack buffer.
+        // Umbra clears custom images with a null data pointer, meaning "clear to zero" without touching client memory or a bound pixel-unpack buffer
         LWJGL.glClearTexImage(texture, 0, format, pixelType);
     }
 
-    // Binds every image on its image unit as READ_WRITE, and its texture on the paired sampler unit
-    // Each image goes to exactly the texture the pack declared for it, and nothing here knows any pack-specific
-    // uniform name — Iris has no such concept either
-    // That is a correction, not a simplification. This previously aliased floodfill_sampler_copy onto floodfill_img
-    // for visible programs. Complementary ping-pongs on framemod2: the compute writes floodfill_img_copy on even
-    // frames and floodfill_img on odd ones, and GetLightVolume reads back whichever was just written
-    // Aliasing the two names onto one texture therefore pointed every even-frame read at the volume that had NOT
-    // been updated
+    // Binds every image READ_WRITE on its image unit and its texture on the paired sampler unit, each to exactly the texture the pack declared; this used to alias floodfill_sampler_copy onto floodfill_img, which pointed every even frame of Complementary's framemod2 ping-pong at the volume that had NOT been updated
     public void bindAll() {
         for (Image image : this.images) {
             // Umbra binds custom images as layered for every texture target.

@@ -47,8 +47,7 @@ public abstract class TextureAtlasSpriteMixin implements SpriteExtension, Sprite
     }
 
     private SpriteTransparencyLevel impetus$processTransparentImages(SpriteTransparencyLevel prevLevel, int[] nativeImage, boolean shouldRewriteColors) {
-        // Calculate an average color from all pixels that are not completely transparent.
-        // This average is weighted based on the (non-zero) alpha value of the pixel.
+        // Average colour of all not-fully-transparent pixels, weighted by their (non-zero) alpha
         float r = 0.0f;
         float g = 0.0f;
         float b = 0.0f;
@@ -93,8 +92,7 @@ public abstract class TextureAtlasSpriteMixin implements SpriteExtension, Sprite
         g /= totalWeight;
         b /= totalWeight;
 
-        // Convert that color in linear space back to sRGB.
-        // Use an alpha value of zero - this works since we only replace pixels with an alpha value of 0.
+        // Convert the linear-space colour back to sRGB with alpha zero, which works since only alpha-0 pixels are replaced
         int averageColor = ColorSRGB.linearToSrgb(r, g, b, 0);
 
         for (int y = 0; y < nativeImage.length; y++) {

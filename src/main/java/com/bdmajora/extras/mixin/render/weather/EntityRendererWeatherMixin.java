@@ -7,8 +7,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// Hides falling rain and snow, draw pass only; weather itself still happens so sounds, mob spawning and crop growth are unaffected
-// Locking weather outright is a separate option — see TimeWeatherOverride
+// Hides falling rain and snow in the draw pass only; weather still happens for sounds, spawning and crops, and locking it is TimeWeatherOverride's job
 @Mixin(EntityRenderer.class)
 public class EntityRendererWeatherMixin {
     @Inject(method = "renderRainSnow", at = @At("HEAD"), cancellable = true)

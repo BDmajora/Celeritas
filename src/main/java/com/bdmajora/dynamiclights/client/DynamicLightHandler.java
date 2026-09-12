@@ -8,8 +8,7 @@ import net.minecraft.item.ItemStack;
 
 import java.util.function.Function;
 
-// Reports how brightly one kind of entity or block entity glows
-// Mods register a handler for their own type via DynamicLightHandlers; tracking, chunk rebuilds, and the lightmap come for free
+// Reports how brightly one kind of entity or block entity glows; mods register via DynamicLightHandlers and get tracking, rebuilds and the lightmap for free
 public interface DynamicLightHandler<T> {
     // Luminance in the vanilla 0-15 scale
     int getLuminance(T lightSource);
@@ -28,8 +27,7 @@ public interface DynamicLightHandler<T> {
                 return luminance.apply(lightSource);
             }
 
-            // Delegates to the function this handler was built with
-            // Explosive light always goes out underwater
+            // Delegates to the function this handler was built with; explosive light always goes out underwater
             @Override
             public boolean isWaterSensitive(T lightSource) {
                 return waterSensitive.apply(lightSource);

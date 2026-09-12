@@ -1,11 +1,6 @@
 package com.bdmajora.impetus.engine.api.util;
 
-// utilities for packing and unpacking colour components from packed integer colours in ARGB format
-// this packed format is used by most of Minecraft, but special care must be taken to pack it into ABGR
-// before passing it to OpenGL attributes
-// | 32        | 24        | 16        | 8          |
-// | 0110 1100 | 0110 1100 | 0110 1100 | 0110 1100  |
-// | Alpha     | Red       | Green     | Blue       |
+// Packs/unpacks ARGB integer colours (alpha 24-31, red 16-23, green 8-15, blue 0-7); Minecraft's format, must be repacked to ABGR before OpenGL sees it
 public class ColorARGB implements ColorU8 {
     private static final int ALPHA_COMPONENT_OFFSET = 24;
     private static final int RED_COMPONENT_OFFSET = 16;
@@ -20,8 +15,7 @@ public class ColorARGB implements ColorU8 {
                 (b & COMPONENT_MASK) << BLUE_COMPONENT_OFFSET;
     }
 
-    // packs the colour components into big-endian format for consumption by OpenGL, with the alpha
-    // channel fully opaque
+    // Packs the components big-endian for OpenGL with a fully opaque alpha channel
     public static int pack(int r, int g, int b) {
         return pack(r, g, b, (1 << ColorU8.COMPONENT_BITS) - 1);
     }
@@ -56,8 +50,7 @@ public class ColorARGB implements ColorU8 {
         return Integer.reverseBytes(Integer.rotateLeft(color, 8));
     }
 
-    // packs the colour components into ARGB format
-    // rgb is the red/green/blue part, alpha the alpha component
+    // Packs the rgb part and the alpha component into ARGB
     public static int withAlpha(int rgb, int alpha) {
         return (alpha << ALPHA_COMPONENT_OFFSET) | (rgb & ~(COMPONENT_MASK << ALPHA_COMPONENT_OFFSET));
     }

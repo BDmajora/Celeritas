@@ -2,11 +2,7 @@ package com.bdmajora.equilibrium.common.util.math;
 
 import net.minecraft.util.math.MathHelper;
 
-// Replaces MathHelper's sine table, folding 65 536 entries (256 KB) down to 16 384 (64 KB) via
-// sin(-x) = -sin(x) and sin(x) = sin(pi/2 - x), so it stays resident in L2
-// Values are bit-for-bit identical to vanilla, which matters because sin drives entity positions and
-// projectile arcs; a client that computes them differently desyncs
-// Original Rust implementation by coderbot16; Java port and further work by jellysquid3 in Lithium
+// Replaces MathHelper's 65 536-entry sine table with 16 384 entries via sin(-x) = -sin(x) and sin(x) = sin(pi/2 - x) so it stays in L2; bit-for-bit identical to vanilla since sin drives positions and a differing client desyncs (coderbot16's Rust, jellysquid3's Lithium port)
 public class CompactSineLUT {
     // Raw float bits, because the sign flip that rebuilds the negative half is an XOR on the sign bit
     private static final int[] SINE_TABLE_INT = new int[16384 + 1];
@@ -18,8 +14,7 @@ public class CompactSineLUT {
     private CompactSineLUT() {
     }
 
-    // Builds the compact table from vanilla's and verifies all 65 536 values agree before it is discarded
-    // Called from the end of MathHelper's static init, the only point where vanilla's table is full and unused
+    // Builds the compact table from vanilla's and verifies all 65 536 values agree; called at the end of MathHelper's static init, the only point vanilla's table is full and unused
     public static void init(float[] vanilla) {
         if (vanilla == null || vanilla.length != 65536) {
             throw new IllegalStateException("Expected a 65536-entry vanilla sine table, found "
@@ -60,8 +55,7 @@ public class CompactSineLUT {
             return sineTableMidpoint;
         }
 
-        // sin(-x) = -sin(x). Over a domain of 0 <= x <= 2*pi, negate whenever x > pi. Shifting the
-        // 15th bit up to the sign bit gives the mask to XOR the result with, with no branch.
+        // sin(-x) = -sin(x): negate when x > pi by shifting the 15th bit up to the sign bit and XORing, with no branch
         int neg = (index & 0x8000) << 16;
 
         // All bits set when pi/2 <= x, none otherwise — the 14th bit, sign-extended.
@@ -70,8 +64,7 @@ public class CompactSineLUT {
         // sin(x) = sin(pi/2 - x), expressed as a conditional reflection about the mask.
         int pos = (0x8001 & mask) + (index ^ mask);
 
-        // Wrapping immediately before the access rather than earlier measurably helps HotSpot fold
-        // the preceding bit arithmetic; it is not redundant with the caller's mask.
+        // Wrapping right before the access rather than earlier measurably helps HotSpot fold the preceding bit arithmetic; not redundant with the caller's mask
         pos &= 0x7fff;
 
         return Float.intBitsToFloat(SINE_TABLE_INT[pos] ^ neg);

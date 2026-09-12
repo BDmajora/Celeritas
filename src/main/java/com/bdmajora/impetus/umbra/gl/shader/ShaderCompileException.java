@@ -1,7 +1,6 @@
 package com.bdmajora.impetus.umbra.gl.shader;
 
-// Thrown when a GLSL stage fails to compile; carries the shader name and driver info log so the pipeline
-// can log a useful diagnostic and fall back to vanilla rendering instead of crashing
+// Thrown when a GLSL stage fails to compile, carrying the shader name and driver info log so the pipeline logs a useful diagnostic and falls back to vanilla
 public class ShaderCompileException extends RuntimeException {
     private final String filename;
     private final String error;

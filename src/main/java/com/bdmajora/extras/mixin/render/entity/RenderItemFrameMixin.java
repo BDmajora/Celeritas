@@ -15,9 +15,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// Item frame visibility, name tags, and level of detail
-// LOD is a backport of MoreCulling's "Frame LOD": past the configured distance a framed item loses the four hidden faces,
-// and a framed map is skipped outright; the flag is cleared unconditionally so it can't leak into other item rendering
+// Item frame visibility, name tags and LOD (MoreCulling's "Frame LOD": past the distance a framed item loses four hidden faces and a map is skipped); the flag is cleared unconditionally so it cannot leak into other item rendering
 @Mixin(RenderItemFrame.class)
 public class RenderItemFrameMixin {
     @Inject(
@@ -43,8 +41,7 @@ public class RenderItemFrameMixin {
         }
     }
 
-    // Distance is measured from the view entity, not render offsets, since renderItem has no camera-relative coordinates —
-    // same idiom vanilla's own renderName uses
+    // Distance is measured from the view entity, not render offsets, since renderItem has no camera-relative coordinates; vanilla's renderName does the same
     @Inject(method = "renderItem(Lnet/minecraft/entity/item/EntityItemFrame;)V", at = @At("HEAD"))
     private void impetus$beginLod(EntityItemFrame entity, CallbackInfo ci) {
         ExtrasConfig.RenderSettings settings = Extras.options().render;

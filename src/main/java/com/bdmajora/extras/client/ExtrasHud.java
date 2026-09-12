@@ -17,9 +17,7 @@ import net.minecraftforge.fml.relauncher.SideOnly;
 import java.util.ArrayList;
 import java.util.List;
 
-// The FPS and coordinate overlay, drawn in the configured corner with the configured contrast
-// Hidden while F3 is up or the GUI is hidden; the light-updates warning is not optional, since
-// with that switch off the world quietly stops relighting and looks like a rendering bug
+// FPS and coordinate overlay in the configured corner and contrast, hidden while F3 is up or the GUI is hidden; the light-updates warning is not optional since that switch makes the world quietly stop relighting
 @Mod.EventBusSubscriber(Side.CLIENT)
 @SideOnly(Side.CLIENT)
 public final class ExtrasHud {

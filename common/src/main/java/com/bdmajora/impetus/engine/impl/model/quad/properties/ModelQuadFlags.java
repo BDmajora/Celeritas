@@ -15,8 +15,7 @@ public class ModelQuadFlags {
     // the quad is aligned to the block grid; only set when IS_PARALLEL is also set
     public static final int IS_ALIGNED = 0b100;
 
-    // the quad should be shaded using vanilla's getShade logic and the light face, rather than the
-    // normals of each vertex
+    // The quad should be shaded using vanilla's getShade logic and the light face rather than per-vertex normals
     public static final int IS_VANILLA_SHADED = 0b1000;
     // the particle sprite on this quad can be trusted to be the only sprite it shows
     public static final int IS_TRUSTED_SPRITE = (1 << 4);
@@ -35,18 +34,7 @@ public class ModelQuadFlags {
         return getQuadFlags(quad, face, 0);
     }
 
-    // checks whether a quad's vertex ordering matches Minecraft's canonical baked order for the face
-    // Minecraft allows four different permutations of a quad's vertices that render identically, but
-    // the baked model pipeline - ambient occlusion, lighting interpolation, back-face culling - assumes
-    // one specific ordering hardcoded in the model baking logic, and this verifies the quad uses it
-    // the canonical order is:
-    //   vertices arranged counter-clockwise as seen from outside the block face
-    //   each face (+/-X, +/-Y, +/-Z) starts at a specific corner and proceeds CCW around the face
-    //   for example the -Y face (DOWN) starts at (minX, minY, maxZ) and proceeds through
-    //   (minX, minY, minZ), (maxX, minY, minZ), (maxX, minY, maxZ)
-    // allocations are avoided by comparing directly against the expected coordinates for each vertex
-    // index, derived from the given face and bounding box
-    // face determines which axis is fixed and which two axes form the quad plane
+    // Checks the quad's vertex order is Minecraft's canonical CCW-from-outside baked order for the face, which AO, lighting interpolation and culling all assume; compares against expected coordinates without allocating
     private static boolean canonicalVertexOrder(ModelQuadView quad, ModelQuadFacing face, float minX, float minY, float minZ,
                                                 float maxX, float maxY, float maxZ) {
         return switch (face) {
@@ -78,8 +66,7 @@ public class ModelQuadFlags {
         };
     }
 
-    // calculates the properties of the given quad; this data is used later by the light pipeline to
-    // make certain optimizations
+    // Calculates the quad's properties, used later by the light pipeline for certain optimizations
     public static int getQuadFlags(ModelQuadView quad, ModelQuadFacing face, int existingFlags) {
         float minX = 32.0F;
         float minY = 32.0F;
@@ -126,8 +113,7 @@ public class ModelQuadFlags {
             }
         }
 
-        // Do not set the partial flag if the vertices are not listed in the expected order. The optimization assumes
-        // it can map directly onto corners in specific locations.
+        // Only set the partial flag when the vertices are in the expected order, since the optimization maps them directly onto corners
         boolean partial = degenerate || (switch (face.getAxis()) {
             case X -> minY >= 0.0001f || minZ >= 0.0001f || maxY <= 0.9999F || maxZ <= 0.9999F;
             case Y -> minX >= 0.0001f || minZ >= 0.0001f || maxX <= 0.9999F || maxZ <= 0.9999F;

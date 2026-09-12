@@ -2,15 +2,11 @@ package com.bdmajora.fulgor.collections;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 
-// FIFO of encoded positions that refuses to hold the same one twice; merges Phosphor's pooled segments
-// with Alfheim's dedup so a bulk edit scheduling one position from every neighbour costs one evaluation
-// The dedup set must be empty before a cycle's enqueues begin or a position updated twice in a row is dropped
-// Not thread-safe except isEmpty, which reads a volatile so the engine can check without the lock
+// FIFO of encoded positions that never holds the same one twice (Phosphor's pooled segments plus Alfheim's dedup); the dedup set must be empty before a cycle's enqueues begin, and only isEmpty (volatile) is thread-safe
 public final class DeduplicatedLongQueue {
     private static final int SEGMENT_SIZE = 1 << 10;
 
-    // Entry count past which the dedup set is replaced rather than cleared, so a worldgen burst that grows
-    // it to millions of entries doesn't keep that array alive for the rest of the session (~512 KiB table).
+    // Entry count past which the dedup set is replaced rather than cleared, so a worldgen burst does not keep a multi-million-entry table alive all session
     private static final int RETAINED_SET_CAPACITY = 1 << 15;
 
     private final Pool pool;
@@ -94,8 +90,7 @@ public final class DeduplicatedLongQueue {
         return this.size;
     }
 
-    // Forgets which values have been seen, so a position can be scheduled again; call so the set is
-    // empty when the next cycle's enqueues start (see class comment for placement per queue)
+    // Forgets which values have been seen so a position can be scheduled again; call so the set is empty when the next cycle's enqueues start
     public void resetDeduplication() {
         if (!this.deduplicate) {
             return;
@@ -108,12 +103,9 @@ public final class DeduplicatedLongQueue {
         }
     }
 
-    // Segment store shared by every queue belonging to one engine. Sharing matters: darkening and
-    // brightening queues run in strict succession one light level at a time, so segments one level
-    // frees are immediately reusable by the next, instead of each of the 34 queues holding its own high-water mark.
+    // Segment store shared by every queue of one engine; darkening and brightening queues run in strict succession per level, so freed segments are reused immediately instead of 34 queues each holding a high-water mark
     public static final class Pool {
-        // Ceiling on retained segments, not queue size (a queue can still allocate past this, it just
-        // won't get the memory back). 1024 segments = 8 MiB, comfortably above any realistic high-water mark.
+        // Ceiling on retained segments, not queue size (allocation past it just is not reclaimed); 1024 segments = 8 MiB, above any realistic high-water mark
         private static final int MAX_CACHED_SEGMENTS = 1 << 10;
 
         private Segment free;

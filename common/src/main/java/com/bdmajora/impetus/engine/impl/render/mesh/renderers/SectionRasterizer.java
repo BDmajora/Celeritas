@@ -5,12 +5,7 @@ import com.bdmajora.impetus.engine.impl.render.mesh.gl.MeshProgram;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Phase 2 of the frame, and the piece that removes the CPU from the loop
-//
-// One task-shader workgroup per visible region. It skips regions the region rasteriser rejected, dispatches one
-// meshlet per live section in the ones it keeps, and — the important part — writes the indirect draw command that
-// the terrain rasteriser will consume. The mesh shader draws each section's bounding box and the fragment shader
-// records which sections were actually reached
+// Phase 2, the piece that removes the CPU from the loop: one task workgroup per visible region skips rejected regions, dispatches one meshlet per live section, and writes the indirect draw command the terrain rasteriser consumes
 public class SectionRasterizer {
     private final MeshProgram program;
 

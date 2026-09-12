@@ -8,8 +8,6 @@ import com.bdmajora.impetus.ImpetusVintage;
 
 import java.io.IOException;
 
-// TODO: current Impetus logo is a placeholder, replace with real artwork
-
 public class ModLogoUtil {
 
     private static final ResourceLocation IMPETUS_LOGO = new ResourceLocation("impetus", "textures/gui/impetus.png");

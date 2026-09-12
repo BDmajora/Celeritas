@@ -7,8 +7,7 @@ import com.bdmajora.impetus.engine.api.util.NormI8;
 import com.bdmajora.impetus.engine.impl.render.chunk.vertex.format.ChunkVertexEncoder;
 import org.joml.Vector3f;
 
-// Vanilla's baked-quad vertex format, stored as an int[8] per vertex:
-// [0-2] position (3 floats), [3] color (4 bytes ARGB), [4-5] block UV (2 floats), [6] light UV (2 shorts), [7] normal (3 bytes) + 1 padding byte
+// Vanilla's baked-quad vertex format, int[8] per vertex: [0-2] position floats, [3] ARGB color, [4-5] block UV floats, [6] light UV shorts, [7] normal bytes + padding
 public class ModelQuadUtil {
     // Integer indices for vertex attributes, useful for accessing baked quad data
     public static final int POSITION_INDEX = 0,
@@ -98,10 +97,7 @@ public class ModelQuadUtil {
         int pbl = (packedLight) & 0xFF;
         int cbl = (calcLight) & 0xFF;
         int bl = Math.max(Math.max(pbl, cbl), vanillaLightEmission);
-        // Emission raises BLOCK light only. A block that emits light does not emit *sky* light, so folding the
-        // emission into the sky channel too — as this used to — reports a torch or lamp as if it were open to the sky.
-        // Currently latent, because ModelQuadView.getVanillaLightEmission() is a default returning 0 with no override,
-        // but it would misfire the moment anything starts supplying a real emission value.
+        // Emission raises BLOCK light only, never sky light (folding it into sky reported torches as open to the sky); latent while getVanillaLightEmission() defaults to 0
         int sl = Math.max(psl, csl);
         return (sl << 16) | bl;
     }

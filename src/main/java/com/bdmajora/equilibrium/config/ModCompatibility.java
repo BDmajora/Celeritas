@@ -8,8 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// Options other mods take out of our hands, detected by class presence since FML has no mod list yet
-// Every conflicting mod is a coremod, so a class that only exists when it is installed is a reliable signal
+// Options other mods take out of our hands, detected by class presence since FML has no mod list yet; every conflicting mod is a coremod, so a class present only when installed is a reliable signal
 public final class ModCompatibility {
     // One mod's claim on one option.
     public static final class Override {
@@ -62,9 +61,7 @@ public final class ModCompatibility {
     private static List<Conflict> conflicts() {
         Map<String, Conflict> conflicts = new LinkedHashMap<>();
 
-        // Cubic Chunks replaces the chunk column with a cube grid. Every world-shaped assumption in
-        // here — sixteen sections per column, an eight-bit section index, one heightmap per column —
-        // is wrong under it, and wrong quietly rather than loudly.
+        // Cubic Chunks replaces the chunk column with a cube grid, making every world-shaped assumption here (sixteen sections, eight-bit section index, one heightmap) quietly wrong
         conflicts.put("cubicchunks", new Conflict("Cubic Chunks",
                 "io.github.opencubicchunks.cubicchunks.core.asm.CubicChunksCoreContainer",
                 "it replaces the chunk column with a cube grid",
@@ -76,8 +73,7 @@ public final class ModCompatibility {
                 "mixin.entity.collisions",
                 "mixin.entity.fast_retrieval"));
 
-        // Sponge rewrites world ticking, block scheduling and inventory handling to hang its event
-        // system off them. The overlap is not "both are fast", it is "both replace the same method".
+        // Sponge rewrites world ticking, block scheduling and inventory handling to hang its event system off them; both replace the same methods
         conflicts.put("sponge", new Conflict("SpongeForge",
                 "org.spongepowered.common.SpongeImpl",
                 "it rewrites world ticking and inventory handling",
@@ -86,18 +82,13 @@ public final class ModCompatibility {
                 "mixin.world.block_entity_ticking",
                 "mixin.world.explosions"));
 
-        // BetterFps' math transformer rewrites the body of MathHelper.sin/cos with a LaunchWrapper
-        // transformer. Ours overwrites the same two methods with a mixin. Whichever runs second wins
-        // and the other's table is left allocated and unused, so the only question is which allocation
-        // is wasted — and the answer should not depend on transformer ordering.
+        // BetterFps' transformer rewrites MathHelper.sin/cos and ours overwrites the same two methods; whichever runs second wins and the loser's table is wasted, which must not depend on transformer order
         conflicts.put("betterfps", new Conflict("BetterFps",
                 "guichaguri.betterfps.tweaker.BetterFpsTweaker",
                 "its math transformer replaces the same sine table",
                 "mixin.math.sine_lut"));
 
-        // FoamFix's coremod rewrites BlockPos' mutable subclasses field by field. Our patch replaces
-        // the directional offset methods those subclasses inherit. The two have not been observed to
-        // collide, but BlockPos is loaded during bootstrap, before anything could report that they had.
+        // FoamFix's coremod rewrites BlockPos' mutable subclasses field by field while our patch replaces the offset methods they inherit; not observed to collide, but BlockPos loads during bootstrap before anything could report it
         conflicts.put("foamfix", new Conflict("FoamFix",
                 "pl.asie.foamfix.coremod.FoamFixCore",
                 "its coremod rewrites BlockPos",
@@ -126,10 +117,7 @@ public final class ModCompatibility {
         return overrides;
     }
 
-    // deliberately does not initialise the class
-    // same reasoning as FulgorMixinPlugin: this runs during coremod setup, where loading a foreign
-    // class early can change the order everything else loads in
-    // whether it exists is all that is being asked
+    // Deliberately does not initialise the class (same reasoning as FulgorMixinPlugin): during coremod setup, loading a foreign class early can change load order, and existence is all that is asked
     private static boolean isClassPresent(String name) {
         try {
             Class.forName(name, false, ModCompatibility.class.getClassLoader());

@@ -16,9 +16,7 @@ import java.util.function.IntSupplier;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The samplers one program uses, each on a texture unit allocated for that program alone
-// Per-program rather than global because a pack can declare 49 sampler names against 32 units; a unit is
-// consumed only when the program genuinely declares the uniform. Overruns log and drop rather than throw
+// The samplers one program uses, each on a unit allocated for that program alone; per-program because a pack can declare 49 names against 32 units, and overruns log and drop rather than throw
 public final class ProgramSamplers {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -35,11 +33,7 @@ public final class ProgramSamplers {
         return new Builder(program, reservedTextureUnits);
     }
 
-    // Must be called with this program bound. Issues the deferred unit assignments on the first call, then rebinds
-    // every texture
-    // The selector is restored EXACTLY ONCE, after the whole run, rather than after each bind — see
-    // GlTextureUnits.bindTextureInRun. Iris does the same for the same reason: leaving the active unit moved
-    // part-way through a vanilla render sequence corrupts unrelated draws
+    // Must be called with this program bound; issues deferred unit assignments on the first call, then rebinds every texture, restoring the selector EXACTLY ONCE after the run (see GlTextureUnits.bindTextureInRun, and Iris does the same)
     public void update() {
         if (this.initializer != null) {
             for (Uniform1iCall call : this.initializer) {
@@ -66,8 +60,7 @@ public final class ProgramSamplers {
         return this.samplerBindings.size();
     }
 
-    // One deferred glUniform1i(location, value), issued on the first update()
-    // Deferred because glUniform1i writes into the currently bound program, and nothing is bound at build time
+    // One deferred glUniform1i(location, value) issued on the first update(), since it writes into the bound program and nothing is bound at build time
     private static final class Uniform1iCall {
         final int location;
         final int value;
@@ -101,15 +94,12 @@ public final class ProgramSamplers {
             skipReserved();
         }
 
-        // Whether this program declares that name as an ACTIVE uniform — a sampler the GLSL compiler optimised
-        // out reports false, which is correct: it needs no unit
+        // Whether this program declares that name as an ACTIVE uniform; a sampler the compiler optimised out reports false, correctly, since it needs no unit
         public boolean hasSampler(String name) {
             return LWJGL.glGetUniformLocation(this.program, name) != -1;
         }
 
-        // Points a sampler at a unit this builder does not own — the block atlas and lightmap, which vanilla binds
-        // The unit must already be reserved, or the allocator would hand the same one out again and the two
-        // bindings would fight
+        // Points a sampler at a unit this builder does not own (the block atlas and lightmap vanilla binds); the unit must already be reserved or the allocator hands it out again
         public void addExternalSampler(int textureUnit, String... names) {
             if (!this.reservedTextureUnits.contains(textureUnit)) {
                 LOGGER.error("[Umbra] Sampler(s) {} point at unit {}, which is not reserved; the allocator may reuse it",
@@ -128,9 +118,7 @@ public final class ProgramSamplers {
             return addDynamicSampler(GL11.GL_TEXTURE_2D, texture, names);
         }
 
-        // Allocates ONE unit shared by all the given names, and only when the program declares at least one of
-        // them — the names are aliases for the same texture, e.g. colortex0 and its legacy gcolor spelling
-        // Returns whether a unit was actually consumed, which is what lets callers offer every sampler blindly
+        // Allocates ONE unit shared by all the given names (aliases like colortex0 and gcolor), only when the program declares at least one; returns whether a unit was consumed so callers can offer every sampler blindly
         public boolean addDynamicSampler(int textureTarget, IntSupplier texture, String... names) {
             boolean used = false;
             for (String name : names) {

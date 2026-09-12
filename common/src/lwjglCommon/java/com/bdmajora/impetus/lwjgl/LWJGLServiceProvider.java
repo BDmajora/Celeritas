@@ -1,9 +1,6 @@
 package com.bdmajora.impetus.lwjgl;
 
-// Picks the LWJGL backend at class-init through ServiceLoader, taking the highest-priority implementation that
-// loads successfully
-// ServiceLoader rather than a version check, because both backends may be on the classpath at once and only the
-// one whose native library actually resolves can answer
+// Picks the LWJGL backend via ServiceLoader at class-init, since both backends may be on the classpath and only the one whose natives resolve can answer
 public final class LWJGLServiceProvider {
     public static final LWJGLService LWJGL = createInstance();
     public static final int POINTER_SIZE = LWJGL.getPointerSize();

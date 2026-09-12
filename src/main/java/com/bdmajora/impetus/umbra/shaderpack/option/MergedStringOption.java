@@ -4,10 +4,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-// The string-valued counterpart of MergedBooleanOption: one option deduplicated across every declaration site,
-// carrying the set of locations so the writer can patch all of them
-// Merge fails the same way, returning null when the defaults disagree and the option is therefore ambiguous
-// Ported from Iris; guava ImmutableSet replaced with an unmodifiable LinkedHashSet to keep declaration order
+// The string-valued counterpart of MergedBooleanOption, deduplicated across declaration sites with the location set for the writer; merge returns null on disagreeing defaults. From Iris, ImmutableSet replaced with an ordered LinkedHashSet
 public class MergedStringOption {
     private final StringOption option;
     private final Set<OptionLocation> locations;

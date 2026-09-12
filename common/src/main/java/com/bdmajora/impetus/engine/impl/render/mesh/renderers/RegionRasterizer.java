@@ -5,11 +5,7 @@ import com.bdmajora.impetus.engine.impl.render.mesh.gl.MeshProgram;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Phase 1 of the frame: draw one box per frustum-visible region and record which ones survive the depth test
-//
-// No task shader, because the workload is fixed — one meshlet per region, eight vertices and twelve triangles.
-// The fragment shader writes a byte, nothing else; colour and depth writes are off and the representative
-// fragment test cuts shading to one fragment per primitive
+// Phase 1: draw one box per frustum-visible region and record which survive the depth test; no task shader since the workload is fixed, colour/depth writes off, representative fragment test on
 public class RegionRasterizer {
     private final MeshProgram program;
 

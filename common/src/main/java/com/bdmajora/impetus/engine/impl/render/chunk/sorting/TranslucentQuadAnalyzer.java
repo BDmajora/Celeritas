@@ -11,10 +11,7 @@ import java.util.BitSet;
 public class TranslucentQuadAnalyzer {
     // X/Y/Z for each quad center
     private static final int EXPECTED_QUADS = 1000;
-    // cap on how many distinct (quantized) normals we track plane sets for
-    // real terrain overwhelmingly uses the six axis-aligned directions plus a few fluid-surface slopes,
-    // and anything past this cap - pathological modded geometry - falls back to the coarse
-    // always-resort heuristic instead of paying unbounded memory here
+    // Cap on distinct quantized normals tracked; real terrain uses the six axis directions plus a few fluid slopes, and pathological modded geometry past this falls back to the coarse always-resort heuristic
     private static final int MAX_TRACKED_NORMALS = 16;
     private final FloatArrayList quadCenters = new FloatArrayList(EXPECTED_QUADS * 3);
     private final FloatArrayList quadNormals = new FloatArrayList(EXPECTED_QUADS * 3);
@@ -23,8 +20,7 @@ public class TranslucentQuadAnalyzer {
     private final Vector3f globalNormal = new Vector3f();
     private final BitSet normalSigns = new BitSet(EXPECTED_QUADS);
     private static final BitSet EMPTY = new BitSet();
-    // Linked map: keeps registration order stable so repeated meshes of identical content produce identical
-    // trigger data.
+    // Linked map keeps registration order stable so identical meshes produce identical trigger data
     private final Int2ObjectLinkedOpenHashMap<PlaneAccumulator> planesByNormal = new Int2ObjectLinkedOpenHashMap<>();
     private boolean trackedNormalsOverflowed;
     private int currentVertex;
@@ -80,10 +76,7 @@ public class TranslucentQuadAnalyzer {
         }
     }
 
-    // triggerPlanes holds, for Level#DYNAMIC states, the per-normal plane sets used for precise
-    // camera-crossing re-sort triggering
-    // it is null when unavailable - too many distinct normals - in which case the caller must fall back
-    // to coarse movement-based triggering
+    // triggerPlanes holds the per-normal plane sets for DYNAMIC states, or null when too many distinct normals forced the caller onto coarse movement triggering
     public record SortState(Level level, float[] centers, float[] normals, int centersLength, BitSet normalSigns, Vector3f sharedNormal, NormalPlanes[] triggerPlanes) {
         public static final SortState NONE = new SortState(Level.NONE, null, null, 0, null, null, null);
 
@@ -118,17 +111,7 @@ public class TranslucentQuadAnalyzer {
 
     // A single plane never needs re-sorting
     private boolean areAllQuadsOnSamePlane() {
-        // Let globalNormal = (a, b, c). Any plane with this normal vector is denoted by the equation ax + by + cz = d,
-        // for some real number d.
-        //
-        // Next, we know that any quad has either globalNormal or -globalNormal as a normal vector. Suppose a quad q has center (x, y, z).
-        // We define the "plane extension" of q as the unique plane in 3D space that q resides within. In particular,
-        // any quad's plane extension (when all share parallel normals) is uniquely determined by the choice of d.
-        //
-        // If all quads are on the same plane, we don't need to sort at all. Otherwise, we need to use a static sort.
-        // Recalling that d is given by ax + by + cz, and that we know all those variables for any quad, we can
-        // easily determine if all quads reside in the same plane by computing this expression for each quad center,
-        // and checking that we obtain at most one value.
+        // With globalNormal (a, b, c), each quad's plane extension is ax + by + cz = d evaluated at its centre; if every quad yields the same d they share a plane and no sort is needed, otherwise a static sort is
 
         var centerArray = quadCenters.elements();
 
@@ -159,8 +142,7 @@ public class TranslucentQuadAnalyzer {
                 // Must use dynamic sort
                 sortLevel = Level.DYNAMIC;
             } else {
-                // If all quads are on the same plane we can use NONE sorting, otherwise we need to sort statically to put
-                // them in the right order
+                // Same plane means NONE sorting, otherwise sort statically to put them in the right order
                 sortLevel = areAllQuadsOnSamePlane() ? Level.NONE : Level.STATIC;
             }
 
@@ -298,9 +280,7 @@ public class TranslucentQuadAnalyzer {
         centers.add(totalY / 4);
         centers.add(totalZ / 4);
 
-        // The normal is needed unconditionally now: sections that turn out to be DYNAMIC register their face
-        // planes with the trigger index, which requires every quad's plane, not just those seen before the
-        // distinct-normal flag tripped.
+        // The normal is needed unconditionally: DYNAMIC sections register every quad's plane with the trigger index, not just those seen before the distinct-normal flag tripped
         calculateNormal();
         quadNormals.add(currentNormal.x);
         quadNormals.add(currentNormal.y);
@@ -313,10 +293,7 @@ public class TranslucentQuadAnalyzer {
                 globalNormal.set(currentNormal);
             } else {
                 float dotProduct = globalNormal.dot(currentNormal);
-                // Technically, only 1 and -1 imply that the quads share a normal. However, if the dot products
-                // are very, very similar, we pretend they share a normal for optimization purposes. This is an
-                // approximation that allows very slightly slanted water in edges of underwater lakes to be counted as
-                // STATIC rather than DYNAMIC.
+                // Only 1 and -1 truly imply a shared normal, but near-equal dot products are treated as shared so slightly slanted water at underwater lake edges counts as STATIC rather than DYNAMIC
                 if (Math.abs(dotProduct) >= 0.98) {
                     if (dotProduct < 0) {
                         // Flag this quad as being flipped relative to the global normal

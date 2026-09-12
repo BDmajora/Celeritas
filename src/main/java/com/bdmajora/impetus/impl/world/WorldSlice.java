@@ -43,8 +43,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-// Copies a slice of world state (blocks, biomes, light) off-thread so chunk build tasks see a consistent snapshot
-// Not thread-safe to share across threads at once; pool instances since the backing arrays are large
+// Copies a slice of world state (blocks, biomes, light) off-thread so chunk build tasks see a consistent snapshot; not shareable across threads, and pooled since the backing arrays are large
 public class WorldSlice implements ImpetusBlockAccess {
     // The number of blocks on each axis in a section.
     private static final int SECTION_BLOCK_LENGTH = 16;
@@ -61,8 +60,7 @@ public class WorldSlice implements ImpetusBlockAccess {
     // The number of sections on each axis of this slice.
     private static final int SECTION_LENGTH = 1 + (NEIGHBOR_CHUNK_RADIUS * 2);
 
-    // The size of the lookup tables used for mapping values to coordinate int pairs. The lookup table size is always
-    // a power of two so that multiplications can be replaced with simple bit shifts in hot code paths.
+    // Lookup table size for mapping values to coordinate pairs, always a power of two so hot-path multiplications become shifts
     private static final int TABLE_LENGTH = MathHelper.smallestEncompassingPowerOfTwo(SECTION_LENGTH);
 
     // The number of bits needed for each X/Y/Z component in a lookup table.
@@ -112,17 +110,13 @@ public class WorldSlice implements ImpetusBlockAccess {
 
     // Clones the 3x3x3 sections around a render section on the main thread, so the builder thread never touches the world
     public static ChunkRenderContext prepare(World world, SectionPos origin, ClonedChunkSectionCache sectionCache) {
-        // Fulgor defers light propagation until something reads light, and the copies below read the
-        // section's light arrays directly rather than through Chunk#getLightFor. Resolve what is
-        // pending before anything is captured, or the mesh bakes in light from an earlier tick.
+        // Fulgor defers light propagation until something reads light, and the copies below read section arrays directly rather than via Chunk#getLightFor, so resolve what is pending or the mesh bakes in an earlier tick's light
         FulgorRenderBridge.flushPendingLightUpdates(world);
 
         Chunk chunk = world.getChunk(origin.x(), origin.z());
         ExtendedBlockStorage section = chunk.getBlockStorageArray()[origin.y()];
 
-        // If the chunk section is absent or empty, simply terminate now. There will never be anything in this chunk
-        // section to render, so we need to signal that a chunk render task shouldn't created. This saves a considerable
-        // amount of time in queueing instant build tasks and greatly accelerates how quickly the world can be loaded.
+        // An absent or empty section will never have anything to render, so signal that no build task should be created; this greatly accelerates world load
         if (section == null || FulgorRenderBridge.isEmptyOfBlocks(section)) {
             return null;
         }
@@ -159,10 +153,7 @@ public class WorldSlice implements ImpetusBlockAccess {
 
     // Nether and End have no skylight; skipping the lookup there saves a branch per vertex
     private boolean hasSkyLight() {
-        //? if >1.10.2 {
         return this.world.provider.hasSkyLight();
-        //?} else
-        /*return true;*/
     }
 
     public WorldSlice(World world) {

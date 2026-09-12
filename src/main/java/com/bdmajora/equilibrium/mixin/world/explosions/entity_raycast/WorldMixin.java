@@ -8,8 +8,7 @@ import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
-// Shares one ChunkSectionCursor across all ~45 exposure rays of a single getBlockDensity call instead of resolving chunk/section per block per ray
-// Sample grid arithmetic left exactly as vanilla wrote it, floating-point quirks included - the sample count depends on rounding and changing it would change explosion damage
+// Shares one ChunkSectionCursor across all ~45 exposure rays of a getBlockDensity call; the sample grid arithmetic is exactly vanilla's, rounding quirks included, since the sample count changes explosion damage
 @Mixin(World.class)
 public abstract class WorldMixin {
     // Share one chunk cursor between every exposure ray of the same call
@@ -22,8 +21,7 @@ public abstract class WorldMixin {
         double offsetX = (1.0D - Math.floor(1.0D / stepX) * stepX) / 2.0D;
         double offsetZ = (1.0D - Math.floor(1.0D / stepZ) * stepZ) / 2.0D;
 
-        // Written as a negated >= rather than a < so that a NaN step — which a degenerate bounding
-        // box produces — still takes the bail-out branch, as it does in vanilla.
+        // Negated >= rather than < so a NaN step from a degenerate bounding box still takes the bail-out branch, as in vanilla
         if (!(stepX >= 0.0D) || !(stepY >= 0.0D) || !(stepZ >= 0.0D)) {
             return 0.0F;
         }

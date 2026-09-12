@@ -37,8 +37,7 @@ public class FlatLightPipeline implements LightPipeline {
             lightmap = getOffsetLightmap(x, y, z, cullFace);
         } else {
             int flags = quad.getFlags();
-            // If the face is aligned, use the light data above it
-            // To match vanilla behavior, also treat the face as aligned if it is parallel and the block state is a full cube
+            // Aligned faces use the light data above them; a parallel face on a full-cube state counts as aligned to match vanilla
             if ((flags & ModelQuadFlags.IS_ALIGNED) != 0 || ((flags & ModelQuadFlags.IS_PARALLEL) != 0 && unpackFC(this.lightCache.get(x, y, z)))) {
                 lightmap = getOffsetLightmap(x, y, z, lightFace);
             } else {
@@ -61,9 +60,7 @@ public class FlatLightPipeline implements LightPipeline {
         Arrays.fill(out.br, this.diffuseProvider.getDiffuse(NormI8.unpackX(normal), NormI8.unpackY(normal), NormI8.unpackZ(normal), shade));
     }
 
-    // Vanilla mixes the origin BlockState with the offset BlockPos here - doesn't make much sense but fixes
-    // dark quads on light-emitting blocks behind tinted glass. LightDataAccess can't cache that inconsistent
-    // combo directly, so this manually recombines origin luminance with offset block/sky light to match it.
+    // Vanilla mixes the origin state with the offset pos here (fixes dark quads on emitters behind tinted glass); LightDataAccess can't cache that combo, so recombine origin luminance with offset block/sky light manually
     private int getOffsetLightmap(int x, int y, int z, ModelQuadFacing face) {
         int word = this.lightCache.get(x, y, z);
 

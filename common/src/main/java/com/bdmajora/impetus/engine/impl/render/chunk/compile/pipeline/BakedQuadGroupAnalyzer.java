@@ -10,9 +10,7 @@ import com.bdmajora.impetus.engine.impl.render.chunk.terrain.material.Material;
 import java.util.List;
 
 public class BakedQuadGroupAnalyzer {
-    // Whether the MC-138211 quad reorienting fix applies while emitting this group's geometry
-    // It has to be switchable rather than always on: some modded models stack superimposed quads, and reorienting
-    // can change the triangulation of one layer but not the one on top of it, which z-fights
+    // Whether the MC-138211 quad reorienting fix applies to this group; switchable because reorienting superimposed modded quads differently per layer causes z-fighting
     public static final int USE_REORIENTING = 0x1;
     public static final int USE_RENDER_PASS_OPTIMIZATION = 0x2;
     public static final int USE_ALL_THINGS = 0xFFFFFFFF;
@@ -58,8 +56,7 @@ public class BakedQuadGroupAnalyzer {
 
         // By definition, singleton or empty lists of quads have a common config. Only check larger lists
         if (quadsSize >= 2) {
-            // Disable reorienting if quads use different light configurations, as otherwise layered quads
-            // may be triangulated differently from others in the stack, and that will cause z-fighting.
+            // Disable reorienting if quads use different light configurations, otherwise layered quads may triangulate differently and z-fight
             int flagMask = -1;
 
             SpriteTransparencyLevel highestSeenLevel = SpriteTransparencyLevel.OPAQUE;

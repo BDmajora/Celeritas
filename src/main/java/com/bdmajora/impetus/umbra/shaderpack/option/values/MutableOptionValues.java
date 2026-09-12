@@ -7,8 +7,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-// Values equal to the pack default are dropped, so only genuine overrides get persisted to <pack>.txt
-// Ported from Umbra; guava ImmutableMap replaced with plain HashMaps
+// Values equal to the pack default are dropped, so only genuine overrides persist to <pack>.txt; from Umbra with plain HashMaps
 public class MutableOptionValues implements OptionValues {
     private final OptionSet options;
     private final Map<String, Boolean> booleanValues;
@@ -87,10 +86,7 @@ public class MutableOptionValues implements OptionValues {
                 return;
             }
 
-            // NB: We don't check if the option is in the allowed values here. This matches OptiFine behavior, the
-            //     allowed values is only used when the user is changing options in the GUI. Profiles might specify
-            //     values for options that aren't in the allowed values list, and values typed manually into the
-            //     config .txt are unchecked.
+            // NB: allowed values are not checked here, matching OptiFine: they only constrain the GUI, while profiles and hand-typed config values are unchecked
 
             if (value.equals(option.getOption().getDefaultValue())) {
                 stringValues.remove(name);

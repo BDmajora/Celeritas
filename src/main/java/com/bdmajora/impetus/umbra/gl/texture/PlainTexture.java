@@ -8,14 +8,9 @@ import java.nio.ByteBuffer;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// A 1x1 solid-colour texture
-// Bound as the fallback `normals` and `specular` samplers during the gbuffer stage when the resource pack ships no
-// PBR maps — the same neutral defaults OptiFine substitutes: a flat up-normal, and black specular
-// The point is that the samplers are ALWAYS bound to something well-defined, so a pack's PBR math reads a known
-// value rather than whatever an unbound sampler happens to return on that driver
+// A 1x1 solid-colour texture bound as the fallback `normals`/`specular` samplers when the resource pack ships no PBR maps (OptiFine's flat up-normal and black specular), so PBR math always reads a defined value
 public class PlainTexture extends GlResource {
-    // Nearest filtering and repeat wrapping: at 1x1 neither can matter, but leaving the driver's defaults would
-    // mean a mipmap-incomplete texture on some drivers, which samples black
+    // Nearest filtering and repeat wrapping: at 1x1 neither matters, but the driver defaults would make a mipmap-incomplete texture that samples black on some drivers
     public PlainTexture(int red, int green, int blue, int alpha) {
         setHandle(LWJGL.glGenTextures());
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, getGlId());
@@ -31,8 +26,7 @@ public class PlainTexture extends GlResource {
             LWJGL.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, 1, 1, 0,
                     GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, pixel);
         }
-        // Unbound before returning so the constructor leaves no texture bound on the active unit for the caller
-        // to trip over
+        // Unbound before returning so the constructor leaves nothing bound on the active unit for the caller to trip over
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
     }
 

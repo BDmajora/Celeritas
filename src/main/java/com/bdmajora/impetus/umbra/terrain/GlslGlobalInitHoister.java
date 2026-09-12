@@ -3,12 +3,9 @@ package com.bdmajora.impetus.umbra.terrain;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// Moves non-constant global initialisers into main(), reproducing #version 120 semantics under 330 where
-// NVIDIA may evaluate them before uniforms load and produce NaNs that corrupt whole passes
-// Multi-line initialisers are collected whole and top-level #ifdef gates are mirrored into the hoisted stream
+// Moves non-constant global initialisers into main(), reproducing #version 120 semantics under 330 where NVIDIA may evaluate them before uniforms load; multi-line initialisers are collected whole and top-level #ifdef gates are mirrored
 public final class GlslGlobalInitHoister {
-    // Matches only the START of a global initialiser — indent, type, name, =, and whatever follows on that first
-    // line. The rest is collected by hand, because a regex cannot balance the nesting a multi-line initialiser has
+    // Matches only the START of a global initialiser (indent, type, name, =, rest of first line); the remainder is collected by hand since a regex cannot balance multi-line nesting
     private static final Pattern GLOBAL_INIT_START = Pattern.compile(
             "^(\\s*)(float|int|bool|vec[234]|ivec[234]|mat[234])\\s+(\\w+)\\s*=\\s*(.*)$");
     private static final Pattern TRAILING_AFTER_TERMINATOR = Pattern.compile("\\s*(?://.*)?");
@@ -16,8 +13,7 @@ public final class GlslGlobalInitHoister {
     private static final Pattern CONSTANT_CALLEES = Pattern.compile(
             "vec[234]|ivec[234]|mat[234]|float|int|bool|true|false");
 
-    // The two halves the caller needs: the rewritten source with initialisers stripped down to bare declarations,
-    // and the assignment statements to splice in at the top of the generated main()
+    // The two halves the caller needs: the rewritten source with initialisers stripped to bare declarations, and the assignments to splice into the generated main()
     public static final class Result {
         public final String body;
         public final String hoistedAssignments;
@@ -51,8 +47,7 @@ public final class GlslGlobalInitHoister {
                 if (starter.matches()) {
                     Initializer init = collectInitializer(lines, idx, starter.group(4));
                     if (init != null && !isConstantExpression(init.expression)) {
-                        // Bare declaration on the first line; blank continuation lines keep GLSL error line
-                        // numbers aligned with the dumped source.
+                        // Bare declaration on the first line; blank continuation lines keep GLSL error line numbers aligned with the dumped source
                         body.append(starter.group(1)).append(starter.group(2)).append(' ')
                                 .append(starter.group(3)).append(";\n");
                         for (int k = idx + 1; k <= init.endLine; k++) {
@@ -76,8 +71,7 @@ public final class GlslGlobalInitHoister {
         return new Result(body.toString(), hasHoistedAssignments ? hoisted.toString() : "");
     }
 
-    // One collected initialiser: the expression text without its trailing ;, and the index of the last source line
-    // it occupied — the caller needs that to know how many lines to consume
+    // One collected initialiser: the expression without its trailing ;, and the index of its last source line so the caller knows how many lines to consume
     private static final class Initializer {
         final String expression;
         final int endLine;
@@ -88,11 +82,7 @@ public final class GlslGlobalInitHoister {
         }
     }
 
-    // Accumulates the initialiser expression, starting from the text after the = on the first line and continuing
-    // across lines until the statement-terminating ; at paren/bracket/brace nesting 0
-    // Returns null in two cases, and both mean "leave this declaration alone": the statement never terminates, or
-    // real code follows the terminator on its line. The second matters because hoisting would otherwise drop that
-    // trailing code entirely
+    // Accumulates the initialiser from after the = across lines until the ; at nesting 0; null when the statement never terminates or real code follows the terminator on its line, both meaning leave it alone since hoisting would drop that trailing code
     private static Initializer collectInitializer(String[] lines, int startLine, String firstRemainder) {
         StringBuilder expression = new StringBuilder();
         int nesting = 0;

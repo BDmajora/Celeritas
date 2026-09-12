@@ -8,11 +8,7 @@ import net.minecraftforge.fml.relauncher.SideOnly;
 
 import java.util.Arrays;
 
-// frame timings over a rolling five-second window, as average / 1% low / 0.1% low
-// ported from Sodium Extra; the lows use the benchmarking definition - the mean of the slowest N% of
-// frames, not the Nth percentile frame - because that is what the number is compared against
-// elsewhere
-// statistics are recomputed at most twice a second; the sampling itself is a ring-buffer append per frame
+// Frame timings over a rolling five-second window as average / 1% low / 0.1% low (Sodium Extra's benchmarking definition, mean of the slowest N%); recomputed at most twice a second from a ring-buffer append per frame
 @Mod.EventBusSubscriber(Side.CLIENT)
 @SideOnly(Side.CLIENT)
 public final class FrameCounter {

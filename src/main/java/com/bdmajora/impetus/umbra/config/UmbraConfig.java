@@ -11,8 +11,7 @@ import java.util.Locale;
 import java.util.Properties;
 import java.util.stream.Stream;
 
-// Backed by OptiFine-style optionsshaders.txt in the game dir, plus shaderpacks/ where packs live
-// Game directory is injected instead of read from Minecraft.getMinecraft() so this stays Minecraft-free and testable
+// Backed by OptiFine-style optionsshaders.txt plus shaderpacks/; the game directory is injected rather than read from Minecraft so this stays Minecraft-free and testable
 public final class UmbraConfig {
     // OptiFine's sentinel value for "shaders disabled"; empty name also means this
     public static final String NO_PACK = "(internal)";
@@ -84,8 +83,7 @@ public final class UmbraConfig {
         Files.createDirectories(this.shaderpacksDirectory);
     }
 
-    // Names of every selectable pack (sub-dirs and .zip files), sorted case-insensitively
-    // Never throws - an unreadable directory just yields an empty list
+    // Names of every selectable pack (sub-dirs and .zip files) sorted case-insensitively; an unreadable directory yields an empty list
     public List<String> listShaderpacks() {
         List<String> result = new ArrayList<>();
         if (!Files.isDirectory(this.shaderpacksDirectory)) {

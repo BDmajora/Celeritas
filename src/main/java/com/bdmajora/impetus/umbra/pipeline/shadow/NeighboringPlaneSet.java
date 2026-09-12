@@ -1,10 +1,6 @@
 package com.bdmajora.impetus.umbra.pipeline.shadow;
 
-// The four frustum planes adjacent to a given plane, needed when extruding edge planes towards the light
-// Port of Iris's shadows.frustum.advanced.NeighboringPlaneSet — a record upstream, a plain class here because this
-// module compiles against --release 8
-// Only three instances exist because planes are ordered -X, +X, -Y, +Y, far, near: the two planes on an axis share
-// the same four neighbours, so the pair collapses to one entry and planeIndex >>> 1 picks it
+// The four frustum planes adjacent to a given plane, for extruding edge planes towards the light (Iris's NeighboringPlaneSet, a class not a record under --release 8); only three instances since the two planes on an axis share neighbours, and planeIndex >>> 1 picks it
 public final class NeighboringPlaneSet {
     private static final NeighboringPlaneSet FOR_PLUS_X = new NeighboringPlaneSet(2, 3, 4, 5);
     private static final NeighboringPlaneSet FOR_PLUS_Y = new NeighboringPlaneSet(0, 1, 4, 5);

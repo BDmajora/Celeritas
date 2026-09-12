@@ -54,8 +54,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 public abstract class RenderSectionManager {
-    // when true, the section manager continuously marks all sections as needing to be remeshed whenever
-    // the update queue empties
+    // When true, all sections are continuously marked for remeshing whenever the update queue empties
     protected static final boolean CONTINUOUSLY_REMESH_WORLD = false;
 
     private final ChunkBuilder builder;
@@ -76,13 +75,10 @@ public abstract class RenderSectionManager {
     protected @Nullable Vector3ic lastCameraPosition;
     protected Vector3d cameraPosition = new Vector3d();
 
-    // plane-crossing trigger index for translucency sorting: maps translucent geometry planes to the
-    // sections owning them, so camera movement schedules re-sorts only where draw order can actually
-    // have changed
+    // Maps translucent geometry planes to their owning sections so camera movement re-sorts only where draw order can actually have changed
     private final TranslucencyTriggerIndex translucencyTriggerIndex = new TranslucencyTriggerIndex();
 
-    // dynamic sections without usable plane data (normal-count overflow); these keep the legacy coarse
-    // movement-based re-sort heuristic
+    // Dynamic sections without usable plane data (normal-count overflow) keep the legacy coarse movement-based re-sort heuristic
     private final ReferenceOpenHashSet<RenderSection> coarseTriggeredSections = new ReferenceOpenHashSet<>();
 
     // Precise camera position of the previous trigger evaluation (null until the first frame).
@@ -191,17 +187,7 @@ public abstract class RenderSectionManager {
     // Per-frame: check translucency triggers, then rebuild the render list
     public void update(Viewport positionedViewport, int frame, boolean spectator) {
         if (isInShadowPass()) {
-            // Umbra parity. `ShadowRenderer` wraps the whole shadow pass in `CullingDataCache#saveState`/
-            // `restoreState`, which swaps out the visible-section list AND the camera memo so the shadow frustum
-            // never becomes the renderer's idea of where the camera is. The list is already separated here (see
-            // `getCurrentRenderListManager`), but `cameraPosition` and `lastCameraPosition` are single fields
-            // shared by both passes, and the shadow pass runs first every frame while the camera pass calls this
-            // method only when its graph is dirty. Writing them here therefore left the manager holding the
-            // SHADOW viewport's position for the rest of any frame the camera pass skipped — which is what
-            // `shouldPrioritizeRebuild` and `createSortTask` then measured distances against.
-            //
-            // `createTerrainRenderList` takes the viewport as a parameter and reads neither field, so the shadow
-            // pass simply does not write them.
+            // Umbra parity: the shadow pass runs first every frame and must not write cameraPosition/lastCameraPosition (shared with the camera pass), or rebuild priority and sort distances measure against the SHADOW viewport
             this.createTerrainRenderList(positionedViewport, frame, spectator);
             return;
         }
@@ -283,8 +269,7 @@ public abstract class RenderSectionManager {
                 boolean triggered = section.pendingTriggeredSort;
 
                 if (!triggered && this.coarseTriggeredSections.contains(section)) {
-                    // Legacy heuristic, kept only for sections whose plane data overflowed: re-sort after moving
-                    // at least one block while crossing the section grid or its axes.
+                    // Legacy heuristic for sections whose plane data overflowed: re-sort after moving at least one block across the section grid or its axes
                     double dx = cameraPosition.x - section.lastCameraX;
                     double dy = cameraPosition.y - section.lastCameraY;
                     double dz = cameraPosition.z - section.lastCameraZ;
@@ -313,8 +298,7 @@ public abstract class RenderSectionManager {
         }
     }
 
-    // true if the renderer should respect per-frame queue limits rather than trying to update as many
-    // chunks as possible per frame
+    // True if the renderer should respect per-frame queue limits rather than updating as many chunks as possible
     protected boolean shouldRespectUpdateTaskQueueSizeLimit() {
         return true;
     }
@@ -479,29 +463,14 @@ public abstract class RenderSectionManager {
         this.regions.update();
         this.jobMetricsTracker.tick();
 
-        // Advance the adaptive scheduling controller once per frame, before any dispatch reads the budget. This
-        // runs only on the main terrain pass so that an additional shadow pass in the same frame does not
-        // double-tick the controller; both passes share the same worker queue and in-flight target.
+        // Advance the adaptive scheduling controller once per frame on the main pass only, so an extra shadow pass sharing the worker queue does not double-tick it
         boolean mainPass = !this.isInShadowPass();
 
         if (mainPass) {
             this.builder.tickSchedulingBudget();
         }
 
-        // Promotion of the interim rebuild list is not required if a graph update is requested, as the graph
-        // generates a new rebuild list anyway.
-        //
-        // Main pass only. `sectionsRequestingUpdate` is main-pass state: it is filled under
-        // `!getCurrentRenderListManager().isNeedsUpdate()` and drained here, and the "clearing is safe because the
-        // graph will regenerate the list" argument only holds for the manager that is about to run a graph update.
-        //
-        // SimpleWorldRenderer#setupTerrain no longer calls this method during the Umbra shadow pass at all (that
-        // pass is culling-only, matching Umbra's ShadowRenderer, which never runs vanilla's chunk build dispatch),
-        // so `mainPass` is true for every caller today. The guards here and on `tickSchedulingBudget()` /
-        // `setDispatchBudgetLimited()` are kept as a backstop: everything in this method is scoped to whichever
-        // manager is current, so reaching it from the shadow pass drains the shadow list's rebuild queue and spends
-        // the shared ChunkBuilder budget that the camera pass needs. That starves terrain on a streaming world —
-        // geometry drains away while entities, which do not come from these lists, keep drawing.
+        // Main pass only: sectionsRequestingUpdate is main-pass state and a graph update regenerates it anyway; the guard is a backstop, since draining it from the shadow pass would spend the shared ChunkBuilder budget and starve terrain
         if (mainPass) {
             if (!this.renderListManager.isNeedsUpdate() && !sectionsRequestingUpdate.isEmpty()) {
                 this.promoteInterimRebuildList();
@@ -527,14 +496,11 @@ public abstract class RenderSectionManager {
         this.submitRebuildTasks(blockingRebuilds, ChunkUpdateType.IMPORTANT_REBUILD);
         this.submitRebuildTasks(blockingRebuilds, ChunkUpdateType.IMPORTANT_SORT);
 
-        // Track whether the deferred dispatch was throttled by the budget while work still
-        // remained. Combined with worker starvation, this is what tells the controller to grow the in-flight
-        // target next frame.
+        // Track whether deferred dispatch was throttled by the budget while work remained; with worker starvation this tells the controller to grow the in-flight target
         boolean budgetLimited = false;
         budgetLimited |= this.submitRebuildTasks(updateImmediately ? blockingRebuilds : deferredRebuilds, ChunkUpdateType.REBUILD);
         budgetLimited |= this.submitRebuildTasks(updateImmediately ? blockingRebuilds : deferredRebuilds, ChunkUpdateType.INITIAL_BUILD);
-        // The BFS itself may have discarded candidates that did not fit in the rebuild lists; that is also work
-        // we were unable to dispatch this frame.
+        // Candidates the BFS discarded for not fitting the rebuild lists also count as work we could not dispatch this frame
         budgetLimited |= this.getCurrentRenderListManager().getRebuildLists().hasAdditionalUpdates();
         if (mainPass) {
             this.builder.setDispatchBudgetLimited(budgetLimited);
@@ -567,8 +533,7 @@ public abstract class RenderSectionManager {
             result.output().delete();
         }
 
-        // Forcefully mark the graph as needing updates if the previous render list detected an overflow of the
-        // update queue. This is necessary to queue those additional chunks.
+        // Force a graph update if the previous render list overflowed the update queue, so those additional chunks get queued
         if (this.getCurrentRenderListManager().getRebuildLists().hasAdditionalUpdates()) {
             this.markGraphDirty();
         }
@@ -591,9 +556,7 @@ public abstract class RenderSectionManager {
                 boolean changed = this.updateSectionInfo(result.render, buildResult.info);
 
                 if (changed) {
-                    // The chunk graph must be rebuilt if the render section reports the info has changed. This
-                    // could indicate an occlusion data update, block entity addition/removal, animated texture
-                    // change, etc.
+                    // Rebuild the chunk graph when the section reports changed info (occlusion data, block entity add/remove, animated texture change, etc.)
                     this.markGraphDirty();
                 }
 
@@ -603,9 +566,7 @@ public abstract class RenderSectionManager {
 
             var job = result.render.getBuildCancellationToken();
 
-            // Only clear the token if this result belongs to the most recently submitted build.
-            // A stale result from an earlier submission must not clear the token for a newer
-            // in-flight job, which is identified by a higher lastSubmittedFrame.
+            // Only clear the token if this result belongs to the most recent submission; a stale result must not clear a newer in-flight job's token
             if (job != null && result.buildTime >= result.render.getLastSubmittedFrame()) {
                 result.render.setBuildCancellationToken(null);
             }
@@ -628,9 +589,7 @@ public abstract class RenderSectionManager {
         this.updateTranslucencyTriggerRegistration(render, sortStates);
     }
 
-    // (re-)registers a section with the plane-crossing trigger index
-    // dynamic sections whose plane data overflowed, or predates this mechanism, fall back to the legacy
-    // movement heuristic instead
+    // (Re-)registers a section with the plane-crossing trigger index; overflowed or pre-mechanism plane data falls back to the legacy movement heuristic
     private void updateTranslucencyTriggerRegistration(RenderSection render, Map<TerrainRenderPass, TranslucentQuadAnalyzer.SortState> sortStates) {
         NormalPlanes[] planes = null;
         boolean dynamic = false;
@@ -735,9 +694,7 @@ public abstract class RenderSectionManager {
         return results;
     }
 
-    // true if dispatch stopped because the collector's budget was exhausted while sections still
-    // remained in the queue - i.e. dispatch was budget-limited rather than work-limited for this
-    // update type
+    // True if dispatch stopped because the collector's budget ran out while sections remained, i.e. budget-limited rather than work-limited
     private boolean submitRebuildTasks(ChunkJobCollector collector, ChunkUpdateType type) {
         var queue = this.getCurrentRenderListManager().getRebuildLists().byUpdateType().get(type);
 
@@ -750,13 +707,7 @@ public abstract class RenderSectionManager {
                 continue;
             }
 
-            // The pending update type may have changed since this entry was queued. Cases:
-            //   - A SORT was promoted to REBUILD (e.g. a block changed while a sort was pending):
-            //     the section remains in the SORT queue but pendingUpdate is now REBUILD, so the
-            //     SORT pass skips it and the REBUILD pass picks it up correctly.
-            //   - The type was cleared by a prior pass in the same frame.
-            //   - The type was set to null after the async BFS generated the list (authoritative
-            //     guard against double submissions from a stale buildCancellationToken read).
+            // The pending type may have changed since queuing: promoted SORT->REBUILD (the REBUILD pass picks it up), cleared by an earlier pass, or nulled after the async BFS (guards against double submission)
             if (section.getPendingUpdate() != type) {
                 continue;
             }
@@ -949,8 +900,7 @@ public abstract class RenderSectionManager {
         return this.lastCameraPosition != null && section.getSquaredDistanceFromBlockCenter(this.lastCameraPosition.x(), this.lastCameraPosition.y(), this.lastCameraPosition.z()) < NEARBY_REBUILD_DISTANCE;
     }
 
-    // true if rebuilds of chunks near the player should block the main thread
-    // reduces flickering, but can cause lag spikes
+    // True if rebuilds near the player should block the main thread; reduces flickering but can cause lag spikes
     protected boolean allowImportantRebuilds() {
         return false;
     }

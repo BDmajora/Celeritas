@@ -9,12 +9,9 @@ import java.nio.ByteOrder;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// OptiFine's centerDepthSmooth: the depth at screen centre, smoothed with the pack's centerDepthHalflife
-// One synchronous glReadPixels per frame from a depth-only FBO over depthtex0; cheap, and could move to a PBO
+// OptiFine's centerDepthSmooth, the depth at screen centre smoothed by the pack's centerDepthHalflife; one synchronous glReadPixels per frame from a depth-only FBO over depthtex0
 public final class CenterDepthSampler {
-    // Latest smoothed value, read by uniform suppliers on any program
-    // Starts at 1.0, the far-plane depth, so the first frame reads "looking at nothing" rather than "focused on
-    // the near plane" and the DoF does not blur the whole world for a frame
+    // Latest smoothed value, read by uniform suppliers; starts at 1.0 (far plane) so the first frame reads "looking at nothing" and DoF does not blur the whole world for a frame
     private static float currentSmoothed = 1.0f;
 
     private final ByteBuffer pixel = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder());
@@ -28,11 +25,7 @@ public final class CenterDepthSampler {
         return currentSmoothed;
     }
 
-    // Samples and smooths the centre depth
-    // depthTexture is depthtex0's GL id, passed in per call rather than cached because it changes across resizes
-    // A halfLife of 0 or less disables smoothing and takes the raw sample
-    // Leaves the READ framebuffer binding pointing at the internal depth-only FBO; callers bind whatever they need
-    // afterwards, so this deliberately does not restore it
+    // Samples and smooths the centre depth; depthTexture is passed per call since it changes on resize, halfLife <= 0 takes the raw sample, and the READ framebuffer is deliberately left pointing at the internal FBO
     public void sample(int depthTexture, int width, int height, float frameTime, float halfLife) {
         if (width <= 0 || height <= 0) {
             return;

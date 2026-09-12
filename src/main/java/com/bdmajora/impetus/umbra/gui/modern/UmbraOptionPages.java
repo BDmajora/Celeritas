@@ -23,21 +23,14 @@ import java.util.OptionalInt;
 public final class UmbraOptionPages {
     // Groups the page under the Umbra sidebar heading and picks its accent colour
     private static final String UMBRA_MOD_ID = "umbra";
-    // Every option here reads and writes its own subsystem directly, so the storage object holds no state and
-    // exists only because OptionImpl requires one; save() is deliberately not implemented for the same reason
+    // Every option reads and writes its subsystem directly, so the storage object holds no state and exists only because OptionImpl requires one; save() is deliberately unimplemented
     private static final UmbraMenuState STATE = new UmbraMenuState();
     private static final OptionStorage<UmbraMenuState> STORAGE = () -> STATE;
 
     private UmbraOptionPages() {
     }
 
-    // The whole Umbra tab: the pack picker and the pack-level settings, on one page
-    // These used to be two sidebar entries with one group each, and the split earned nothing. The Umbra sidebar
-    // heading already names the section, TabFrame was stacking both pages into one scroll pane anyway, and the
-    // "Settings" page opened with a second button that displayed the very same ShaderPackSelectScreen as the
-    // first page's — so the duplicate is dropped here and what is left fits one page
-    // Kept as two groups rather than one flat list: OptionPageFrame draws no group header, but it does put a
-    // gap between groups, which keeps "pick a pack" visually apart from "what the pack decided"
+    // The whole Umbra tab, picker and pack-level settings on one page; the old two-page split earned nothing (TabFrame stacked them anyway and the second page's button opened the same screen), kept as two groups for the visual gap
     public static OptionPage shaderPacks(GuiScreen parent) {
         // The pack picker on its own, so it reads as the primary action rather than one row among the settings
         OptionGroup packs = OptionGroup.createBuilder()
@@ -57,8 +50,7 @@ public final class UmbraOptionPages {
                         .setId(OptionIdentifier.create(UMBRA_MOD_ID, "color_space", ColorSpaceConverter.ColorSpace.class))
                         .setName(TextComponent.translatable("options.umbra.colorSpace"))
                         .setTooltip(TextComponent.translatable("options.umbra.colorSpace.tooltip"))
-                        // Display names are supplied literally because the enum constant names are not what a
-                        // user reads on a monitor spec sheet, and the array order has to track the enum's
+                        // Display names supplied literally because the enum constant names are not what a user reads on a monitor spec sheet, and the array order must track the enum
                         .setControl(option -> new CyclingControl<>(option,
                                 ColorSpaceConverter.ColorSpace.values(),
                                 new TextComponent[] {
@@ -67,9 +59,7 @@ public final class UmbraOptionPages {
                                         TextComponent.literal("Display P3"),
                                         TextComponent.literal("Rec.2020"),
                                         TextComponent.literal("Adobe RGB") }))
-                        // The converter is the source of truth, not STATE, so the getter reads back from it
-                        // The config save is best-effort: a failed write costs the setting on next launch, and
-                        // must not take the options screen down with it
+                        // The converter is the source of truth, not STATE, so the getter reads back from it; the config save is best-effort and must not take the options screen down
                         .setBinding((state, value) -> {
                             ColorSpaceConverter.setColorSpace(value);
                             try {
@@ -78,8 +68,7 @@ public final class UmbraOptionPages {
                             }
                         }, state -> ColorSpaceConverter.getColorSpace())
                         .build())
-                // Read-only: the loaded pack owns this number, so the row reports it rather than offering it
-                // The no-op setter is what makes that explicit; setEnabled(false) is what greys it out
+                // Read-only: the loaded pack owns this number, so the row reports it; the no-op setter makes that explicit and setEnabled(false) greys it out
                 .add(OptionImpl.createBuilder(String.class, STORAGE)
                         .setId(OptionIdentifier.create(UMBRA_MOD_ID, "max_shadow_distance", String.class))
                         .setName(TextComponent.translatable("options.umbra.maxShadowDistance"))
@@ -97,9 +86,7 @@ public final class UmbraOptionPages {
                 ImmutableList.of(packs, settings));
     }
 
-    // A row whose "control" is a button that runs an action instead of editing a value
-    // The boolean type parameter is a placeholder: OptionImpl needs a value type, nothing here has one, so the
-    // binding reads a constant false and writes nothing
+    // A row whose "control" is a button running an action; the boolean type parameter is a placeholder since OptionImpl needs a value type, reading constant false and writing nothing
     private static OptionImpl<UmbraMenuState, Boolean> openAction(String path, TextComponent name, TextComponent tooltip,
                                                                 Runnable action, boolean enabled) {
         return OptionImpl.createBuilder(boolean.class, STORAGE)
@@ -112,8 +99,7 @@ public final class UmbraOptionPages {
                 .build();
     }
 
-    // What the read-only shadow distance row shows: the pack's own shadowDistance when it declares one,
-    // otherwise "Default" — which also covers the no-pack-loaded case
+    // What the read-only shadow distance row shows: the pack's shadowDistance when declared, otherwise "Default", which also covers no pack loaded
     private static String shadowDistanceLabel() {
         ShaderPack pack = Umbra.getCurrentPack();
         if (pack == null) {

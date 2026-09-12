@@ -17,8 +17,7 @@ import net.minecraftforge.fml.common.registry.ForgeRegistries;
 
 import java.util.Optional;
 
-// How brightly one item glows when held, worn or dropped
-// Declared in assets/impetus/dynamiclights/item/*.json so a resource pack can cover modded items
+// How brightly one item glows when held, worn or dropped; declared in assets/impetus/dynamiclights/item/*.json so a resource pack can cover modded items
 public abstract class ItemLightSource {
     private final ResourceLocation id;
     private final Item item;
@@ -62,9 +61,7 @@ public abstract class ItemLightSource {
                 + ", water_sensitive=" + this.waterSensitive + '}';
     }
 
-    // parses one light source definition
-    // luminance is either a number, the literal "block" (use the block this item places), or a block
-    // id (mimic that block's light value)
+    // Parses one definition; luminance is a number, the literal "block" (the block this item places), or a block id to mimic
     public static Optional<ItemLightSource> fromJson(ResourceLocation id, JsonObject json) {
         if (!json.has("item") || !json.has("luminance")) {
             DynamicLights.LOGGER.warn("Item light source \"{}\" is missing a required field", id);
@@ -130,8 +127,7 @@ public abstract class ItemLightSource {
             this.luminance = luminance;
         }
 
-        // Fixed brightness regardless of stack state
-        // Reads the luminance of the block this item mimics, so a glowstone item glows like glowstone
+        // Fixed brightness regardless of stack state; reads the mimicked block's luminance so a glowstone item glows like glowstone
         @Override
         public int getLuminance(ItemStack stack) {
             return this.luminance;
@@ -153,9 +149,7 @@ public abstract class ItemLightSource {
             return getLuminance(stack, this.mimic);
         }
 
-        // the light value of state, with any BlockStateTag on the stack applied first
-        // that tag is how a stack can carry a non-default block state - a lit versus unlit redstone
-        // torch, for instance - so ignoring it would report the wrong brightness for those stacks
+        // Light value of state with any BlockStateTag on the stack applied first, since that tag is how a stack carries a non-default state (lit vs unlit redstone torch)
         public static int getLuminance(ItemStack stack, IBlockState state) {
             NBTTagCompound nbt = stack.getTagCompound();
 

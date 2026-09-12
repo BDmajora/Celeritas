@@ -6,10 +6,7 @@ import java.util.function.Supplier;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// An ivec2 uniform; OptiFine's eyeBrightness is the one that matters
-// Diffed against the last upload, since update runs for every uniform of every bind and most do not move
-// cached is set in place rather than stored by reference, since the supplier may mutate and return the same object
-// initialized forces the first upload, which equals() against a fresh zero vector would otherwise skip
+// An ivec2 uniform (OptiFine's eyeBrightness), diffed against the last upload; cached is set in place since the supplier may mutate and return the same object, and initialized forces the first upload
 public class Vector2IntUniform extends Uniform {
     private final Supplier<Vector2i> value;
     private final Vector2i cached = new Vector2i();

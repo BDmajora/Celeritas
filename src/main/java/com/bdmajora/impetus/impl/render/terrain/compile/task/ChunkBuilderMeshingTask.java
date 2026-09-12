@@ -114,15 +114,11 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
 
                         buildContext.getBlockRenderer().resetSharedState();
 
-                        // block.properties `layer.<rendertype>`: the pack can move a block to a different chunk
-                        // render layer than the block itself reports (OptiFine's block render layer override).
+                        // block.properties `layer.<rendertype>`: the pack can move a block to a different chunk render layer than it reports (OptiFine's render layer override)
                         BlockRenderLayer forcedLayer =
                                 com.bdmajora.impetus.umbra.material.WorldRenderingSettings.getForcedRenderLayer(block);
 
-                        // `voxelizeLightBlocks`: a block that emits light but draws nothing is invisible to a pack's
-                        // shadow-pass voxelization. Umbra solves this for 1.17+'s `minecraft:light`; the 1.12.2
-                        // equivalent is any INVISIBLE-render-type block with a non-zero light value (modded light
-                        // sources, mostly). Attributing it to the solid layer gives the voxelizer something to see.
+                        // `voxelizeLightBlocks`: a block emitting light but drawing nothing is invisible to shadow-pass voxelization, so any INVISIBLE block with a light value (the 1.12.2 stand-in for `minecraft:light`) is attributed to the solid layer
                         if (com.bdmajora.impetus.umbra.material.WorldRenderingSettings.isVoxelizeLightBlocks()
                                 && blockState.getRenderType() == EnumBlockRenderType.INVISIBLE
                                 && blockState.getLightValue(slice, blockPos) > 0) {
@@ -149,8 +145,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
 
                         if (FluidloggedCompat.IS_LOADED) {
                             FluidloggedCompat.renderFluidState(slice, blockPos, blockState, buildContext, dispatcher);
-                            // The compat hook picks its own layer(s) internally; sweep all of them — recording is a
-                            // no-op for layers whose quad count did not change.
+                            // The compat hook picks its own layer(s), so sweep all of them; recording is a no-op for layers whose quad count did not change
                             for (BlockRenderLayer layer : VintageChunkBuildContext.LAYERS) {
                                 buildContext.recordVanillaBlockAttribution(layer, blockState, blockPos);
                             }
@@ -194,13 +189,6 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         CrashReportCategory.addBlockInfo(crashReportSection, pos, state);
 
         crashReportSection.addCrashSection("Chunk section", this.render);
-        /*
-        if (this.renderContext != null) {
-            crashReportSection.addCrashSection("Render context volume", this.renderContext.getVolume());
-        }
-
-         */
-
         return new ReportedException(report);
     }
 

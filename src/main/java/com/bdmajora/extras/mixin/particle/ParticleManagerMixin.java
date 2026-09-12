@@ -16,13 +16,10 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// The catch-all particle gate: block-break/block-hit switches, master switch, and per-class filter
-// Every particle reaches addEffect regardless of source, which is what makes per-class toggles work for mod particles too
-// Id-keyed named switches live in RenderGlobalParticleMixin instead, since several vanilla ids share one class here
+// The catch-all particle gate (block-break/hit switches, master switch, per-class filter); every particle reaches addEffect, which is what makes per-class toggles work for mods, while id-keyed switches live in RenderGlobalParticleMixin
 @Mixin(ParticleManager.class)
 public class ParticleManagerMixin {
-    // Records which mod registered each factory while its container is still the active one;
-    // the only reliable attribution for lambda/anonymous factories, whose class name says nothing about the source
+    // Records which mod registered each factory while its container is active, the only reliable attribution for lambda/anonymous factories
     @Inject(method = "registerParticle", at = @At("HEAD"))
     private void impetus$captureFactoryMod(int id, IParticleFactory particleFactory, CallbackInfo ci) {
         if (particleFactory == null) {
@@ -62,8 +59,7 @@ public class ParticleManagerMixin {
         }
     }
 
-    // Records the class and applies the master and per-class filters;
-    // recordClass is identity-guarded and isEmptyDisabled short-circuits the common no-filter case
+    // Records the class and applies the master and per-class filters; recordClass is identity-guarded and isEmptyDisabled short-circuits the no-filter case
     @Inject(method = "addEffect", at = @At("HEAD"), cancellable = true)
     private void impetus$filterEffect(Particle effect, CallbackInfo ci) {
         if (effect == null) {

@@ -8,8 +8,7 @@ import net.minecraft.world.IBlockAccess;
 import net.minecraftforge.fluids.IFluidBlock;
 import net.minecraftforge.fml.common.Loader;
 
-// Whether a position is inside a fluid, which drives "extinguish when underwater"
-// Checks both the block's material and Forge's IFluidBlock, so modded fluids count too, not just water and lava
+// Whether a position is inside a fluid ("extinguish when underwater"), checking both the block material and Forge's IFluidBlock so modded fluids count
 public final class FluidHandler {
     private static final boolean FLUIDLOGGING = Loader.isModLoaded("fluidlogged_api");
 

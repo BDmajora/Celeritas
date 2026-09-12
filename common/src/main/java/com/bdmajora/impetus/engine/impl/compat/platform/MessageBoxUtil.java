@@ -3,12 +3,7 @@ package com.bdmajora.impetus.engine.impl.compat.platform;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-// A blocking warning dialog, for problems severe enough that a log line would simply be missed — a driver known
-// to crash on launch, for instance
-// Swing rather than a native message box: Swing is present on every platform and Java version this targets, and
-// this path only runs during startup, well before the GL loop is latency-sensitive
-// Falls back to logging in a headless environment rather than throwing, since a CI or server run must not be
-// stopped by a dialog nobody can dismiss
+// Blocking Swing warning dialog for problems a log line would miss (e.g. a driver known to crash on launch); falls back to logging when headless
 public final class MessageBoxUtil {
     private static final Logger LOGGER = LogManager.getLogger("Impetus");
 
@@ -40,8 +35,7 @@ public final class MessageBoxUtil {
         try {
             javax.swing.JOptionPane.showMessageDialog(null, message, title, type);
         } catch (Throwable t) {
-            // AWT can fail in exotic launcher setups (e.g. macOS without -XstartOnFirstThread juggling); the
-            // warning is already in the log, so never let the dialog itself take the game down.
+            // AWT can fail in exotic launcher setups (e.g. macOS without -XstartOnFirstThread); the warning is already logged, so never let the dialog crash the game
         }
     }
 }

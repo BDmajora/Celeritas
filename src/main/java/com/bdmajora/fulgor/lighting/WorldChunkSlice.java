@@ -3,8 +3,7 @@ package com.bdmajora.fulgor.lighting;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.IChunkProvider;
 
-// 5x5 chunk snapshot around one column for recheckGaps: 25 lookups up front instead of 1024 through the provider
-// Entries may be null; use isLoaded rather than piecemeal null checks, since a partial answer produces skylight seams
+// 5x5 chunk snapshot around one column for recheckGaps: 25 lookups up front instead of 1024 through the provider; entries may be null, so use isLoaded since a partial answer produces skylight seams
 public final class WorldChunkSlice {
     private static final int DIAMETER = 5;
     private static final int RADIUS = DIAMETER / 2;

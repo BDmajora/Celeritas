@@ -11,9 +11,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-// Throttles how often the F3 overlay text is rebuilt; vanilla recomputes every line each frame, some of which hit the world (biome lookup, chunk pos)
-// Rebuilding once a tick makes the numbers readable too, since at high FPS vanilla's overlay changes too fast to read
-// Both cached lists share one rebuild decision per frame so left/right columns never show text from different ticks
+// Throttles the F3 overlay rebuild to once a tick (vanilla recomputes every line per frame, some hitting the world), which also makes the numbers readable; both cached lists share one rebuild decision so the columns never mix ticks
 @Mixin(GuiOverlayDebug.class)
 public abstract class GuiOverlayDebugMixin {
     @Unique
@@ -43,8 +41,7 @@ public abstract class GuiOverlayDebugMixin {
         }
     }
 
-    // Returns a copy, not the cache itself; renderDebugInfoLeft appends 3 lines to whatever this returns,
-    // so handing back the live cache would let it grow every frame until the next rebuild
+    // Returns a copy, not the cache; renderDebugInfoLeft appends 3 lines to the result, so the live cache would grow every frame until the next rebuild
     @Inject(method = "call()Ljava/util/List;", at = @At("HEAD"), cancellable = true)
     private void impetus$leftFromCache(CallbackInfoReturnable<java.util.List<String>> cir) {
         if (!this.impetus$rebuild) {

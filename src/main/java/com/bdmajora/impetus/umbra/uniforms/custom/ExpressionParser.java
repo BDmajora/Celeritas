@@ -3,9 +3,7 @@ package com.bdmajora.impetus.umbra.uniforms.custom;
 import java.util.ArrayList;
 import java.util.List;
 
-// Recursive-descent parser for the custom-uniform expression language: arithmetic, comparisons, logic,
-// ternary and if, the maths builtins, and vec constructors. Each parse method calls the next tighter one,
-// which is what encodes precedence
+// Recursive-descent parser for the custom-uniform expression language (arithmetic, comparisons, logic, ternary and if, maths builtins, vec constructors); each parse method calls the next tighter one, which encodes precedence
 public final class ExpressionParser {
     public static final class ParseException extends RuntimeException {
         public ParseException(String message) {
@@ -15,9 +13,7 @@ public final class ExpressionParser {
 
     private final String source;
     private int pos;
-    // Running count of smooth() calls seen, handing each a distinct persistent-state slot
-    // Stable across a parse, and the slot is baked into the compiled expression — so one uniform's several smooth()
-    // calls keep separate histories instead of overwriting each other every frame
+    // Running count of smooth() calls, handing each a distinct persistent-state slot baked into the compiled expression so one uniform's several smooth() calls keep separate histories
     private int smoothCallCount;
 
     private ExpressionParser(String source) {
@@ -223,10 +219,7 @@ public final class ExpressionParser {
                     if (constant != null) {
                         return ctx -> CustomUniformValue.scalar(constant);
                     }
-                    // Component/swizzle access (eyeBrightness.y, cameraPosition.x, delta.xz): the identifier
-                    // grammar swallows the dots, so decompose here. Without this the whole dotted name misses the
-                    // input table and SILENTLY evaluates to 0 — which zeroed eyeBrightness-derived custom uniforms
-                    // (SDV's eyeSkylight, MakeUp's exposure) and rendered those packs cave-black.
+                    // Component/swizzle access (eyeBrightness.y, delta.xz): the identifier grammar swallows the dots, so decompose here; otherwise the dotted name misses the input table and SILENTLY evaluates to 0, which rendered SDV and MakeUp cave-black
                     int dot = ident.indexOf('.');
                     if (dot > 0) {
                         String base = ident.substring(0, dot);
@@ -522,9 +515,7 @@ public final class ExpressionParser {
 
     // --- lexer helpers ---
 
-    // Maps a swizzle suffix — y, xz, rgb — to component indices
-    // Null when the suffix is not a pure swizzle at all, e.g. matrix cell access like m.0.1, which this expression
-    // language cannot resolve and which the caller then reports rather than silently mis-reading as a swizzle
+    // Maps a swizzle suffix (y, xz, rgb) to component indices; null when not a pure swizzle (matrix cell access like m.0.1), which the caller reports rather than mis-reading
     private static int[] swizzleIndices(String suffix) {
         if (suffix.isEmpty() || suffix.length() > 4 || suffix.indexOf('.') >= 0) {
             return null;

@@ -12,12 +12,7 @@ import org.joml.Vector4i;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-// Where uniform registrations go. Two implementations, and the second is the reason this is an interface at all
-// ProgramUniforms.Builder is the real one: it resolves GL locations and builds the objects that upload
-// CustomUniformInputs implements it too, capturing the same name -> supplier pairs without any GL, so a pack's
-// custom uniform expressions can reference every built-in uniform by name. Without the shared interface the whole
-// registration list in CommonUniforms would have to be written out a second time and kept in step by hand
-// Every method returns the collector so registrations chain
+// Where uniform registrations go; ProgramUniforms.Builder resolves GL locations, and CustomUniformInputs captures the same name -> supplier pairs without GL so custom uniform expressions can reference built-ins by name. Every method returns the collector so registrations chain
 public interface UniformCollector {
     UniformCollector uniform1f(UniformUpdateFrequency frequency, String uniformName, FloatSupplier value);
 

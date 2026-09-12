@@ -40,8 +40,7 @@ public class ChunkJobCollector {
             builder.tryStealTask(job);
         }
 
-        // Acquire all the permits while running the managed block logic (to handle tasks requiring input from
-        // the main thread)
+        // Acquire all permits while running the managed block logic, to handle tasks needing input from the main thread
         int remaining = this.submitted.size();
         BooleanSupplier isDone = () -> this.semaphore.availablePermits() > 0;
 

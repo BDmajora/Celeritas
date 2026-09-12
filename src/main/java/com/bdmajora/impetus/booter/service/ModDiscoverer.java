@@ -40,9 +40,7 @@ import java.util.jar.JarFile;
 import java.util.jar.Manifest;
 import java.util.zip.ZipEntry;
 
-// Discovers all mods present in the game directory at coremod init time independently of
-// net.minecraftforge.fml.common.Loader which is not available early. Builds a bidirectional mod-id and file
-// mapping used for dependency checking
+// Discovers every mod in the game directory at coremod init, independently of Loader (unavailable that early); builds a bidirectional mod-id/file mapping for dependency checking
 public final class ModDiscoverer {
 
     private static final ILogger LOGGER = MixinService.getService().getLogger(Tags.MOD_NAME);
@@ -77,32 +75,23 @@ public final class ModDiscoverer {
         return Collections.unmodifiableSet(modIdToFiles.keySet());
     }
 
-    // Returns the jars that declare the given mod id. A single mod id may be shipped by more than one jar (e.g.
-    // duplicate installs), hence a set
+    // The jars declaring the given mod id; a set since duplicate installs can ship one id from several jars
     public static Set<File> getModSources(String modId) {
         return Collections.unmodifiableSet(modIdToFiles.get(modId));
     }
 
-    // Returns the id of the mod owning the given jar. Use #getModsFromSource(File) instead if you need every
-    // declared id
+    // The id of the mod owning the given jar; use getModsFromSource(File) for every declared id
     public static String getModFromSource(File source) {
         Set<String> ids = getModsFromSource(source);
         return ids.isEmpty() ? null : ids.iterator().next();
     }
 
-    // Returns the ids of the mod(s) owning the given jar, resolved during #discover() from its mcmod.info or,
-    // when that declares none, its @Mod annotation. A jar may declare more than one mod (via mcmod.info's
-    // modList), hence the set
+    // The ids of the mod(s) owning the given jar, resolved during discover() from mcmod.info or, failing that, its @Mod annotation; a set since mcmod.info's modList may declare several
     public static Set<String> getModsFromSource(File source) {
         return Collections.unmodifiableSet(fileToModIds.get(source.getAbsoluteFile()));
     }
 
-    // Honors the ForceLoadAsMod manifest key for every jar collected during #discover(). Replicating the only
-    // behavior the removed MixinPlatformAgentFMLLegacy still provided which was un-ignoring jars so Forge would
-    // load it as mods. Forge unconditionally adds cascading-tweaker jars to its ignored list and never reaches
-    // its own FMLCorePluginContainsFMLMod handling for them. Without this functionality those jars would
-    // silently fail to load as mods. Must run after CoreModManager#discoverCoreMods has fully populated the
-    // ignored list, i.e. from injectData and not from the plugin constructor
+    // Honors the ForceLoadAsMod manifest key for every discovered jar, replicating the removed MixinPlatformAgentFMLLegacy: Forge unconditionally ignores cascading-tweaker jars, so must run after CoreModManager#discoverCoreMods populates the ignored list (injectData, not the constructor)
     public static void applyForceLoadAsMod() {
         if (forceLoadAsModFiles.isEmpty()) {
             return;
@@ -119,25 +108,15 @@ public final class ModDiscoverer {
         }
     }
 
-    // Loads the FMLCorePlugin of every jar that also declares a TweakClass, which Forge's
-    // CoreModManager#discoverCoreMods skips. The removed MixinPlatformAgentFMLLegacy re-injected these via
-    // CoreModManager.loadCoreMod and this replicates that. This must run from CoremodsRescuer's constructor
-    // while LaunchWrapper is iterating TweakClasses, because rescued coremods such as Sledgehammer may add
-    // directly to Tweaks. Any TweakClasses added during rescue are captured and replayed later to avoid
-    // corrupting LaunchWrapper's active TweakClasses iterator
+    // Loads the FMLCorePlugin of every jar that also declares a TweakClass, which CoreModManager#discoverCoreMods skips (replicating MixinPlatformAgentFMLLegacy); must run from CoremodsRescuer's constructor while LaunchWrapper iterates TweakClasses, so any added during rescue are captured and replayed later
     public static void rescueDroppedCoremods() {
         if (droppedCoremods.isEmpty()) {
             return;
         }
         Method loadCoreMod;
-//        Field loadPlugins, location;
         try {
             loadCoreMod = CoreModManager.class.getDeclaredMethod("loadCoreMod", LaunchClassLoader.class, String.class, File.class);
             loadCoreMod.setAccessible(true);
-//            loadPlugins = CoreModManager.class.getDeclaredField("loadPlugins");
-//            loadPlugins.setAccessible(true);
-//            location = Class.forName("net.minecraftforge.fml.relauncher.CoreModManager$FMLPluginWrapper", true, Launch.classLoader).getDeclaredField("location")
-//            location.setAccessible(true);
         } catch (Throwable t) {
             LOGGER.error("Unable to access crucial internals. Coremods declared alongside a TweakClass will not be loaded.", t);
             return;
@@ -212,10 +191,7 @@ public final class ModDiscoverer {
         Launch.blackboard.put(TWEAK_CLASSES, tweakClasses);
         GlobalProperties.put(GlobalProperties.Keys.of(TWEAK_CLASSES), tweakClasses);
     }
-    // Gathers the same candidate set FML resolves in CoreModManager#discoverCoreMods (the flat mods/ and mods/
-    // directories, command-line --mods, and contained dependencies extracted into memory_repo or the libraries
-    // directory) and supplements it with classpath entries already on the LaunchClassLoader for the dev
-    // environment. Must be called once before FML's own mod discovery runs
+    // Gathers the candidate set FML resolves in CoreModManager#discoverCoreMods (mods/ dirs, --mods, contained dependencies in memory_repo or libraries) plus dev-classpath entries on the LaunchClassLoader; call once before FML's own discovery
     public static void discover() {
         if (discovered) {
             return;
@@ -256,17 +232,12 @@ public final class ModDiscoverer {
         return manifestMixinJars;
     }
 
-    // Internal usage, whether the given manifest mixin jar was gathered as a mods-folder (or maven artifact)
-    // candidate rather than purely from the dev classloader
+    // Whether the given manifest mixin jar was gathered as a mods-folder (or maven artifact) candidate rather than purely from the dev classloader
     static boolean isModDirMixinJar(File jar) {
         return manifestMixinModDirJars.contains(jar);
     }
 
-    // Builds the candidate jar set FML resolves in CoreModManager#discoverCoreMods. The legacy candidates
-    // (LibraryManager#gatherLegacyCanidates which are from the mods/ and mods/ directories plus command-line
-    // --mods) merged with the maven artifacts (LibraryManager#flattenLists which are the contained dependencies
-    // extracted into memory_repo or the libraries directory). Both are read-only and already invoked by FML
-    // before this runs, so querying them again here is safe
+    // Builds the candidate jar set FML resolves in discoverCoreMods: LibraryManager#gatherLegacyCanidates (mods/ dirs plus --mods) merged with #flattenLists (contained dependencies); both read-only and already invoked by FML, so re-querying is safe
     private static List<File> gatherCandidates() {
         File mcDir = Launch.minecraftHome != null ? Launch.minecraftHome : new File(".");
         if ("1.12.2".equals(Environment.minecraftVersion())) {
@@ -392,8 +363,7 @@ public final class ModDiscoverer {
         }
     }
 
-    // Scans the jar's classes for the first @Mod annotation and returns its modid or null if none declares one.
-    // Reads bytecode only and unreadable entries are skipped, the walk stops at the first match
+    // Scans the jar's classes for the first @Mod annotation and returns its modid or null; bytecode only, unreadable entries skipped, stops at the first match
     private static String scanModAnnotation(JarFile jar) {
         Enumeration<JarEntry> entries = jar.entries();
         while (entries.hasMoreElements()) {
@@ -414,12 +384,7 @@ public final class ModDiscoverer {
         return null;
     }
 
-    // Records a jar that requests Mixin's ForceLoadAsMod manifest key so it can be honored later by
-    // #applyForceLoadAsMod(). The actual mutation of Forge's coremod lists is deferred because this runs while
-    // CoreModManager#discoverCoreMods is still populating relevant lists. And if the jar has declared a Mixin
-    // bootstrap TweakClass and an FMLCorePlugin, the TweakClass will be cascaded and the FMLCorePlugin will
-    // never be instantiated. ReplayMod uses its own bootstrap tweaker but relies on its coremod to remove the
-    // jar from Forge's ignored list
+    // Records a jar requesting Mixin's ForceLoadAsMod key for #applyForceLoadAsMod() later, since this runs while discoverCoreMods is still populating its lists; a jar with both a bootstrap TweakClass and an FMLCorePlugin has the plugin skipped (ReplayMod relies on this)
     private static void resolveLegacyBehaviour(File jar, Attributes attributes, boolean modDirCandidate) {
         if ("true".equalsIgnoreCase(attributes.getValue(FORCE_LOAD_AS_MOD))) {
             forceLoadAsModFiles.add(jar.getName());
@@ -477,8 +442,7 @@ public final class ModDiscoverer {
         }
     }
 
-    // Reads modid from a class's @Mod annotation. An annotation element is always a compile-time constant, so
-    // the value is read straight from the bytecode without loading the class
+    // Reads modid from a class's @Mod annotation straight from bytecode, since annotation elements are compile-time constants
     private static class ModAnnotationVisitor extends ClassVisitor {
 
         private static final String MOD_ANNOTATION = "Lnet/minecraftforge/fml/common/Mod;";
@@ -508,8 +472,7 @@ public final class ModDiscoverer {
         }
     }
 
-    // Thrown to abort ClassReader#accept the moment a modid is read so the rest of the class is not visited.
-    // Carries no stacktrace, for control flow and not a real exception
+    // Thrown to abort ClassReader#accept the moment a modid is read; carries no stacktrace, pure control flow
     private static class ExitVisitException extends RuntimeException {
 
         private ExitVisitException() {

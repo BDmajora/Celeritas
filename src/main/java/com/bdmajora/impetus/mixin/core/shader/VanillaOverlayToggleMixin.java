@@ -7,9 +7,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// the "underwaterOverlay" shaders.properties toggle, wired through VanillaFeatureToggles: packs that
-// shade being underwater in their composite chain (Complementary, Photon) turn off vanilla's
-// screen-space water texture
+// The "underwaterOverlay" shaders.properties toggle via VanillaFeatureToggles: packs shading underwater in their composite chain (Complementary, Photon) turn off vanilla's screen-space water texture
 @Mixin(ItemRenderer.class)
 public class VanillaOverlayToggleMixin {
     @Inject(method = "renderWaterOverlayTexture", at = @At("HEAD"), cancellable = true, require = 0)

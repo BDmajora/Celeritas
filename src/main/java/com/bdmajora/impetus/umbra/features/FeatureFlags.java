@@ -4,9 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-// The Iris feature-flag vocabulary, restricted to what this port can actually honor
-// Packs name these in shaders.properties as `iris.features.required` / `iris.features.optional`, so the enum
-// constant names are the pack-facing spelling and cannot be renamed to fit our internal "Umbra" naming
+// The Iris feature-flag vocabulary restricted to what this port honors; packs name these in shaders.properties as `iris.features.required`/`optional`, so the constant names are the pack-facing spelling and cannot be renamed
 public enum FeatureFlags {
     // Implemented here, so declaring them is safe and the matching IRIS_FEATURE_* define is emitted
     CUSTOM_IMAGES(true),
@@ -14,8 +12,7 @@ public enum FeatureFlags {
     SSBO(true),
     BLOCK_EMISSION_ATTRIBUTE(true),
     SEPARATE_HARDWARE_SAMPLERS(true),
-    // Not implemented: a pack listing one of these under `required` is refused at load with a visible message
-    // rather than silently rendering wrong, because required means the pack cannot work without it
+    // Not implemented: a pack listing one of these under `required` is refused at load with a visible message rather than silently rendering wrong
     ENTITY_TRANSLUCENT(false),
     PER_BUFFER_BLENDING(false),
     HIGHER_SHADOWCOLOR(false),
@@ -37,9 +34,7 @@ public enum FeatureFlags {
         return this.usable;
     }
 
-    // Token -> enum constant, trimmed and upper-cased because packs write these in any case with loose spacing
-    // An unrecognised token is UNKNOWN rather than an exception: a pack listing a flag from a newer Iris under
-    // `optional` must still load
+    // Token -> constant, trimmed and upper-cased since packs write these loosely; unrecognised is UNKNOWN rather than an exception so a pack listing a newer Iris flag under `optional` still loads
     public static FeatureFlags byName(String name) {
         try {
             return valueOf(name.trim().toUpperCase(Locale.ROOT));
@@ -48,9 +43,7 @@ public enum FeatureFlags {
         }
     }
 
-    // Names from a declaration list that this port cannot honor, in the pack's own spelling so the error message
-    // quotes back exactly what the author wrote
-    // Only ever called with the `required` list — unsupported `optional` flags are simply not advertised
+    // Names from a declaration list this port cannot honor, in the pack's own spelling so the error quotes the author; only called with the `required` list
     public static List<String> findUnsupported(String declared) {
         List<String> missing = new ArrayList<>();
         if (declared == null || declared.trim().isEmpty()) {
@@ -65,9 +58,7 @@ public enum FeatureFlags {
         return missing;
     }
 
-    // The set of flags the loaded pack asked for AND this port implements, from both declaration lists at once
-    // This is what ShaderPack.hasFeature answers from — it is about what the PACK opted into, which is not the
-    // same question as which IRIS_FEATURE_* defines exist (addUsableDefines advertises everything we support)
+    // Flags the pack asked for AND this port implements, from both lists; what ShaderPack.hasFeature answers, distinct from which IRIS_FEATURE_* defines exist
     public static java.util.Set<FeatureFlags> parseDeclared(String required, String optional) {
         java.util.Set<FeatureFlags> declared = java.util.EnumSet.noneOf(FeatureFlags.class);
         for (String list : new String[]{required, optional}) {
@@ -85,12 +76,7 @@ public enum FeatureFlags {
         return declared;
     }
 
-    // Emits one `IRIS_FEATURE_<NAME>` define per implemented flag into the macro map every program compiles with
-    // The IRIS_FEATURE_ prefix is Iris's, not ours: packs write `#ifdef IRIS_FEATURE_CUSTOM_IMAGES` verbatim
-    // (that exact gate is what Complementary's colored lighting hangs off), so renaming the prefix silently drops
-    // the pack onto its plain-OptiFine path
-    // Advertised unconditionally rather than only for declared flags, because a pack may use a feature it never
-    // listed — the lists are a compatibility contract, not a request
+    // Emits one `IRIS_FEATURE_<NAME>` define per implemented flag; the prefix is Iris's, packs gate on it verbatim (Complementary's colored lighting), and it is advertised unconditionally since the lists are a contract, not a request
     public static void addUsableDefines(java.util.Map<String, String> macros) {
         for (FeatureFlags flag : values()) {
             if (flag != UNKNOWN && flag.usable) {

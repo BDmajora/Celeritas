@@ -11,9 +11,7 @@ import java.util.List;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// A linked task/mesh/fragment program
-// Deliberately not a GlProgram: GlProgram exists to bind a typed uniform interface, and these shaders have no
-// uniforms at all — every input is either the address-bound scene UBO or a pointer read out of it
+// A linked task/mesh/fragment program, not a GlProgram since these shaders have no uniforms at all: every input is the address-bound scene UBO or a pointer read from it
 public class MeshProgram {
     private final String name;
     private final int handle;
@@ -63,8 +61,7 @@ public class MeshProgram {
             return this;
         }
 
-        // Loads and compiles one stage from /assets/{namespace}/shaders/{path}, reusing the engine's own
-        // ShaderParser so #import and the define injection behave exactly as they do for the chunk shaders
+        // Loads and compiles one stage from /assets/{namespace}/shaders/{path} through the engine's ShaderParser so #import and define injection match the chunk shaders
         public Builder stage(ShaderType type, String path) {
             this.stages.add(ShaderLoader.loadShader(type, path, this.constants));
             return this;

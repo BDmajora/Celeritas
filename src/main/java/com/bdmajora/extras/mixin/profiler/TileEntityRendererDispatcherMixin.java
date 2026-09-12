@@ -8,10 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// splits block-entity rendering by renderer type in the F3 profiler graph
-// the counterpart to RenderManagerMixin, and usually the more useful of the two: a single
-// badly-written tile-entity renderer in a large modpack is one of the more common causes of an
-// unexplained frame-time cliff
+// Splits block-entity rendering by renderer type in the profiler graph; a single bad tile-entity renderer is a common cause of an unexplained frame-time cliff
 @Mixin(TileEntityRendererDispatcher.class)
 public class TileEntityRendererDispatcherMixin {
     @Inject(

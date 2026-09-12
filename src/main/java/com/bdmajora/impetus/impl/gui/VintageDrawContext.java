@@ -42,6 +42,17 @@ public class VintageDrawContext implements DrawContext {
     // caches generated dynamic texture locations for mod logos, keyed by mod ID
     private static final Map<String, String> MOD_LOGOS = new HashMap<>();
 
+    // Impetus and its subsystems ship sidebar icons as textures under assets/impetus/textures/gui, bypassing the mcmod.info lookup below which needs a Forge container; keyed by the mod id the option pages register under
+    private static final Map<String, String> BUNDLED_LOGOS = new HashMap<>();
+
+    static {
+        BUNDLED_LOGOS.put("impetus", "impetus:textures/gui/impetus.png");
+        BUNDLED_LOGOS.put("coarctatio", "impetus:textures/gui/coarctatio.png");
+        BUNDLED_LOGOS.put("equilibrium", "impetus:textures/gui/equilibrium.png");
+        BUNDLED_LOGOS.put("fulgor", "impetus:textures/gui/fulgor.png");
+        BUNDLED_LOGOS.put("umbra", "impetus:textures/gui/umbra.png");
+    }
+
     public VintageDrawContext() {
         this.componentCache = new HashMap<>();
     }
@@ -127,11 +138,19 @@ public class VintageDrawContext implements DrawContext {
         return len;
     }
 
-    // Binds and draws a full texture
+    // Binds and draws a full texture; the GL colour is reset to opaque white first because Gui.drawRect leaves the last fill colour (e.g. translucent black from a widget background) in place, which would tint and fade the icon by whatever was drawn before it
     @Override
     public void blitWholeImage(String icon, int x, int y, int width, int height) {
+        GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
+        GlStateManager.enableTexture2D();
+        GlStateManager.enableAlpha();
+        GlStateManager.enableBlend();
+        GlStateManager.tryBlendFuncSeparate(
+                GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA, GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ZERO
+        );
         Minecraft.getMinecraft().getTextureManager().bindTexture(new ResourceLocation(icon));
         Gui.drawModalRectWithCustomSizedTexture(x, y, 0, 0, width, height, (float)width, (float)height);
+        GlStateManager.disableBlend();
     }
 
     // GlStateManager
@@ -200,13 +219,7 @@ public class VintageDrawContext implements DrawContext {
         return font.FONT_HEIGHT;
     }
 
-    // Sidebar heading for a group of option pages
-    // Impetus' subsystems (umbra, coartatio, fulgor, equilibrium) are not separately registered Forge mods, so
-    // the indexed mod list has no container for them and the raw lowercase mod id would come back. Everything is
-    // therefore capitalised on the way out, which keeps every heading in the sidebar in one style instead of
-    // mixing "Impetus" against "coartatio"
-    // A real third-party mod still wins with its own declared display name, since that is the name its author
-    // chose and is already properly cased
+    // Sidebar heading for a group of pages; Impetus' subsystems are not registered Forge mods so their raw lowercase id is capitalised to match "Impetus", while a third-party mod's own display name wins
     @Override
     public TextComponent getFriendlyModName(String modId) {
         var container = Loader.instance().getIndexedModList().get(modId);
@@ -217,9 +230,7 @@ public class VintageDrawContext implements DrawContext {
         return TextComponent.literal(capitalize(modId));
     }
 
-    // First character upper-cased, rest untouched; anything empty or already capitalised passes straight through
-    // Character.toUpperCase rather than String.toUpperCase on the first character: the String form applies the
-    // default locale, which on a Turkish install maps "i" to the dotted capital "I" and renders "Impetus" wrong
+    // First character upper-cased via Character.toUpperCase, not String.toUpperCase, which applies the default locale and on a Turkish install maps "i" to the dotted capital
     private static String capitalize(String modId) {
         if (modId == null || modId.isEmpty()) {
             return modId;
@@ -230,6 +241,11 @@ public class VintageDrawContext implements DrawContext {
 
     @Override
     public @Nullable String getModLogoPath(String modId) {
+        String bundled = BUNDLED_LOGOS.get(modId);
+        if (bundled != null) {
+            return bundled;
+        }
+
         return MOD_LOGOS.computeIfAbsent(modId, id -> {
             var container = Loader.instance().getIndexedModList().get(id);
             if (container == null) {

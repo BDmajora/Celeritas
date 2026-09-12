@@ -10,11 +10,7 @@ import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 
-// Lights living entities from what they are holding and wearing
-// Targets EntityLivingBase rather than EntityLiving, which is where Celeritas puts it
-// The difference matters: EntityArmorStand extends EntityLivingBase WITHOUT extending EntityLiving, so the
-// narrower target leaves an armor stand holding a torch dark — and an armor stand is one of the few things a
-// player deliberately puts a torch into
+// Lights living entities from what they hold and wear; targets EntityLivingBase rather than Celeritas' EntityLiving because EntityArmorStand skips EntityLiving and an armor stand holding a torch must glow
 @Mixin(EntityLivingBase.class)
 public abstract class EntityLivingBaseMixin extends Entity implements DynamicLightSource {
     @Unique

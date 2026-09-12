@@ -8,10 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-// OptiFine's named particle switches, applied at the point the particle id is still known and before the particle object exists
-// Must be id-keyed, not class-keyed: ParticleSuspendedTown alone backs SUSPENDED_DEPTH, TOWN_AURA and VILLAGER_HAPPY,
-// so filtering by class would take villager happy particles out along with the void ones
-// spawnParticle0 is overloaded; full descriptor targets the form that actually builds the particle
+// OptiFine's named particle switches, applied while the id is known and before the particle exists; id-keyed since ParticleSuspendedTown alone backs three ids, and the full descriptor targets the spawnParticle0 overload that builds the particle
 @Mixin(RenderGlobal.class)
 public class RenderGlobalParticleMixin {
     @Inject(

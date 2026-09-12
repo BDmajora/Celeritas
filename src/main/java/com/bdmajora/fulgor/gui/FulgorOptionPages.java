@@ -17,9 +17,7 @@ import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
-// Lighting page in Impetus' video options (alongside General, Quality, Performance, Memory, Umbra)
-// Except for diagnostics and pause behaviour, these are read by FulgorMixinPlugin before the game window
-// exists, so toggling at runtime can't un-apply a mixin — hence REQUIRES_GAME_RESTART on most of them
+// Lighting page in Impetus' video options; except diagnostics and pause behaviour these are read by FulgorMixinPlugin before the window exists, hence REQUIRES_GAME_RESTART on most
 public final class FulgorOptionPages {
     private static final String MOD_ID = "fulgor";
 
@@ -141,8 +139,7 @@ public final class FulgorOptionPages {
                 .setControl(TickBoxControl::new)
                 .setBinding(setter, getter);
 
-        // The diagnostics have no performance impact worth labelling, and an impact badge on them
-        // would only suggest otherwise.
+        // The diagnostics have no performance impact worth labelling, and a badge would only suggest otherwise
         if (impact != null) {
             builder.setImpact(impact);
         }

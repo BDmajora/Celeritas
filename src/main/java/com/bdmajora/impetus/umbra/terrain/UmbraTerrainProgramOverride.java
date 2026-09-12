@@ -23,8 +23,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-// Builds the pack's gbuffers_terrain and gbuffers_water on Impetus's vertex format; null on failure so the
-// engine's default shader takes over. Not cached here: ShaderChunkRenderer caches per options and deletes on reload
+// Builds the pack's gbuffers_terrain and gbuffers_water on Impetus's vertex format, null on failure so the engine's default takes over; not cached here since ShaderChunkRenderer caches per options and deletes on reload
 public final class UmbraTerrainProgramOverride {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/UmbraTerrain");
 
@@ -36,12 +35,7 @@ public final class UmbraTerrainProgramOverride {
         return Umbra.isShaderPackInUse();
     }
 
-    // The pack's shadow programs, one per options variant
-    // Cached here, unlike the gbuffer overrides, because these are OURS to manage: they are handed out during the
-    // shadow pass and never stored in the engine's per-renderer map, so nothing else would ever free them. The
-    // pipeline teardown destroys them explicitly
-    // A failed build caches null rather than being left absent, so a pack whose shadow program cannot compile is
-    // retried once and not once per frame
+    // The pack's shadow programs per options variant, cached here unlike the gbuffer overrides because they are OURS to free (handed out during the shadow pass, never stored in the engine's map, destroyed at pipeline teardown); a failed build caches null so it is retried once, not per frame
     private static final Map<ChunkShaderOptions, GlProgram<ChunkShaderInterface>> SHADOW_PROGRAMS = new HashMap<>();
 
     // The transformed terrain or water program for these options; null falls back to the engine's default
@@ -50,13 +44,7 @@ public final class UmbraTerrainProgramOverride {
         if (pack == null) {
             return null;
         }
-        // One program per chunk pass, the way OptiFine (programs 12/9/8) and Umbra (TERRAIN_TRANSLUCENT/TERRAIN_CUTOUT/
-        // TERRAIN_SOLID) both split them. The translucent (reverse-ordered) pass is gbuffers_water; the solid pass is
-        // the one that needs no fragment discard, which is precisely the distinction gbuffers_terrain_solid exists to
-        // let a pack compile away. All three fall back to gbuffers_terrain for packs that ship only that, and
-        // TerrainCutoutMip additionally falls back to TerrainCutout, so both pack conventions resolve. (Impetus draws
-        // cutout and cutout-mipped as one pass by default; with pass consolidation off the separate cutout pass also
-        // lands on TerrainCutoutMip, which only differs for a pack shipping both cutout programs with distinct code.)
+        // One program per chunk pass as OptiFine (programs 12/9/8) and Umbra (TERRAIN_TRANSLUCENT/CUTOUT/SOLID) split them: translucent is gbuffers_water, solid needs no discard (what gbuffers_terrain_solid lets a pack compile away); all fall back to gbuffers_terrain, TerrainCutoutMip also to TerrainCutout so both conventions resolve
         ProgramId programId;
         if (options.pass().isReverseOrder()) {
             programId = ProgramId.Water;
@@ -68,15 +56,7 @@ public final class UmbraTerrainProgramOverride {
         return build(pack, options, programId);
     }
 
-    // The pack's shadow terrain program for the shadow-map pass, or null — meaning nothing is drawn — when it will
-    // not build
-    // Split by chunk pass exactly as the camera-pass override is, because both references split the shadow pass the
-    // same way: Iris has ShadowWater, ShadowCutout and ShadowSolid in its shadow ProgramGroup, and OptiFine ships
-    // shadow_solid and shadow_cutout at program indices 31 and 32
-    // That split is meaningful, not cosmetic: a pack declaring shadow_solid is telling the compiler it can drop the
-    // alpha test for the solid pass. Previously that file was loaded and then never asked for
-    // Every variant falls back to plain `shadow`, so a pack shipping only that file resolves to exactly the source
-    // it always did and nothing about its shadow map changes
+    // The pack's shadow terrain program for the shadow-map pass, or null meaning nothing is drawn; split by chunk pass like Iris's ShadowWater/Cutout/Solid and OptiFine's shadow_solid/shadow_cutout, since shadow_solid tells the compiler to drop the alpha test, and every variant falls back to plain `shadow`
     public static GlProgram<ChunkShaderInterface> getShadowProgramOverride(ChunkShaderOptions options) {
         ShaderPack pack = Umbra.getCurrentPack();
         if (pack == null) {
@@ -98,8 +78,7 @@ public final class UmbraTerrainProgramOverride {
         return program;
     }
 
-    // Frees the cached shadow programs. Pipeline teardown only, and on the render thread — a GL delete off-thread
-    // has no context and leaks the program silently
+    // Frees the cached shadow programs; pipeline teardown only, on the render thread, since an off-thread GL delete has no context and leaks
     public static void destroyShadowPrograms() {
         for (GlProgram<ChunkShaderInterface> program : SHADOW_PROGRAMS.values()) {
             if (program != null) {
@@ -139,39 +118,14 @@ public final class UmbraTerrainProgramOverride {
             vshSource = VanillaNameTransformer.transform(vshSource);
             fshSource = VanillaNameTransformer.transform(fshSource);
 
-            // Modern (#version 130+) dual-stage packs (Complementary) use the compatibility stage normalizer; the
-            // GLSL-120 Chocapic family (LIGHT) keeps the full rewrite.
+            // Modern (#version 130+) dual-stage packs (Complementary) use the compatibility stage normalizer; the GLSL-120 Chocapic family (LIGHT) keeps the full rewrite
             boolean modern = ModernPackTransformer.isModernSource(fshSource);
-            // Scoped per program: a program listed in `impetus.umbra.legacyPrograms` compiles without IS_IRIS. The same
-            // map feeds parseActive below and injectDefines further down, so the DRAWBUFFERS layout and the branch the
-            // shader actually compiles always agree (mismatching them is what corrupted colortex1 on water pixels).
+            // Scoped per program: a program in `impetus.umbra.legacyPrograms` compiles without IS_IRIS, and the same map feeds parseActive and injectDefines so the DRAWBUFFERS layout and the compiled branch agree (mismatching corrupted colortex1 on water)
             Map<String, String> macros = com.bdmajora.impetus.umbra.gl.shader.ShaderMacros.forProgram(
                     pack.getEnvironmentDefines(), programId.getSourceName());
             int[] drawBuffers = UmbraRenderingPipeline.sanitizeDrawBuffers(
                     programId.getSourceName(), DrawBuffers.parseActive(fshSource, macros));
-            // The GLSL-120 terrain path (Chocapic family: Sildur's, BSL, ...) needs the same
-            // MC_*/IS_IRIS/IRIS_VERSION macro environment the 120 gbuffers path and the modern path
-            // already get. Without it gbuffers_water compiles its pre-Umbra/pre-1.16 branch: it writes
-            // gl_FragData[2] and skips the SSR reflection + water-fog blocks (both gated behind
-            // `defined(IS_IRIS) || MC_VERSION >= 11604`). Worse, DrawBuffers.parseActive above IS given
-            // the macro env (so it lays out DRAWBUFFERS:41), leaving the gl_FragData[2] write pointed at
-            // an unbound slot and corrupting colortex1 on water pixels. Injecting the macros after the
-            // 330 rewrite makes the shader and the framebuffer layout agree and turns water reflections on.
-            //
-            // The legacy branch folds at the very END, after injectDefines, because that is the only point where it
-            // sees what the driver will see: this branch deliberately injects the macros *after* the 330 rewrite (see
-            // above), so folding any earlier would evaluate the pack's conditionals against an empty macro
-            // environment. The modern branch reaches the same state through stabilizeShaderSource.
-            //
-            // Skipping the fold here is what left water unshaded. Pastel is a GLSL-120 pack, so it takes the legacy
-            // branch, and its lib/atmospherics/fog.glsl carries `#if (in(biome, BIOME_SOUL_SAND_VALLEY)` — a
-            // shaders.properties expression pasted into GLSL with a paren missing. The driver answered
-            // `iris_gbuffers_terrain.fsh: 0(1209): error C0105: Syntax error in #if`, plus
-            // `0(1210): C1038: declaration of "fogColor" conflicts with previous declaration at 0(1175)` — the second
-            // error is the tell that "treat it as false" is the only reading under which this pack compiles at all,
-            // since the overworld build already declared fogColor and the malformed branch declares it again. The
-            // translucent pass then logged "Failed to build terrain override; using Impetus default", i.e. water was
-            // drawn by Impetus's own shader with none of the pack's reflection or sun-glint work.
+            // The GLSL-120 terrain path needs the same MC_*/IS_IRIS macro environment as the other paths, or gbuffers_water compiles its pre-Umbra branch writing gl_FragData[2] against a DRAWBUFFERS:41 layout and corrupts colortex1; the macros inject after the 330 rewrite, so the legacy conditional fold runs at the END where it sees what the driver sees (Pastel's malformed `#if (in(biome, ...)` otherwise failed the water pass to the Impetus default)
             String vsh = modern
                     ? ImpetusTerrainTransformer.transformVertexShaderModern(
                             UmbraRenderingPipeline.stabilizeShaderSource(programId.getSourceName(),
@@ -179,11 +133,7 @@ public final class UmbraTerrainProgramOverride {
                     : UmbraRenderingPipeline.foldUncompilableConditionals(programId.getSourceName(),
                             com.bdmajora.impetus.umbra.gl.shader.ShaderMacros.injectDefines(
                                     ImpetusTerrainTransformer.transformVertexShader(vshSource), macros));
-            // Umbra SodiumPrograms:77 exactly:
-            //   getAlphaTestOverride().orElse(TRANSLUCENT ? NON_ZERO_ALPHA
-            //                               : (TERRAIN_CUTOUT || SHADOW_CUTOUT) ? HALF_ALPHA : ALWAYS)
-            // The pack's alphaTest.<program> directive wins; otherwise the per-pass default. ALWAYS emits no
-            // discard at all, which is why an unspecified solid pass carries none.
+            // Umbra SodiumPrograms exactly: the pack's alphaTest.<program> wins, else TRANSLUCENT -> NON_ZERO_ALPHA, CUTOUT/SHADOW_CUTOUT -> HALF_ALPHA, else ALWAYS, which emits no discard at all
             String programName = programId.getSourceName();
             ProgramAlphaTest packAlphaTest = ProgramAlphaTest.from(pack.getProperties(), source.getName());
             String alphaTestSnippet;
@@ -207,16 +157,9 @@ public final class UmbraTerrainProgramOverride {
                             com.bdmajora.impetus.umbra.gl.shader.ShaderMacros.injectDefines(
                                     ImpetusTerrainTransformer.transformFragmentShader(fshSource, drawBuffers,
                                             alphaTestSnippet), macros));
-            // Name the shader after the program it actually is. This method builds every terrain-family pass — solid,
-            // cutout_mipped, translucent (i.e. gbuffers_water) and shadow — and the old hardcoded
-            // "iris_gbuffers_terrain" meant a compile failure in the water pass was reported as a gbuffers_terrain
-            // error, next to log lines saying gbuffers_terrain had just built successfully. The dump filenames beside
-            // this already use getSourceName(); the driver-facing name should agree with them.
+            // Name the shader after the program it actually is: this builds every terrain-family pass, and the old hardcoded "iris_gbuffers_terrain" reported water-pass failures as gbuffers_terrain errors beside logs saying gbuffers_terrain built fine; the dump filenames already use getSourceName()
             String shaderName = "iris_" + programId.getSourceName();
-            // This path builds the ENGINE's GlShader, not umbra.gl.shader.GlShader, so it does not inherit the
-            // strict-driver rewrites that constructor applies — it has to ask for them. Skipping this is why Mesa kept
-            // rejecting `#extension` mid-shader and `texture2D(usampler2D, ...)` in exactly the terrain and shadow
-            // programs, long after both fixes were written.
+            // This path builds the ENGINE's GlShader, not umbra.gl.shader.GlShader, so it does not inherit the strict-driver rewrites and must ask for them; skipping this is why Mesa kept rejecting `#extension` mid-shader and texture2D(usampler2D) in exactly the terrain and shadow programs
             vsh = com.bdmajora.impetus.umbra.shaderpack.preprocessor.GlslPreprocessor
                     .finalizeForDriver(shaderName + ".vsh", vsh);
             fsh = com.bdmajora.impetus.umbra.shaderpack.preprocessor.GlslPreprocessor
@@ -238,9 +181,7 @@ public final class UmbraTerrainProgramOverride {
                     builder.link(context -> new UmbraTerrainShaderInterface(context, drawBuffers, blendState, alphaTest));
             UmbraRenderingPipeline.reportGlError("terrain '" + programId.getSourceName() + "' link");
 
-            // The pack program needs the full OptiFine uniform set: shaders like LIGHT round-trip positions through
-            // gbufferModelView(Inverse), so leaving those at zero collapses every vertex to the origin. Sampler units
-            // (shadow, noisetex, …) get the standard mapping; the block/lightmap samplers stay with the interface.
+            // The pack program needs the full OptiFine uniform set (LIGHT round-trips positions through gbufferModelView(Inverse), and zeros collapse every vertex to the origin); sampler units get the standard mapping, the block/lightmap samplers stay with the interface
             program.bind();
             UmbraRenderingPipeline.assignSamplerUnitsToBoundProgram(program.handle());
             UmbraRenderingPipeline.reportGlError("terrain '" + programId.getSourceName() + "' sampler-units");

@@ -7,9 +7,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.text.TextComponentString;
 import net.minecraft.util.text.TextFormatting;
 
-// /fulgor - prints how much lighting work was requested vs. actually collapsed/skipped
-// Registered client-side so it works in single-player and on servers without the mod; counters are
-// process-wide (client + integrated server both contribute in single-player)
+// /fulgor prints how much lighting work was requested vs collapsed/skipped; client-side so it works without the mod on servers, and counters are process-wide (client + integrated server)
 public class FulgorStatsCommand extends CommandBase {
     // Command name, so this is /fulgor
     @Override

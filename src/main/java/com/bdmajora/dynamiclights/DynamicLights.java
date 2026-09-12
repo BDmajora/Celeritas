@@ -11,9 +11,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 
-// The Dynamic Lights subsystem: LambDynLights' glowing entities and items, ported to 1.12.2
-// Sources are tracked client-side and folded into the lightmap wherever light is read; nothing is written to the world
-// Mixins are not gated at coremod time, they read options() at call time so the mode switch is live
+// Dynamic Lights subsystem, LambDynLights' glowing entities and items on 1.12.2; sources are tracked client-side and folded into the lightmap, and mixins read options() at call time so the mode switch is live
 public final class DynamicLights {
     public static final Logger LOGGER = LogManager.getLogger("Impetus/DynamicLights");
 
@@ -24,11 +22,7 @@ public final class DynamicLights {
     private DynamicLights() {
     }
 
-    // the live options, loading them on first use
-    // called from mixin bodies on the client, render and chunk-builder threads, so the first call has
-    // to be safe from wherever it happens to land
-    // ImpetusVintage warms it during construction, which in practice is always well before any of
-    // those bodies run
+    // Live options loaded on first use; called from mixin bodies on client, render and chunk-builder threads, though ImpetusVintage warms it during construction well before any run
     public static DynamicLightsConfig options() {
         DynamicLightsConfig loaded = config;
         if (loaded == null) {
@@ -53,13 +47,7 @@ public final class DynamicLights {
         options();
     }
 
-    // registers the default light handlers and the item light source reload listener
-    // deliberately not done alongside initialize() during construction:
-    // SimpleReloadableResourceManager#registerReloadListener invokes the listener *immediately*, and
-    // at construction time Forge's registry events have not fired yet - so every ForgeRegistries.ITEMS
-    // lookup would come back null, every definition would be dropped as "item not installed", and a
-    // held torch would silently fail to light anything
-    // client init is the first point where the item registry is populated
+    // Registers the default handlers and the item light reload listener at client init, not construction: registerReloadListener fires immediately and the item registry is empty until then, so every definition would be dropped
     public static void onClientInit() {
         DynamicLightHandlers.registerDefaultHandlers();
         ItemLightSources.registerReloadListener();

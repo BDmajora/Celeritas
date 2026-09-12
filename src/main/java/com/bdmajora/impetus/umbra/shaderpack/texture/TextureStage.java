@@ -2,10 +2,7 @@ package com.bdmajora.impetus.umbra.shaderpack.texture;
 
 import java.util.Optional;
 
-// The pipeline stage a `texture.<stage>.<sampler>` override applies to
-// Verbatim port of Iris's shaderpack.texture.TextureStage, which follows OptiFine's shaders.txt custom-texture spec
-// Only three of these are actually bound here — gbuffers+shadow, deferred, and composite+final. The rest are parsed
-// so a pack declaring them loads cleanly instead of warning, but nothing binds them yet
+// The pipeline stage a `texture.<stage>.<sampler>` override applies to (verbatim port of Iris's TextureStage); only gbuffers+shadow, deferred and composite+final are bound here, the rest parse cleanly but bind nothing
 public enum TextureStage {
     // The setup passes; Iris 1.6 exclusive
     SETUP,

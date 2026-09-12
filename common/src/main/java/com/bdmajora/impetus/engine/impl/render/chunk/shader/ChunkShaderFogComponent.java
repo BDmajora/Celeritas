@@ -8,12 +8,7 @@ import com.bdmajora.impetus.engine.impl.render.chunk.fog.FogService;
 
 import java.util.ServiceLoader;
 
-// Reproduces the fixed-function fog inside the chunk shaders, by copying the live GL fog state into uniforms
-// The GLSL is a direct implementation of the fixed-function fog functions with ONE deliberate difference: it uses
-// distance from the camera rather than the z-buffer value, which gives fog that does not shift as the player turns
-// their head
-// Minecraft itself tries to get that same distance-based fog through the proprietary NV_fog_distance extension,
-// which as the name says only exists on NVIDIA. Doing it in GLSL depends on no vendor extension and is a few lines
+// Fixed-function fog reproduced in the chunk shaders from live GL fog state, using camera distance instead of z so fog does not shift with head turns (what Minecraft wants from NVIDIA-only NV_fog_distance)
 public abstract class ChunkShaderFogComponent implements ChunkShaderComponent {
     public static final FogService FOG_SERVICE = ServiceLoader.load(FogService.class).findFirst().orElseThrow();
 

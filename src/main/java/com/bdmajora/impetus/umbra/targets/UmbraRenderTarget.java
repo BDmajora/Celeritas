@@ -8,11 +8,7 @@ import java.nio.ByteBuffer;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// One shader-pack colour buffer, the thing packs call colortexN (or gcolor in older packs)
-// Owns TWO GL textures, the same way OptiFine keeps dfbColorTexturesA and B, because a composite pass has to read
-// the previous pass's output while writing its own — sampling and rendering to one texture at once is undefined
-// So pass N samples "main" and renders into "alt", then BufferFlipper swaps which is which and pass N+1 sees the
-// freshly written data as its main
+// One pack colour buffer (colortexN, gcolor in older packs) owning TWO GL textures like OptiFine's dfbColorTexturesA/B, since a pass must read the previous output while writing its own; pass N samples main and renders into alt, then BufferFlipper swaps
 public class UmbraRenderTarget {
     private static final ByteBuffer NULL_BUFFER = null;
     private static final int GL_LINEAR_MIPMAP_LINEAR = 0x2703;

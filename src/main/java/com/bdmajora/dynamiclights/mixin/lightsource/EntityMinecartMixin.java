@@ -15,11 +15,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// lights a minecart by the block it is carrying: the display tile is a real block state, so a
-// minecart loaded with glowstone by command should light the tunnel it rolls through
-// like EntityHanging, EntityMinecart overrides onUpdate without calling up, so the generic entity
-// tick hook never fires for it and it needs its own
-// ported from SodiumDynamicLights; Celeritas Extra does not carry this one
+// Lights a minecart by its display tile (glowstone by command lights the tunnel); EntityMinecart overrides onUpdate without calling up so it needs its own hook, ported from SodiumDynamicLights
 @Mixin(EntityMinecart.class)
 public abstract class EntityMinecartMixin extends Entity implements DynamicLightSource {
     @Shadow

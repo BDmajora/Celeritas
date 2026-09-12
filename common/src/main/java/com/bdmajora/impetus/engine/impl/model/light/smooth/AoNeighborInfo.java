@@ -2,8 +2,7 @@ package com.bdmajora.impetus.engine.impl.model.light.smooth;
 
 import com.bdmajora.impetus.engine.impl.model.quad.properties.ModelQuadFacing;
 
-// the neighbour information for each face of a block, used during smooth lighting to calculate the
-// occlusion of each corner
+// Neighbour information for each face of a block, used during smooth lighting to calculate each corner's occlusion
 @SuppressWarnings("UnnecessaryLocalVariable")
 enum AoNeighborInfo {
     POS_X(new ModelQuadFacing[] { ModelQuadFacing.NEG_Y, ModelQuadFacing.POS_Y, ModelQuadFacing.NEG_Z, ModelQuadFacing.POS_Z }, 0.6F) {
@@ -207,11 +206,9 @@ enum AoNeighborInfo {
 
 
     private static final AoNeighborInfo[] VALUES = AoNeighborInfo.values();
-    // the direction of each corner block from this face, reached by offsetting the origin block's
-    // position by the direction vector
+    // Direction of each corner block from this face, reached by offsetting the origin block's position by the direction vector
     public final ModelQuadFacing[] faces;
-    // the constant brightness modifier for this face, emulating the OpenGL lighting model that gives
-    // blocks their faux directional-light appearance; not currently used
+    // Constant brightness modifier emulating the OpenGL lighting model's faux directional light; not currently used
     public final float strength;
 
     AoNeighborInfo(ModelQuadFacing[] directions, float strength) {
@@ -227,18 +224,12 @@ enum AoNeighborInfo {
         return VALUES[direction.ordinal()];
     }
 
-    // calculates how much each corner contributes to the final "darkening" of the vertex at this
-    // position; the weight is a function of the distance from the vertex to the corner block
-    // x/y/z are the vertex position, out receives the weight for each corner
+    // Weight of each corner's contribution to the darkening of the vertex at x/y/z, as a function of distance from the vertex to the corner block
     public abstract void calculateCornerWeights(float x, float y, float z, float[] out);
 
-    // maps the light map array lm0 and the occlusion array ao0 from AoFaceData onto the correct corners
-    // for this facing
-    // lm0/ao0 are the inputs, lm1/ao1 the re-oriented outputs
+    // Re-orients the lightmap (lm0) and occlusion (ao0) arrays from AoFaceData onto this facing's corners, writing lm1/ao1
     public abstract void mapCorners(int[] lm0, float[] ao0, int[] lm1, float[] ao1);
 
-    // the depth (or inset) of the vertex into this facing of the block, used to decide how much shadow
-    // is contributed by the block's direct neighbours
-    // x/y/z are the vertex position
+    // Depth (inset) of the vertex at x/y/z into this facing, used to decide how much shadow the direct neighbours contribute
     public abstract float getDepth(float x, float y, float z);
 }

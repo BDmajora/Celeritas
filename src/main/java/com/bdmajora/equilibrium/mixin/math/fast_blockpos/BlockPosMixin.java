@@ -5,14 +5,7 @@ import net.minecraft.util.math.Vec3i;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
-// replaces the six directional offset helpers with direct construction
-// vanilla routes every one of them through offset(EnumFacing, int), which multiplies the direction's
-// three offsets by the distance - so pos.up() costs three multiplications and three calls into
-// EnumFacing to add one to a coordinate
-// the n == 0 short-circuit is kept deliberately: it looks redundant next to a constructor call, but
-// for a MutableBlockPos vanilla returns this in that case rather than a copy, and callers do rely on
-// the identity - dropping it would silently hand out an immutable snapshot where a live view was
-// expected
+// Replaces the six directional offset helpers with direct construction instead of offset(EnumFacing, int)'s three multiplications; the n == 0 short-circuit stays since MutableBlockPos returns this there and callers rely on the identity
 @Mixin(BlockPos.class)
 public abstract class BlockPosMixin extends Vec3i {
     public BlockPosMixin(int x, int y, int z) {

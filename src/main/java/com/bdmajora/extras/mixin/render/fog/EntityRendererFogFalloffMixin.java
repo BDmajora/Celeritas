@@ -9,9 +9,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 
-// Fog start and end distances; Impetus reads GL_FOG_START/GL_FOG_END into shader uniforms, so both must stay finite with start < end
-// Writing Float.MAX_VALUE to fake "no fog" would poison the shader math instead, so disabling fog is left to EntityRendererFogMixin
-// Gameplay fog is exempt; see FogState
+// Fog start and end; Impetus reads GL_FOG_START/END into shader uniforms, so both stay finite with start < end and disabling fog is left to EntityRendererFogMixin. Gameplay fog exempt, see FogState
 @Mixin(EntityRenderer.class)
 public class EntityRendererFogFalloffMixin {
     // Vanilla's GL_LINEAR fog end, used to keep a custom start below it

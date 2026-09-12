@@ -19,8 +19,7 @@ public class ProxyClassGenerator<DELEGATE, INTERFACE> {
             return DEFINER;
         }
         try {
-            // Try to create a Java 9+ style class definer
-            // These are all public methods, but just don't exist in Java 8
+            // Try to build a Java 9+ style class definer; these public methods just don't exist on Java 8
             Method makePrivateLookup = MethodHandles.class.getMethod(
                     "privateLookupIn", Class.class, MethodHandles.Lookup.class
             );

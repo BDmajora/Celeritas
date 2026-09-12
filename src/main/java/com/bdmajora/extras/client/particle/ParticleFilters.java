@@ -4,9 +4,7 @@ import com.bdmajora.extras.Extras;
 import com.bdmajora.extras.ExtrasConfig;
 import net.minecraft.util.EnumParticleTypes;
 
-// The named particle switches, resolved by vanilla particle id rather than class, because several ids share
-// a class: ParticleSuspendedTown backs void, town aura and villager happy particles alike
-// Ids are read once into a table so the spawn path pays one array index
+// The named particle switches resolved by vanilla id rather than class, since several ids share a class (ParticleSuspendedTown backs void, town aura and villager happy); read once into a table so the spawn path pays one index
 public final class ParticleFilters {
     // Which switch governs each particle id; null means "no named switch".
     private static final Filter[] BY_ID = buildTable();
@@ -14,9 +12,7 @@ public final class ParticleFilters {
     private ParticleFilters() {
     }
 
-    // whether a particle with this vanilla id may spawn
-    // unknown ids - every modded particle - are always allowed through; they are filtered later by
-    // class, if the user disabled them
+    // Whether a particle with this vanilla id may spawn; unknown ids (every modded particle) pass and are filtered later by class if disabled
     public static boolean isAllowed(int particleId) {
         ExtrasConfig options = Extras.options();
 
@@ -41,8 +37,7 @@ public final class ParticleFilters {
 
         Filter[] table = new Filter[size];
 
-        // OptiFine treats explosions and smoke as animations rather than particles; both names are
-        // kept where the user expects to find them, and both read the animation switches.
+        // OptiFine treats explosions and smoke as animations rather than particles; both names are kept where the user expects them and both read the animation switches
         put(table, Filter.EXPLOSION, EnumParticleTypes.EXPLOSION_NORMAL,
                 EnumParticleTypes.EXPLOSION_LARGE, EnumParticleTypes.EXPLOSION_HUGE);
         put(table, Filter.SMOKE, EnumParticleTypes.SMOKE_NORMAL, EnumParticleTypes.SMOKE_LARGE);

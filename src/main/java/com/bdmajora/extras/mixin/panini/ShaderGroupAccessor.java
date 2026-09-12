@@ -7,11 +7,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 import java.util.List;
 
-// exposes ShaderGroup's pass list
-// 1.12.2's post-processing framework can set uniforms from the chain JSON, but only to constants:
-// there is no public way to reach a pass and write a value into it per frame
-// Panini needs exactly that - its strength and the projection extents change with the FOV - so the
-// list has to be opened up
+// Exposes ShaderGroup's pass list; 1.12.2's post framework only sets uniforms to constants from JSON, and Panini's strength and extents change per frame with the FOV
 @Mixin(ShaderGroup.class)
 public interface ShaderGroupAccessor {
     @Accessor("listShaders")

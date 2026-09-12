@@ -2,11 +2,7 @@ package com.bdmajora.impetus.umbra.shaderpack.materialmap;
 
 import java.util.Objects;
 
-// A namespace:name pair, defaulting the namespace to `minecraft` when the pack wrote a bare name
-// Verbatim port of Iris's NamespacedId
-// Deliberately performs no validation: a pack's block.properties routinely names blocks from mods that are not
-// installed, and rejecting those here would fail the whole pack rather than skipping one line. Whatever resolves
-// these against the registry owns deciding what exists
+// A namespace:name pair defaulting to `minecraft` (verbatim port of Iris's NamespacedId); deliberately unvalidated, since packs name blocks from uninstalled mods and rejecting them would fail the whole pack
 public final class NamespacedId {
     private final String namespace;
     private final String name;

@@ -5,8 +5,7 @@ import com.bdmajora.impetus.lwjgl.GL32;
 import com.bdmajora.impetus.lwjgl.GL40;
 import com.bdmajora.impetus.lwjgl.GL43;
 
-// GLSL pipeline stages an OptiFine-style 1.12.2 pack can supply — vertex/fragment mandatory, geometry
-// needs GL3.2 and tessellation needs GL4.0 (most 1.12.2 packs don't use either)
+// GLSL stages an OptiFine-style 1.12.2 pack can supply: vertex/fragment mandatory, geometry needs GL3.2, tessellation GL4.0 (most 1.12.2 packs use neither)
 public enum ShaderType {
     VERTEX(GL20.GL_VERTEX_SHADER),
     GEOMETRY(GL32.GL_GEOMETRY_SHADER),

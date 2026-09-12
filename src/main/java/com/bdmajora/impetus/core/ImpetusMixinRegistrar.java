@@ -11,12 +11,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// Registers Impetus' mixin configurations and suppresses superseded lighting engines
-// Talks to Mixin directly so the same path works under an installed MixinBooter or the bundled copy
+// Registers Impetus' mixin configurations and suppresses superseded lighting engines, talking to Mixin directly so the same path works under an installed MixinBooter or the bundled copy
 final class ImpetusMixinRegistrar {
 
-    // Maps legacy Phosphor lineage mods to their configs
-    // Fulgor replaces the functions below, running both simultaneously would corrupt the lighting
+    // Legacy Phosphor-lineage mods mapped to their configs; Fulgor replaces them and running both would corrupt the lighting
     private static final Map<String, String> SUPERSEDED_LIGHTING_MODS = supersededLightingMods();
 
     private ImpetusMixinRegistrar() { }
@@ -42,15 +40,9 @@ final class ImpetusMixinRegistrar {
         }
     }
 
-    // 1. Impetus/Umbra: Reserve early-load slots
-    // 2. Coartatio: Must apply before vanilla NBT/ResourceLocation instantiation
-    // 3. Fulgor: Injects required lighting fields into World/Chunk
-    // 4. Equilibrium: Loads last so Fulgor's reads utilize Equilibrium's chunk cache
-    // 5. Extras: Pure feature switches over existing render paths; no ordering constraints
-    // 6. Dynamic Lights: Reads the lightmap Fulgor and the chunk builder produce; must not
-    //    precede them, and like Extras is otherwise order-independent
+    // Order: Impetus/Umbra reserve early-load slots, Coarctatio must apply before vanilla NBT/ResourceLocation instantiation, Fulgor injects lighting fields into World/Chunk, Equilibrium loads last so Fulgor reads its chunk cache, Extras and Dynamic Lights are order-independent after those
     private static List<String> mixinConfigs() {
-        return Arrays.asList("mixins.impetus.json", "mixins.umbra.json", "mixins.coartatio.json",
+        return Arrays.asList("mixins.impetus.json", "mixins.umbra.json", "mixins.coarctatio.json",
                 "mixins.fulgor.json", "mixins.equilibrium.json", "mixins.extras.json",
                 "mixins.dynamiclights.json");
     }
@@ -60,8 +52,7 @@ final class ImpetusMixinRegistrar {
         for (Map.Entry<String, String> mod : SUPERSEDED_LIGHTING_MODS.entrySet()) {
             String config = mod.getValue();
 
-            // Presence is inferred from the config being on the classpath rather than from a booter's
-            // mod index, which keeps this independent of whichever booter is running.
+            // Presence is inferred from the config being on the classpath rather than a booter's mod index, keeping this independent of whichever booter is running
             if (Launch.classLoader.getResource(config) == null) {
                 continue;
             }

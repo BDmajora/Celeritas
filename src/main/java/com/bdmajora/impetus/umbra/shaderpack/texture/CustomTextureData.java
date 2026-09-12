@@ -1,11 +1,6 @@
 package com.bdmajora.impetus.umbra.shaderpack.texture;
 
-// A custom texture that has been parsed but not yet uploaded, from a texture.<stage>.<sampler>, texture.noise or
-// customTexture.<name> directive
-// Port of Iris's shaderpack.texture.CustomTextureData, including the raw typed definitions modern packs use for
-// precomputed 3D data textures
-// Construction touches neither Minecraft nor GL — it holds bytes and names only — so parsing can happen off the
-// render thread. CustomTextureManager turns these into real GL textures later, on the render thread
+// A custom texture parsed but not yet uploaded, from texture.<stage>.<sampler>, texture.noise or customTexture.<name> (port of Iris's CustomTextureData including raw typed 3D definitions); touches neither Minecraft nor GL, so parsing is off-thread and CustomTextureManager uploads later
 public abstract class CustomTextureData {
     private CustomTextureData() {
     }
@@ -31,9 +26,7 @@ public abstract class CustomTextureData {
         }
     }
 
-    // The special minecraft:dynamic/lightmap_1 location, meaning the game's live lightmap texture
-    // A marker rather than a stored id because the lightmap object is recreated on resource reloads and brightness
-    // changes, so it has to be resolved at bind time
+    // The special minecraft:dynamic/lightmap_1 location meaning the live lightmap; a marker rather than a stored id since the lightmap object is recreated on reloads and brightness changes
     public static final class LightmapMarker extends CustomTextureData {
         // By content, so identical textures share one GL object
         @Override
@@ -48,8 +41,7 @@ public abstract class CustomTextureData {
         }
     }
 
-    // A namespace:path resource location, resolved through Minecraft's TextureManager at bind time — the resource
-    // pack it comes from can change under us, so nothing is cached here
+    // A namespace:path resource location resolved through TextureManager at bind time, since the resource pack it comes from can change
     public static final class ResourceData extends CustomTextureData {
         private final String namespace;
         private final String location;
@@ -59,8 +51,7 @@ public abstract class CustomTextureData {
             this.location = location;
         }
 
-        // Unvalidated: a pack naming a namespace no mod provides is a skipped texture, not a load failure, and
-        // that decision belongs to the caller that can log which sampler it affects
+        // Unvalidated: a namespace no mod provides is a skipped texture, not a load failure, and the caller that can log the affected sampler decides
         public String getNamespace() {
             return this.namespace;
         }
@@ -71,8 +62,7 @@ public abstract class CustomTextureData {
         }
     }
 
-    // A raw binary texture, declared as e.g. `image/foo.dat TEXTURE_3D RGB16F 32 64 32 RGB HALF_FLOAT`
-    // Every field is explicit because there is no container format to read them from — the file is bare pixel data
+    // A raw binary texture (`image/foo.dat TEXTURE_3D RGB16F 32 64 32 RGB HALF_FLOAT`); every field is explicit since the file is bare pixel data with no container
     public static final class RawData extends CustomTextureData {
         private final String textureType;
         private final String internalFormat;

@@ -4,8 +4,7 @@ import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 
-// Derives OptiFine's extended per-vertex data from Minecraft state for the mesher, only while a pack is active
-// No mc_midTexCoord helper on purpose: it is the quad's UV centre, not the sprite's, so it cannot come from a sprite
+// Derives OptiFine's extended per-vertex data from Minecraft state for the mesher, only while a pack is active; no mc_midTexCoord helper on purpose, since it is the quad's UV centre, not the sprite's
 public final class ExtendedDataHelper {
     private ExtendedDataHelper() {
     }

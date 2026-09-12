@@ -5,10 +5,7 @@ import com.bdmajora.impetus.lwjgl.GL44;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The staging side of every upload: persistently mapped, client-resident, write-only
-// GL_CLIENT_STORAGE_BIT asks the driver to keep it in host memory, because the CPU writes it every frame and the
-// GPU only ever reads it once, during the copy into a BindlessBuffer
-// Explicit flush rather than coherent mapping — one flush per allocation beats an implicit flush per write
+// Persistently mapped, client-resident, write-only staging (GL_CLIENT_STORAGE_BIT since the CPU writes every frame and the GPU reads once); explicit flush per allocation beats coherent mapping
 public class MappedUploadBuffer {
     private static final int STORAGE_FLAGS = GL44.GL_MAP_PERSISTENT_BIT | GL44.GL_CLIENT_STORAGE_BIT | GL30.GL_MAP_WRITE_BIT;
     private static final int MAP_FLAGS = GL44.GL_MAP_PERSISTENT_BIT | GL30.GL_MAP_UNSYNCHRONIZED_BIT

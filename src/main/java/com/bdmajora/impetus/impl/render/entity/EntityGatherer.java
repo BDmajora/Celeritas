@@ -51,8 +51,7 @@ public class EntityGatherer {
     // Buckets loaded entities by render section so the renderer can skip invisible sections
     public List<Entity>[] getLoadedEntityList(WorldClient world) {
         Consumer<Entity> addEntity = this.addEntity;
-        // Iterate directly over chunk entity lists where possible - mods may create multipart entities that are not
-        // added to the main loadedEntityList.
+        // Iterate chunk entity lists directly where possible; mods may create multipart entities not added to loadedEntityList
         if (world.getChunkProvider() instanceof ChunkProviderClientAccessor provider) {
             var loadedChunks = provider.impetus$getLoadedChunks();
             for (Chunk chunk : loadedChunks.values()) {

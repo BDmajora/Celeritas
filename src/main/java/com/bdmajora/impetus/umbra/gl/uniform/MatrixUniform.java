@@ -8,9 +8,7 @@ import java.util.function.Supplier;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// A mat4 uniform: the gbuffer and shadow model-view and projection matrices, plus their inverses
-// Unlike the scalar uniforms, this does NOT cache and diff. Comparing 16 floats is rarely cheaper than the upload
-// itself, and every matrix here is a PER_FRAME value that changes almost every time anyway
+// A mat4 uniform (gbuffer/shadow model-view and projection plus inverses); does NOT cache and diff, since comparing 16 floats rarely beats the upload and these change almost every frame anyway
 public class MatrixUniform extends Uniform {
     private final Supplier<Matrix4fc> value;
 
@@ -23,13 +21,11 @@ public class MatrixUniform extends Uniform {
     @Override
     public void update() {
         Matrix4fc matrix = this.value.get();
-        // A supplier can legitimately have nothing yet — an inverse of a matrix that has not been captured this
-        // frame — and leaving the uniform at its previous value beats uploading garbage
+        // A supplier can legitimately have nothing yet (an inverse not captured this frame), and keeping the previous value beats uploading garbage
         if (matrix == null) {
             return;
         }
-        // Thread-local stack rather than a field or a fresh allocation: the buffer lives only for this call, and
-        // the try-with-resources pops it even if the upload throws
+        // Thread-local stack rather than a field or fresh allocation: the buffer lives only for this call and try-with-resources pops it even if the upload throws
         try (MemoryStack stack = LWJGL.stackPush()) {
             FloatBuffer buffer = stack.mallocFloat(16);
             matrix.get(buffer);

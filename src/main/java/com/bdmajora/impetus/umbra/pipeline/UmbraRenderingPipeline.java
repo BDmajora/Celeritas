@@ -69,15 +69,11 @@ import java.util.regex.Pattern;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The frame pipeline: the gbuffer FBO world rendering is redirected into, and the composite and final chain
-// beginWorldRendering binds the gbuffer, captureRenderingState copies the camera matrices, finishWorldRendering
-// runs each pass ping-ponging targets like OptiFine then final into vanilla's framebuffer
-// Every pass compiles up front; a failure skips that pass. Render thread only
+// The frame pipeline: beginWorldRendering binds the gbuffer, captureRenderingState copies camera matrices, finishWorldRendering runs each pass ping-ponging targets like OptiFine then final into vanilla's framebuffer; every pass compiles up front and a failure skips it, render thread only
 public class UmbraRenderingPipeline {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
-    // Texture units used by this fixed-unit 1.12 bridge. Fullscreen programs keep the existing colortexN -> unit N
-    // mapping, while gbuffers programs use the OptiFine 1.12 aux slots for gaux1..4/colortex4..7.
+    // Texture units for this fixed-unit 1.12 bridge: fullscreen programs keep colortexN -> unit N, gbuffers programs use OptiFine's 1.12 aux slots for gaux1..4/colortex4..7
     private static final int DEPTH_TEX_0_UNIT = 16;
     private static final int DEPTH_TEX_1_UNIT = 17;
     private static final int DEPTH_TEX_2_UNIT = 18;
@@ -88,9 +84,7 @@ public class UmbraRenderingPipeline {
     private static final int NOISE_TEX_UNIT = 23;
     private static final int SHADOW_TEX_0_HW_UNIT = 24;
     private static final int SHADOW_TEX_1_HW_UNIT = 25;
-    // OptiFine 1.12 gbuffers-stage sampler units from Shaders.useProgram(): texture/lightmap/normals/specular use
-    // 0..3, shadow maps use 4/5, depthtex0 uses 6, gaux1..4/colortex4..7 use 7..10, depthtex1 uses 12,
-    // shadowcolor0/1 use 13/14, and noisetex uses 15.
+    // OptiFine 1.12 gbuffers-stage units from Shaders.useProgram(): texture/lightmap/normals/specular 0..3, shadow maps 4/5, depthtex0 6, gaux1..4 7..10, depthtex1 12, shadowcolor0/1 13/14, noisetex 15
     private static final int GBUFFER_DEPTH_TEX_0_UNIT = 6;
     private static final int GBUFFER_DEPTH_TEX_1_UNIT = 12;
     private static final int GBUFFER_SHADOW_TEX_0_UNIT = 4;
@@ -98,37 +92,18 @@ public class UmbraRenderingPipeline {
     private static final int GBUFFER_SHADOW_COLOR_0_UNIT = 13;
     private static final int GBUFFER_SHADOW_COLOR_1_UNIT = 14;
     private static final int GBUFFER_NOISE_TEX_UNIT = 15;
-    // iris_overlay - Umbra's entity damage/hurt overlay sampler
-    // 1.12.2 draws that flash as a separate fixed-function pass rather than through a sampler, so there
-    // is no live overlay texture to expose; a fully transparent 1x1 is bound instead, which is exactly
-    // the "no overlay" value Umbra's own fallback provides
-    // unit 11 is the one gap in OptiFine's 1.12 gbuffers layout - 7..10 are gaux1..4, 12 is depthtex1
+    // iris_overlay, Umbra's entity hurt overlay sampler; 1.12.2 draws that flash as a fixed-function pass, so a fully transparent 1x1 is bound (Umbra's own "no overlay" fallback) on unit 11, the one gap in OptiFine's 1.12 layout
     private static final int GBUFFER_OVERLAY_UNIT = 11;
-    // iris_overlay for the gbuffers stage lives on GBUFFER_OVERLAY_UNIT; this is the fullscreen-stage
-    // bind of the same 1x1 dummy
-    // it sits ABOVE the sampleable range on purpose - no composite/deferred/final program declares
-    // iris_overlay, since it is an entity hurt-flash concept, so reserving a scarce low unit for it just
-    // starved the pack's own samplers
+    // The fullscreen-stage bind of the same 1x1 iris_overlay dummy, ABOVE the sampleable range on purpose since no composite/deferred/final program declares it and a low unit only starved the pack's samplers
     private static final int OVERLAY_TEX_UNIT = 34;
     // Highest logical colortex index shader-pack gbuffer stages may address. FBO attachment points are packed.
     private static final int GBUFFER_ATTACHMENT_LIMIT = UmbraRenderTargets.MAX_COLOR_BUFFERS;
     // High texture unit used transiently for depth-copy binds so no vanilla-tracked unit is disturbed.
     private static final int DEPTH_COPY_SCRATCH_UNIT = 33;
-    // scratch unit for mipmap generation and reset, ABOVE every sampler allocation (colortex 0..15,
-    // depth 16..18, shadow 19..25, noise 23, custom textures 26+, custom images 27..31)
-    // mipmap ops bind textures raw, and doing that on unit 0 desyncs GlStateManager's 8-slot cache, after
-    // which bindColorSamplers' "already bound" checks skip the real rebind and a pass samples whatever
-    // mipmap target was bound last (BSL deferred1: colortex0 ended up reading the black colortex6, so the
-    // whole screen went black)
+    // Scratch unit for mipmap generation and reset, ABOVE every sampler allocation; raw binds on unit 0 desync GlStateManager's cache so bindColorSamplers' "already bound" checks skip the real rebind (BSL deferred1 read the black colortex6 and the screen went black)
     private static final int MIPMAP_SCRATCH_UNIT = 32;
 
-    // lowest unit the pack's custom textures and images may use
-    // the shadowtex*HW units above it are only real when the pack declared SEPARATE_HARDWARE_SAMPLERS;
-    // otherwise nothing samples them and they are handed to the pack instead - Complementary needs seven
-    // custom sampler units (gaux4, colortex3, voxel, floodfill x2, wsr, wsr_lod) and silently lost the
-    // last two when the budget stopped at 26
-    // the first custom unit is shared only by transient depth-copy and capture helpers; custom textures
-    // are rebound after those scratch uses
+    // Lowest unit the pack's custom textures and images may use; the shadowtex*HW units are only real under SEPARATE_HARDWARE_SAMPLERS, otherwise they are handed to the pack (Complementary needs seven custom units and lost two at 26), and the first is shared with transient depth-copy helpers that rebind afterwards
     private static final int CUSTOM_TEX_FIRST_UNIT = SHADOW_TEX_0_HW_UNIT;
     private static final int GL_MAX_TEXTURE_IMAGE_UNITS = 0x8872;
     private static final int GL_BACK_BUFFER = 0x0405;
@@ -167,8 +142,7 @@ public class UmbraRenderingPipeline {
             }
             GBUFFER_COLOR_TEXTURE_UNITS[i] = -1;
         }
-        // OptiFine 1.12 gbuffers stage: gaux1..4 live on texture units 7..10. Umbra exposes the matching colortex
-        // aliases too, so gbuffers colortex4..7 share those same aux units.
+        // OptiFine 1.12 gbuffers stage: gaux1..4 live on units 7..10, and the colortex4..7 aliases share them
         for (int i = 4; i <= 7; i++) {
             GBUFFER_COLOR_TEXTURE_UNITS[i] = i + 3;
         }
@@ -185,8 +159,7 @@ public class UmbraRenderingPipeline {
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "depthtex1", DEPTH_TEX_1_UNIT);
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "dhDepthTex1", DEPTH_TEX_1_UNIT);
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "depthtex2", DEPTH_TEX_2_UNIT);
-        // Shadow samplers are parked on unused units so a shadow-reading pack samples nothing instead of colortex0
-        // (sampler uniforms default to unit 0). The shadow pass itself is a later phase.
+        // Shadow samplers are parked on unused units so a shadow-reading pack samples nothing instead of colortex0 (sampler uniforms default to unit 0); the shadow pass is a later phase
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "shadowcolor1", SHADOW_COLOR_1_UNIT);
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "shadowcolor0", SHADOW_COLOR_0_UNIT);
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "shadowcolor", SHADOW_COLOR_0_UNIT);
@@ -199,8 +172,7 @@ public class UmbraRenderingPipeline {
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "shadowtex0HW", SHADOW_TEX_0_HW_UNIT);
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "shadowtex1HW", SHADOW_TEX_1_HW_UNIT);
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "noisetex", NOISE_TEX_UNIT);
-        // OptiFine gbuffer-stage PBR samplers. During fullscreen passes these units are also colortex2/3, so the same
-        // mapping remains correct for packs that leave the aliases active in shared include code.
+        // OptiFine gbuffer-stage PBR samplers; during fullscreen passes these units are also colortex2/3, so the mapping stays correct for packs leaving the aliases in shared includes
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "normals", 2);
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "texNorm", 2);
         putSharedSampler(FULLSCREEN_SAMPLER_UNITS, "specular", 3);
@@ -236,13 +208,7 @@ public class UmbraRenderingPipeline {
         GBUFFER_SAMPLER_UNITS.put(name, unit);
     }
 
-    // one entry of a numbered pass family: a full-screen draw (program != null) into its own framebuffer,
-    // or the final pass (drawn to the screen, framebuffer == null), or a compute-only entry
-    // (program == null) for a family index the pack only supplies .csh files for
-    // computes are the program's compute stages - <name>.csh and the letter-suffixed <name>_a.csh ..
-    // <name>_z.csh
-    // Umbra dispatches them *before* the pass's own draw, under the same flip state: Photon's
-    // deferred4_a.csh writes the skylight SH that deferred4 then reads
+    // One entry of a numbered pass family: a fullscreen draw into its own framebuffer, the final pass (framebuffer == null), or compute-only (program == null) for a slot with only .csh files; computes (<name>.csh, <name>_a..z.csh) dispatch before the pass's own draw under the same flip state, like Umbra
     private static final class FullscreenPass {
         final String name;
         final UmbraProgram program;
@@ -258,15 +224,10 @@ public class UmbraRenderingPipeline {
         final BitSet mipmappedBuffers;
         // Compute stages dispatched before this pass draws; never null, usually empty.
         final List<ComputePass> computes;
-        // viewport for this pass, taken from its draw buffers' size (size.buffer.colortexN)
-        // zero means "the current render size", which is the case for every pass of a pack that declares
-        // no buffer sizes
+        // Viewport for this pass from its draw buffers' size (size.buffer.colortexN); zero means the current render size
         int viewportWidth;
         int viewportHeight;
-        // scale.<program> - Umbra's ViewportData
-        // unlike viewportWidth, which reflects a target the pack resized, this shrinks the rasterised
-        // rectangle inside whatever size the pass already has
-        // defaults to the full viewport: scale 1, no offset
+        // scale.<program> (Umbra's ViewportData): unlike viewportWidth, this shrinks the rasterised rectangle inside whatever size the pass has; default scale 1, no offset
         float viewportScale = 1.0f;
         float viewportOffsetX;
         float viewportOffsetY;
@@ -287,10 +248,7 @@ public class UmbraRenderingPipeline {
             this.computes = computes;
         }
 
-        // Umbra's CompositeRenderer.ComputeOnlyPass: a family slot with computes but no vertex/fragment
-        // pair
-        // it draws nothing, so it flips nothing, but it still needs the flip state and colortex snapshot
-        // of its position in the chain - that is what its computes read and image-write
+        // Umbra's ComputeOnlyPass: a family slot with computes but no vertex/fragment pair; draws and flips nothing, but still needs the flip state and colortex snapshot of its position in the chain
         static FullscreenPass computeOnly(String name, int[] colorSamplers, BitSet flips, List<ComputePass> computes) {
             return new FullscreenPass(name, null, null, null, colorSamplers, DrawBuffers.DEFAULT.clone(), null,
                     flips, (BitSet) flips.clone(), new BitSet(), computes);
@@ -307,13 +265,7 @@ public class UmbraRenderingPipeline {
     private final PlainTexture noOverlayTexture;
     // "Always lit" 1×1 shadow map on the shadowtex units until the real shadow pass exists.
     private final StubShadowMap stubShadowMap;
-    // whether the pack DECLARED SEPARATE_HARDWARE_SAMPLERS, not whether this port could provide it -
-    // Umbra reads programSet.getPack().hasFeature(...) for exactly this (UmbraRenderingPipeline.java:222)
-    // keying it off isUsable() made it permanently true, which suppressed the GL_TEXTURE_COMPARE_MODE
-    // that UmbraShadowRenderer.createShadowDepthTexture otherwise sets on the shadow depth textures,
-    // leaving hardware depth compare supplied only by per-unit sampler objects
-    // any path that rebinds a shadow unit without also restoring its sampler object then leaves a
-    // sampler2DShadow reading a texture whose compare mode is NONE - undefined, and "fully lit" on NVIDIA
+    // Whether the pack DECLARED SEPARATE_HARDWARE_SAMPLERS (Umbra reads hasFeature for this), not whether the port could provide it; keying off isUsable() made it always true, suppressed GL_TEXTURE_COMPARE_MODE on the shadow depth textures, and left sampler2DShadow reading compare-mode NONE, "fully lit" on NVIDIA
     private boolean separateHardwareSamplers;
     private final boolean[] shadowHardwareFiltering = new boolean[2];
     private final boolean[] shadowMipmap = new boolean[2];
@@ -322,26 +274,15 @@ public class UmbraRenderingPipeline {
     private final int shadowNearestHwSampler;
     private final int shadowMippedLinearHwSampler;
     private final int shadowMippedNearestHwSampler;
-    // ONE baked frame schedule, exactly like Umbra
-    // the composite chain flips some colortex buffers an odd number of times per frame - Complementary's
-    // colortex2 TAA history, written once by composite6 - and instead of alternating schedules per frame,
-    // the frame ENDS by copying each such buffer's alt side back to main (see SwapPass, Umbra's
-    // FinalPassRenderer.SwapPass)
-    // every frame therefore starts from the canonical state "main = latest", and all baked FBOs and
-    // sampler snapshots stay valid forever
-    // cross-frame temporal accumulation (TAA) works because a history pass reads main - last frame's
-    // copy-back - and writes alt
+    // ONE baked frame schedule like Umbra: buffers the chain flips an odd number of times (Complementary's colortex2 TAA history) are copied alt->main at frame end (SwapPass), so every frame starts from "main = latest" and all baked FBOs and sampler snapshots stay valid; TAA works since a history pass reads main and writes alt
     private UmbraFramebuffer gbufferFramebuffer;
     private UmbraFramebuffer translucentGbufferFramebuffer;
-    // the setup family: compute-only, dispatched *once* after the pipeline is built rather than every
-    // frame - Umbra runs it when the dimension changes, and Photon uses it to seed its LPV volumes
+    // The setup family: compute-only, dispatched *once* after the pipeline is built (Umbra runs it on dimension change, Photon seeds its LPV volumes with it)
     private final List<FullscreenPass> setupPasses = new ArrayList<>();
     private boolean setupDispatched;
-    // prepareBeforeShadow: run the prepare family before the shadow map instead of after it
-    // packs whose shadow pass samples what prepare produces need this ordering
+    // prepareBeforeShadow: run the prepare family before the shadow map instead of after, for packs whose shadow pass samples what prepare produces
     private boolean prepareBeforeShadow;
-    // allowConcurrentCompute: skip the full memory barrier between consecutive compute dispatches
-    // only safe when the pack states its dispatches are independent
+    // allowConcurrentCompute: skip the full memory barrier between consecutive compute dispatches, only safe when the pack states they are independent
     private boolean allowConcurrentCompute;
     // rain.depth — whether rain/snow writes into the depth buffer (Umbra shouldWriteRainAndSnowToDepthBuffer).
     private boolean rainDepth;
@@ -356,16 +297,11 @@ public class UmbraRenderingPipeline {
     private boolean separateEntityDraws;
     // particles.ordering = mixed | after | before, relative to the deferred chain.
     private String particleOrdering = "mixed";
-    // backFace.solid|cutout|cutoutMipped|translucent - per-terrain-layer back-face culling
-    // vanilla culls every layer; a pack that shades both sides of a face, or reads geometry from the
-    // light's side, asks for a layer's back faces to be kept
-    // indexed by BlockRenderLayer#ordinal()
+    // backFace.solid|cutout|cutoutMipped|translucent, indexed by BlockRenderLayer#ordinal(); vanilla culls every layer, and a pack shading both sides or reading geometry from the light's side asks to keep back faces
     private final boolean[] backFaceCulling = {true, true, true, true};
     // The begin family: runs at the very start of world rendering, before anything is drawn.
     private final List<FullscreenPass> beginPasses = new ArrayList<>();
-    // the prepare family: runs after the shadow map, before the gbuffers
-    // Photon's prepare builds the cloud shadow map and cumulus coverage map into colortex8, which its
-    // terrain lighting and sky both read
+    // The prepare family, after the shadow map and before the gbuffers; Photon builds its cloud shadow and cumulus coverage maps into colortex8 here
     private final List<FullscreenPass> preparePasses = new ArrayList<>();
     private final List<FullscreenPass> deferredPasses = new ArrayList<>();
     private final List<FullscreenPass> passes = new ArrayList<>();
@@ -380,9 +316,7 @@ public class UmbraRenderingPipeline {
     // First-frame / resized-storage clears: every materialized buffer, both main and alt sides.
     private final List<ClearPass> fullClearPasses = new ArrayList<>();
     private boolean fullClearRequired = true;
-    // fullscreen programs plus their uniforms, compiled once and cached by name
-    // a name mapping to null means that program failed to compile
-    // owns the GL programs - they are destroyed here, not per-pass
+    // Fullscreen programs plus their uniforms, compiled once and cached by name (null means it failed); owns the GL programs, destroyed here not per-pass
     private final java.util.Map<String, UmbraProgram> compiledPrograms = new java.util.HashMap<>();
     private final java.util.Map<String, ProgramUniforms> compiledUniforms = new java.util.HashMap<>();
     // The pack's fixed-function gbuffer programs (sky/entities/particles/weather/clouds/hand), phase-switched.
@@ -391,22 +325,11 @@ public class UmbraRenderingPipeline {
     private final CustomTextureManager customTextureManager;
     // The pack's writable custom images (image.* directives — Complementary's colored-lighting volumes).
     private final CustomImageManager customImageManager;
-    // the shadowcomp family, dispatched as a block right after the shadow map renders
-    // compute stages only - a shadowcomp *raster* stage would draw into shadowcolor0/1, which
-    // UmbraShadowRenderer does own, but nothing schedules those yet; Umbra does it in
-    // ShadowCompositeRenderer
+    // The shadowcomp family, dispatched right after the shadow map renders; compute stages only, since nothing schedules shadowcomp raster stages into shadowcolor0/1 yet (Umbra's ShadowCompositeRenderer)
     private final List<FullscreenPass> shadowCompPasses = new ArrayList<>();
-    // render targets a program writes through the image API (colorimgN), mapped to the image unit they
-    // are bound on - Umbra's UmbraImages.addRenderTargetImages
-    // Photon's deferred4_a.csh stores its skylight spherical harmonics with imageStore(colorimg4, ...);
-    // with no such binding the compute writes nowhere and every surface loses its sky ambient
-    // like Umbra, the bound texture follows the pass's buffer flips, so it is always the same side of the
-    // ping-pong pair that colortexN reads
+    // Render targets a program writes via the image API (colorimgN) mapped to their image unit (Umbra's addRenderTargetImages); Photon's deferred4_a.csh imageStores its skylight SH this way, and the bound texture follows the pass's flips like Umbra
     private final Map<Integer, Integer> renderTargetImageUnits = new LinkedHashMap<>();
-    // shadowcolorimg0/shadowcolorimg1 - the shadow colour attachments exposed through the image API
-    // (Umbra UmbraImages.addShadowColorImages)
-    // index 0/1 -> image unit, empty when the pack references neither or there is no shadow pass to own
-    // the textures
+    // shadowcolorimg0/1, the shadow colour attachments via the image API (Umbra's addShadowColorImages); index -> image unit, empty when unreferenced or there is no shadow pass to own them
     private final Map<Integer, Integer> shadowColorImageUnits = new LinkedHashMap<>();
     // Active shader macro environment: built-in MC/UMBRA macros plus the pack's resolved option values.
     private final Map<String, String> shaderDefines;
@@ -445,18 +368,11 @@ public class UmbraRenderingPipeline {
             this.indirectOffset = indirectOffset;
         }
     }
-    // the gbuffers/shadow-stage sampler overrides of the *active* pipeline, consulted by the static
-    // assignSamplerUnitsToBoundProgram that the Impetus terrain and shadow overrides call - their program
-    // objects are Impetus's, built lazily outside this class
-    // set on construction, cleared on destroy
+    // The gbuffers/shadow-stage sampler overrides of the *active* pipeline, consulted by the static assignSamplerUnitsToBoundProgram the Impetus terrain and shadow overrides call for their lazily built programs; set on construction, cleared on destroy
     private static volatile Map<String, CustomTextureManager.Override> activeGbufferSamplerOverrides =
             java.util.Collections.emptyMap();
     private static volatile Map<String, Integer> activeGbufferSamplerUnits = GBUFFER_SAMPLER_UNITS;
-    // colour targets written (flipped) by at least one earlier pass while the composite/deferred chain is
-    // being built
-    // Umbra parity: a custom-texture override on a colortex deactivates once a pass has written that
-    // buffer, because later passes must read the chain's content and not the custom texture
-    // only mutated during construction
+    // Colour targets flipped by at least one earlier pass while the chain is being built; Umbra parity, a custom-texture override on a colortex deactivates once a pass has written it, and only mutated during construction
     private final TreeSet<Integer> flippedAtLeastOnce = new TreeSet<>();
     // Every color index attached to the gbuffer FBOs: the union of all gbuffer-stage DRAWBUFFERS masks, sorted.
     private final int[] gbufferAttachments;
@@ -480,8 +396,7 @@ public class UmbraRenderingPipeline {
     private final CenterDepthSampler centerDepthSampler = new CenterDepthSampler();
     private float centerDepthHalfLife = DEFAULT_CENTER_DEPTH_HALF_LIFE;
 
-    // the pack-wide scalar const directives, with Umbra's defaults (from PackDirectives' constructor)
-    // the three half-lives are in *deciseconds*, the unit Umbra's SmoothedFloat takes
+    // The pack-wide scalar const directives with Umbra's defaults; the three half-lives are in *deciseconds*, SmoothedFloat's unit
     private int noiseTextureResolution = NoiseTexture.DEFAULT_RESOLUTION;
     private float ambientOcclusionLevel = 1.0f;
     private float wetnessHalfLife = DEFAULT_WETNESS_HALF_LIFE;
@@ -500,9 +415,7 @@ public class UmbraRenderingPipeline {
     // GL43 dispatch-indirect binding target (kept as a literal to avoid a hard generated-constant dependency).
     private static final int GL_DISPATCH_INDIRECT_BUFFER = 0x90EE;
 
-    // end-of-frame alt->main copy-back for a buffer the chain left odd-flipped (Umbra
-    // FinalPassRenderer.SwapPass)
-    // "from" is a read framebuffer over the buffer's ALT texture; the copy target is its MAIN texture
+    // End-of-frame alt->main copy-back for a buffer the chain left odd-flipped (Umbra's FinalPassRenderer.SwapPass); "from" is a read framebuffer over the ALT texture, the target is MAIN
     private static final class SwapPass {
         final UmbraFramebuffer from;
         final int targetTexture;
@@ -537,18 +450,13 @@ public class UmbraRenderingPipeline {
 
     private boolean worldRenderingActive;
     private boolean destroyed;
-    // true when the pack's fullscreen shaders are modern (#version 130+)
-    // such passes position the quad with the fixed-function ftransform()/gl_TextureMatrix[0], so the
-    // composite chain must run with identity model-view, projection and texture matrices - see runPass
+    // True when the pack's fullscreen shaders are modern (#version 130+), which position the quad via ftransform()/gl_TextureMatrix[0] so the chain must run with identity matrices (see runPass)
     private boolean modernPack;
     public UmbraRenderingPipeline(ShaderPack pack) {
         Minecraft mc = Minecraft.getMinecraft();
         this.renderTargets = new UmbraRenderTargets(mc.displayWidth, mc.displayHeight);
         this.shaderDefines = pack.getEnvironmentDefines();
-        // The GPU identity macros need a live GL context, so they are added here rather than baked into the pack's
-        // environment defines. Without them every hardware-workaround gate in every pack silently took its
-        // "unknown vendor" branch — Clarity's `#if ... defined MC_GL_VENDOR_NVIDIA` left `immut` expanding to nothing
-        // instead of `const`.
+        // The GPU identity macros need a live GL context, so they are added here rather than baked into the pack's environment defines; without them every hardware-workaround gate took its "unknown vendor" branch (Clarity's `immut` expanded to nothing)
         com.bdmajora.impetus.umbra.gl.shader.ShaderMacros.withGpuIdentity(this.shaderDefines,
                 LWJGL.glGetString(GL11.GL_VENDOR), LWJGL.glGetString(GL11.GL_RENDERER));
         this.separateHardwareSamplers = pack.hasFeature(FeatureFlags.SEPARATE_HARDWARE_SAMPLERS);
@@ -569,17 +477,11 @@ public class UmbraRenderingPipeline {
             this.shadowMippedNearestHwSampler = createShadowHardwareSampler(false, true);
 
             List<ProgramSource> fullscreenSources = collectFullscreenSources(pack);
-            // colortexNFormat / clear directives may live in ANY program stage, not just fullscreen passes.
-            // Umbra/OptiFine text-scan every program in the pack; Sildur declares its HDR formats
-            // (R11F_G11F_B10F, RGB16F) inside gbuffers_textured.fsh, so a fullscreen-only scan leaves every
-            // target at RGBA8 and its HDR lighting/PCSS/bloom/TAA buffers clamp. Scan all sources.
+            // colortexNFormat / clear directives may live in ANY program stage, and Umbra/OptiFine scan every one; Sildur declares its HDR formats in gbuffers_textured.fsh, and a fullscreen-only scan left every target RGBA8 and clamped its lighting
             applyPackFormatDirectives(collectAllProgramSources(pack));
-            // After the directive scan: `const int noiseTextureResolution` sizes this, and a pack that samples
-            // noisetex at an assumed resolution gets the wrong spatial frequency if we guess 256.
+            // After the directive scan: `const int noiseTextureResolution` sizes this, and a pack sampling noisetex at an assumed resolution gets the wrong spatial frequency if we guess 256
             this.noiseTexture = new NoiseTexture(this.noiseTextureResolution);
-            // size.buffer.colortexN must land before anything materialises a target: Photon's sky map is authored
-            // against a 192x108 colortex4 and indexes it by absolute texel, so at full resolution its light/ambient
-            // column lands mid-screen instead of at the edge.
+            // size.buffer.colortexN must land before any target materialises: Photon's sky map is authored against a 192x108 colortex4 indexed by absolute texel
             pack.getProperties().getBufferSizes().forEach((index, size) -> {
                 if (index < 0 || index >= UmbraRenderTargets.MAX_COLOR_BUFFERS) {
                     return;
@@ -589,8 +491,7 @@ public class UmbraRenderingPipeline {
             });
             materializeSampledTargets(fullscreenSources);
 
-            // Publish the pack's block.properties mapping for the chunk meshers (null keeps raw 1.12.2 IDs). Done
-            // here rather than at pack parse because registry resolution needs the game fully initialized.
+            // Publish the pack's block.properties mapping for the chunk meshers (null keeps raw 1.12.2 IDs); done here since registry resolution needs the game fully initialized
             com.bdmajora.impetus.umbra.material.WorldRenderingSettings.setBlockStateIds(
                     com.bdmajora.impetus.umbra.material.BlockMaterialMapping.createBlockStateIdTable(pack.getIdMap()));
             com.bdmajora.impetus.umbra.material.WorldRenderingSettings.setBlockRenderLayers(
@@ -600,8 +501,7 @@ public class UmbraRenderingPipeline {
             com.bdmajora.impetus.umbra.material.WorldRenderingSettings.setVoxelRenderDistanceChunks(
                     mc.gameSettings.renderDistanceChunks);
 
-            // Custom images/textures must exist before any program compiles: sampler-unit assignment consults
-            // the overrides (image uniforms are plain glUniform1i assignments like samplers).
+            // Custom images/textures must exist before any program compiles, since sampler-unit assignment consults the overrides (image uniforms are plain glUniform1i assignments like samplers)
             int firstCustomUnit = this.separateHardwareSamplers
                     ? SHADOW_TEX_1_HW_UNIT + 1 : CUSTOM_TEX_FIRST_UNIT;
             this.customTextureManager = new CustomTextureManager(pack, samplerUnitsByStage(), COLOR_TARGETS_BY_NAME,
@@ -642,9 +542,7 @@ public class UmbraRenderingPipeline {
             this.occlusionCulling = pack.getProperties().getOcclusionCulling().orElse(Boolean.TRUE);
             this.skipAllRendering = pack.getProperties().getSkipAllRendering().orElse(Boolean.FALSE);
             this.separateEntityDraws = pack.getProperties().getSeparateEntityDraws().orElse(Boolean.FALSE);
-            // Umbra's resolution order: an explicit directive wins, otherwise a pack with a deferred chain that is
-            // not using separate entity draws gets `after` (so particles are not lit by the deferred pass), and
-            // everything else `mixed`.
+            // Umbra's resolution order: an explicit directive wins, else a pack with a deferred chain not using separate entity draws gets `after` (particles not lit by deferred), else `mixed`
             this.particleOrdering = pack.getProperties().getParticleOrdering().orElseGet(() -> {
                 boolean hasDeferred = pack.getProgramSet().get(ProgramArrayId.Deferred, 0).isPresent();
                 return hasDeferred && !this.separateEntityDraws ? "after" : "mixed";
@@ -659,9 +557,7 @@ public class UmbraRenderingPipeline {
             this.gbufferAttachments = computeGbufferAttachments(pack, terrainDrawBuffers(pack));
             for (int i = 0; i < this.gbufferAttachments.length; i++) {
                 this.gbufferAttachmentPoints.put(this.gbufferAttachments[i], i);
-                // A gbuffer FBO mixing attachment sizes renders into the intersection of them, which would silently
-                // shrink the world pass. Packs size reflection/bloom buffers this way, never gbuffer outputs, so this
-                // is a pack bug (or a bad parse) worth surfacing rather than a case to support.
+                // A gbuffer FBO mixing attachment sizes renders into their intersection, silently shrinking the world pass; packs size reflection/bloom buffers this way but never gbuffer outputs, so surface it as a pack bug
                 if (this.renderTargets.hasCustomSize(this.gbufferAttachments[i])) {
                     LOGGER.warn("[Umbra] colortex{} declares its own size but is also a gbuffer output; the world pass "
                                     + "would be clipped to {}x{}", this.gbufferAttachments[i],
@@ -673,16 +569,13 @@ public class UmbraRenderingPipeline {
             allocateShadowColorImageUnits(collectAllProgramSources(pack));
             BufferFlipper flipper = this.renderTargets.getBufferFlipper();
 
-            // Bake the single schedule from the reset flip state, then record which buffers the chain leaves
-            // odd-flipped: those get an end-of-frame alt->main copy-back (Umbra's SwapPass), so the next frame's
-            // baked FBOs and sampler snapshots are valid again without any per-frame parity.
+            // Bake the single schedule from the reset flip state, then record which buffers the chain leaves odd-flipped for the end-of-frame alt->main copy-back, so next frame's baked FBOs and snapshots are valid without per-frame parity
             buildSchedule(pack, flipper);
             buildSwapPasses(flipper);
             buildClearPasses();
 
 
-            // Pipeline setup creates and checks Umbra FBOs as a side effect. Give Minecraft's main target back before
-            // vanilla reaches its next post-render GL check.
+            // Pipeline setup creates and checks Umbra FBOs as a side effect; give Minecraft's main target back before vanilla's next post-render GL check
             LWJGL.glUseProgram(0);
             bindMainRenderTarget(mc);
             restoreMainDrawReadBuffers(mc);
@@ -737,13 +630,7 @@ public class UmbraRenderingPipeline {
         return sources;
     }
 
-    // every present program source in the pack - all gbuffer families plus shadow, the numbered
-    // deferred/composite arrays and final - for directive scanning only
-    // buffer-format and clear directives (const int colortexNFormat, const bool colortexNClear, ...) are
-    // conventionally placed inside a block comment in whichever file the pack author chose, and
-    // Umbra/OptiFine text-scan the whole pack, so we must too
-    // duplicates are harmless: the directive scan is idempotent, since re-setting a target to the same
-    // format is a no-op
+    // Every present program source (all gbuffer families, shadow, deferred/composite arrays, final) for directive scanning only; format and clear directives sit in block comments wherever the author chose and Umbra/OptiFine scan the whole pack, and duplicates are idempotent
     private List<ProgramSource> collectAllProgramSources(ShaderPack pack) {
         List<ProgramSource> sources = new ArrayList<>();
         for (ProgramId id : ProgramId.values()) {
@@ -757,11 +644,7 @@ public class UmbraRenderingPipeline {
 
     private static final Pattern RENDER_TARGET_IMAGE = Pattern.compile("\\bcolorimg(\\d{1,2})\\b");
 
-    // reserves an image unit for every colorimgN the pack references, above the units the image.<name>
-    // directives took
-    // Umbra assigns these per program from its ProgramImages builder; with this pipeline's fixed-unit
-    // architecture one global unit per referenced target is equivalent and much simpler, because the
-    // binding is re-established per pass anyway (see bindRenderTargetImages)
+    // Reserves an image unit for every colorimgN the pack references, above the image.<name> units; Umbra assigns per program, but with fixed units one global unit per target is equivalent since the binding is re-established per pass (see bindRenderTargetImages)
     private void allocateRenderTargetImageUnits(List<ProgramSource> sources) {
         TreeSet<Integer> referenced = new TreeSet<>();
         for (ProgramSource source : sources) {
@@ -790,9 +673,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    // reserves image units for shadowcolorimg0/1
-    // runs after the render-target images so the two share one ascending allocation, and only when a
-    // shadow renderer exists to own the textures
+    // Reserves image units for shadowcolorimg0/1, after the render-target images so they share one ascending allocation, and only when a shadow renderer exists to own the textures
     private void allocateShadowColorImageUnits(List<ProgramSource> sources) {
         if (this.shadowRenderer == null) {
             return;
@@ -850,10 +731,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    // OptiFine's pre-colortexNFormat way of upgrading gaux4/colortex7, written as a block comment in
-    // the pack source: GAUX4FORMAT:RGB32F
-    // only the three formats OptiFine accepted are honoured, matching Umbra's PackRenderTargetDirectives;
-    // anything else is a pack error and keeps the default
+    // OptiFine's pre-colortexNFormat way of upgrading gaux4/colortex7 as a block comment (GAUX4FORMAT:RGB32F); only OptiFine's three formats are honoured, matching Umbra's PackRenderTargetDirectives
     private void applyLegacyGaux4Format(List<ProgramSource> sources) {
         Pattern directive = Pattern.compile("/\\*\\s*GAUX4FORMAT\\s*:\\s*(\\w+)\\s*\\*/");
         for (ProgramSource source : sources) {
@@ -874,30 +752,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    // the stages of source a pack directive may be declared in, each with the pack's own preprocessor
-    // conditionals resolved against the macro set that stage actually compiles with
-    // directives must never be read from raw source: these scans take the LAST textual match, so a
-    // directive the pack declared under a disabled #if silently wins over the live one
-    // Umbra is immune because it scans source JCPP has already preprocessed (ShaderPack.java:317 feeds
-    // ProgramSet -> ConstDirectiveParser)
-    // OptiFine 1.12.2 does not preprocess, but its matchers filter on the VALUE -
-    // isConstBoolSuffix("Clear", false) / ("MipmapEnabled", true), Shaders.java:2470/2499 - so it only
-    // ever reads the polarity that is not the default and is accidentally immune to the common #if/#else
-    // pair
-    // Impetus declares IS_IRIS, so it owes the pack Umbra's semantics
-    // Body Camera Shader v1.6.1 is the case that proved it: colortex0Format (R11F_G11F_B10F vs RGB8),
-    // colortex5Clear (false vs true) and colortex0MipmapEnabled (true vs false) are each declared once
-    // per branch of an #if, and all three resolved to the dead branch
-    // that killed the pack's auto-exposure - a wiped accumulator makes its color /= tempExposure + 0.125
-    // a flat 8x - and clipped its HDR buffer, for a uniformly white screen
-    // option values reach the resolver even though getEnvironmentDefines() excludes them, because Impetus
-    // applies them in place as real #define lines ahead of the #if; do NOT add options to the macro map
-    // instead, that reintroduces the macro-redefinition failure across every non-Complementary pack
-    // vertex first, fragment last: the scans are last-match-wins, and Umbra only ever trusts the fragment
-    // stage (ProgramSet.java:263), so when the two disagree the fragment value has to be the one that
-    // survives
-    // scanning the vertex stage at all is a deliberate superset of Umbra, matching OptiFine, which scans
-    // every file in the pack - Sildur declares real formats in a .vsh
+    // The stages a directive may be declared in, each with the pack's conditionals resolved against its macro set; raw scans take the LAST textual match so a directive under a disabled #if wins (Body Camera's colortex0Format/colortex5Clear/colortex0MipmapEnabled all resolved to the dead branch and whited the screen). Options are applied as real #define lines, not macro-map entries; vertex first, fragment last since Umbra trusts the fragment stage
     private List<String> activeDirectiveStages(ProgramSource source) {
         Map<String, String> macros =
                 com.bdmajora.impetus.umbra.gl.shader.ShaderMacros.forProgram(this.shaderDefines, source.getName());
@@ -910,11 +765,7 @@ public class UmbraRenderingPipeline {
         return stages;
     }
 
-    // applies the pack's render-target format directives (const int colortex0Format = RGBA16;, including
-    // the legacy gcolorFormat-style names) the OptiFine way: declared as consts anywhere in the
-    // composite/deferred/final sources
-    // must run before any target is materialized - HDR packs depend on it, because with plain RGBA8 their
-    // tonemapping input is clamped and highlights blow out
+    // Applies the pack's render-target format directives (const int colortex0Format = RGBA16, including legacy gcolorFormat names) declared as consts anywhere in the fullscreen sources; must precede target materialisation or HDR packs clamp and blow out
     private void applyPackFormatDirectives(List<ProgramSource> sources) {
         Pattern formatDirective = Pattern.compile("const\\s+int\\s+(\\w+?)Format\\s*=\\s*(\\w+)\\s*;");
         Pattern clearDirective = Pattern.compile("const\\s+bool\\s+(\\w+?)Clear\\s*=\\s*(true|false)\\s*;");
@@ -923,8 +774,7 @@ public class UmbraRenderingPipeline {
         StringBuilder scalarText = new StringBuilder();
         for (ProgramSource source : sources) {
             for (String stage : activeDirectiveStages(source)) {
-                // The pack-wide scalar directives are name-keyed rather than target-keyed, so they can be read from
-                // one concatenation. Terminate each stage: an unterminated construct must not run into the next.
+                // The pack-wide scalar directives are name-keyed rather than target-keyed, so one concatenation serves; terminate each stage so an unterminated construct cannot run into the next
                 scalarText.append(stage).append('\n');
                 Matcher matcher = formatDirective.matcher(stage);
                 while (matcher.find()) {
@@ -966,21 +816,14 @@ public class UmbraRenderingPipeline {
         applyPackScalarDirectives(scalarText.toString());
     }
 
-    // the pack-wide scalar const directives Umbra collects into PackDirectives
-    // (PackDirectives.acceptDirectivesFrom)
-    // sunPathRotation and the shadow directives are read on the shadow path instead, which owns their
-    // consumers
-    // defaults and units are Umbra's: the half-lives are in *deciseconds* (SmoothedFloat scales by 0.1f),
-    // and ambientOcclusionLevel is clamped to 0..1
+    // The pack-wide scalar const directives Umbra collects into PackDirectives; sunPathRotation and the shadow directives are read on the shadow path, and the half-lives are in *deciseconds* with ambientOcclusionLevel clamped to 0..1
     private void applyPackScalarDirectives(String activeText) {
         this.centerDepthHalfLife = parseConstFloat(activeText, "centerDepthHalflife", DEFAULT_CENTER_DEPTH_HALF_LIFE);
 
-        // noisetex size. A pack that samples `texture2D(noisetex, uv * 32)` against a 256x256 noise texture gets the
-        // wrong spatial frequency everywhere it uses noise — Body Camera's water normals are built from it.
+        // noisetex size; a pack sampling `texture2D(noisetex, uv * 32)` against a 256x256 texture gets the wrong spatial frequency (Body Camera's water normals)
         int noiseResolution = parseConstInt(activeText, "noiseTextureResolution", NoiseTexture.DEFAULT_RESOLUTION);
         if (noiseResolution > 0) {
-            // NoiseTexture allocates resolution^2 * 4 bytes twice (a byte[] and a direct buffer), so a pack typo like
-            // 65536 would OOM the client outright rather than render badly. 4096 is far past anything real.
+            // NoiseTexture allocates resolution^2 * 4 bytes twice, so a pack typo like 65536 would OOM the client; 4096 is far past anything real
             if (noiseResolution > 4096) {
                 LOGGER.warn("[Umbra] Pack requests noiseTextureResolution={}; clamping to 4096", noiseResolution);
                 noiseResolution = 4096;
@@ -988,8 +831,7 @@ public class UmbraRenderingPipeline {
             this.noiseTextureResolution = noiseResolution;
         }
 
-        // Vanilla's baked AO strength. Umbra pushes this into WorldRenderingSettings, where the block-model AO
-        // computation reads it; 1.0 is vanilla, 0.0 disables vanilla AO so the pack can do its own.
+        // Vanilla's baked AO strength, pushed into WorldRenderingSettings for the block-model AO computation; 1.0 is vanilla, 0.0 disables it so the pack does its own
         float aoLevel = parseConstFloat(activeText, "ambientOcclusionLevel", 1.0f);
         this.ambientOcclusionLevel = Math.max(0.0f, Math.min(1.0f, aoLevel));
         com.bdmajora.impetus.umbra.material.WorldRenderingSettings
@@ -1035,8 +877,7 @@ public class UmbraRenderingPipeline {
         return Float.parseFloat(cleaned);
     }
 
-    // creates every colour target the composite/final programs declare a sampler for, so per-pass sampler
-    // snapshots can bind them even when the writing pass comes later in the chain
+    // Creates every colour target the composite/final programs declare a sampler for, so per-pass sampler snapshots can bind them even when the writing pass comes later in the chain
     private void materializeSampledTargets(List<ProgramSource> sources) {
         StringBuilder allSource = new StringBuilder();
         for (ProgramSource source : sources) {
@@ -1052,11 +893,9 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    // builds the shadow renderer when the pack declares a shadow program, with the OptiFine shadow
-    // projection directives parsed anywhere in the pack sources
+    // Builds the shadow renderer when the pack declares a shadow program, with OptiFine's shadow projection directives parsed from anywhere in the sources
     private UmbraShadowRenderer createShadowRenderer(ShaderPack pack) {
-        // Const directives may live in ANY source (packs put them in shared includes flattened into every program),
-        // so scan the gbuffer programs and the whole fullscreen chain.
+        // Const directives may live in ANY source (packs put them in includes flattened into every program), so scan the gbuffer programs and the whole fullscreen chain
         StringBuilder allSources = new StringBuilder();
         StringBuilder activeSources = new StringBuilder();
         for (ProgramId id : new ProgramId[]{ProgramId.Shadow, ProgramId.Terrain, ProgramId.Water, ProgramId.Final}) {
@@ -1072,8 +911,7 @@ public class UmbraRenderingPipeline {
         String text = allSources.toString();
         String activeText = activeSources.toString();
 
-        // Tilt of the sun/moon's daily arc. Needed by the celestial-position uniforms whether or not the pack draws
-        // shadows, so set it before the no-shadow early-out.
+        // Tilt of the sun/moon's daily arc, needed by the celestial-position uniforms whether or not the pack draws shadows, so set before the no-shadow early-out
         float sunPathRotation = parseConstFloat(activeText, "sunPathRotation", 0.0f);
         CelestialUniforms.setSunPathRotation(sunPathRotation);
 
@@ -1081,13 +919,10 @@ public class UmbraRenderingPipeline {
         if (!shadowSource.isPresent()) {
             return null;
         }
-        // OptiFine's pre-const spelling of the same three settings: `#define SHADOWRES 2048` etc. Umbra accepts both
-        // (PackShadowDirectives), and the shaders.properties keys override either.
+        // OptiFine's pre-const spelling of the same settings (`#define SHADOWRES 2048`); Umbra accepts both, and the shaders.properties keys override either
         int resolution = parseConstInt(activeText, "shadowMapResolution", parseDefineInt(text, "SHADOWRES", 1024));
         if (resolution <= 0) {
-            // A pack error, but the literal grammar now admits a sign, and a non-positive texture size would fail
-            // allocation rather than degrade. E-LITE declares `shadowMapResolution = 10` in its shadows-off branch,
-            // which conditional resolution already hides; this only backstops the value actually reaching GL.
+            // A pack error, but the literal grammar admits a sign and a non-positive texture size would fail allocation; E-LITE declares 10 in its shadows-off branch, which conditional resolution hides, so this only backstops the value reaching GL
             LOGGER.warn("[Umbra] Pack declares shadowMapResolution={}; falling back to 1024", resolution);
             resolution = 1024;
         }
@@ -1110,12 +945,9 @@ public class UmbraRenderingPipeline {
         resolution = pack.getProperties().getShadowMapResolution().orElse(resolution);
         distance = pack.getProperties().getShadowDistance().isPresent()
                 ? pack.getProperties().getShadowDistance().getAsInt() : distance;
-        // `const float voxelDistance` overrides the shadow distance for voxelization only: packs that voxelize for
-        // colored lighting want a tighter radius than their shadow map covers (Umbra PackShadowDirectives).
+        // `const float voxelDistance` overrides the shadow distance for voxelization only, since colored-lighting packs want a tighter radius than their shadow map (Umbra PackShadowDirectives)
         float voxelDistance = parseConstFloat(activeText, "voxelDistance", 0.0f);
-        // `shadowDistanceRenderMul` scales the shadow pass's CULLING distance (not the projection). Umbra's unset
-        // sentinel is -1, where it falls back to the user's shadow-distance setting; there is no such setting here,
-        // so an unset or negative value simply means "no scaling".
+        // `shadowDistanceRenderMul` scales the shadow pass's CULLING distance, not the projection; Umbra's -1 sentinel falls back to a user setting that does not exist here, so unset or negative means no scaling
         float shadowDistanceRenderMul = parseConstFloat(activeText, "shadowDistanceRenderMul", -1.0f);
         float cullDistance = shadowDistanceRenderMul >= 0.0f ? distance * shadowDistanceRenderMul : distance;
         float voxelRadius = voxelDistance > 0.0f ? voxelDistance : distance;
@@ -1133,8 +965,7 @@ public class UmbraRenderingPipeline {
             return new UmbraShadowRenderer(resolution, distance, nearPlane, farPlane, intervalSize, shadowMapFov,
                     sunPathRotation,
                     shadowSource.get(),
-                    // Both resolve through the ProgramSet fallback chain, so a pack shipping only `shadow` hands the
-                    // renderer the very same ProgramSource for all three and it compiles once.
+                    // Both resolve through the ProgramSet fallback chain, so a pack shipping only `shadow` hands the renderer the same ProgramSource for all three and it compiles once
                     pack.getProgramSet().get(ProgramId.ShadowEntities).orElse(shadowSource.get()),
                     pack.getProgramSet().get(ProgramId.ShadowBlock).orElse(shadowSource.get()),
                     shadowSamplerUnits, this.shaderDefines,
@@ -1147,18 +978,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    // appends one shader stage to both directive scans: raw as authored, active with the pack's own
-    // preprocessor conditionals resolved against the macro set that stage compiles with
-    // the const directives must be read from active, because a raw first-textual-match happily reads a
-    // value the pack disabled
-    // Complementary Reimagined declares const int shadowMapResolution = 4096; under
-    // #if SHADOW_QUALITY >= 5 || SHADOW_SMOOTHING < 3 and 2048 under its #else; at its default 3/4 the
-    // 4096 map we allocated left every texelFetch(shadowtex0, ivec2(pos * shadowMapResolution)) in the
-    // pack - its volumetric light shafts, and the scene-aware light-shaft probe - addressing one quadrant
-    // of the map
-    // that quadrant is mostly cleared depth, which reads as "lit", so light shafts shone straight through
-    // terrain; normalized shadow2D lookups are resolution-independent, which is why surface shadows
-    // looked correct
+    // Appends one stage to both scans, raw as authored and active with conditionals resolved; consts must be read from active, since Complementary declares shadowMapResolution 4096 under one branch and 2048 under #else, and the wrong map size sent every texelFetch-based light shaft into one quadrant of cleared depth, shining through terrain
     private void appendDirectiveSource(StringBuilder raw, StringBuilder active, ProgramSource source,
                                        Optional<String> stage) {
         if (!stage.isPresent()) {
@@ -1167,24 +987,14 @@ public class UmbraRenderingPipeline {
         raw.append(stage.get());
         active.append(GlslPreprocessor.resolveConditionals(stage.get(),
                 com.bdmajora.impetus.umbra.gl.shader.ShaderMacros.forProgram(this.shaderDefines, source.getName())));
-        // Stages are resolved individually, so terminate the appended text: an unterminated construct in one file
-        // must not run into the next.
+        // Stages are resolved individually, so terminate the appended text so an unterminated construct cannot run into the next file
         active.append('\n');
     }
 
-    // the GLSL float literal grammar, as permissive as Float#parseFloat: optional sign, the .5 and 1.
-    // forms, and an exponent
-    // the narrower -?[0-9]+(\.[0-9]+)? this replaces silently fell back to the default for a pack
-    // writing const float x = .5; or 1e-3
+    // The GLSL float literal grammar, as permissive as Float#parseFloat (sign, .5 and 1. forms, exponent); the narrower pattern it replaces silently defaulted on `.5` or `1e-3`
     private static final String FLOAT_LITERAL = "([-+]?(?:[0-9]+\\.?[0-9]*|\\.[0-9]+)(?:[eE][-+]?[0-9]+)?)[fF]?";
 
-    // the LAST match of pattern in text, or null
-    // last-wins is Umbra's and OptiFine's rule: Umbra dispatches every directive it finds in file order
-    // and each overwrites the previous (DispatchingDirectiveHolder), OptiFine likewise assigns per line
-    // (Shaders.java:2555)
-    // these scans read text concatenated from several stages and programs, so a pack that declares a
-    // directive more than once must resolve the same way it does under Umbra
-    // first-match-wins was the old behaviour, and is a silent divergence whenever the values differ
+    // The LAST match of pattern in text, or null; last-wins is Umbra's and OptiFine's rule (each directive overwrites the previous in file order), and these scans concatenate several stages, so first-match was a silent divergence
     private static String lastMatch(Pattern pattern, String text, int group) {
         Matcher matcher = pattern.matcher(text);
         String value = null;
@@ -1284,11 +1094,7 @@ public class UmbraRenderingPipeline {
         return value != null ? value : fallback;
     }
 
-    // the pack's const float <name>, or null when it declares none
-    // also accepts const int <name> for the float-valued directives: GLSL would reject the implicit
-    // narrowing, but packs write const float shadowDistance = 120; anyway, and both Umbra
-    // (Float.parseFloat over the token) and OptiFine (isConstFloat on a value it later parses loosely)
-    // tolerate it
+    // The pack's const float <name>, or null; also accepts const int since packs write `const float shadowDistance = 120;` and both Umbra and OptiFine tolerate it
     private static Float parseConstFloat(String text, String name) {
         String value = lastMatch(
                 Pattern.compile("const\\s+(?:float|int)\\s+" + name + "\\s*=\\s*" + FLOAT_LITERAL), text, 1);
@@ -1307,11 +1113,7 @@ public class UmbraRenderingPipeline {
         return programDrawBuffers(pack, ProgramId.Terrain, "gbuffers_terrain");
     }
 
-    // one gbuffer program's DRAWBUFFERS mask, resolved against the macros that program actually compiles with
-    // the scoping matters: a program whose pre-Umbra branch is active (see
-    // ShaderMacros.setPackLegacyPrograms) declares a different mask than its Umbra branch - Sildur's
-    // gbuffers_water is 41 with IS_IRIS and 412 without - and a buffer missing from the attachment set
-    // gets rerouted to colortex0, corrupting it
+    // One gbuffer program's DRAWBUFFERS mask resolved against the macros it actually compiles with; a legacy-branch program declares a different mask (Sildur's gbuffers_water is 41 with IS_IRIS, 412 without), and a buffer missing from the attachment set reroutes to colortex0
     private int[] programDrawBuffers(ShaderPack pack, ProgramId id, String fallbackName) {
         ProgramSource source = pack.getProgramSet().get(id).orElse(null);
         String fragment = source == null ? null : source.getFragmentSource().orElse(null);
@@ -1323,10 +1125,7 @@ public class UmbraRenderingPipeline {
                 com.bdmajora.impetus.umbra.gl.shader.ShaderMacros.forProgram(this.shaderDefines, name)));
     }
 
-    // the union of every gbuffer-stage program's DRAWBUFFERS mask (terrain, water, and the fixed-function
-    // programs), plus colortex0
-    // all of these must be attached to the gbuffer FBOs up front, because a draw-buffer mask naming an
-    // attachment without an image makes the FBO incomplete
+    // The union of every gbuffer-stage program's DRAWBUFFERS mask plus colortex0, all attached up front since a mask naming an attachment without an image makes the FBO incomplete
     private int[] computeGbufferAttachments(ShaderPack pack, int[] terrainDrawBuffers) {
         TreeSet<Integer> attachments = new TreeSet<>();
         attachments.add(0); // colortex0 must exist — it is what final/blit shows
@@ -1349,10 +1148,7 @@ public class UmbraRenderingPipeline {
         return result;
     }
 
-    // a gbuffer FBO world rendering is redirected into: every gbuffer-stage colour target attached -
-    // writing the current "front" side of each under the given flip state - plus the shared depth texture
-    // the draw-buffer mask starts as plain-colour-only; setPhase and the terrain override switch it per
-    // program, OptiFine-style
+    // A gbuffer FBO world rendering is redirected into: every gbuffer-stage target's current "front" side plus the shared depth texture; the mask starts colour-only and setPhase and the terrain override switch it per program, OptiFine-style
     private UmbraFramebuffer createGbufferFramebuffer(BufferFlipper flipper) {
         UmbraFramebuffer framebuffer = new UmbraFramebuffer();
         for (Map.Entry<Integer, Integer> entry : this.gbufferAttachmentPoints.entrySet()) {
@@ -1390,15 +1186,12 @@ public class UmbraRenderingPipeline {
             }
             physicalDrawBuffers[i] = attachmentPoint == null ? 0 : attachmentPoint;
         }
-        // Umbra parity: a gbuffer FBO must hold ONLY the buffers the current program writes, so a program that samples a
-        // colortex it doesn't write (gbuffers_terrain reading gaux4=colortex7 for fog) reads a detached — thus valid —
-        // texture instead of triggering a feedback loop that returns garbage (the ~50 that blew the horizon white).
+        // Umbra parity: a gbuffer FBO holds ONLY the buffers the current program writes, so a program sampling a colortex it does not write (gbuffers_terrain reading gaux4 for fog) reads a detached texture instead of a feedback loop's garbage
         framebuffer.retainColorAttachments(written);
         framebuffer.drawBuffers(physicalDrawBuffers);
     }
 
-    // bakes one frame's ping-pong schedule from the flipper's current state, advancing the flipper as it goes
-    // family order matches Umbra: begin, prepare, (gbuffers), deferred, (translucents), composite, final
+    // Bakes one frame's ping-pong schedule from the flipper's current state, advancing it as it goes; family order matches Umbra: begin, prepare, (gbuffers), deferred, (translucents), composite, final
     private void buildSchedule(ShaderPack pack, BufferFlipper flipper) {
         buildFamily(pack, ProgramArrayId.Setup, TextureStage.SETUP, flipper, this.setupPasses);
         buildFamily(pack, ProgramArrayId.Begin, TextureStage.BEGIN, flipper, this.beginPasses);
@@ -1430,11 +1223,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    // schedules one numbered family in index order
-    // an entry with a vertex+fragment pair becomes a drawing pass; an entry the pack only supplies .csh
-    // files for becomes a compute-only pass (Umbra's ComputeOnlyPass), which is how Photon's
-    // deferred4_a.csh gets to run at all - there is no deferred4_a.fsh
-    // either way the entry's computes are dispatched before the entry's own draw, under the same flip state
+    // Schedules one numbered family in index order: a vertex+fragment pair becomes a drawing pass, a .csh-only entry a compute-only pass (how Photon's deferred4_a.csh runs at all), and computes dispatch before the entry's draw under the same flip state
     private void buildFamily(ShaderPack pack, ProgramArrayId id, TextureStage stage, BufferFlipper flipper,
                              List<FullscreenPass> target) {
         for (int i = 0; i < id.getNumPrograms(); i++) {
@@ -1465,10 +1254,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    // gives a pass the viewport of the buffers it writes
-    // Umbra throws when a pass mixes differently-sized draw buffers; here the mismatch is logged and the
-    // first size wins, because refusing to build the pass would take a whole stage of the chain out
-    // rather than render it at a slightly wrong scale
+    // Gives a pass the viewport of the buffers it writes; Umbra throws on mixed sizes, here the mismatch is logged and the first size wins rather than losing a whole stage of the chain
     private void applyPassViewport(FullscreenPass pass, int[] drawBuffers) {
         for (int buffer : drawBuffers) {
             if (buffer < 0 || buffer >= UmbraRenderTargets.MAX_COLOR_BUFFERS
@@ -1488,10 +1274,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    // applies scale.<program> to a fullscreen pass
-    // separate from applyPassViewport because the two are independent: that one reads the size of the
-    // buffers being written, this one is the pack asking for a smaller rasterised rectangle within
-    // whatever that size turned out to be - a pass can have both
+    // Applies scale.<program>, separate from applyPassViewport since one reads the written buffers' size and the other shrinks the rasterised rectangle within it; a pass can have both
     private void applyPassViewportScale(FullscreenPass pass, ShaderPack pack) {
         float[] scale = pack.getProperties().getViewportScale(pass.name);
         if (scale == null) {
@@ -1511,11 +1294,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    // Umbra's FinalPassRenderer.SwapPass: every buffer the chain leaves odd-flipped ends the frame with
-    // its latest content on the ALT side, so copy alt->main after the final pass
-    // buffers cleared at frame start are skipped, matching Umbra
-    // do not special-case gbuffer attachments here: packs such as Complementary deliberately mark some
-    // gbuffer-written targets (colortex4, for example) as clear=false so their temporal contents survive
+    // Umbra's SwapPass: every buffer the chain leaves odd-flipped has its latest content on ALT, so copy alt->main after final; buffers cleared at frame start are skipped, and gbuffer attachments are not special-cased since Complementary marks some clear=false for temporal contents
     private void buildSwapPasses(BufferFlipper flipper) {
         for (int i = 0; i < UmbraRenderTargets.MAX_COLOR_BUFFERS; i++) {
             if (!flipper.isFlipped(i) || this.renderTargets.get(i) == null || this.colorBufferClears[i]) {
@@ -1572,8 +1351,7 @@ public class UmbraRenderingPipeline {
         return new float[]{0.0f, 0.0f, 0.0f, 0.0f};
     }
 
-    // the custom-texture stage a full-screen program belongs to, from its source name: beginN -> begin,
-    // prepareN -> prepare, deferredN -> deferred, compositeN and final -> composite
+    // The custom-texture stage a fullscreen program belongs to, from its name: beginN -> begin, prepareN -> prepare, deferredN -> deferred, compositeN and final -> composite
     private static TextureStage fullscreenTextureStage(String name) {
         if (name.startsWith(ProgramArrayId.Begin.getBaseName())) {
             return TextureStage.BEGIN;
@@ -1621,8 +1399,7 @@ public class UmbraRenderingPipeline {
         return builder.append(']').toString();
     }
 
-    // compiles a fullscreen program and its uniforms once, caching it by source name
-    // returns null if the program failed to compile, cached as absent so we do not retry
+    // Compiles a fullscreen program and its uniforms once, cached by source name; null if it failed, cached as absent so we do not retry
     private UmbraProgram cachedProgram(ProgramSource source) {
         String name = source.getName();
         if (this.compiledPrograms.containsKey(name)) {
@@ -1708,11 +1485,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    // the colortexNMipmapEnabled set for one pass
-    // per program, like Umbra's ProgramDirectives, and read from the fragment stage with the pack's
-    // conditionals resolved - see activeDirectiveStages for why raw source is not safe here (Body Camera
-    // declares colortex0MipmapEnabled true and false in the two branches of one #if, and the dead branch
-    // was winning, which broke its auto-exposure metering)
+    // The colortexNMipmapEnabled set for one pass, per program like Umbra's ProgramDirectives, read from the fragment stage with conditionals resolved (Body Camera declares it true and false in the two branches of one #if and the dead branch broke its auto-exposure)
     private BitSet parseMipmappedBuffers(ProgramSource source) {
         BitSet mipmappedBuffers = new BitSet(UmbraRenderTargets.MAX_COLOR_BUFFERS);
         Optional<String> fragmentSource = source.getFragmentSource();
@@ -1761,37 +1534,27 @@ public class UmbraRenderingPipeline {
             LOGGER.warn("[Umbra] Program '{}' is missing a vertex or fragment stage; skipping", source.getName());
             return null;
         }
-        // Raw texture.<stage>.<sampler> directives redirect the identifier to its minted customtexN name, but only
-        // where the declared sampler type matches the directive's target. Must precede everything else so the later
-        // transforms and the DRAWBUFFERS parse all see the final identifier set.
+        // Raw texture.<stage>.<sampler> directives redirect the identifier to its minted customtexN name where the sampler type matches; must precede everything else so later transforms and the DRAWBUFFERS parse see the final identifiers
         vshRaw = CustomTextureTransformer.transform(source.getName(), vshRaw, stage);
         fshRaw = CustomTextureTransformer.transform(source.getName(), fshRaw, stage);
-        // Modern (1.17+) attribute/matrix names -> fixed-function built-ins. The full-screen quad is drawn with the
-        // ortho projection pushed in runPass, so gl_ProjectionMatrix is exactly the (0,1)->(-1,1) matrix Umbra
-        // substitutes for `projectionMatrix` in its own composite core transformer.
+        // Modern (1.17+) attribute/matrix names -> fixed-function built-ins; the quad is drawn under runPass's ortho, so gl_ProjectionMatrix is exactly the (0,1)->(-1,1) matrix Umbra substitutes for `projectionMatrix`
         vshRaw = VanillaNameTransformer.transform(vshRaw);
         fshRaw = VanillaNameTransformer.transform(fshRaw);
 
         GlShader vertex = null;
         GlShader fragment = null;
         try {
-            // Modern packs (#version 130+ single-source, e.g. Complementary) use the compatibility stage normalizer;
-            // the GLSL-120 Chocapic family (LIGHT) keeps the full 330-core rewrite. Detect off the fragment source.
+            // Modern single-source packs (Complementary) use the compatibility stage normalizer, the GLSL-120 Chocapic family (LIGHT) keeps the full 330-core rewrite; detected off the fragment source
             boolean modern = ModernPackTransformer.isModernSource(fshRaw);
             this.modernPack |= modern;
-            // Scoped per pass, same as the terrain path: a pass listed in `impetus.umbra.legacyPrograms` compiles
-            // without IS_IRIS, and the one map drives both the DRAWBUFFERS parse and the injected prologue.
+            // Scoped per pass like the terrain path: a pass in `impetus.umbra.legacyPrograms` compiles without IS_IRIS, and the one map drives both the DRAWBUFFERS parse and the injected prologue
             Map<String, String> macros = com.bdmajora.impetus.umbra.gl.shader.ShaderMacros.forProgram(
                     this.shaderDefines, source.getName());
             int[] drawBuffers = sanitizeCompositeDrawBuffers(source.getName(), DrawBuffers.parseActive(fshRaw, macros));
             String vsh;
             String fsh;
             if (modern) {
-                // Modern sources rely on the driver preprocessor for their #if trees; the MC_*/IRIS_FEATURE_* macro
-                // environment has to be present for those gates (colored lighting checks IRIS_FEATURE_CUSTOM_IMAGES).
-                // The quad is drawn from generic vertex attributes, so gl_MultiTexCoord0 has to be fed from a real
-                // one rather than relying on NVIDIA's generic-to-conventional aliasing. See
-                // ModernPackTransformer#bindFullscreenTexCoord.
+                // Modern sources rely on the driver preprocessor for their #if trees, so the MC_*/IRIS_FEATURE_* environment must be present; the quad uses generic attributes, so gl_MultiTexCoord0 is fed from a real one rather than NVIDIA's aliasing (see ModernPackTransformer#bindFullscreenTexCoord)
                 vsh = ModernPackTransformer.bindFullscreenTexCoord(
                         ModernPackTransformer.transform(stabilizeShaderSource(source.getName(),
                                 com.bdmajora.impetus.umbra.gl.shader.ShaderMacros.injectDefines(vshRaw, macros))));
@@ -1800,22 +1563,7 @@ public class UmbraRenderingPipeline {
                                 com.bdmajora.impetus.umbra.gl.shader.ShaderMacros.injectDefines(fshRaw, macros))),
                         drawBuffers);
             } else {
-                // The macro environment has to be injected here too, not just on the modern branch. Without it a
-                // legacy pack's whole post chain compiles with MC_VERSION, IRIS_VERSION, MC_RENDER_QUALITY,
-                // MC_RENDER_STAGE_*, MC_OLD_LIGHTING and the IRIS_FEATURE_* flags all absent — while its gbuffer
-                // programs, which go through ShaderProgramCompiler, get every one of them. The two halves of the
-                // same pack then disagree about what version of Minecraft they are running on.
-                //
-                // It fails both ways round. Silently: an undefined name is 0 in a preprocessor expression, so
-                // `#if MC_VERSION < 10800` is TRUE and every legacy pack took its pre-1.8 path through composite.
-                // Loudly: a macro used as a value rather than a gate is a hard compile error, which is what killed
-                // Pastel's final pass — `float mult = MC_RENDER_QUALITY * 0.0625;` in program/final.glsl, reported
-                // as `final.fsh: 0(453): error C1503: undefined variable "MC_RENDER_QUALITY"`, dropping the pass to
-                // a bare colortex0 blit.
-                //
-                // Injecting before the transform (as the modern branch does) is what makes this land correctly:
-                // FullscreenTransformer.strip() drops the pack's own `#version` line, so the defines come out at the
-                // top of the body and end up immediately after the generated `#version 330 core`.
+                // The macro environment must be injected on the legacy branch too, or a pack's post chain disagrees with its gbuffer programs about MC_VERSION etc: `#if MC_VERSION < 10800` silently takes the pre-1.8 path, and Pastel's `MC_RENDER_QUALITY * 0.0625` failed to compile; injecting before the transform lands the defines right after the generated `#version 330 core`
                 vsh = FullscreenTransformer.transformVertexShader(foldUncompilableConditionals(source.getName(),
                         com.bdmajora.impetus.umbra.gl.shader.ShaderMacros.injectDefines(vshRaw, macros)));
                 fsh = FullscreenTransformer.transformFragmentShader(foldUncompilableConditionals(source.getName(),
@@ -1829,13 +1577,11 @@ public class UmbraRenderingPipeline {
                     .attach(fragment)
                     .bindAttributeLocation(FullscreenQuadRenderer.POSITION_SLOT, "a_Position")
                     .bindAttributeLocation(FullscreenQuadRenderer.TEXCOORD_SLOT, "a_TexCoord")
-                    // Modern (compatibility-profile) sources read the quad's texcoord through this instead, since
-                    // gl_MultiTexCoord0 cannot be fed portably via generic attribute 8.
+                    // Modern (compatibility-profile) sources read the quad's texcoord through this, since gl_MultiTexCoord0 cannot be fed portably via generic attribute 8
                     .bindAttributeLocation(FullscreenQuadRenderer.TEXCOORD_SLOT,
                             ModernPackTransformer.FULLSCREEN_TEXCOORD_ATTRIBUTE);
             if (!modern) {
-                // The generated 330-core path writes to an explicit out array whose indices are the dense
-                // draw-buffer slots, matching Umbra's packed framebuffer attachments.
+                // The generated 330-core path writes an explicit out array whose indices are the dense draw-buffer slots, matching Umbra's packed attachments
                 builder.bindFragmentDataLocation(0, "iris_FragData");
             }
             GlProgram program = builder.link();
@@ -1852,10 +1598,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    // points every sampler uniform the program declares at its fixed texture unit (OptiFine's
-    // setProgramUniform1i), with the pack's custom-texture overrides for the program's stage applied
-    // a colortex override is skipped once an earlier pass in the chain has written (flipped) that buffer,
-    // matching Umbra's deactivation rule
+    // Points every sampler uniform the program declares at its fixed unit (OptiFine's setProgramUniform1i) with the stage's custom-texture overrides; a colortex override is skipped once an earlier pass has flipped that buffer, matching Umbra
     private void assignSamplerUnits(GlProgram program, TextureStage stage) {
         program.bind();
         assignSamplerUnits(program.getGlId(), samplerUnitsForStage(stage), mergedStageOverrides(stage),
@@ -1863,10 +1606,7 @@ public class UmbraRenderingPipeline {
         program.unbind();
     }
 
-    // assigns the standard sampler-unit mapping on the *currently bound* program (raw GL id), with the
-    // active pipeline's gbuffers/shadow-stage custom-texture overrides
-    // used by the Impetus terrain and shadow overrides, whose program objects are Impetus's rather than
-    // ours - both belong to the gbuffers texture stage
+    // Assigns the standard sampler-unit mapping on the *currently bound* raw GL program with the active pipeline's gbuffers/shadow-stage overrides; used by the Impetus terrain and shadow overrides, whose programs are Impetus's
     public static void assignSamplerUnitsToBoundProgram(int programId) {
         assignSamplerUnits(programId, activeGbufferSamplerUnits, activeGbufferSamplerOverrides,
                 java.util.Collections.<Integer>emptySet());
@@ -1883,8 +1623,7 @@ public class UmbraRenderingPipeline {
             }
             int unit = entry.getValue();
             if (waterShadowEnabled && "shadow".equals(entry.getKey())) {
-                // UmbraSamplers.addShadowSamplers parity: when watershadow is present, the legacy shadow alias reads
-                // the pre-translucent depth texture (shadowtex1), while watershadow reads shadowtex0.
+                // UmbraSamplers.addShadowSamplers parity: with watershadow present, the legacy shadow alias reads the pre-translucent depth (shadowtex1) while watershadow reads shadowtex0
                 unit = isGbufferSamplerLayout(samplerUnits) ? GBUFFER_SHADOW_TEX_1_UNIT : SHADOW_TEX_1_UNIT;
             }
             CustomTextureManager.Override override = overrides.get(entry.getKey());
@@ -1935,9 +1674,7 @@ public class UmbraRenderingPipeline {
         return stage == TextureStage.GBUFFERS_AND_SHADOW ? GBUFFER_SAMPLER_UNITS : FULLSCREEN_SAMPLER_UNITS;
     }
 
-    // the stage's custom-texture overrides plus the (stage-independent) custom-image uniform assignments,
-    // in the Override form assignSamplerUnits consumes
-    // image entries never deactivate (colorTarget -1)
+    // The stage's custom-texture overrides plus the stage-independent custom-image uniform assignments, in the Override form assignSamplerUnits consumes; image entries never deactivate (colorTarget -1)
     private Map<String, CustomTextureManager.Override> mergedStageOverrides(TextureStage stage) {
         Map<String, CustomTextureManager.Override> merged =
                 new LinkedHashMap<>(this.customTextureManager.getOverrides(stage));
@@ -1986,9 +1723,7 @@ public class UmbraRenderingPipeline {
         return flips.get(index) ? target.getMainTexture() : target.getAltTexture();
     }
 
-    // gbuffer-program draw buffers: shader packs address logical colortex indices, while the shared
-    // gbuffer FBO maps those logical targets onto dense physical attachment points
-    // called by the terrain override and the phase compiler
+    // Gbuffer-program draw buffers: packs address logical colortex indices, the shared gbuffer FBO maps them onto dense attachments; called by the terrain override and the phase compiler
     public static int[] sanitizeDrawBuffers(String name, int[] drawBuffers) {
         return sanitizeDrawBuffers(name, drawBuffers, GBUFFER_ATTACHMENT_LIMIT);
     }
@@ -2000,8 +1735,7 @@ public class UmbraRenderingPipeline {
 
     // Drops out-of-range targets, logging each with the program name
     private static int[] sanitizeDrawBuffers(String name, int[] drawBuffers, int maxExclusive) {
-        // An out-of-range index is normally just an inactive #ifdef path in the pack, so it is dropped silently
-        // rather than reported; the consumer stays because sanitize requires one
+        // An out-of-range index is normally an inactive #ifdef path in the pack, so it is dropped silently; the consumer stays because sanitize requires one
         return DrawBuffers.sanitize(drawBuffers, maxExclusive, buffer -> { });
     }
 
@@ -2024,9 +1758,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    // renderWorld HEAD: redirect the frame into the gbuffer
-    // vanilla's own fog-coloured clear inside renderWorldPass then clears our attachments, and every
-    // world draw lands in the render targets
+    // renderWorld HEAD: redirect the frame into the gbuffer, so vanilla's fog-coloured clear clears our attachments and every world draw lands in the render targets
     public void beginWorldRendering(float partialTicks) {
         if (this.destroyed) {
             return;
@@ -2061,9 +1793,7 @@ public class UmbraRenderingPipeline {
         CommonUniforms.beginFrame();
         com.bdmajora.impetus.umbra.uniforms.custom.ActiveCustomUniforms.update();
 
-        // noisetex and the stub shadow maps ride along for the whole frame (gbuffer + fullscreen stages) on their
-        // fixed units; vanilla never binds units above 1, and GlStateManager's 8-slot cache can't address them.
-        // A pack-supplied texture.noise replaces the generated noise (Umbra CustomTextureManager parity).
+        // noisetex and the stub shadow maps ride along the whole frame on fixed units vanilla never binds and GlStateManager cannot address; a pack-supplied texture.noise replaces the generated noise (Umbra parity)
         bindNoiseTexture();
         bindOverlayTexture();
         GlTextureUnits.selectScratch(SHADOW_TEX_0_UNIT);
@@ -2078,16 +1808,14 @@ public class UmbraRenderingPipeline {
 
         this.activeGbufferSamplerFlips = this.preTranslucentGbufferSamplerFlips;
         bindGbufferPbrSamplers();
-        // colortex4..7 (gaux1..4) must be readable by gbuffer programs — MakeUp's terrain fog samples gaux4
-        // (colortex7). Bind before world geometry renders; without it distant terrain fogs toward garbage and blows out.
+        // colortex4..7 (gaux1..4) must be readable by gbuffer programs (MakeUp's terrain fog samples gaux4); bind before world geometry or distant terrain fogs toward garbage
         bindGbufferColorSamplers();
 
         UmbraFramebuffer gbuffer = this.gbufferFramebuffer;
         this.currentGbuffer = gbuffer;
         runClearPasses(this.fullClearRequired ? this.fullClearPasses : this.clearPasses);
         this.fullClearRequired = false;
-        // Umbra beginLevelRendering: the setup computes run once (on the first frame the pipeline is used), then the
-        // `begin` family runs every frame on the freshly cleared targets, before any geometry.
+        // Umbra beginLevelRendering: the setup computes run once on the first frame, then the `begin` family runs every frame on the freshly cleared targets before any geometry
         if (!this.setupDispatched) {
             this.setupDispatched = true;
             if (!this.setupPasses.isEmpty()) {
@@ -2111,28 +1839,18 @@ public class UmbraRenderingPipeline {
         this.worldRenderingActive = true;
     }
 
-    // sky phases render at the far plane: packs like LIGHT write BLACK from gbuffers_skybasic and repaint
-    // the entire sky procedurally in composite, which only works if the vanilla sky dome - real geometry
-    // ~16 blocks above the camera - never reaches depthtex0, because otherwise composite classifies the
-    // dome as terrain and passes the black through
-    // under OptiFine the sky never lands in the depth buffer; emulate that with glDepthRange(1,1), which
-    // is immune to vanilla's own depthMask toggling inside renderSky
+    // Sky phases render at the far plane: packs like LIGHT write BLACK from gbuffers_skybasic and repaint the sky in composite, which only works if the vanilla dome (real geometry ~16 blocks up) never reaches depthtex0; glDepthRange(1,1) emulates OptiFine and survives vanilla's depthMask toggling
     private boolean skyAtFarPlane;
 
     // The alphaTest.<program> override currently forced on the GL state, so it can be undone.
     private com.bdmajora.impetus.umbra.gl.blending.ProgramAlphaTest activeAlphaTest;
 
-    // true when the pack supplies a program for this phase, so a draw made in it lands in that program's
-    // DRAWBUFFERS rather than in vanilla's fixed-function output
-    // callers that have to suppress a vanilla GL state - blending into a packed gbuffer, say - use this
-    // to leave the fixed-function path untouched
+    // True when the pack supplies a program for this phase, so a draw lands in its DRAWBUFFERS rather than fixed-function output; callers suppressing vanilla GL state (blending into a packed gbuffer) use this to leave the fixed-function path alone
     public boolean hasGbufferProgram(ProgramId phase) {
         return this.worldRenderingActive && this.gbufferPrograms != null && this.gbufferPrograms.get(phase) != null;
     }
 
-    // whether the pack ships this phase's program itself, as opposed to the phase merely resolving
-    // through OptiFine's fallback chain onto some other program that was never written with this
-    // geometry in mind
+    // Whether the pack ships this phase's program itself, rather than resolving through OptiFine's fallback chain onto a program never written for this geometry
     public boolean hasDirectGbufferProgram(ProgramId phase) {
         return this.worldRenderingActive && this.gbufferPrograms != null && this.gbufferPrograms.hasDirect(phase);
     }
@@ -2143,11 +1861,7 @@ public class UmbraRenderingPipeline {
                 && this.currentGbuffer == this.translucentGbufferFramebuffer;
     }
 
-    // Umbra's chain is gbuffers_entities_translucent -> gbuffers_entities -> gbuffers_textured_lit
-    // falling straight through to TexturedLit skipped the middle link, so a pack shipping
-    // gbuffers_entities but no _translucent variant (most of them) drew translucent entities with the
-    // generic textured program and lost whatever the entity program does with entityColor, normals and
-    // diffuse lighting
+    // Umbra's chain is gbuffers_entities_translucent -> gbuffers_entities -> gbuffers_textured_lit; skipping the middle link drew translucent entities with the generic program for most packs and lost entityColor, normals and diffuse lighting
     public ProgramId getTranslucentEntityPhase() {
         return hasGbufferProgram(ProgramId.EntitiesTrans) ? ProgramId.EntitiesTrans : ProgramId.Entities;
     }
@@ -2157,35 +1871,17 @@ public class UmbraRenderingPipeline {
         return this.currentPhase;
     }
 
-    // whether the camera pass is drawing right now
-    // narrower than isWorldRenderingActive() and the correct test for anything that wants to observe or
-    // affect the gbuffer: the shadow pass renders entities and block entities through the SAME vanilla
-    // renderers as the camera pass, so worldRenderingActive alone is true for both
-    // it also runs first in the frame, so a budgeted hook gated only on worldRenderingActive is spent
-    // entirely on shadow draws and never observes the camera pass at all - measured: 48 of 48 probe
-    // samples came back shadow=true
+    // Whether the camera pass is drawing right now; narrower than isWorldRenderingActive(), since the shadow pass renders entities through the SAME vanilla renderers and runs first (48 of 48 probe samples came back shadow=true)
     public boolean isCameraPassActive() {
         return this.worldRenderingActive && !UmbraShadowRenderer.isShadowPass();
     }
 
-    // switches the active gbuffer program for a fixed-function world-render phase - sky, entities,
-    // particles, weather, clouds, hand - anchored on vanilla's profiler sections
-    // binds the pack's program for that phase and points the gbuffer's draw-buffer mask at the program's
-    // DRAWBUFFERS; with no pack program the phase renders plain fixed-function into colortex0 only
-    // also (re)binds the gbuffer, which heals the redirection if something - the entity-outline
-    // framebuffer, say - rebound vanilla's framebuffer mid-frame
+    // Switches the active gbuffer program for a fixed-function phase (sky, entities, particles, weather, clouds, hand) anchored on vanilla's profiler sections, pointing the draw-buffer mask at its DRAWBUFFERS (colortex0 only with no program); also rebinds the gbuffer to heal any mid-frame framebuffer rebind
     public void setPhase(ProgramId phase) {
         setPhase(phase, defaultRenderStage(phase));
     }
 
-    // Umbra's WorldRenderingPhase ordinals for the phases this pipeline can identify, published as the
-    // renderStage uniform
-    // Umbra sets one for every draw; before this, only the hand and terrain paths did, so every sky,
-    // cloud, weather, entity and outline draw reported MC_RENDER_STAGE_NONE
-    // that is not a cosmetic gap: Clarity's gbuffers_skybasic draws stars only under
-    // renderStage == MC_RENDER_STAGE_STARS, so its star field could never appear - the star quads were
-    // painted with the plain sky gradient instead
-    // only the unambiguous phases are mapped; anything else reports NONE rather than guess at the pack
+    // Umbra's WorldRenderingPhase ordinals for identifiable phases, published as renderStage; before this every sky/cloud/weather/entity draw reported NONE and Clarity's stars (gated on MC_RENDER_STAGE_STARS) never appeared. Ambiguous phases still report NONE
     private static int defaultRenderStage(ProgramId phase) {
         if (phase == null) {
             return 0; // MC_RENDER_STAGE_NONE
@@ -2204,23 +1900,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    // mirrors OptiFine's Shaders.enableLightmap()/disableLightmap(), which swap program 2
-    // (gbuffers_textured) and program 3 (gbuffers_textured_lit) whenever vanilla toggles the lightmap
-    // texture unit:
-    //   enableLightmap()  { lightmapEnabled = true;  if (activeProgram == 2) useProgram(3); }
-    //   disableLightmap() { lightmapEnabled = false; if (activeProgram == 3) useProgram(2); }
-    // without this, geometry drawn while unit 1 is disabled still runs gbuffers_textured_lit, whose
-    // texture2D(lightmap, lmcoord) then samples a disabled unit and reads white - every such surface
-    // renders fullbright
-    // it bites items hardest because DefaultVertexFormats.ITEM carries no lightmap element at all, so
-    // item quads inherit whatever gl_MultiTexCoord1 and unit-1 state the last caller left behind
-    // (RenderItemFrame#renderItem goes straight to RenderItem under
-    // RenderHelper.enableStandardItemLighting(), which does not touch the lightmap unit)
-    // servers that build scenery out of custom item models in item frames therefore light up while
-    // ordinary terrain stays correct
-    // only the Textured/TexturedLit pair moves, exactly as in OptiFine - a phase like Entities or Terrain
-    // is left alone, because those programs are selected by the geometry being drawn rather than by the
-    // lightmap toggle
+    // Mirrors OptiFine's enableLightmap()/disableLightmap(), which swap gbuffers_textured and gbuffers_textured_lit when vanilla toggles unit 1; otherwise texture2D(lightmap) on a disabled unit reads white and items (no lightmap element in ITEM format, RenderItemFrame never touches the unit) render fullbright. Only the Textured/TexturedLit pair moves, as in OptiFine
     public void setLightmapEnabled(boolean enabled) {
         if (!this.worldRenderingActive) {
             return;
@@ -2234,37 +1914,19 @@ public class UmbraRenderingPipeline {
         if (target == null) {
             return;
         }
-        // Carry the current render stage across rather than letting setPhase(ProgramId) recompute the default.
-        // OptiFine's useProgram() only swaps the program and leaves its stage tracking alone, and this pair maps to
-        // MC_RENDER_STAGE_NONE by default — so recomputing would silently discard a stage a caller set explicitly
-        // (see setPhase(ProgramId, int): gbuffers_textured_lit carries both particles and translucent entities, whose
-        // stage can only come from the call site).
+        // Carry the current render stage across rather than recompute the default: OptiFine's useProgram() leaves stage tracking alone, and gbuffers_textured_lit's stage (particles vs translucent entities) can only come from the call site
         setPhase(target, CapturedRenderingState.INSTANCE.getRenderStage());
     }
 
     // Overload for callers that know a finer phase than ProgramId can express (sky basic covers sky/stars/void).
     public void setPhase(ProgramId phase, int renderStage) {
-        // The shadow pass owns the GL state for its own framebuffer: UmbraShadowRenderer binds the `shadow` program,
-        // its own draw buffers and its own blend state, and never calls this method. Letting a gbuffer phase be
-        // selected while it runs binds a gbuffer program over the shadow program and re-points the draw buffers at
-        // the gbuffer attachments, corrupting the shadow map for the rest of the frame — and the shadow map feeds
-        // every lit surface, so the damage is world-wide rather than local to whatever was being drawn.
-        //
-        // This is reachable because the shadow pass renders entities and block entities through the SAME vanilla
-        // renderers as the camera pass (UmbraShadowRenderer#renderEntityShadows -> RenderManager#renderEntityStatic),
-        // so any per-object hook on those paths fires in both. Measured: a per-entity setPhase on that path shredded
-        // water and terrain shading. Guarding here rather than at each call site means one missed caller cannot do
-        // it again — which is exactly why the neighbouring beginEyes/endEyes/armor-glint methods all carry the same
-        // isShadowPass() test.
+        // The shadow pass owns its GL state (the `shadow` program, its draw buffers, its blend) and never calls this; selecting a gbuffer phase during it re-points the draw buffers at the gbuffer and corrupts the shadow map world-wide. Reachable since it renders entities through the same vanilla renderers (measured: per-entity setPhase shredded water), so the guard lives here and in beginEyes/endEyes/armor glint
         if (!this.worldRenderingActive || UmbraShadowRenderer.isShadowPass()) {
             return;
         }
         this.currentPhase = phase;
         CapturedRenderingState.INSTANCE.setRenderStage(renderStage);
-        // Every phase this switches to is vanilla fixed-function geometry (sky, entities, particles, block damage,
-        // weather), submitted through client arrays that alias generic attribute slots. See
-        // resetVanillaVertexArrayState: a leftover generic array wins over the aliased client array and flattens that
-        // attribute to a constant.
+        // Every phase this switches to is fixed-function geometry submitted through client arrays aliasing generic slots; see resetVanillaVertexArrayState, a leftover generic array wins and flattens the attribute
         resetVanillaVertexArrayState();
         boolean sky = phase == ProgramId.SkyBasic || phase == ProgramId.SkyTextured;
         if (sky != this.skyAtFarPlane) {
@@ -2284,15 +1946,12 @@ public class UmbraRenderingPipeline {
             entry.getProgram().bind();
             bindShaderPackResources();
             int[] drawBuffers = DrawBuffers.sanitize(entry.getDrawBuffers(), GBUFFER_ATTACHMENT_LIMIT);
-            // Re-assert colortex4..7 read bindings: sky/entity/hand phases sample gaux buffers too, and the prior
-            // phase's fixed-function draws may have disturbed these units. If this program also writes a samplable
-            // gbuffer target, bind the sampler to a copied scratch side so it never reads the active render target.
+            // Re-assert colortex4..7 read bindings, since sky/entity/hand phases sample gaux buffers and the prior phase may have disturbed the units; if this program also writes a samplable target, bind a copied scratch side so it never reads the active render target
             bindGbufferColorSamplers(prepareGbufferFeedbackSamplers(drawBuffers));
             entry.getUniforms().update();
             drawGbufferBuffers(this.currentGbuffer, drawBuffers);
             entry.getBlendState().apply(drawBuffers);
-            // alphaTest.<program>: packs that do their own discard turn the fixed-function test off entirely
-            // (Photon), others tighten it to GREATER 0.0001 (Complementary). Held until the next setPhase.
+            // alphaTest.<program>: packs doing their own discard turn the fixed-function test off (Photon), others tighten it to GREATER 0.0001 (Complementary); held until the next setPhase
             if (entry.getAlphaTest().hasDirectives()) {
                 entry.getAlphaTest().apply();
                 this.activeAlphaTest = entry.getAlphaTest();
@@ -2303,36 +1962,7 @@ public class UmbraRenderingPipeline {
     // GL_CURRENT_PROGRAM, spelled as a literal because the generated GL constant classes do not carry it
     private static final int GL_CURRENT_PROGRAM = 0x8B8D;
 
-    // re-uploads the current phase's DYNAMIC uniforms without repeating the rest of setPhase's state work
-    // a phase is selected once and then covers a whole batch of draws - "entities" is set once for every
-    // entity in the frame - so anything that varies per draw inside a batch would otherwise never reach
-    // the GPU after the phase began
-    // entityColor is one case that needs it: the hurt flash belongs to one entity, not to the batch
-    // entityId, blockEntityId and currentRenderedItemId are the others, and they are the reason this is
-    // called from the three id mixins rather than only from the hurt-flash one
-    // Umbra never faces this: EntityPatcher#patchEntityId *deletes* the
-    // uniform int entityId/blockEntityId/currentRenderedItemId declarations, rewrites every reference to
-    // iris_entityInfo.x/.y/.z, and feeds that from the per-vertex attribute in ivec3 iris_Entity
-    // per-vertex data cannot latch, because each vertex carries its own ids (the ONCE/-1 uniforms Umbra
-    // keeps in CommonUniforms are warning-suppression dummies for programs where the attribute is not
-    // wired up, not the real values)
-    // 1.12's fixed-function vertex formats have nowhere to put an extra integer attribute, so Impetus
-    // keeps them as genuine uniforms, and uploading them per object is what restores the per-draw
-    // semantics the attribute gives Umbra for free
-    // left un-refreshed, one id latches for a whole batch: whichever object happened to be current when
-    // the phase was entered decides the material for every draw after it
-    // packs dispatch on exactly these values - Complementary's gbuffers_entities opens
-    // int mat = currentRenderedItemId; - so a latched emissive id makes the entire batch emissive, and
-    // since draw order tracks the camera, which id wins changes with the heading
-    // cheap enough to call per object only because it goes through ProgramUniforms#updatePerObject(),
-    // which touches just the ids and entityColor
-    // it must NOT be widened back to the whole DYNAMIC set: MatrixUniform and Matrix3Uniform have no
-    // dirty-check at all, and five of the six DYNAMIC matrix suppliers each issue a
-    // glGetFloat(GL_MODELVIEW_MATRIX) pipeline query plus a direct buffer allocation - at two calls per
-    // object that is tens of thousands of stalling queries a frame
-    // unlike setPhase, this touches nothing but uniforms - no vertex arrays, draw buffers, blend or alpha
-    // test - which is what makes it safe on a per-object hook that setPhase was not
-    // no-op in the shadow pass, which binds its own entity program that this phase tracking does not describe
+    // Re-uploads only the current phase's per-object uniforms (entityColor, entityId, blockEntityId, currentRenderedItemId) between draws of a batch; Umbra gets per-draw ids from a vertex attribute 1.12's formats cannot carry, and a latched id makes a whole batch emissive (Complementary dispatches on currentRenderedItemId). Goes through updatePerObject() only, since the DYNAMIC matrix uniforms each stall on glGetFloat; no-op in the shadow pass
     public void refreshDynamicUniforms() {
         if (!this.worldRenderingActive || UmbraShadowRenderer.isShadowPass() || this.currentPhase == null
                 || this.gbufferPrograms == null) {
@@ -2342,34 +1972,14 @@ public class UmbraRenderingPipeline {
         if (entry == null) {
             return;
         }
-        // glUniform* writes into whatever program is bound RIGHT NOW, and uniform locations are per-program. The
-        // phase field only records the last setPhase, while the per-object id hooks fire from vanilla renderers that
-        // have no idea which program that was — a held item reaches RenderItem#renderItem underneath the hand pass,
-        // not the entity phase. Pushing the recorded phase's Uniform objects while a different program is bound would
-        // write at locations belonging to the other program and silently corrupt whatever those slots mean there.
-        // Ask GL what is actually bound rather than trusting the bookkeeping to have been kept in step.
+        // glUniform* writes into whatever program is bound RIGHT NOW with per-program locations, and the per-object hooks fire from vanilla renderers unaware of the phase (a held item reaches RenderItem under the hand pass); ask GL rather than trust the bookkeeping
         if (LWJGL.glGetInteger(GL_CURRENT_PROGRAM) != entry.getProgram().getProgram().getGlId()) {
             return;
         }
         entry.getUniforms().updatePerObject();
     }
 
-    // the "eyes" overlay layers - spider, enderman and ender dragon - which is what gbuffers_spidereyes
-    // is for
-    // OptiFine brackets the same three draws with Shaders.beginSpiderEyes()/endSpiderEyes(); Umbra routes
-    // them through ShaderKey.ENTITIES_EYES
-    // the lightmap coordinate has to be rewritten here: 1.12 signals "full bright" for these layers by
-    // pushing the raw sentinel OpenGlHelper.setLightmapTextureCoords(unit, 61680, 0), which only works
-    // because GL_CLAMP pins the lightmap *texture lookup* to the brightest texel
-    // a shader consumes the same value arithmetically - gl_TextureMatrix[1] * gl_MultiTexCoord1 is
-    // (61680 + 8) / 256 = 240.97, i.e. 256x outside the [0,1] range every pack assumes
-    // packs raise that coordinate to a power (Mellow uses pow(lm.x, 2.4), so ~6e5), which overflows an
-    // R11F_G11F_B10F colortex and leaves an Inf/NaN pixel wrapped in an enormous bloom halo
-    // modern Minecraft has no such sentinel - its full-bright packed light is 0xF000F0 - which is why
-    // Umbra's VanillaTransformer substitutes a literal vec4(240.0, 240.0, 0.0, 1.0) for
-    // gl_MultiTexCoord1 on every FULLBRIGHT draw; do the same, from the GL side
-    // no-op in the shadow pass: Umbra maps the eyes render type to the shadow entity program there, not
-    // to gbuffers_spidereyes
+    // The "eyes" overlay layers (spider, enderman, dragon) for gbuffers_spidereyes, bracketed like OptiFine's beginSpiderEyes/endSpiderEyes; 1.12 signals full-bright with the raw 61680 sentinel, which arithmetically is 240.97 and overflows HDR targets into a bloom halo, so substitute vec4(240, 240, 0, 1) like Umbra's VanillaTransformer. No-op in the shadow pass
     public void beginEyes() {
         if (!this.worldRenderingActive || UmbraShadowRenderer.isShadowPass()) {
             return;
@@ -2380,11 +1990,7 @@ public class UmbraRenderingPipeline {
         setPhase(ProgramId.SpiderEyes);
     }
 
-    // back to the entity program, as OptiFine's endSpiderEyes does - except that the eyes layers also run
-    // in the post-translucent entity batch, where the phase is gbuffers_entities_translucent
-    // restore what was actually bound instead of assuming, so a pack with a dedicated translucent-entity
-    // program keeps it for the rest of the batch
-    // vanilla puts the real lightmap coordinate back itself on the line after the model draw
+    // Back to the entity program like OptiFine's endSpiderEyes, restoring what was actually bound since the eyes layers also run in the translucent-entity batch; vanilla restores the lightmap coordinate itself
     public void endEyes() {
         if (!this.worldRenderingActive || UmbraShadowRenderer.isShadowPass()) {
             return;
@@ -2392,14 +1998,7 @@ public class UmbraRenderingPipeline {
         setPhase(this.phaseBeforeEyes, this.phaseBeforeEyesStage);
     }
 
-    // routes the enchantment glint through gbuffers_armor_glint, matching OptiFine's
-    // ShadersRender.renderEnchantedGlintBegin (Shaders.useProgram(17))
-    // without this the glint inherits whichever program is current - gbuffers_entities for armour, the
-    // hand program for a held item - so a pack that ships gbuffers_armor_glint to give the glint its own
-    // additive treatment never gets it, and the glint is shaded as if it were the entity's own surface
-    // two gates, both of which fall out of the existing state rather than needing the OptiFine-only
-    // renderItemGui flag: worldRenderingActive is false while the GUI draws inventory items, and the
-    // shadow pass maps every entity draw to the shadow program (OptiFine likewise skips the glint there)
+    // Routes the enchantment glint through gbuffers_armor_glint like OptiFine's renderEnchantedGlintBegin, otherwise it inherits the entity or hand program and loses the pack's additive treatment; gated on worldRenderingActive (skips GUI items) and the shadow pass, without needing OptiFine's renderItemGui flag
     public void beginArmorGlint() {
         if (!this.worldRenderingActive || UmbraShadowRenderer.isShadowPass()) {
             return;
@@ -2410,10 +2009,7 @@ public class UmbraRenderingPipeline {
         setPhase(ProgramId.ArmorGlint);
     }
 
-    // restores whatever was bound before the glint, the same way endEyes() does: the glint runs inside
-    // both the entity batch and the first-person hand batch, so assuming gbuffers_entities would strand
-    // the hand
-    // OptiFine's renderEnchantedGlintEnd makes the same distinction explicitly
+    // Restores whatever was bound before the glint like endEyes(), since the glint runs in both the entity and first-person hand batches and assuming gbuffers_entities would strand the hand
     public void endArmorGlint() {
         if (!this.armorGlintActive) {
             return;
@@ -2431,26 +2027,14 @@ public class UmbraRenderingPipeline {
     // Guards #endArmorGlint() so a begin that bailed out (GUI, shadow pass) cannot restore a stale phase.
     private boolean armorGlintActive;
 
-    // port of OptiFine's Shaders.drawHorizon (preSkyList): draws an octagonal ring at the render-distance
-    // edge, from ground level (y = -cameraY) up to y = 16, through the currently-bound sky program
-    // (gbuffers_skybasic)
-    // vanilla's renderSky only draws the sky disc above the horizon and the void plane well below it, so
-    // the thin band at the horizon between the render-distance edge and those is left uncovered
-    // because packs commonly set colortex1 to not clear (OptiFine and Umbra both honour that), those
-    // uncovered pixels keep last frame's colortex1 - which self-perpetuated into the blown ~50 neutral
-    // horizon band
-    // skybasic derives the sky colour from the view direction rather than vertex colour, so this fill
-    // gets the correct atmospheric horizon colour and the band disappears
-    // call right before the sky disc, matching OptiFine
+    // Port of OptiFine's Shaders.drawHorizon: an octagonal ring at the render-distance edge from ground level to y = 16 through gbuffers_skybasic, right before the sky disc; vanilla leaves a band at the horizon uncovered, which kept last frame's non-cleared colortex1 and self-perpetuated into a blown ~50 band
     public void drawSkyHorizon() {
         if (!this.worldRenderingActive || this.skyHorizonActive) {
             return;
         }
         this.skyHorizonActive = true;
         try {
-            // Clamp the radius (Umbra HorizonRenderer parity): at high render distances the ring would otherwise reach
-            // the far plane and get clipped, letting the band return. 256 blocks is always beyond the visible terrain
-            // fog yet safely inside the sky projection.
+            // Clamp the radius (Umbra HorizonRenderer parity): at high render distances the ring reaches the far plane and clips, letting the band return; 256 blocks is beyond the terrain fog yet inside the sky projection
             float f = Math.min(Minecraft.getMinecraft().gameSettings.renderDistanceChunks * 16.0f, 256.0f);
             double d0 = f * 0.9238D;
             double d1 = f * 0.3826D;
@@ -2504,8 +2088,7 @@ public class UmbraRenderingPipeline {
 
     private boolean skyHorizonActive;
 
-    // called when the Impetus terrain override program binds (UmbraTerrainShaderInterface.setupState):
-    // points the gbuffer's draw-buffer mask at the terrain/water program's DRAWBUFFERS directive
+    // Called when the Impetus terrain override program binds (UmbraTerrainShaderInterface.setupState): points the gbuffer's draw-buffer mask at the terrain/water program's DRAWBUFFERS
     public void onTerrainDraw(int[] drawBuffers, ProgramBlendState blendState) {
         onTerrainDraw(drawBuffers, blendState,
                 com.bdmajora.impetus.umbra.gl.blending.ProgramAlphaTest.empty(), false);
@@ -2518,9 +2101,7 @@ public class UmbraRenderingPipeline {
             return;
         }
         int[] sanitizedDrawBuffers = DrawBuffers.sanitize(drawBuffers, GBUFFER_ATTACHMENT_LIMIT);
-        // The chunk renderer owns atlas/lightmap setup, but shader-pack samplers are Umbra-owned dynamic bindings.
-        // Re-assert them at program use, matching Umbra' sampler model and OptiFine's repeated program-uniform/binding
-        // setup, so gbuffers_water sees the current depthtex1/shadow/noise and a feedback-safe colortex4 snapshot.
+        // The chunk renderer owns atlas/lightmap setup, but pack samplers are Umbra-owned dynamic bindings re-asserted at program use, so gbuffers_water sees the current depthtex1/shadow/noise and a feedback-safe colortex4 snapshot
         bindDepthSamplers();
         bindShadowSamplers();
         bindNoiseTexture();
@@ -2533,8 +2114,7 @@ public class UmbraRenderingPipeline {
             restoreGbufferOpaqueBlend(sanitizedDrawBuffers);
         }
         blendState.apply(sanitizedDrawBuffers);
-        // The terrain passes set their own alpha test (vanilla uses GREATER 0.1 for the cutout layers); a pack
-        // override replaces it for this draw. Recorded so the next setPhase puts vanilla's back.
+        // The terrain passes set their own alpha test (vanilla's GREATER 0.1 for cutout); a pack override replaces it for this draw, recorded so the next setPhase restores vanilla's
         if (alphaTest.hasDirectives()) {
             alphaTest.apply();
             this.activeAlphaTest = alphaTest;
@@ -2589,8 +2169,7 @@ public class UmbraRenderingPipeline {
         GlTextureUnits.resetToUnit0();
     }
 
-    // called right after setupCameraTransform / ActiveRenderInfo.updateRenderInfo: vanilla has just read
-    // the camera matrices back into ActiveRenderInfo's buffers, so copy them for the uniform providers
+    // Called right after setupCameraTransform / updateRenderInfo, when vanilla has just read the camera matrices into ActiveRenderInfo's buffers, so copy them for the uniform providers
     public void captureRenderingState() {
         if (!this.worldRenderingActive) {
             return;
@@ -2599,13 +2178,7 @@ public class UmbraRenderingPipeline {
         CapturedRenderingState.INSTANCE.setGbufferProjection(new Matrix4f(ActiveRenderInfoAccessor.getProjectionMatrix()));
     }
 
-    // renders the shadow map for this frame
-    // called right after captureRenderingState, when the shadow angle and camera position are current and
-    // nothing has drawn into the gbuffer yet, then re-points GL at the gbuffer and puts the fresh shadow
-    // map on the shadowtex0/1 units, replacing the always-lit stub bound at frame start
-    // the prepare family runs here too, matching Umbra's renderShadows: it is the first thing after the
-    // shadow map, so its passes can read shadowtex/shadowcolor - Photon's prepare bakes the cloud shadow
-    // map into colortex8 that terrain lighting then samples - and still land before any gbuffer geometry
+    // Renders the shadow map right after captureRenderingState, before anything draws into the gbuffer, then re-points GL at the gbuffer and replaces the always-lit stubs on shadowtex0/1; the prepare family runs here too like Umbra's renderShadows, so Photon's cloud shadow map lands before any gbuffer geometry
     public void renderShadowMap() {
         if (!this.worldRenderingActive) {
             return;
@@ -2630,10 +2203,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    // called at the "translucent" profiler anchor - after all opaque world content (terrain, entities,
-    // particles, weather), before the translucent block layer
-    // snapshots the pre-translucent depth (depthtex1) and runs the pack's deferred chain, then points
-    // world rendering at the post-deferred gbuffer
+    // Called at the "translucent" anchor after all opaque content: snapshots pre-translucent depth (depthtex1), runs the deferred chain, then points world rendering at the post-deferred gbuffer
     public void beginTranslucents() {
         if (!this.worldRenderingActive) {
             return;
@@ -2649,8 +2219,7 @@ public class UmbraRenderingPipeline {
             GlStateManager.disableAlpha();
 
             bindDepthSamplers();
-            // Re-establish the custom image/sampler bindings (Umbra binds images at every program use; the shadow
-            // pass's out-of-band FF/TESR rendering may have disturbed the high texture units).
+            // Re-establish the custom image/sampler bindings (Umbra binds images at every program use); the shadow pass's out-of-band rendering may have disturbed the high units
             bindShaderPackResources();
             for (FullscreenPass pass : this.deferredPasses) {
                 runPass(pass, mc);
@@ -2673,11 +2242,7 @@ public class UmbraRenderingPipeline {
             LWJGL.glViewport(0, 0, this.renderTargets.getWidth(), this.renderTargets.getHeight());
         }
 
-        // OptiFine's Shaders.beginWater() contract (EntityRenderer.java:1870, Shaders.java:4484): the translucent
-        // terrain draws with BLENDING ON and DEPTH WRITES ON. Vanilla itself just set depthMask(false) for this
-        // section, but shader water must land in depthtex0 — the composites find water surfaces by comparing
-        // depthtex0 against the pre-translucent depthtex1 copied above. Blend must also be (re)enabled here: the
-        // deferred chain above runs blend-off, and unlike modern MC there is no RenderType state setup to restore it.
+        // OptiFine's Shaders.beginWater() contract: translucent terrain draws with BLENDING ON and DEPTH WRITES ON, since composites find water by comparing depthtex0 against the copied depthtex1; blend must be re-enabled because the deferred chain runs blend-off and 1.12 has no RenderType setup to restore it
         GlStateManager.enableBlend();
         GlStateManager.tryBlendFuncSeparate(
                 GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA,
@@ -2693,22 +2258,12 @@ public class UmbraRenderingPipeline {
         copyDepthTexture(this.renderTargets.getDepthTextureNoHand());
     }
 
-    // starts the first-person hand gbuffer pass
-    // matching OptiFine's ShadersRender.renderHand0 (and Umbra's HandRenderer.renderSolid), the solid
-    // hand draws into the *pre-deferred* gbuffer, before beginTranslucents() runs the pack's deferred chain
-    // that is what lights the hand: deferred packs such as Complementary write only albedo, normal and
-    // lightmap data in gbuffers_hand and do all shading in deferred*, so a hand drawn after that chain
-    // stays as raw unlit gbuffer data
-    // when the pack has no hand program, the hand still renders into colortex0 fixed-function
-    // returns true when hand rendering should proceed and endHandRendering() must be called
+    // Starts the first-person hand pass into the *pre-deferred* gbuffer like OptiFine's renderHand0 (Umbra's renderSolid), since deferred packs light the hand in deferred* and a later hand stays unlit raw gbuffer data; with no hand program it still renders fixed-function into colortex0. True means call endHandRendering()
     public boolean beginHandRendering() {
         return beginHandRendering(ProgramId.Hand, 16); // MC_RENDER_STAGE_HAND_SOLID
     }
 
-    // starts OptiFine's late hand pass (renderHand1), after translucent world geometry has drawn but
-    // before the composite/final chain consumes the gbuffer
-    // this keeps nearby translucent collision panes from being blended over the first-person hand until
-    // it appears to vanish
+    // Starts OptiFine's late hand pass (renderHand1), after translucent geometry but before the composite chain consumes the gbuffer, so nearby translucent panes are not blended over the hand until it vanishes
     public boolean beginHandTranslucentRendering() {
         return beginHandRendering(ProgramId.HandWater, 23); // MC_RENDER_STAGE_HAND_TRANSLUCENT
     }
@@ -2725,9 +2280,7 @@ public class UmbraRenderingPipeline {
 
         GlStateManager.enableDepth();
         GlStateManager.depthMask(true);
-        // The hand is drawn into an already-populated world depth buffer. When the camera is pressed into collision
-        // geometry, even the squeezed OptiFine hand projection can fail LEQUAL and vanish; force it to win only for
-        // this pass, then restore LEQUAL in endHandRendering before translucent/world drawing resumes.
+        // The hand draws into an already-populated depth buffer, and with the camera pressed into collision geometry even the squeezed projection can fail LEQUAL; force it to win for this pass, restored in endHandRendering
         GlStateManager.depthFunc(GL11.GL_ALWAYS);
         GlStateManager.enableAlpha();
         GlStateManager.enableBlend();
@@ -2735,10 +2288,7 @@ public class UmbraRenderingPipeline {
         resetVanillaVertexArrayState();
 
         GbufferPrograms.Entry entry = this.gbufferPrograms != null ? this.gbufferPrograms.get(programId) : null;
-        // Keep the phase honest. This method binds a gbuffer program without going through setPhase, and the held
-        // item draws through RenderItem underneath it, so refreshDynamicUniforms has to be able to find the hand
-        // program to give that item its currentRenderedItemId — otherwise its GL_CURRENT_PROGRAM guard sees a
-        // mismatch against the stale phase and skips the update, leaving the hand on whatever id the world left.
+        // Keep the phase honest: this binds a gbuffer program without setPhase, and the held item draws through RenderItem underneath, so refreshDynamicUniforms must find the hand program or its GL_CURRENT_PROGRAM guard skips the item's currentRenderedItemId
         this.currentPhase = programId;
         int packedLight = getHandPackedLight();
         setupHandLightmap(packedLight);
@@ -2761,24 +2311,7 @@ public class UmbraRenderingPipeline {
         return true;
     }
 
-    // hands the fixed-function vertex pipeline back to vanilla in a state it can actually use, before the
-    // first-person arm draws
-    // vanilla submits the arm through client arrays - glVertexPointer/glTexCoordPointer plus
-    // glEnableClientState, see ForgeHooksClient.preDraw
-    // on the compatibility profile those alias generic attribute slots - 0 is gl_Vertex, 2 gl_Normal,
-    // 3 gl_Color, 8..15 gl_MultiTexCoord0..7 - the same aliasing FullscreenQuadRenderer relies on
-    // deliberately
-    // when a generic array and the aliased conventional array are both enabled for a slot, *the generic
-    // array wins*, and every vertex then reads a single value: the attribute goes constant
-    // that is the measured hand bug - gl_MultiTexCoord0 was constant across the whole draw, so the arm
-    // and its second ("jacket") layer each sampled one texel: a flat green arm inside a flat shell, the
-    // shell visible only because a constant UV lands on an opaque texel instead of the transparent
-    // overlay it should have hit and been discarded for
-    // position, normal and colour survived because nothing had left *their* slots enabled
-    // leftover state here poisons the session, not just the frame: ModelRenderer bakes the arm into a
-    // display list on first render and glDrawArrays dereferences the arrays at compile time, so one bad
-    // compile is baked in for good
-    // this runs before the first arm draw, so that compile happens clean too
+    // Hands the fixed-function vertex pipeline back to vanilla before the first-person arm draws; vanilla submits through client arrays aliasing generic slots (0 gl_Vertex, 2 gl_Normal, 3 gl_Color, 8..15 texcoords), and a leftover generic array wins and flattens the attribute (measured: constant gl_MultiTexCoord0 gave a flat green arm), baked permanently into ModelRenderer's display list on first compile
     public static void resetVanillaVertexArrayState() {
         LWJGL.glBindVertexArray(0);
         LWJGL.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
@@ -2791,24 +2324,9 @@ public class UmbraRenderingPipeline {
     // gl_Vertex/gl_Normal/gl_Color/gl_MultiTexCoord0..7 all alias generic slots below this.
     private static final int VANILLA_ALIASED_ATTRIBUTE_SLOTS = 16;
 
-    // hands texture unit 0 back to vanilla in a state its caches can be trusted about, right before the
-    // first-person hand draws
-    // ItemRenderer.renderArmFirstPerson binds the player skin with
-    // TextureManager.bindTexture(getLocationSkin()), which bottoms out in GlStateManager.bindTexture -
-    // guarded by *both* a cached active-unit index and a cached per-unit texture name
-    // the pipeline has to select scratch/sampler units with raw glActiveTexture + glBindTexture (shadow
-    // mipmaps, depth copies, custom textures and images), which those caches never see
-    // once the cache and GL disagree about unit 0, vanilla's skin bind silently no-ops and the arm
-    // samples whatever unit 0 really holds - the block atlas
-    // that is exactly the reported symptom: a flat lime arm inside an opaque orange box, because the
-    // skin's second ("jacket") layer is fully transparent and would have been discarded, while atlas
-    // texels are opaque and never are
-    // bouncing through another unit defeats the active-unit cache, and clearing the binding defeats the
-    // texture-name cache, so the very next bindTexture call is guaranteed to reach GL
+    // Hands unit 0 back to vanilla in a cache-trustworthy state before the arm draws; the pipeline's raw scratch binds desync GlStateManager's active-unit and texture-name caches, after which the skin bind no-ops and the arm samples the block atlas (the lime arm in an orange box); bouncing through another unit and clearing the binding defeats both caches
     private static void resyncTextureUnitZero() {
-        // resetToUnit0 already performs the step-through-unit-1 dance that used to be inlined on the two lines above
-        // it, and the cached unbind below leaves real GL and the cache both holding 0 — so the trailing raw
-        // glBindTexture was redundant too. One coherent pair is the whole job.
+        // resetToUnit0 already does the step-through-unit-1 dance and the cached unbind leaves real GL and the cache both on 0, so the trailing raw glBindTexture was redundant
         GlTextureUnits.resetToUnit0();
         GlStateManager.bindTexture(0);
     }
@@ -2820,14 +2338,7 @@ public class UmbraRenderingPipeline {
         CapturedRenderingState.INSTANCE.setRenderStage(0); // MC_RENDER_STAGE_NONE
     }
 
-    // feeds the first-person hand its lightmap coordinate
-    // BSL's gbuffers_hand derives all its brightness from lmCoord = gl_TextureMatrix[1] * gl_MultiTexCoord1
-    // and never samples the lightmap texture, while Sodium/Embeddium can leave the fixed-function
-    // lightmap coord stale
-    // set both the legacy current texcoord and the hand shader bridge uniform to the player's combined
-    // light, matching Umbra's getPackedLightCoords(player)
-    // the vanilla lightmap texture matrix (scale 1/256, translate 8/256) expects the raw [0,240] block
-    // and sky values getCombinedLight packs
+    // Feeds the first-person hand its lightmap coordinate: BSL's gbuffers_hand derives all brightness from gl_TextureMatrix[1] * gl_MultiTexCoord1, and Sodium can leave the fixed-function coord stale, so set both the legacy texcoord and the bridge uniform to the player's combined light (Umbra's getPackedLightCoords)
     private void setupHandLightmap(int packedLight) {
         float blockLight = getBlockLightmapCoord(packedLight);
         float skyLight = getSkyLightmapCoord(packedLight);
@@ -2880,8 +2391,7 @@ public class UmbraRenderingPipeline {
         }
         Minecraft mc = Minecraft.getMinecraft();
 
-        // Full-screen passes draw with depth/blend/alpha-test off. Going through GlStateManager keeps its state cache
-        // coherent with reality, so vanilla's later enable/disable calls are not silently skipped.
+        // Full-screen passes draw with depth/blend/alpha-test off; going through GlStateManager keeps its cache coherent so vanilla's later toggles are not skipped
         GlStateManager.disableBlend();
         GlStateManager.disableDepth();
         GlStateManager.depthMask(false);
@@ -2889,8 +2399,7 @@ public class UmbraRenderingPipeline {
 
         bindDepthSamplers();
 
-        // centerDepthSmooth: sample depthtex0 at the screen centre now that all geometry (translucents included) has
-        // landed in it, before any composite consumes the uniform — OptiFine's readCenterDepth in renderHand1.
+        // centerDepthSmooth: sample depthtex0 at the screen centre now that all geometry including translucents is in it, before any composite consumes the uniform (OptiFine's readCenterDepth in renderHand1)
         this.centerDepthSampler.sample(this.renderTargets.getDepthTexture().getTextureId(),
                 this.renderTargets.getWidth(), this.renderTargets.getHeight(),
                 SystemTimeUniforms.COUNTER.getLastFrameTime(), this.centerDepthHalfLife);
@@ -2908,8 +2417,7 @@ public class UmbraRenderingPipeline {
                     GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
         }
 
-        // Optional wide-gamut output conversion: runs in place on the presentation target as the last color op
-        // of the shader frame. No-op (and zero cost) when the configured colorspace is sRGB.
+        // Optional wide-gamut output conversion in place on the presentation target as the last colour op; zero cost when the colorspace is sRGB
         if (this.colorSpaceConverter.isActive()) {
             bindMainRenderTarget(mc);
             restoreMainDrawReadBuffers(mc);
@@ -2918,15 +2426,9 @@ public class UmbraRenderingPipeline {
 
         resetRenderTargetMipmaps();
 
-        // Umbra FinalPassRenderer.SwapPass: buffers the chain leaves odd-flipped carry this frame's data on their
-        // ALT side — copy it back to MAIN so next frame's baked FBOs and sampler snapshots read fresh data. NB:
-        // glCopyTexSubImage2D reads the GL_READ_BUFFER of the framebuffer bound to GL_FRAMEBUFFER (bind(), not
-        // bindAsReadBuffer() — Umbra hit TAA breakage on many drivers with the read-framebuffer binding).
+        // Umbra's SwapPass: odd-flipped buffers carry this frame's data on ALT, copy back to MAIN so next frame's baked FBOs read fresh data; glCopyTexSubImage2D reads the GL_READ_BUFFER of GL_FRAMEBUFFER (bind(), not bindAsReadBuffer(), which broke TAA on many drivers for Umbra)
         if (!this.swapPasses.isEmpty()) {
-            // glCopyTexSubImage2D needs the destination bound to a texture unit. Binding it on whatever unit happens
-            // to be selected — unit 0 in practice, since bindColorSamplers ends there — would rewrite a cached slot
-            // behind GlStateManager's back, after which its next cached bind of the value it still believes is there
-            // no-ops and the unit keeps this texture. Do the copy on a scratch unit no cached slot describes.
+            // glCopyTexSubImage2D needs the destination bound to a unit; binding on the selected unit 0 would rewrite a cached slot behind GlStateManager's back and its next cached bind would no-op, so copy on a scratch unit no cached slot describes
             GlTextureUnits.selectScratch(DEPTH_COPY_SCRATCH_UNIT);
             try {
                 for (SwapPass swap : this.swapPasses) {
@@ -2990,8 +2492,7 @@ public class UmbraRenderingPipeline {
         return this.particleOrdering;
     }
 
-    // backFace.<layer> - false when the pack wants that terrain layer's back faces drawn
-    // layerOrdinal is BlockRenderLayer#ordinal()
+    // backFace.<layer>: false when the pack wants that terrain layer's back faces drawn; layerOrdinal is BlockRenderLayer#ordinal()
     public boolean shouldCullBackFaces(int layerOrdinal) {
         return layerOrdinal < 0 || layerOrdinal >= this.backFaceCulling.length
                 || this.backFaceCulling[layerOrdinal];
@@ -3002,10 +2503,7 @@ public class UmbraRenderingPipeline {
         return this.shadowRenderer != null;
     }
 
-    // compiles the pack's shadowcomp compute passes (.csh, an Umbra extension - Complementary's floodfill
-    // light propagation)
-    // each family index becomes a compute-only pass carrying the flip snapshot of its place in the chain,
-    // so its colortexN reads and colorimgN writes hit the same sides the rest of the frame does
+    // Compiles the pack's shadowcomp compute passes (.csh, an Umbra extension used by Complementary's floodfill); each index is a compute-only pass carrying the flip snapshot of its place in the chain so its reads and writes hit the same sides as the rest of the frame
     private void buildComputePasses(ShaderPack pack, BufferFlipper flipper) {
         for (int i = 0; i < ProgramArrayId.ShadowComposite.getNumPrograms(); i++) {
             Optional<ProgramSource> source = pack.getProgramSet().get(ProgramArrayId.ShadowComposite, i);
@@ -3013,9 +2511,7 @@ public class UmbraRenderingPipeline {
                 continue;
             }
             List<ComputePass> computes = buildFamilyComputePasses(pack, source.get(), TextureStage.SHADOWCOMP);
-            // A shadowcomp entry with a vertex+fragment pair draws a full-screen quad into shadowcolor0/1
-            // (Umbra ShadowCompositeRenderer). None of the packs in circulation ship one — every shadowcomp in the
-            // wild is compute-only — but the family is scheduled here so one that does is not silently dropped.
+            // A shadowcomp entry with a vertex+fragment pair draws a full-screen quad into shadowcolor0/1 (Umbra ShadowCompositeRenderer); no pack in circulation ships one, but it is scheduled so one that does is not dropped
             FullscreenPass raster = source.get().hasRasterStages()
                     ? buildShadowCompositePass(pack, source.get(), computes)
                     : null;
@@ -3028,9 +2524,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    // builds a raster shadowcomp pass: a full-screen quad into the shadow pass's own colour attachments,
-    // at shadow-map resolution
-    // unlike the numbered colour families these targets do not ping-pong, so the pass carries no flip state
+    // Builds a raster shadowcomp pass: a full-screen quad into the shadow pass's own colour attachments at shadow-map resolution; these targets do not ping-pong, so no flip state
     private FullscreenPass buildShadowCompositePass(ShaderPack pack, ProgramSource source, List<ComputePass> computes) {
         if (this.shadowRenderer == null) {
             LOGGER.warn("[Umbra] '{}' draws into shadowcolor but the pack declares no shadow program; skipping",
@@ -3080,10 +2574,7 @@ public class UmbraRenderingPipeline {
         return count == 0 ? new int[]{0} : Arrays.copyOf(sanitized, count);
     }
 
-    // compiles every compute stage attached to one program - the unsuffixed <name>.csh plus the
-    // letter-suffixed <name>_a.csh .. <name>_z.csh Umbra extension
-    // dispatch size follows Umbra's priority order: the indirect directive, then const ivec3 workGroups,
-    // then const vec2 workGroupsRender, then one invocation per pixel of the render target
+    // Compiles every compute stage attached to one program (<name>.csh plus the <name>_a..z.csh Umbra extension); dispatch size follows Umbra's priority: indirect directive, const ivec3 workGroups, const vec2 workGroupsRender, then one invocation per pixel
     private List<ComputePass> buildFamilyComputePasses(ShaderPack pack, ProgramSource source, TextureStage stage) {
         String[] computeSources = source.getComputeSources();
         if (computeSources.length == 0) {
@@ -3093,10 +2584,7 @@ public class UmbraRenderingPipeline {
             return java.util.Collections.emptyList();
         }
 
-        // The voxel-volume dispatch fallback is a shadowcomp-only workaround (Complementary's floodfill under-declares
-        // its groups). Umbra never second-guesses a declared `workGroups`, and doing so elsewhere is actively wrong:
-        // Photon's deferred4_a.csh declares ivec3(1,1,1) with local_size_x=256 and does one parallel reduction into
-        // colorimg4, so scaling it to a 64x64x64 LPV volume would run it 4096 times over the same texels.
+        // The voxel-volume dispatch fallback is a shadowcomp-only workaround for Complementary's under-declared floodfill groups; Umbra never second-guesses a declared `workGroups`, and Photon's deferred4_a.csh declares (1,1,1) for a parallel reduction that scaling would run 4096 times over
         int[] volume = stage == TextureStage.SHADOWCOMP ? this.customImageManager.getFirst3DImageSize() : null;
         List<ComputePass> built = new ArrayList<>();
         for (int variant = 0; variant < computeSources.length; variant++) {
@@ -3188,26 +2676,10 @@ public class UmbraRenderingPipeline {
 
     private static final Pattern UNINITIALIZED_LIGHT_VOLUME =
             Pattern.compile("(?m)^([\\t ]*)vec4\\s+lightVolume\\s*;[\\t ]*$");
-    // source stabilizer for a hazard proven by the shader pins: Complementary's GetComplexLightVolume can
-    // accumulate into an uninitialized vec4, and zero-init is required under our transformed sources
-    // a companion rewrite used to flatten the pack's
-    // fract(d + goldenRatio * mod(float(frameCounter), 3600.0)) dither reroll into a no-op fract(d),
-    // dating from the era when block-edge shimmer was being chased
-    // that root cause turned out to be the zeroed at_midBlock attribute, and the rewrite outlived it -
-    // while silently breaking every raymarch that depends on the reroll
-    // Complementary's light shafts take only ~15 samples over the whole ray and rely on a per-frame
-    // dither offset for TAA to converge them; frozen, the sample planes become static screen-space slabs
-    // of lit fog that cut straight across terrain
-    // Umbra never rewrites pack source this way, and SystemTimeUniforms advances frameCounter per frame
-    // exactly as Umbra does, so the pack's own reroll is left to run as authored
-    // #version <number> — the first one wins, matching the driver preprocessor.
+    // `#version <number>`, first one wins like the driver; a companion rewrite that flattened Complementary's per-frame dither reroll (chasing block-edge shimmer whose real cause was the zeroed at_midBlock) is gone, since freezing it turned its ~15-sample light shafts into static slabs of fog, and Umbra never rewrites pack source this way
     private static final Pattern VERSION_DIRECTIVE = Pattern.compile("(?m)^\\s*#version\\s+(\\d+)");
 
-    // the ARB_shader_texture_lod entry points
-    // in a #version 130+ shader these are only legal when the pack enabled the extension itself, and the
-    // core textureGrad family replaces them - the rename Umbra does in CommonTransformer
-    // Just Colored Lighting and Sildur's call texture2DGradARB from #version 430 compatibility sources,
-    // which the NVIDIA driver rejects outright (error C7531)
+    // The ARB_shader_texture_lod entry points, only legal in #version 130+ when the pack enabled the extension; renamed to the core textureGrad family like Umbra's CommonTransformer, since Just Colored Lighting and Sildur's call texture2DGradARB from 430 sources and NVIDIA rejects it (C7531)
     private static final Map<String, String> ARB_TEXTURE_LOD_FUNCTIONS;
 
     static {
@@ -3221,10 +2693,7 @@ public class UmbraRenderingPipeline {
         ARB_TEXTURE_LOD_FUNCTIONS = java.util.Collections.unmodifiableMap(arb);
     }
 
-    // rewrites the *ARB texture-lookup entry points to their core equivalents, but only for sources that
-    // declare #version 130 or newer
-    // a GLSL 120 pack that calls them has to enable the extension itself and textureGrad would not exist
-    // there, so those are left exactly as authored
+    // Rewrites the *ARB texture-lookup entry points to their core equivalents only for #version 130+ sources; a GLSL 120 pack enables the extension itself and textureGrad does not exist there
     private static String normalizeArbTextureLookups(String name, String source) {
         Matcher version = VERSION_DIRECTIVE.matcher(source);
         if (!version.find()) {
@@ -3251,17 +2720,7 @@ public class UmbraRenderingPipeline {
         return result;
     }
 
-    // resolves the #if directives the driver's preprocessor cannot legally accept - float comparisons,
-    // and expressions that are outright malformed - leaving everything else for the driver
-    // split out of stabilizeShaderSource because the two legacy paths need exactly this and none of the
-    // rest: both hand a #version 120 source to a 330 rewrite, where normalizeArbTextureLookups is a
-    // no-op by construction
-    // every caller must inline the macro environment as #define lines first, which is what makes the
-    // fold self-contained
-    // there are three callers, each of which reaches the driver by a different route and each of which
-    // had to be fixed separately: stabilizeShaderSource (gbuffer programs, via ShaderProgramCompiler),
-    // the legacy fullscreen composite/deferred/final path in this class, and UmbraTerrainProgramOverride
-    // (terrain and, critically, the translucent water pass)
+    // Resolves the #if directives the driver's preprocessor cannot accept (float comparisons, malformed expressions), leaving the rest to the driver; split from stabilizeShaderSource for the two legacy paths, and callers must inline the macro environment as #define lines first (three callers: gbuffer, legacy fullscreen, UmbraTerrainProgramOverride)
     public static String foldUncompilableConditionals(String name, String source) {
         return GlslPreprocessor.foldFloatConditionals(source, java.util.Collections.emptyMap());
     }
@@ -3328,10 +2787,7 @@ public class UmbraRenderingPipeline {
         return pointers;
     }
 
-    // delegates to GlslPreprocessor#resolveConditionals, which additionally falls back to the raw source
-    // when resolution yields nothing - an unterminated #if otherwise swallows the rest of the file and
-    // the scan sees no directives at all
-    // kept as a named seam because the compute-directive callers pass their own define maps
+    // Delegates to GlslPreprocessor#resolveConditionals, which falls back to raw source when resolution yields nothing (an unterminated #if would otherwise swallow the file); a named seam because the compute-directive callers pass their own define maps
     private static String preprocessActiveShaderSource(String source, Map<String, String> defines) {
         return GlslPreprocessor.resolveConditionals(source, defines);
     }
@@ -3415,31 +2871,22 @@ public class UmbraRenderingPipeline {
         return source.replaceAll("(?s)/\\*.*?\\*/", "").replaceAll("(?m)//.*$", "");
     }
 
-    // runs the shadowcomp compute chain: a full barrier makes the shadow pass's imageStore voxelization
-    // visible, each pass dispatches, and a closing barrier publishes the results to every later sampler read
+    // Runs the shadowcomp compute chain: a full barrier makes the shadow pass's voxelization visible, each pass dispatches, and a closing barrier publishes to every later sampler read
     private void dispatchComputePasses() {
         if (this.shadowCompPasses.isEmpty()) {
             return;
         }
-        // Umbra rebinds all images + paired samplers at every compute use (ComputeProgram.use -> images.update()). The
-        // Impetus shadow-terrain draw that just voxelized runs through managed code that can reset texture/image
-        // units, so re-establish the voxel/floodfill bindings here rather than trusting the frame-start bindAll to
-        // survive it — otherwise the compute could read/write the wrong (or unbound) volume.
+        // Umbra rebinds all images + paired samplers at every compute use; the shadow-terrain draw that just voxelized runs through managed code that can reset units, so re-establish the voxel/floodfill bindings here rather than trust the frame-start bindAll
         bindShaderPackResources();
         LWJGL.glMemoryBarrier(com.bdmajora.impetus.lwjgl.GL42.GL_ALL_BARRIER_BITS);
         boolean drewRaster = false;
         for (FullscreenPass pass : this.shadowCompPasses) {
-            // NB: only the images, not bindColorSamplers(pass), for the compute-only entries. This runs between the
-            // shadow map and the gbuffers, and colortex0..7 would land on texture units 0..7 — the block atlas and
-            // lightmap units the world is about to render with. restoreTextureUnits() deliberately leaves the low
-            // units alone, so there would be nothing to undo it. Image units are a separate namespace, so safe.
+            // Only the images, not bindColorSamplers(pass), for compute-only entries: this runs between the shadow map and the gbuffers, and colortex0..7 would land on units 0..7, the atlas and lightmap units the world is about to render with; image units are a separate namespace
             if (pass.program == null) {
                 bindRenderTargetImages(pass);
                 dispatchComputes(pass.computes);
             } else {
-                // A raster shadowcomp draws into shadowcolor. runPass dispatches this pass's own computes first,
-                // so they must not be dispatched again here. It needs the colortex samplers, so the gbuffer
-                // bindings are restored right after the loop.
+                // A raster shadowcomp draws into shadowcolor; runPass dispatches its own computes first, so they must not run again here, and the gbuffer bindings are restored after the loop since it needs the colortex samplers
                 runPass(pass, Minecraft.getMinecraft());
                 drewRaster = true;
             }
@@ -3455,9 +2902,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    // dispatches a list of compute programs in order, publishing each one's writes with a full barrier
-    // before the next runs - Complementary's floodfill iterations read the previous one's output, and a
-    // family pass's fragment stage reads its computes' output
+    // Dispatches compute programs in order with a full barrier between each, since Complementary's floodfill iterations read the previous output and a family pass's fragment stage reads its computes' output
     private void dispatchComputes(List<ComputePass> computes) {
         for (ComputePass pass : computes) {
             pass.program.bind();
@@ -3469,16 +2914,14 @@ public class UmbraRenderingPipeline {
                 LWJGL.glDispatchComputeIndirect(pass.indirectOffset);
                 LWJGL.glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, 0);
             } else if (!Float.isNaN(pass.renderScaleX)) {
-                // Screen-relative dispatch (`const vec2 workGroupsRender`): recomputed every frame from the
-                // current render size and the shader's local_size.
+                // Screen-relative dispatch (`const vec2 workGroupsRender`), recomputed every frame from the render size and the shader's local_size
                 int groupsX = Math.max(1, ceilDiv((int) Math.ceil(this.renderTargets.getWidth() * pass.renderScaleX), pass.localSizeX));
                 int groupsY = Math.max(1, ceilDiv((int) Math.ceil(this.renderTargets.getHeight() * pass.renderScaleY), pass.localSizeY));
                 LWJGL.glDispatchCompute(groupsX, groupsY, 1);
             } else {
                 LWJGL.glDispatchCompute(pass.groupsX, pass.groupsY, pass.groupsZ);
             }
-            // Each floodfill iteration reads the previous one's writes, so by default every dispatch is fenced.
-            // `allowConcurrentCompute` is the pack asserting its dispatches are independent.
+            // Each floodfill iteration reads the previous one's writes, so every dispatch is fenced by default; `allowConcurrentCompute` is the pack asserting independence
             if (!this.allowConcurrentCompute) {
                 LWJGL.glMemoryBarrier(com.bdmajora.impetus.lwjgl.GL42.GL_ALL_BARRIER_BITS);
             }
@@ -3517,10 +2960,7 @@ public class UmbraRenderingPipeline {
 
     // ------------------------------------------------------------------ state helpers
 
-    // runs a numbered family that executes in the middle of world rendering (begin, prepare): the quads
-    // draw with depth, blend and alpha test off, then the gbuffer state the world expects is put back
-    // the composite and deferred chains do this inline because they also switch flip snapshots and
-    // gbuffer framebuffers
+    // Runs a numbered family that executes mid world rendering (begin, prepare): quads draw with depth, blend and alpha test off, then the gbuffer state is put back; composite and deferred do this inline since they also switch flip snapshots
     private void runFullscreenFamily(List<FullscreenPass> family, Minecraft mc) {
         if (family.isEmpty()) {
             return;
@@ -3556,10 +2996,7 @@ public class UmbraRenderingPipeline {
 
     // Runs one full-screen pass into its framebuffer (or Minecraft's framebuffer for the final pass).
     private void runPass(FullscreenPass pass, Minecraft mc) {
-        // Umbra CompositeRenderer.renderAll: the pass's computes dispatch first, under this pass's flip state, then a
-        // barrier publishes their writes to the draw that follows (deferred4 texelFetches the SH that deferred4_a
-        // just imageStored into colortex4). Both the colortex samplers they read and the colorimg images they write
-        // have to be established before dispatching.
+        // Umbra CompositeRenderer.renderAll: the pass's computes dispatch first under its flip state, then a barrier publishes their writes to the draw (deferred4 texelFetches the SH deferred4_a imageStored); samplers and images must be established before dispatching
         if (!pass.computes.isEmpty()) {
             bindColorSamplers(pass);
             bindRenderTargetImages(pass);
@@ -3574,8 +3011,7 @@ public class UmbraRenderingPipeline {
             // A pass writing an explicitly-sized buffer draws at that buffer's resolution, not the screen's.
             int passWidth = pass.viewportWidth > 0 ? pass.viewportWidth : this.renderTargets.getWidth();
             int passHeight = pass.viewportHeight > 0 ? pass.viewportHeight : this.renderTargets.getHeight();
-            // `scale.<program>` on top of that, arithmetic per Umbra CompositeRenderer:317-321 — the offsets are
-            // fractions of the pass size, not texels, and the scaled extent is truncated rather than rounded.
+            // `scale.<program>` on top, arithmetic per Umbra: the offsets are fractions of the pass size, not texels, and the scaled extent is truncated rather than rounded
             LWJGL.glViewport(
                     (int) (passWidth * pass.viewportOffsetX),
                     (int) (passHeight * pass.viewportOffsetY),
@@ -3594,10 +3030,7 @@ public class UmbraRenderingPipeline {
         bindShaderPackResources();
         pass.uniforms.update();
         if (this.modernPack) {
-            // The [0,1] fullscreen quad maps to NDC via an ortho projection (modelview/texture stay identity), so
-            // ftransform() = projection*modelview*gl_Vertex = ortho*[0,1] = NDC and (gl_TextureMatrix[0]*
-            // gl_MultiTexCoord0) passes the [0,1] texcoords through. Save/restore so the hand and GUI that vanilla
-            // draws after the composite chain are unaffected.
+            // The [0,1] quad maps to NDC via an ortho projection with modelview/texture identity, so ftransform() = ortho*[0,1] = NDC and gl_TextureMatrix[0]*gl_MultiTexCoord0 passes through; saved and restored so the hand and GUI after the chain are unaffected
             pushFullscreenFixedFunctionMatrices();
             this.quadRenderer.draw();
             popFixedFunctionMatrices();
@@ -3659,9 +3092,7 @@ public class UmbraRenderingPipeline {
 
     // Identity matrices for fullscreen passes that still use fixed-function transforms
     private static void pushFullscreenFixedFunctionMatrices() {
-        // Projection is the ortho that maps the [0,1] fullscreen quad to NDC [-1,1] (matching Umbra's composite
-        // gl_ProjectionMatrix), so `gl_Position = ftransform()` (Complementary/BSL) resolves to
-        // projection*modelview*gl_Vertex = ortho*[0,1] = NDC. Modelview + texture stay identity.
+        // Projection is the ortho mapping the [0,1] quad to NDC (matching Umbra's composite gl_ProjectionMatrix), so `gl_Position = ftransform()` (Complementary/BSL) resolves correctly; modelview and texture stay identity
         GlStateManager.matrixMode(GL_PROJECTION_MODE);
         GlStateManager.pushMatrix();
         GlStateManager.loadIdentity();
@@ -3684,12 +3115,9 @@ public class UmbraRenderingPipeline {
         GlStateManager.popMatrix();
     }
 
-    // copies the depth of the active gbuffer framebuffer into destination - how OptiFine snapshots
-    // depthtex1/depthtex2
-    // runs on a scratch texture unit so no vanilla-tracked binding is disturbed
+    // Copies the active gbuffer framebuffer's depth into destination (how OptiFine snapshots depthtex1/2), on a scratch unit so no vanilla-tracked binding is disturbed
     private void copyDepthTexture(DepthTexture destination) {
-        // Umbra/OptiFine copy from the shader framebuffer's depth attachment. Do not rely on whatever framebuffer a
-        // previous vanilla hook, hand render, or post pass happened to leave bound.
+        // Umbra/OptiFine copy from the shader framebuffer's depth attachment; do not rely on whatever a previous hook, hand render or post pass left bound
         if (this.currentGbuffer != null) {
             this.currentGbuffer.bind();
         }
@@ -3748,22 +3176,17 @@ public class UmbraRenderingPipeline {
                     GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + i);
                     GlStateManager.bindTexture(pass.colorSamplers[i]);
                 } else {
-                    // colortex8..15 live beyond GlStateManager's cache (indexing it there throws); vanilla never
-                    // touches these units, so a raw bind is correct — the tail below hands the selector back.
+                    // colortex8..15 live beyond GlStateManager's cache (indexing throws) and vanilla never touches these units, so a raw bind is correct; the tail hands the selector back
                     GlTextureUnits.selectScratch(i);
                     LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, pass.colorSamplers[i]);
                 }
             }
         }
-        // Deliberately not a bare setActiveTexture(GL_TEXTURE0). If the loop took the raw branch above, real GL is on
-        // a high unit while the cache still reads 0 — and setActiveTexture would then swallow the return as a no-op,
-        // stranding the selector there for every later cached bind. resetToUnit0 steps through unit 1 so it issues.
+        // Deliberately not a bare setActiveTexture(GL_TEXTURE0): after the raw branch real GL is on a high unit while the cache reads 0, so the cached call would no-op and strand the selector; resetToUnit0 steps through unit 1
         GlTextureUnits.resetToUnit0();
     }
 
-    // binds the colorimgN images for one pass
-    // Umbra's binding is flip-aware, so a compute writing colorimg4 hits the exact texture the following
-    // programs sample as colortex4
+    // Binds the colorimgN images for one pass, flip-aware like Umbra so a compute writing colorimg4 hits the exact texture later programs sample as colortex4
     private void bindRenderTargetImages(FullscreenPass pass) {
         if (this.renderTargetImageUnits.isEmpty()) {
             return;
@@ -3780,8 +3203,7 @@ public class UmbraRenderingPipeline {
         bindShadowColorImages();
     }
 
-    // binds shadowcolorimg0/1 over the shadow pass's colour attachments
-    // they do not ping-pong, so unlike the render-target images there is no flip state to follow
+    // Binds shadowcolorimg0/1 over the shadow pass's colour attachments; they do not ping-pong, so no flip state to follow
     private void bindShadowColorImages() {
         if (this.shadowColorImageUnits.isEmpty() || this.shadowRenderer == null) {
             return;
@@ -3811,9 +3233,7 @@ public class UmbraRenderingPipeline {
 
     // normals and specular atlases, or the neutral fallbacks
     private void bindGbufferPbrSamplers() {
-        // PBR maps on the gbuffer-stage normals/specular units (2/3, through GlStateManager so its cache stays
-        // coherent). Fullscreen passes overwrite these units with colortex2/3; rebind before later gbuffers stages
-        // such as water and hand sample the atlas again.
+        // PBR maps on the gbuffer-stage normals/specular units (2/3, through GlStateManager); fullscreen passes overwrite these with colortex2/3, so rebind before water and hand sample the atlas again
         GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + 2);
         GlStateManager.bindTexture(com.bdmajora.impetus.umbra.pbr.PBRAtlasManager.getNormalsAtlas(
                 this.defaultNormals.getTextureId()));
@@ -3865,17 +3285,12 @@ public class UmbraRenderingPipeline {
         }
         int sampler0 = shadowHardwareSamplerFor(0);
         int sampler1 = shadowHardwareSamplerFor(1);
-        // OptiFine 1.12 packs declare sampler2DShadow shadowtex0/1 directly when shadowHardwareFiltering is enabled,
-        // so the plain names keep the comparison sampler. Only a pack that opted into SEPARATE_HARDWARE_SAMPLERS
-        // expects them to read raw depth, with comparison moved to the *HW aliases (Umbra UmbraSamplers:151).
+        // OptiFine 1.12 packs declare sampler2DShadow shadowtex0/1 directly under shadowHardwareFiltering, so the plain names keep the comparison sampler; only SEPARATE_HARDWARE_SAMPLERS packs expect raw depth there with comparison on the *HW aliases (Umbra UmbraSamplers)
         int plain0 = this.separateHardwareSamplers ? 0 : sampler0;
         int plain1 = this.separateHardwareSamplers ? 0 : sampler1;
         bindShadowDepthUnit(SHADOW_TEX_0_UNIT, depth0, plain0);
         bindShadowDepthUnit(SHADOW_TEX_1_UNIT, depth1, plain1);
-        // The *HW aliases exist only for packs that declared SEPARATE_HARDWARE_SAMPLERS. For every other pack
-        // nothing samples them, and holding two units hostage starves the pack's own custom textures and images —
-        // which is exactly how Complementary's wsr_sampler/wsr_lod_sampler ended up with no unit at all and fell
-        // back to unit 0, making its world-space reflections trace an empty voxel volume.
+        // The *HW aliases exist only for SEPARATE_HARDWARE_SAMPLERS packs; holding two units hostage for everyone else starved Complementary's wsr_sampler/wsr_lod_sampler onto unit 0, tracing an empty voxel volume
         if (this.separateHardwareSamplers) {
             bindShadowDepthUnit(SHADOW_TEX_0_HW_UNIT, depth0, sampler0);
             bindShadowDepthUnit(SHADOW_TEX_1_HW_UNIT, depth1, sampler1);
@@ -3895,14 +3310,10 @@ public class UmbraRenderingPipeline {
         bindTextureUnit(unit, texture);
     }
 
-    // binds one sampler unit, leaving the selector *on that unit* - callers batch several of these and
-    // reset once via GlTextureUnits#resetToUnit0() rather than paying a reset per bind
-    // every caller does, and that is load-bearing for units at or above GlTextureUnits#CACHED_UNITS,
-    // which take the raw branch
+    // Binds one sampler unit leaving the selector *on that unit*; callers batch several and reset once via resetToUnit0(), which is load-bearing for units at or above CACHED_UNITS taking the raw branch
     private static void bindTextureUnit(int unit, int texture) {
         if (unit < GlTextureUnits.CACHED_UNITS) {
-            // Low OptiFine 1.12 sampler units overlap Minecraft's cached texture slots. Keep that cache coherent
-            // or later GlStateManager binds can be skipped while the actual GL unit still holds depth/shadow data.
+            // Low OptiFine 1.12 sampler units overlap Minecraft's cached slots; keep the cache coherent or later GlStateManager binds are skipped while the real unit holds depth/shadow data
             GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + unit);
             GlStateManager.bindTexture(texture);
         } else {
@@ -3911,11 +3322,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
-    // the comparison sampler for a shadow depth texture
-    // bound only to the *HW units, which only programs that declared a sampler2DShadow are pointed at -
-    // and such a program is undefined without depth comparison
-    // so comparison is unconditional here; shadowHardwareFiltering only selects the filtering flavour,
-    // exactly as it does for the raw units through the texture's own parameters
+    // The comparison sampler for a shadow depth texture, bound only to the *HW units that sampler2DShadow programs are pointed at (undefined without comparison), so comparison is unconditional and shadowHardwareFiltering only picks the filtering flavour
     private int shadowHardwareSamplerFor(int index) {
         if (this.shadowMipmap[index]) {
             return this.shadowNearest[index] ? this.shadowMippedNearestHwSampler : this.shadowMippedLinearHwSampler;
@@ -3923,20 +3330,7 @@ public class UmbraRenderingPipeline {
         return this.shadowNearest[index] ? this.shadowNearestHwSampler : this.shadowLinearHwSampler;
     }
 
-    // binds the readable colortex4..7 textures to their sampler units for the gbuffer/world phase
-    // on the 1.12 OptiFine path colortex4..7 (gaux1..4) live on aux units 7..10; fullscreen programs use
-    // their own table
-    // gbuffer programs sample these - most importantly MakeUp and other packs read gaux4 (= colortex7)
-    // in gbuffers_terrain as the atmosphere/fog colour that distant terrain fades toward
-    // without this bind, unit 7 held a stale/garbage texture, so the fog blended distant terrain toward
-    // a huge value (clamped to the shader's 50.0 ceiling) - the blown-out horizon band, which also
-    // dragged auto-exposure down
-    // units 0..3 are deliberately left alone: unit 0 is the block atlas, unit 1 the lightmap, and units
-    // 2/3 the PBR normals/specular maps (see bindGbufferPbrSamplers)
-    // custom-texture overrides - gaux2 pointed at a pack noise texture, say - point their sampler
-    // uniforms at their own high units and are unaffected
-    // called once at gbuffer start and re-asserted on every fixed-function phase switch, since
-    // vanilla/Sodium may disturb these units mid-frame
+    // Binds colortex4..7 (gaux1..4, aux units 7..10) for the gbuffer phase; MakeUp reads gaux4 in gbuffers_terrain as the fog colour, and a stale unit 7 blew the horizon out and dragged auto-exposure down. Units 0..3 (atlas, lightmap, PBR) are left alone, custom overrides use their own high units, re-asserted on every phase switch
     private void bindGbufferColorSamplers() {
         bindGbufferColorSamplers(this.activeGbufferSamplerFlips);
     }
@@ -4022,30 +3416,13 @@ public class UmbraRenderingPipeline {
             LWJGL.glBindSampler(unit, 0);
             bindTextureUnit(unit, 0);
         }
-        // colortex8..15 sit beyond GlStateManager's 8-slot cache — unbind those with raw GL (indexing the cache at
-        // unit 8+ throws ArrayIndexOutOfBounds); units 0..7 go through GlStateManager to keep its cache coherent.
+        // colortex8..15 sit beyond GlStateManager's 8-slot cache, so unbind those raw (indexing the cache there throws); units 0..7 go through GlStateManager
         for (int i = UmbraRenderTargets.MAX_COLOR_BUFFERS - 1; i >= 8; i--) {
             LWJGL.glBindSampler(i, 0);
             GlTextureUnits.selectScratch(i);
             LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
         }
-        // Force GlStateManager's activeTextureUnit cache to agree with real GL before touching units 0..7.
-        //
-        // A bare LWJGL.glActiveTexture(GL_TEXTURE0) here is NOT enough: it moves real GL without telling
-        // GlStateManager, and GlStateManager.setActiveTexture is itself cached, so the loop below can no-op its
-        // first iteration and then drive real GL and the cache out of step for every remaining unit. Stepping
-        // through a different unit first guarantees the second call actually issues, so both end at unit 0 no
-        // matter what the cache held on entry.
-        //
-        // This is not hypothetical bookkeeping — it is what turned the screen white until a shader reload.
-        // Vanilla's screenshot path (ScreenShotHelper.createScreenshot) calls the CACHED
-        // GlStateManager.bindTexture(framebuffer.framebufferTexture) and then glGetTexImage. With the cache
-        // desynced, that bind lands on the real (wrong) unit while the cache records framebufferTexture against
-        // a unit that does not have it — so glGetTexImage reads the wrong texture (white PNG), and from then on
-        // Framebuffer.bindFramebufferTexture()'s identical cached bind no-ops forever, leaving the fullscreen
-        // blit sampling whatever is genuinely on that unit (shadowcolor0 clears to white). Hence: white screen,
-        // every frame, until a reload rebinds and resyncs. See also MIPMAP_SCRATCH_UNIT and the standing rule
-        // that raw texture binds must stay off units 0..7.
+        // Force GlStateManager's active-unit cache to agree with real GL before touching units 0..7 by stepping through unit 1 first; a bare glActiveTexture desyncs the cache, after which the screenshot path's cached bind lands on the wrong unit and bindFramebufferTexture()'s identical cached bind no-ops forever, a white screen until reload (see MIPMAP_SCRATCH_UNIT; raw binds stay off units 0..7)
         GlStateManager.setActiveTexture(GL13.GL_TEXTURE0 + 1);
         GlStateManager.setActiveTexture(GL13.GL_TEXTURE0);
         for (int i = 7; i >= 0; i--) {
@@ -4092,8 +3469,7 @@ public class UmbraRenderingPipeline {
             this.shaderStorageBuffers.destroy();
             this.shaderStorageBuffers = null;
         }
-        // Umbra sweeps the same registry on teardown: a holder replaced without destroy() would otherwise strand
-        // hundreds of megabytes of video memory per reload with nothing left referencing it.
+        // Umbra sweeps the same registry on teardown: a holder replaced without destroy() strands hundreds of megabytes of VRAM per reload
         com.bdmajora.impetus.umbra.gl.buffer.ShaderStorageBufferHolder.forceDeleteBuffers();
         com.bdmajora.impetus.umbra.uniforms.custom.ActiveCustomUniforms.clear();
         com.bdmajora.impetus.umbra.terrain.UmbraTerrainProgramOverride.destroyShadowPrograms();

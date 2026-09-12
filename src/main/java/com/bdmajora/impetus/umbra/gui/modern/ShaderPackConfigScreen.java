@@ -30,8 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 
-// The loaded pack's own option screen, laid out from its screen directives as a grid of tiles
-// A pack with no layout still gets one generated from its options; labels come through PackLanguage
+// The loaded pack's own option screen, laid out from its screen directives as a grid of tiles; a pack with no layout gets one generated from its options, labels via PackLanguage
 public class ShaderPackConfigScreen extends GuiScreen {
     private static final int DEFAULT_COLUMNS = 2;
     private static final int ROW_HEIGHT = 22;

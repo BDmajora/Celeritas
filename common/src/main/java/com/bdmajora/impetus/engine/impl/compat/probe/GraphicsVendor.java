@@ -4,9 +4,7 @@ import com.bdmajora.impetus.engine.impl.compat.environment.GlContextInfo;
 
 import java.util.Locale;
 
-// Graphics hardware and driver vendor classification
-// Two independent identification paths feed it, and they run at different times: PCI vendor ids from the OS-level
-// probe, which works before any GL context exists, and the GL context strings once one does
+// Vendor classification fed by two paths at different times: PCI ids from the OS probe before any GL context, then the GL strings once one exists
 public enum GraphicsVendor {
     NVIDIA,
     AMD,
@@ -30,8 +28,7 @@ public enum GraphicsVendor {
         var renderer = context.renderer().toLowerCase(Locale.ROOT);
         var version = context.version().toLowerCase(Locale.ROOT);
 
-        // Mesa is checked first: its drivers report the hardware vendor in GL_RENDERER but behave like Mesa,
-        // which is what matters for workaround selection.
+        // Mesa first: its drivers report the hardware vendor in GL_RENDERER but behave like Mesa, which is what matters for workarounds
         if (version.contains("mesa") || renderer.contains("mesa") || vendor.contains("x.org")) {
             return MESA;
         } else if (vendor.contains("nvidia")) {

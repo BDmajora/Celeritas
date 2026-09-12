@@ -1,10 +1,6 @@
 package com.bdmajora.impetus.engine.api.util;
 
-// utilities for packing and unpacking colour components from packed integer colours in ABGR format,
-// which is what OpenGL uses for colour vectors
-// | 32        | 24        | 16        | 8          |
-// | 0110 1100 | 0110 1100 | 0110 1100 | 0110 1100  |
-// | Alpha     | Blue      | Green     | Red        |
+// Packs/unpacks ABGR integer colours (the layout OpenGL uses for colour vectors): alpha in bits 24-31, then blue, green, red in bits 0-7
 public class ColorABGR implements ColorU8 {
     private static final int RED_COMPONENT_OFFSET = 0;
     private static final int GREEN_COMPONENT_OFFSET = 8;
@@ -34,8 +30,7 @@ public class ColorABGR implements ColorU8 {
         return (alpha << ALPHA_COMPONENT_OFFSET) | (rgb & ~(COMPONENT_MASK << ALPHA_COMPONENT_OFFSET));
     }
 
-    // converts normalised floating point colour components into a packed ABGR integer, via
-    // pack(int, int, int, int)
+    // Converts normalised float components into a packed ABGR integer via pack(int, int, int, int)
     public static int pack(float r, float g, float b, float a) {
         return pack(ColorU8.normalizedFloatToByte(r),
                 ColorU8.normalizedFloatToByte(g),

@@ -8,8 +8,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 
-// Reads the pack's format = <name>-<version> declaration from optifine/texture.properties into two macros,
-// MC_TEXTURE_FORMAT_<NAME> and MC_TEXTURE_FORMAT_<NAME>_<VERSION>, since packs gate on both
+// Reads the pack's format = <name>-<version> from optifine/texture.properties into MC_TEXTURE_FORMAT_<NAME> and MC_TEXTURE_FORMAT_<NAME>_<VERSION>, since packs gate on both
 public final class TextureFormatLoader {
     private static final ResourceLocation LOCATION = new ResourceLocation("minecraft", "optifine/texture.properties");
 
@@ -23,8 +22,7 @@ public final class TextureFormatLoader {
             return;
         }
 
-        // `<name>-<version>` where the name itself may contain dashes (lab-pbr-1.3 → "lab-pbr" + "1.3"). The
-        // version is the trailing dash-separated token iff it starts with a digit.
+        // `<name>-<version>` where the name may contain dashes (lab-pbr-1.3 -> "lab-pbr" + "1.3"); the version is the trailing token iff it starts with a digit
         String name = format;
         String version = null;
         int lastDash = format.lastIndexOf('-');

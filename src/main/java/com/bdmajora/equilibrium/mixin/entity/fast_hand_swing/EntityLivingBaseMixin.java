@@ -7,8 +7,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// Skips updateArmSwingProgress for idle entities; vanilla always pays two potion-effect lookups for a division that just produces zero again
-// Guard also requires swingProgress == 0 already, so the tick a swing actually finishes still runs and writes the final value
+// Skips updateArmSwingProgress for idle entities, saving two potion-effect lookups per tick; also requires swingProgress == 0 so the tick a swing finishes still writes the final value
 @Mixin(EntityLivingBase.class)
 public abstract class EntityLivingBaseMixin {
     @Shadow

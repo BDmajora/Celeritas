@@ -7,8 +7,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
-// Removes biome variation from the sky colour by forcing a single temperature into getSkyColorByTemp
-// Leaves time-of-day and weather shading untouched; only stops the sky changing colour per biome
+// Removes biome variation from the sky colour by forcing one temperature into getSkyColorByTemp; time-of-day and weather shading untouched
 @Mixin(Biome.class)
 public class BiomeMixin {
     // Plains temperature; yields the standard overworld blue

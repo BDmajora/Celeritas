@@ -6,12 +6,9 @@ import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// A resident buffer with an enormous address space whose physical pages are committed on demand
-// Terrain geometry lives in one of these so section allocation is pointer arithmetic in a flat address space,
-// rather than per-region arenas that have to be compacted once they fragment
+// Resident buffer with an enormous address space and on-demand page commitment, so section allocation is pointer arithmetic instead of per-region arenas needing compaction
 public class SparseBindlessBuffer implements DeviceBuffer {
-    // 1 MB, not the driver's minimum page size
-    // Smaller pages fragment the driver's own physical allocator badly enough that commitment cost dominates
+    // 1 MB rather than the driver's minimum page size; smaller pages fragment the driver's physical allocator until commitment cost dominates
     public static final long PAGE_SIZE = 1L << 20;
 
     private final int id;
@@ -19,9 +16,7 @@ public class SparseBindlessBuffer implements DeviceBuffer {
     private final long deviceAddress;
     private boolean deleted;
 
-    // Page index -> number of live allocations touching it
-    // A page is released only when the last allocation overlapping it goes away, which matters because
-    // allocations are quad-granular and neighbouring sections routinely share a page
+    // Page index -> live allocations touching it; a page is released only when the last one goes, since quad-granular allocations from neighbouring sections routinely share a page
     private final Int2IntOpenHashMap pageRefCounts = new Int2IntOpenHashMap();
 
     public SparseBindlessBuffer(long requestedSize) {
@@ -115,8 +110,7 @@ public class SparseBindlessBuffer implements DeviceBuffer {
         if (pageCount <= 0) {
             return;
         }
-        // Page commitment has no DSA form, so the buffer has to be bound; ARRAY_BUFFER is the least intrusive
-        // target because nothing in the mesh pipeline draws from a bound vertex array
+        // Page commitment has no DSA form so the buffer must be bound; ARRAY_BUFFER is least intrusive since nothing in the mesh pipeline draws from a bound vertex array
         LWJGL.glBindBuffer(GL15.GL_ARRAY_BUFFER, this.id);
         LWJGL.glBufferPageCommitmentARB(GL15.GL_ARRAY_BUFFER, firstPage * PAGE_SIZE, pageCount * PAGE_SIZE, commit);
         LWJGL.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);

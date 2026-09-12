@@ -7,9 +7,7 @@ import com.bdmajora.impetus.engine.impl.render.chunk.vertex.format.ChunkVertexTy
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The terrain vertex format while a pack is active: VanillaLikeChunkVertex's layout followed by the OptiFine
-// per-vertex attributes packs expect (normal, at_tangent, mc_midTexCoord, mc_Entity)
-// Only selected while a pack is loaded, so the wider stride costs nothing otherwise
+// The terrain vertex format while a pack is active: VanillaLikeChunkVertex's layout plus the OptiFine per-vertex attributes (normal, at_tangent, mc_midTexCoord, mc_Entity); only selected with a pack loaded, so the wider stride costs nothing otherwise
 public class UmbraChunkVertexType implements ChunkVertexType {
     public static final UmbraChunkVertexType INSTANCE = new UmbraChunkVertexType();
 

@@ -6,18 +6,14 @@ import com.bdmajora.impetus.lwjgl.GL20;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// A single compiled GLSL stage (vertex, geometry, tessellation, or fragment)
-// Mirrors OptiFine's createVertShader/createFragShader through the Impetus LWJGL abstraction; caller must
-// already have run the source through GlslPreprocessor (version normalisation, #define injection)
+// A single compiled GLSL stage, mirroring OptiFine's createVertShader/createFragShader through the LWJGL abstraction; the caller must already have run GlslPreprocessor
 public class GlShader extends GlResource {
     private final String name;
 
     public GlShader(ShaderType type, String name, String source) {
         this.name = name;
 
-        // Strict-driver rewrites for the paths that reach the driver through THIS class: gbuffer programs, the
-        // fullscreen composite/deferred/final chain, and compute. The terrain/shadow override does not — it builds
-        // the engine's GlShader instead — so it calls finalizeForDriver itself. See that method's note.
+        // Strict-driver rewrites for the paths reaching the driver through THIS class (gbuffer, fullscreen chain, compute); the terrain/shadow override builds the engine's GlShader instead and calls finalizeForDriver itself
         source = GlslPreprocessor.finalizeForDriver(name, source);
 
         int handle = LWJGL.glCreateShader(type.id);

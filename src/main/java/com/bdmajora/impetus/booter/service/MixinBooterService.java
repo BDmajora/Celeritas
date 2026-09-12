@@ -39,8 +39,7 @@ public class MixinBooterService extends AbstractMixinServiceLaunchWrapper {
 
     private boolean initialized;
 
-    // The shared mixin log, also written to by ClassLoadTracer and the teeing
-    // org.spongepowered.asm.service.mojang.Log4j2AuditingAdapter
+    // The shared mixin log, also written by ClassLoadTracer and the teeing Log4j2AuditingAdapter
     public static MixinAuditFile auditFile() {
         return AUDIT_FILE;
     }
@@ -108,8 +107,7 @@ public class MixinBooterService extends AbstractMixinServiceLaunchWrapper {
         }
     }
 
-    // Advances to MixinEnvironment.Phase#INIT INIT, called by InitPhaseTrigger from within FMLDeobfTweaker. A
-    // no-op if the environment has already moved past it
+    // Advances to Phase.INIT, called by InitPhaseTrigger from within FMLDeobfTweaker; no-op if the environment already moved past it
     void gotoInitPhase() {
         if (this.phaseTransitioner != null) {
             this.phaseTransitioner.accept(MixinEnvironment.Phase.INIT);

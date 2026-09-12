@@ -23,25 +23,13 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-// Reads a pack folder or zip into the map ShaderPack consumes, using only java.nio and java.util.zip
-// Text goes to one map, binary assets to another, and every key is made relative to shaders/
+// Reads a pack folder or zip into the map ShaderPack consumes with java.nio and java.util.zip only; text to one map, binary assets to another, keys relative to shaders/
 public final class ShaderPackLoader {
-    // Extensions read as raw bytes, for the custom-texture directives — texture.<stage>.<sampler>, texture.noise,
-    // customTexture.<name> — and their .mcmeta filtering sidecars
-    // .dat is in here because Photon and several newer packs ship 3D lookup textures that way; treating only PNGs
-    // as binary makes those directives fail even though the asset is sitting right there in the pack
-    // Built with Arrays.asList rather than Set.of because this module compiles with --release 8, so Java 9+ library
-    // APIs are unavailable even though Jabel allows the modern syntax
+    // Extensions read as raw bytes for the custom-texture directives and their .mcmeta sidecars; .dat is included since Photon ships 3D lookup textures that way, and Arrays.asList rather than Set.of because of --release 8
     private static final Set<String> BINARY_EXTENSIONS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "png", "mcmeta", "dat", "bin", "raw")));
 
-    // Text files that are metadata for OTHER mods rather than GLSL, kept out of the source map entirely
-    // This carve-out exists only because the source map does double duty here: ShaderPackOptions scans EVERY entry
-    // for #define and const options, where Iris only ever scans files reachable through its IncludeGraph
-    // Voxy's per-dimension voxy.json — shipped by "I Like Vanilla" and Mellow — opens with lines like
-    // `#define OVERWORLD` and `#define DIMENSION_NETHER`, and those names are #ifdef-tested throughout the pack. So
-    // scanning the JSON registers the pack's dimension macros as user-toggleable boolean options
-    // Nothing #includes these files, so dropping them costs nothing
+    // Text files that are metadata for OTHER mods, kept out of the source map since ShaderPackOptions scans EVERY entry for options (Iris only walks its IncludeGraph); Voxy's voxy.json opens with `#define OVERWORLD` and would register dimension macros as user toggles
     private static final Set<String> NON_GLSL_TEXT_EXTENSIONS =
             Collections.unmodifiableSet(new HashSet<>(Arrays.asList("json", "md")));
 
@@ -87,8 +75,7 @@ public final class ShaderPackLoader {
         return new ShaderPack(sources, changedConfigs, binaries);
     }
 
-    // Loads a pack distributed as a .zip, whose archive is expected to hold a top-level shaders/ directory
-    // Keys come out relative to that directory, matching the folder loader exactly
+    // Loads a pack distributed as a .zip with a top-level shaders/ directory; keys come out relative to it, matching the folder loader
     public static ShaderPack loadFromZip(Path zipFile) throws IOException {
         return loadFromZip(zipFile, Collections.emptyMap());
     }
@@ -134,16 +121,7 @@ public final class ShaderPackLoader {
         return new ShaderPack(sources, changedConfigs, binaries);
     }
 
-    // Anything that is not a recognised binary asset is read as text — a blacklist, deliberately, NOT a whitelist
-    // of known GLSL extensions
-    // Iris never pre-scans a pack at all: its IncludeGraph walks out from the program stages and reads whatever
-    // path an #include names straight off disk, so the extension is irrelevant. OptiFine's
-    // ShaderPackParser.resolveIncludes does the same and hard-errors on a missing file
-    // This port pre-scans into a source map instead, because options are applied per file before includes are
-    // flattened. So a whitelist here silently drops include files, the #include then resolves to nothing, every
-    // constant it defined becomes an "undefined variable" compile error, and the whole pack falls back to vanilla
-    // That is exactly what happened to miniature-shader's /shader.h and to RedHat's 22 lib/defines/*.h files
-    // NON_GLSL_TEXT_EXTENSIONS above is the one narrow carve-out
+    // Anything not a recognised binary asset is read as text, a blacklist NOT a whitelist: Iris and OptiFine read #include paths straight off disk, but this port pre-scans into a source map, so a whitelist silently dropped miniature-shader's /shader.h and RedHat's lib/defines/*.h and every constant became an undefined-variable error
     private static boolean isTextPath(String relative) {
         int dot = relative.lastIndexOf('.');
         if (dot >= 0 && NON_GLSL_TEXT_EXTENSIONS.contains(relative.substring(dot + 1).toLowerCase(Locale.ROOT))) {
@@ -195,9 +173,7 @@ public final class ShaderPackLoader {
         return out.toByteArray();
     }
 
-    // Wraps a stream so close() does nothing
-    // Needed because the reading helpers close what they are handed, but a ZipInputStream is reused across every
-    // entry in the archive — closing it after the first file would end the whole scan
+    // Wraps a stream so close() does nothing; the reading helpers close what they are handed, but a ZipInputStream is reused across every entry
     private static final class UncloseableStream extends InputStream {
         private final InputStream delegate;
 

@@ -7,11 +7,7 @@ import org.joml.Vector3ic;
 import java.util.ArrayList;
 import java.util.function.Consumer;
 
-// A dynamic loose octree over the loaded render sections
-// It does NOT replace the visibility graph, which remains the authority on occlusion. It exists so the traversals
-// that are not about occlusion have a spatial structure to walk, instead of following a camera-rooted graph or
-// scanning coordinates that hold nothing
-// Loose rather than strict, so a section straddling a node boundary lives in one node instead of being split
+// Dynamic loose octree over loaded render sections for non-occlusion traversals; the visibility graph stays the authority on occlusion, and loose nodes keep a straddling section in one node
 public final class SectionTree {
     private static final int LEAF_CAPACITY = 8;
     private static final int[] CHILD_ORDER = { 0, 1, 2, 4, 3, 5, 6, 7 };

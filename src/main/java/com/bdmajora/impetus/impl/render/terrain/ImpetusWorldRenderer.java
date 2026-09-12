@@ -153,19 +153,14 @@ public class ImpetusWorldRenderer extends SimpleWorldRenderer<WorldClient, Vinta
             return true;
         }
 
-        //? if <1.21.2
         AxisAlignedBB box = entity.getRenderBoundingBox();
-        //? if >=1.21.2
-        /*AABB box = renderer.getBoundingBoxForCulling(entity);*/
 
         return this.isBoxVisible(box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ);
     }
 
     // Compact vertices unless the shader pipeline needs the full format
     private ChunkVertexType chooseVertexType() {
-        // When a shader pack is active, terrain is drawn by the pack's transformed gbuffers_terrain, which reads
-        // the vanilla-like float layout plus the OptiFine extended attributes (true normals, at_tangent,
-        // mc_midTexCoord, mc_Entity) that UmbraChunkVertexType appends.
+        // With a shader pack active, terrain is drawn by the pack's transformed gbuffers_terrain, which reads the vanilla-like float layout plus the OptiFine extended attributes UmbraChunkVertexType appends
         if (com.bdmajora.impetus.umbra.terrain.UmbraTerrainProgramOverride.areShadersActive()) {
             return com.bdmajora.impetus.umbra.vertices.UmbraChunkVertexType.INSTANCE;
         }

@@ -18,9 +18,7 @@ public enum ShaderType {
     TESS_CTRL(GL42.GL_TESS_CONTROL_SHADER, "tcs"),
     TESS_EVALUATE(GL42.GL_TESS_EVALUATION_SHADER, "tes"),
     COMPUTE(GL43.GL_COMPUTE_SHADER, "csh"),
-    // NV_mesh_shader stages, used only by the mesh-shader terrain backend
-    // A driver without the extension rejects these enums at glCreateShader, which is why nothing constructs one
-    // without clearing MeshShaderSupport first
+    // NV_mesh_shader stages for the mesh-shader terrain backend; a driver without the extension rejects them at glCreateShader, so MeshShaderSupport is checked first
     TASK(GLNv.GL_TASK_SHADER_NV, "task"),
     MESH(GLNv.GL_MESH_SHADER_NV, "mesh");
 

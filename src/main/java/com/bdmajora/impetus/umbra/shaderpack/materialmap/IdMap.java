@@ -12,9 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// The pack's block, item and entity .properties, preprocessed first so option gates resolve, as descriptions
-// BlockMaterialMapping resolves them against the registry later. No block.properties means raw block ids, which
-// is what classic packs expect, so no legacy table is needed
+// The pack's block, item and entity .properties as descriptions, preprocessed first so option gates resolve; BlockMaterialMapping resolves them against the registry later, and no block.properties means raw block ids, as classic packs expect
 public final class IdMap {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -29,9 +27,7 @@ public final class IdMap {
     // entity.<id> entries, likewise parsed but not yet consumed
     private final Map<NamespacedId, Integer> entityIdMap;
     private final boolean hasBlockProperties;
-    // layer.<rendertype> = <block> ... from block.properties: the pack reassigning which chunk render layer a block
-    // meshes into, OptiFine's "Block render layers" feature
-    // Keyed by block id, valued by the target BlockRenderLayer
+    // layer.<rendertype> = <block> ... from block.properties, the pack reassigning a block's chunk render layer (OptiFine's "Block render layers"); block id -> target BlockRenderLayer
     private final Map<NamespacedId, net.minecraft.util.BlockRenderLayer> blockRenderLayerMap;
 
     public IdMap(Map<AbsolutePackPath, String> sources, Map<String, String> preprocessorDefines) {
@@ -61,10 +57,7 @@ public final class IdMap {
         return this.blockRenderLayerMap;
     }
 
-    // Parses layer.solid, layer.cutout, layer.cutout_mipped and layer.translucent — OptiFine's list is exactly
-    // those four, so anything else is a pack error rather than an extension
-    // Tag entries (%name) are rejected here the same way Iris rejects them: a render layer has to resolve to
-    // concrete blocks, and a tag names a set that 1.12.2 cannot enumerate at all
+    // Parses layer.solid, layer.cutout, layer.cutout_mipped and layer.translucent (OptiFine's exact four, anything else is a pack error); tag entries are rejected like Iris since 1.12.2 cannot enumerate a tag
     private static Map<NamespacedId, net.minecraft.util.BlockRenderLayer> parseRenderLayerMap(String preprocessed) {
         Map<NamespacedId, net.minecraft.util.BlockRenderLayer> overrides = new LinkedHashMap<>();
         for (String rawLine : preprocessed.split("\r\n|\r|\n")) {
@@ -114,19 +107,10 @@ public final class IdMap {
         }
     }
 
-    // The MC_VERSION to claim when a pack turns out to have no 1.12.2 mapping at all
-    // 11300 is the FIRST flattened version, which selects the oldest and therefore closest set of modern names —
-    // claiming a later version would pull in renames that drifted further from 1.12.2
+    // The MC_VERSION to claim when a pack has no 1.12.2 mapping; 11300 is the FIRST flattened version and selects the oldest, closest set of modern names
     private static final String FALLBACK_MC_VERSION = "11300";
 
-    // Preprocesses block.properties honestly for 1.12.2 first, and only when that leaves the pack with NO block IDs
-    // whatsoever does it re-read the file as a 1.13+ pack and translate the names back through ModernBlockNames
-    // Packs that never targeted 1.12 — Photon and most post-1.16 packs — put their entire ID map behind
-    // `#if MC_VERSION >= 11300` with an empty #else. Honest preprocessing declares nothing, every block reaches the
-    // shader as mc_Entity.x == 0, and every material test in the pack fails: water is not recognised as water so it
-    // is flat with no waves and no reflections, nothing waves, nothing is emissive
-    // A pack that DOES ship a 1.12 branch is left strictly alone, because this only runs when the honest result is
-    // empty
+    // Preprocesses block.properties honestly for 1.12.2, and only when that yields NO block IDs re-reads it as a 1.13+ pack translated through ModernBlockNames; Photon and most post-1.16 packs gate their map on `MC_VERSION >= 11300` with an empty #else, leaving every block mc_Entity.x == 0 (water flat, nothing emissive). A pack with a 1.12 branch is left alone
     private static Map<Integer, List<BlockEntry>> parseBlockMapWithModernFallback(
             String blockProperties, Map<String, String> preprocessorDefines) {
         Map<Integer, List<BlockEntry>> declared =
@@ -184,22 +168,7 @@ public final class IdMap {
         return entriesById;
     }
 
-    // Recovers two block IDs a pack ran together by omitting the space between them
-    // Shader packs are hand-maintained text, and a dropped space produces a token like
-    // minecraft:gold_oreminecraft:redstone_ore. BSL 10.1.3 ships exactly that on two lines of its block.properties,
-    // which silently costs gold ore and redstone ore their material ID — the ores stop being shaded as ores with
-    // nothing in game to explain why. OptiFine and Iris both just drop the entry as unparseable
-    //
-    // Fixing it is safe rather than guesswork because the malformed shape is unambiguous. A colon-separated token
-    // is legal in exactly four forms
-    //   path
-    //   namespace:path
-    //   namespace:path:key=value... — every segment past the second is a state filter and MUST contain =
-    //   path:key=value
-    // So three or more segments where two consecutive non-leading segments both lack = cannot be a valid entry at
-    // all, and can only be two IDs with the separator missing
-    // The split point is the trailing namespace embedded in the joined segment
-    // Returns the token split into its constituent IDs, or the token unchanged when it is well-formed
+    // Recovers two block IDs a pack ran together by omitting the space (BSL 10.1.3 ships minecraft:gold_oreminecraft:redstone_ore, silently losing both ores' material); safe because a legal token has at most one non-= segment after the namespace, so two consecutive non-= segments can only be a missing separator, split at the trailing embedded namespace
     private static List<String> separateRunTogetherIds(String token, int intId) {
         String[] parts = token.split(":");
 
@@ -212,8 +181,7 @@ public final class IdMap {
                 continue;
             }
 
-            // parts[i] is "<path><namespace>". The namespace of the token we are already inside is by
-            // far the likeliest, because this is a typo in a list of same-namespace entries.
+            // parts[i] is "<path><namespace>"; the namespace of the token we are already inside is by far the likeliest, since this is a typo in a list of same-namespace entries
             String namespace = findTrailingNamespace(parts[i], parts[0]);
 
             if (namespace == null) {
@@ -238,8 +206,7 @@ public final class IdMap {
         return Collections.singletonList(token);
     }
 
-    // The namespace this segment ends with, provided a non-empty path remains in front of it, or null when it ends
-    // with no namespace we recognise — the "non-empty path" condition is what stops a bare namespace from matching
+    // The namespace this segment ends with, provided a non-empty path remains in front of it (which stops a bare namespace matching), or null
     private static String findTrailingNamespace(String segment, String enclosingNamespace) {
         for (String candidate : new String[] {enclosingNamespace, "minecraft"}) {
             if (candidate == null || candidate.isEmpty() || candidate.length() >= segment.length()) {
@@ -254,8 +221,7 @@ public final class IdMap {
         return null;
     }
 
-    // Parses the plain `<prefix><id> = name name ...` shape used by item.properties and entity.properties, which
-    // unlike block.properties carry no state predicates
+    // Parses the plain `<prefix><id> = name name ...` shape of item.properties and entity.properties, which carry no state predicates
     private static Map<NamespacedId, Integer> parseIdMap(String preprocessed, String prefix) {
         Map<NamespacedId, Integer> idMap = new LinkedHashMap<>();
         forEachProperty(preprocessed, prefix, (intId, value) -> {
@@ -277,10 +243,7 @@ public final class IdMap {
         void accept(int intId, String value);
     }
 
-    // Walks the `<prefix><int> = value` lines in DECLARATION ORDER, which first-match-wins depends on
-    // Parsed by hand, splitting on the first =, rather than through java.util.Properties: that class applies
-    // backslash-escape semantics which would mangle Windows-style paths and escaped characters in pack values, and
-    // the line continuations it would handle were already joined by the preprocessor
+    // Walks the `<prefix><int> = value` lines in DECLARATION ORDER (first-match-wins depends on it), split by hand on the first = since java.util.Properties' backslash escapes would mangle paths and the preprocessor already joined continuations
     private static void forEachProperty(String preprocessed, String prefix, PropertyConsumer consumer) {
         for (String line : preprocessed.split("\n")) {
             String trimmed = line.trim();
@@ -304,8 +267,7 @@ public final class IdMap {
         }
     }
 
-    // Whether the pack ships a block.properties at all — when it does not, raw 1.12.2 block IDs are the contract
-    // and the mesher emits those instead of mapped ones
+    // Whether the pack ships a block.properties at all; without one raw 1.12.2 block IDs are the contract and the mesher emits those
     public boolean hasBlockProperties() {
         return this.hasBlockProperties;
     }

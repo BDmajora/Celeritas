@@ -93,16 +93,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         return this.renderer;
     }
 
-    // set for the duration of setWorldAndLoadRenderers, which calls loadRenderers internally
-    // without this, one world change tore the terrain renderer down twice: loadRenderers fired
-    // onReload first, rebuilding the section manager for the world we are in the middle of leaving, and
-    // the trailing onWorldChanged then destroyed that brand-new manager and built another for the
-    // incoming world
-    // every chunk mesh was discarded and every terrain program recompiled twice per transition, and on
-    // a server that moves you between worlds routinely (MCParks park-hopping) that reads as terrain
-    // endlessly unloading
-    // the tell in the logs is that a plain config change, which calls loadRenderers on its own, logged
-    // a single "ChunkBuilder: Stopping worker threads", while every world change logged them in pairs
+    // Set for the duration of setWorldAndLoadRenderers, which calls loadRenderers internally; without it each world change rebuilt the section manager twice (onReload for the world being left, then onWorldChanged), discarding every mesh and recompiling every program twice, visible as endless unloading on park-hopping servers
     @Unique
     private boolean impetus$changingWorld;
 
@@ -177,8 +168,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         RenderDevice.enterManagedCode();
 
         try {
-            // `frustum.culling = false`: the pack wants off-screen geometry drawn too, so the frustum test is
-            // replaced with one that accepts everything (the same trick the shadow pass uses).
+            // `frustum.culling = false`: the pack wants off-screen geometry drawn too, so the frustum test is replaced with one that accepts everything (the shadow pass's trick)
             com.bdmajora.impetus.umbra.pipeline.UmbraRenderingPipeline pipeline =
                     com.bdmajora.impetus.umbra.Umbra.getRenderingPipeline();
             com.bdmajora.impetus.engine.impl.render.viewport.Viewport viewport =
@@ -208,8 +198,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         this.renderer.scheduleRebuildForBlockArea(minX, minY, minZ, maxX, maxY, maxZ, important);
     }
 
-    // The following two redirects force light updates to trigger chunk updates and not check vanilla's chunk renderer
-    // flags
+    // The following two redirects force light updates to trigger chunk updates without checking vanilla's chunk renderer flags
     @Redirect(method = "updateClouds", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/chunk/ChunkRenderDispatcher;hasNoFreeRenderBuilders()Z"))
     private boolean alwaysHaveBuilders(ChunkRenderDispatcher instance) {
         return false;
@@ -221,12 +210,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         return true;
     }
 
-    // takes over both cloud modes with SodiumCloudRenderer, which is upstream Sodium's face-culled
-    // cloud mesh rather than vanilla's draw-everything-and-hide-it-with-a-depth-prepass one
-    // see that class for why the vanilla mesh cannot survive a shader pipeline
-    // the pack's clouds directive is not consulted here: GameSettingsCloudsMixin has already folded it
-    // into shouldRenderClouds(), so by this point the mode is the effective one and every other caller
-    // - notably EntityRenderer#renderCloudsCheck - agrees with it
+    // Takes over both cloud modes with SodiumCloudRenderer's face-culled mesh (see that class for why vanilla's depth-prepass mesh cannot survive a shader pipeline); the pack's clouds directive is already folded into shouldRenderClouds() by GameSettingsCloudsMixin
     @Inject(method = "renderClouds", at = @At("HEAD"), cancellable = true)
     private void impetus$renderCloudsSodium(float partialTicks, int pass, double x, double y, double z,
             CallbackInfo ci) {
@@ -238,8 +222,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
 
         if (!ImpetusVintage.options().performance.useFasterClouds
                 || !this.world.provider.isSurfaceWorld()
-                // A mod owning this dimension's clouds gets vanilla's dispatch, including the Forge render handler
-                // that runs ahead of any cloud geometry.
+                // A mod owning this dimension's clouds gets vanilla's dispatch, including the Forge render handler that runs ahead of any cloud geometry
                 || this.world.provider.getCloudRenderer() != null
                 || !SodiumCloudRenderer.isReady(this.mc)) {
             return;
@@ -265,11 +248,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         }
     }
 
-    // the vanilla fallback still honours the cloud-height option
-    // the cloud *distance* options are deliberately not applied to it: vanilla's fancy mesh emits its
-    // walls under hardcoded l2 > -1 / l2 <= 1 guards that are relative to its own -3..4 tile range, so
-    // widening the range without widening those guards just multiplies the wall count
-    // the Sodium path owns the distance slider instead, where culling makes it meaningful
+    // The vanilla fallback honours the cloud-height option but not the distance options: its fancy mesh emits walls under hardcoded l2 guards relative to its own -3..4 range, so widening the range only multiplies wall count; the Sodium path owns the distance slider
     @Redirect(method = "renderClouds", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/WorldProvider;getCloudHeight()F"))
     private float getConfiguredFastCloudHeight(WorldProvider provider) {
         return getConfiguredCloudHeight(provider);
@@ -286,13 +265,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         return ImpetusVintage.options().quality.cloudHeight;
     }
 
-    // cloud radius in cells
-    // clamped at the bottom to vanilla's own extent (8 tiles of 8 cells, so 32 either side of the
-    // camera) and at the top to the cloud projection's far plane - renderCloudsCheck builds it at
-    // farPlaneDistance * 4, and cells past that are clipped away anyway
-    // the distance the user asked for is in blocks, so it is divided by the *effective* cell size
-    // rather than by vanilla's 12: raising the cloud scale must make the cells bigger, not push the
-    // cloud layer further out
+    // Cloud radius in cells, clamped between vanilla's own extent (32 cells either side) and the cloud projection's far plane (farPlaneDistance * 4); the user's block distance is divided by the *effective* cell size so raising the scale makes cells bigger, not the layer further out
     @Unique
     private int impetus$cloudRadiusCells(float cellSize) {
         int requested = Math.max(8, ImpetusVintage.options().quality.cloudDistance) * 16;
@@ -303,8 +276,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
     // Skipped mid world change, since onWorldChanged is about to rebuild everything anyway
     @Inject(method = "loadRenderers", at = @At("RETURN"))
     private void onReload(CallbackInfo ci) {
-        // Mid-world-change this reload is for the world being left, and onWorldChanged is about to rebuild the
-        // renderer for the incoming one anyway. Doing it here as well only discards every chunk mesh an extra time.
+        // Mid-world-change this reload is for the world being left and onWorldChanged is about to rebuild for the incoming one, so doing it here only discards every chunk mesh an extra time
         if (this.impetus$changingWorld) {
             return;
         }
@@ -322,11 +294,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
     public void impetus$renderTileEntities(Entity entity, ICamera camera, float partialTicks, CallbackInfo ci, @Local(ordinal = 0) int pass) {
         this.renderer.renderBlockEntities(new ImpetusWorldRenderer.TileEntityRenderContext(damagedBlocks, partialTicks));
 
-        /*
-         * Normally, setTileEntities will be empty because we suppress vanilla chunk rendering. However, some mods
-         * inject a custom renderer into the set. So we render any TE we find in it.
-         * https://github.com/pau101/Fairy-Lights/blob/8a92f770d69be6fa164d24d7a023d828249423bb/src/main/java/com/pau101/fairylights/client/ClientProxy.java#L203
-         */
+        // setTileEntities is normally empty since vanilla chunk rendering is suppressed, but some mods (Fairy Lights) inject a custom renderer into it, so render any TE found there
         synchronized(this.setTileEntities) {
             if (!this.setTileEntities.isEmpty()) {
                 TileEntityRendererDispatcher.instance.preDrawBatch();
@@ -370,9 +338,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         }
         UmbraRenderingPipeline pipeline = Umbra.getRenderingPipeline();
         if (pipeline != null && pass == 1 && pipeline.isRenderingPostDeferredTranslucents()) {
-            // These are entities even when the pack ships no gbuffers_entities_translucent and the phase falls back to
-            // gbuffers_textured_lit — which this pipeline also uses for particles. State the stage here rather than
-            // derive it from the ProgramId, or a pack reading renderStage would be told "particles".
+            // These are entities even when the phase falls back to gbuffers_textured_lit, which this pipeline also uses for particles; state the stage explicitly or a pack reading renderStage is told "particles"
             pipeline.setPhase(pipeline.getTranslucentEntityPhase(), 11); // MC_RENDER_STAGE_ENTITIES
         }
         EntityPlayerSP player = this.mc.player;

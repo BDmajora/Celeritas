@@ -8,11 +8,6 @@ import com.bdmajora.impetus.engine.impl.util.PositionUtil;
 import com.bdmajora.impetus.engine.impl.util.collections.DoubleBufferedQueue;
 import com.bdmajora.impetus.engine.impl.util.collections.ReadQueue;
 import com.bdmajora.impetus.engine.impl.util.collections.WriteQueue;
-// TODO reintroduce
-/*
-import com.bdmajora.impetus.engine.api.render.chunk.RenderSectionDistanceFilter;
-import com.bdmajora.impetus.engine.api.render.chunk.RenderSectionDistanceFilterEvent;
- */
 import org.jetbrains.annotations.NotNull;
 import org.joml.Vector3ic;
 
@@ -107,17 +102,14 @@ public class OcclusionCuller {
 
             {
                 if (useOcclusionCulling) {
-                    // When using occlusion culling, we can only traverse into neighbors for which there is a path of
-                    // visibility through this chunk. This is determined by taking all the incoming paths to this chunk and
-                    // creating a union of the outgoing paths from those.
+                    // With occlusion culling we only traverse into neighbours reachable through this chunk: the union of outgoing paths from every incoming path
                     connections = VisibilityEncoding.getConnections(section.getVisibilityData(), section.getIncomingDirections());
                 } else {
                     // Not using any occlusion culling, so traversing in any direction is legal.
                     connections = GraphDirectionSet.ALL;
                 }
 
-                // We can only traverse *outwards* from the center of the graph search, so mask off any invalid
-                // directions.
+                // Only traverse *outwards* from the centre of the graph search, so mask off invalid directions
                 connections &= getOutwardDirections(viewport.getChunkCoord(), section);
             }
 
@@ -132,9 +124,7 @@ public class OcclusionCuller {
 
     // Queues each neighbour the section's visibility data lets light through to
     private static void visitNeighbors(final WriteQueue<OcclusionNode> queue, OcclusionNode section, int outgoing, int frame) {
-        // Only traverse into neighbors which are actually present.
-        // This avoids a null-check on each invocation to enqueue, and since the compiler will see that a null
-        // is never encountered (after profiling), it will optimize it away.
+        // Only traverse into neighbours actually present; avoids a null-check per enqueue, which the JIT then optimises away after profiling
         outgoing &= section.getAdjacentMask();
 
         // Check if there are any valid connections left, and if not, early-exit.
@@ -173,8 +163,7 @@ public class OcclusionCuller {
     // Records the incoming direction; enqueues on first visit this frame
     private static void visitNode(final WriteQueue<OcclusionNode> queue, @NotNull OcclusionNode render, int incoming, int frame) {
         if (render.getLastVisibleFrame() != frame) {
-            // This is the first time we are visiting this section during the given frame, so we must
-            // reset the state.
+            // First visit to this section this frame, so reset its state
             render.setLastVisibleFrame(frame);
             render.setIncomingDirections(GraphDirectionSet.NONE);
 
@@ -207,14 +196,12 @@ public class OcclusionCuller {
         int oy = section.getOriginY() - camera.intY;
         int oz = section.getOriginZ() - camera.intZ;
 
-        // coordinates of the point to compare (in view space)
-        // this is the closest point within the bounding box to the center (0, 0, 0)
+        // Closest point of the bounding box to the camera origin, in view space
         float dx = nearestToZero(ox, ox + 16) - camera.fracX;
         float dy = nearestToZero(oy, oy + 16) - camera.fracY;
         float dz = nearestToZero(oz, oz + 16) - camera.fracZ;
 
         return ((((dx * dx) + (dz * dz)) < (maxDistance * maxDistance)) && (Math.abs(dy) < maxDistance));
-        //return DistanceFilterHolder.INSTANCE.isWithinDistance(dx, dy, dz, maxDistance);
     }
 
     // Closest value in a range to zero
@@ -227,9 +214,7 @@ public class OcclusionCuller {
         return clamped;
     }
 
-    // The bounding box of a chunk section must be large enough to contain all possible geometry within it. Block models
-    // can extend outside a block volume by +/- 1.0 blocks on all axis. Additionally, we make use of a small epsilon
-    // to deal with floating point imprecision during a frustum check (see GH#2132).
+    // Block models may extend +/- 1.0 blocks outside their volume on every axis, plus a small epsilon for frustum float imprecision (see GH#2132)
     private static final float CHUNK_SECTION_SIZE = 8.0f /* chunk bounds */ + 1.0f /* maximum model extent */ + 0.125f /* epsilon */;
 
     // Section box against the frustum
@@ -279,8 +264,7 @@ public class OcclusionCuller {
         int outgoing;
 
         if (useOcclusionCulling) {
-            // Since the camera is located inside this chunk, there are no "incoming" directions. So we need to instead
-            // find any possible paths out of this chunk and enqueue those neighbors.
+            // The camera is inside this chunk so there are no "incoming" directions; find every path out and enqueue those neighbours instead
             outgoing = VisibilityEncoding.getConnections(section.getVisibilityData());
         } else {
             // Occlusion culling is disabled, so we can traverse into any neighbor.
@@ -290,9 +274,7 @@ public class OcclusionCuller {
         visitNeighbors(queue, section, outgoing, frame);
     }
 
-    // Enqueues sections that are inside the viewport using diamond spiral iteration to avoid sorting and ensure a
-    // consistent order. Innermost layers are enqueued first. Within each layer, iteration starts at the northernmost
-    // section and proceeds counterclockwise (N->W->S->E).
+    // Enqueues in-viewport sections in a diamond spiral (innermost layer first, each layer N->W->S->E) for a consistent order without sorting
     private void initOutsideWorldHeight(WriteQueue<OcclusionNode> queue,
                                         Viewport viewport,
                                         float searchDistance,
@@ -365,16 +347,4 @@ public class OcclusionCuller {
         void visit(OcclusionNode section, boolean visible);
     }
 
-    /*
-    private static class DistanceFilterHolder {
-        private static final RenderSectionDistanceFilter INSTANCE;
-
-        static {
-            var event = new RenderSectionDistanceFilterEvent();
-            RenderSectionDistanceFilterEvent.BUS.post(event);
-            INSTANCE = event.getFilter();
-        }
-    }
-
-     */
 }

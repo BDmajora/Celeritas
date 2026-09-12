@@ -10,15 +10,12 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import java.util.List;
 import java.util.Set;
 
-// Decides which Equilibrium mixins apply by resolving each one's package path against the option tree
-// Unlike Fulgor and Coartatio there is no hand-written name list: the package is the switch, so adding
-// a mixin under an existing option needs no change here
+// Decides which mixins apply by resolving each package path against the option tree; the package is the switch, so adding a mixin under an existing option needs no change here
 public class EquilibriumMixinPlugin implements IMixinConfigPlugin {
     // Everything below this prefix is ours; anything else is treated as foreign and refused
     private static final String MIXIN_PACKAGE_ROOT = "com.bdmajora.equilibrium.mixin.";
 
-    // Kill switch for bisecting a startup crash without editing the config, mirroring Lithium's
-    // lithium.test.disable_all_mixins; answers "is this us" in one launch argument
+    // Kill switch for bisecting a startup crash without editing the config, mirroring lithium.test.disable_all_mixins; answers "is this us" in one launch argument
     private static final String DISABLE_ALL_MIXINS_PROPERTY = "equilibrium.disable_all_mixins";
 
     // Read once at class init, before any mixin is considered
@@ -71,9 +68,7 @@ public class EquilibriumMixinPlugin implements IMixinConfigPlugin {
 
         Option option = config.getEffectiveOptionForMixin(mixin);
 
-        // An unmatched mixin means someone added a package without adding its option. Refusing to
-        // apply it is the safe reading: an optimization nobody can turn off is worse than one that
-        // never ran, and the log line says exactly what to add.
+        // An unmatched mixin means a package was added without its option; refusing to apply is the safe reading, and the log line says exactly what to add
         if (option == null) {
             Equilibrium.LOGGER.error("No rules matched mixin '{}', treating as foreign and disabling", mixin);
             return false;

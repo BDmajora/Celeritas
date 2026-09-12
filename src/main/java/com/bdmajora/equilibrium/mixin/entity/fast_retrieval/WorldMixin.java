@@ -14,8 +14,7 @@ import org.spongepowered.asm.mixin.Overwrite;
 import javax.annotation.Nullable;
 import java.util.List;
 
-// Halves the chunk lookups an entity query performs: vanilla calls isChunkLoaded then getChunk separately, this fetches once and treats null as not-loaded
-// On the path of every explosion, mob target search, item pickup and entity collision test, so the doubled lookup was paid a lot
+// Halves the chunk lookups an entity query performs: vanilla calls isChunkLoaded then getChunk, this fetches once and treats null as unloaded; on the path of every explosion, target search, pickup and collision test
 @Mixin(World.class)
 public abstract class WorldMixin implements ChunkAccess {
     // Resolve each chunk once rather than testing for it and then fetching it

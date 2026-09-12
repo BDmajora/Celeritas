@@ -10,11 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.OptionalInt;
 
-// the "clouds = off | fast | fancy" shaders.properties toggle: lets the pack override the player's
-// cloud video setting, which is Umbra's MixinOptions_CloudsOverride
-// vanilla's own renderDistanceChunks >= 4 gate is mirrored ahead of the override - as Umbra does,
-// and for the same reason: injecting at the head means the real check has not run yet, and a pack
-// must not be able to force clouds on at a render distance where vanilla suppresses them
+// The "clouds = off | fast | fancy" shaders.properties override (Umbra's MixinOptions_CloudsOverride); vanilla's renderDistanceChunks >= 4 gate is mirrored first so a pack cannot force clouds on where vanilla suppresses them
 @Mixin(GameSettings.class)
 public class GameSettingsCloudsMixin {
     @Shadow

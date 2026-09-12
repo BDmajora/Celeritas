@@ -15,14 +15,12 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 
-// the render state object for a chunk section: all the graphics state for each render pass, plus the
-// data about the render in the chunk visibility graph
+// Render state for a chunk section: the graphics state for each render pass plus its data in the chunk visibility graph
 public class RenderSection extends AbstractSection {
     // Render Region State
     private final RenderRegion region;
 
-    // We must use EVERYTHING here for the default visibility encoding, so that ContextBundle.empty() would correspond
-    // to the data generated for an empty section.
+    // Must be EVERYTHING for the default visibility encoding so ContextBundle.empty() matches the data generated for an empty section
     public static final BuiltRenderSectionData EMPTY_DATA = new BuiltRenderSectionData();
 
     static {
@@ -36,9 +34,7 @@ public class RenderSection extends AbstractSection {
     @Getter
     private int visualsServiceFlags;
 
-    // maps each translucent render pass to that pass's sort state, which carries the data needed to
-    // re-sort the geometry as the camera moves
-    // empty for sections without any translucent render passes
+    // Maps each translucent render pass to its sort state (data needed to re-sort as the camera moves); empty for sections without translucent passes
     @Getter
     @NotNull
     private Map<TerrainRenderPass, TranslucentQuadAnalyzer.SortState> translucencySortStates = Collections.emptyMap();
@@ -52,10 +48,7 @@ public class RenderSection extends AbstractSection {
 
     // Pending Update State
 
-    // The in-flight build job for this section, if one exists. Serves two purposes:
-    //   1. Cancellation: allows delete() to abort a queued or executing build early.
-    //   2. Deduplication hint: VisibleChunkCollector skips re-queuing a section whose build
-    //      is already in flight. submitRebuildTasks() performs the authoritative type check.
+    // In-flight build job, if any: lets delete() cancel early and lets VisibleChunkCollector skip re-queuing (submitRebuildTasks does the authoritative type check)
     @Nullable
     private CancellationToken buildCancellationToken = null;
 
@@ -75,9 +68,7 @@ public class RenderSection extends AbstractSection {
     // Used by the translucency sorter, to determine when a section needs sorting again
     public double lastCameraX, lastCameraY, lastCameraZ;
 
-    // set when the camera crossed one of this section's translucent geometry planes (see
-    // TranslucencyTriggerIndex), cleared when the resulting sort task is scheduled
-    // only meaningful for sections requiring dynamic translucency sorting
+    // Set when the camera crossed one of this section's translucent geometry planes (see TranslucencyTriggerIndex), cleared when the sort task is scheduled; only meaningful for dynamically sorted sections
     public boolean pendingTriggeredSort;
 
     public RenderSection(RenderRegion region, int chunkX, int chunkY, int chunkZ) {
@@ -89,9 +80,7 @@ public class RenderSection extends AbstractSection {
         this.updateCachedContextDataFlags();
     }
 
-    // deletes all data attached to this render and drops any pending tasks
-    // used when the render falls out of view or otherwise needs destroying; the object cannot be used
-    // afterwards
+    // Deletes all data attached to this render and drops pending tasks; the object cannot be used afterwards
     public void delete() {
         if (this.buildCancellationToken != null) {
             this.buildCancellationToken.setCancelled();
@@ -182,8 +171,7 @@ public class RenderSection extends AbstractSection {
         this.pendingUpdateType = type;
     }
 
-    // requests a type of chunk update for this section, which may "upgrade" an existing pending update
-    // returns true if the section's chunk update type actually changed
+    // Requests a chunk update, possibly "upgrading" an existing pending one; returns true if the pending type actually changed
     public boolean requestUpdate(ChunkUpdateType type) {
         type = ChunkUpdateType.getPromotionUpdateType(this.pendingUpdateType, type);
 

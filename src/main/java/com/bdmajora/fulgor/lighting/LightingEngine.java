@@ -21,15 +21,11 @@ import net.minecraftforge.fml.relauncher.SideOnly;
 
 import java.util.concurrent.locks.ReentrantLock;
 
-// Batched light propagator replacing vanilla's recursive checkLightFor; one per World, ported from Phosphor
-// Positions are only recorded until something reads light, then the whole batch runs brightest-to-darkest
-// Coordinates pack as [light(4)][y(8)][x(26)][z(26)] longs, x/z biased so a neighbour offset is plain addition
+// Batched light propagator replacing vanilla's recursive checkLightFor, one per World (from Phosphor); positions are recorded until something reads light, then the batch runs brightest-to-darkest, keys packed as [light(4)][y(8)][x(26)][z(26)] with x/z biased so neighbour offsets are plain addition
 public final class LightingEngine {
     private static final int MAX_LIGHT = 15;
 
-    // Starting capacity of each queue's dedup set (grows/shrinks with load). Kept small deliberately:
-    // 34 queues per engine x up to 4 engines (overworld/nether/end/etc) means every doubling costs
-    // megabytes of empty hash table before a single block is placed.
+    // Starting capacity of each queue's dedup set, kept small since 34 queues x up to 4 engines means every doubling costs megabytes of empty table before a block is placed
     private static final int QUEUE_CAPACITY = 512;
 
     // Layout parameters: length of each bit segment.
@@ -93,8 +89,7 @@ public final class LightingEngine {
     private final int maxScheduledUpdates;
     private final boolean warnOnIllegalThreadAccess;
 
-    // Cursor state. The pass is single-threaded under the lock, so it lives in fields rather than
-    // being threaded through every call.
+    // Cursor state; the pass is single-threaded under the lock, so it lives in fields rather than being threaded through every call
     private final MutableBlockPos currentPos = new MutableBlockPos();
     private final NeighborInfo[] neighborInfos = new NeighborInfo[6];
 
@@ -138,8 +133,7 @@ public final class LightingEngine {
         }
     }
 
-    // Records that a position's light may be stale, resolved on next read; this is Fulgor's whole
-    // replacement for World.checkLightFor
+    // Records that a position's light may be stale, resolved on next read; Fulgor's whole replacement for World.checkLightFor
     public void scheduleLightUpdate(EnumSkyBlock lightType, BlockPos pos) {
         lock();
 
@@ -153,10 +147,7 @@ public final class LightingEngine {
                 return;
             }
 
-            // Deferral is a memory trade, and a producer that never reads light — a generator filling
-            // chunks, a world-edit operation — would otherwise grow this without bound. Flushing here
-            // gives up the batching for one pass rather than the heap. Skipped while a pass is already
-            // running, since re-entering one is not valid.
+            // Deferral is a memory trade and a producer that never reads light (generator, world-edit) would grow this unbounded, so flush and give up batching for one pass; skipped while a pass is running since re-entry is invalid
             if (!this.updating && queue.size() >= this.maxScheduledUpdates) {
                 processLightUpdatesForType(lightType);
             }
@@ -173,17 +164,14 @@ public final class LightingEngine {
 
     // Resolves everything pending for one light type
     public void processLightUpdatesForType(EnumSkyBlock lightType) {
-        // The client reaches this from a dozen places, several of them off-thread — chunk builders,
-        // the sound engine, mod render hooks. Those threads must not mutate the world, and unlike the
-        // server there is a well-defined tick that will do the work shortly, so they are turned away.
+        // The client reaches this from off-thread callers (chunk builders, sound engine, mod render hooks) that must not mutate the world; unlike the server there is a tick that will do the work shortly, so they are turned away
         if (this.world.isRemote && !isCallingFromMainThread()) {
             return;
         }
 
         DeduplicatedLongQueue queue = this.scheduledUpdates[lightType.ordinal()];
 
-        // Cheap volatile read before the lock. This is the common case by a wide margin: every light
-        // read goes through here and almost none of them have anything to do.
+        // Cheap volatile read before the lock; every light read goes through here and almost none have anything to do
         if (queue.isEmpty()) {
             return;
         }
@@ -203,8 +191,7 @@ public final class LightingEngine {
         return Minecraft.getMinecraft().isCallingFromMinecraftThread();
     }
 
-    // Contention here means another mod is touching the world from the wrong thread; blocking will
-    // stall but beats the corruption that proceeding anyway would cause, so warn and block
+    // Contention means another mod is touching the world from the wrong thread; blocking stalls but beats the corruption of proceeding, so warn and block
     private void lock() {
         if (this.lock.tryLock()) {
             return;
@@ -242,9 +229,7 @@ public final class LightingEngine {
         try {
             propagate(lightType, queue);
         } finally {
-            // The pass reaches foreign code through notifyLightSet and through block light values, so
-            // it can throw. Leaving the flag set would turn one mod's exception into permanently dead
-            // lighting for the rest of the session.
+            // The pass reaches foreign code via notifyLightSet and block light values and can throw; leaving the flag set would turn one mod's exception into dead lighting for the session
             Fulgor.recordProcessed(this.processedThisPass);
             this.updating = false;
         }
@@ -255,9 +240,7 @@ public final class LightingEngine {
         this.profiler.startSection("fulgor");
         this.profiler.startSection("sort");
 
-        // Sort the scheduled positions into "needs to get brighter" and "needs to get darker". Neither
-        // is acted on yet: a position can be reached by both, and scheduling directly from here would
-        // enqueue it once per neighbour that noticed.
+        // Sort scheduled positions into "brighter" and "darker" without acting yet; a position can be reached by both, and scheduling from here would enqueue it once per neighbour that noticed
         beginDraining(queue);
 
         while (nextItem()) {
@@ -283,9 +266,7 @@ public final class LightingEngine {
             int newLight = (int) (this.currentData >> S_L & M_L);
 
             if (newLight > getCursorCachedLight(lightType)) {
-                // Setting the light here as well as queueing is what keeps a position from being
-                // scheduled twice: the second visit sees the new value and stops. M_POS strips the
-                // light field back off the key.
+                // Setting the light here as well as queueing is what stops a position being scheduled twice: the second visit sees the new value and stops. M_POS strips the light field off the key
                 enqueueBrightening(this.currentPos, this.currentData & M_POS, newLight, this.currentChunk, lightType);
             }
         }
@@ -302,9 +283,7 @@ public final class LightingEngine {
 
         this.profiler.endStartSection("propagate");
 
-        // Brightest to darkest, darkening then brightening at each level. Both directions in one
-        // descending sweep is what bounds the pass: a position can only be enqueued at a level below
-        // the one being processed, so nothing is ever revisited.
+        // Brightest to darkest, darkening then brightening at each level; a position can only be enqueued below the level being processed, so nothing is revisited
         for (int currentLight = MAX_LIGHT; currentLight >= 0; currentLight--) {
             beginDraining(this.darkeningQueues[currentLight]);
 
@@ -321,9 +300,7 @@ public final class LightingEngine {
                         : getPosOpacity(this.currentPos, state, this.currentChunk);
 
                 if (calculateNewLightFromCursor(luminosity, opacity, lightType) < currentLight) {
-                    // We did get darker, so anything we were lighting has to be reconsidered. The new
-                    // value has to be derived while ignoring neighbours that are themselves about to
-                    // be darkened, or they would prop each other up at a level neither can sustain.
+                    // We got darker, so anything we were lighting must be reconsidered, ignoring neighbours about to be darkened themselves or they would prop each other up
                     int newLight = luminosity;
 
                     fetchNeighborDataFromCursor(lightType);
@@ -342,18 +319,14 @@ public final class LightingEngine {
                             // We could have been its light source, so it has to be re-derived too.
                             enqueueDarkening(neighborPos, info.key, info.light, neighborChunk, lightType);
                         } else {
-                            // It is brighter than we could account for, so it has an independent
-                            // source. Processing order guarantees nobody will darken it later, which
-                            // makes it safe to be lit by it.
+                            // Brighter than we can account for, so it has an independent source; processing order guarantees nobody darkens it later, so it is safe to be lit by
                             newLight = Math.max(newLight, info.light - opacity);
                         }
                     }
 
                     enqueueBrighteningFromCursor(newLight, lightType);
                 } else {
-                    // A false alarm: we are still as bright as we were. The value was zeroed when the
-                    // position was queued, so it has to be put back. Queueing rather than spreading
-                    // immediately keeps neighbours from being scheduled more than once.
+                    // A false alarm, still as bright as before; the value was zeroed when queued so it must be put back, queued rather than spread so neighbours are not scheduled twice
                     enqueueBrighteningFromCursor(currentLight, lightType);
                 }
             }
@@ -361,8 +334,7 @@ public final class LightingEngine {
             beginDraining(this.brighteningQueues[currentLight]);
 
             while (nextItem()) {
-                // Anything but an exact match means the position moved on after being queued, and
-                // whatever moved it queued its own follow-up.
+                // Anything but an exact match means the position moved on after being queued, and whatever moved it queued its own follow-up
                 if (getCursorCachedLight(lightType) != currentLight) {
                     continue;
                 }
@@ -379,8 +351,7 @@ public final class LightingEngine {
         this.profiler.endSection();
     }
 
-    // Points the cursor at a queue and clears its dedup set; safe because every queue is fully filled
-    // before it's drained, never during
+    // Points the cursor at a queue and clears its dedup set; safe because every queue is fully filled before it is drained
     private void beginDraining(DeduplicatedLongQueue queue) {
         this.currentQueue = queue;
         queue.resetDeduplication();
@@ -410,8 +381,7 @@ public final class LightingEngine {
         return true;
     }
 
-    // Fills neighborInfos for the cursor position if it moved since the last fill; an unloaded
-    // neighbour gets a null chunk (skipped by every caller) and its other fields left stale on purpose
+    // Fills neighborInfos for the cursor position if it moved since the last fill; an unloaded neighbour gets a null chunk (skipped by every caller) with its other fields left stale on purpose
     private void fetchNeighborDataFromCursor(EnumSkyBlock lightType) {
         if (this.isNeighborDataValid) {
             return;
@@ -531,8 +501,7 @@ public final class LightingEngine {
         return ((ChunkLightingData) this.currentChunk).fulgor$getCachedLightFor(lightType, this.currentPos);
     }
 
-    // Same read as ChunkLightingData.fulgor$getCachedLightFor, but for an already-resolved section —
-    // fetchNeighborDataFromCursor needs the section anyway, so this avoids a second storage-array walk
+    // Same read as ChunkLightingData.fulgor$getCachedLightFor for an already-resolved section; fetchNeighborDataFromCursor needs the section anyway
     private int getCachedLightFor(Chunk chunk, ExtendedBlockStorage section, BlockPos pos, EnumSkyBlock type) {
         if (section == Chunk.NULL_BLOCK_STORAGE) {
             return type == EnumSkyBlock.SKY && chunk.canSeeSky(pos) ? type.defaultLightValue : 0;
@@ -543,16 +512,14 @@ public final class LightingEngine {
         int z = pos.getZ() & 15;
 
         if (type == EnumSkyBlock.SKY) {
-            // Asked live rather than cached at construction: WorldProvider.hasSkyLight() is only
-            // populated by registerWorld, which runs after the World constructor this engine is built in.
+            // Asked live rather than cached: WorldProvider.hasSkyLight() is only populated by registerWorld, after the World constructor this engine is built in
             return this.world.provider.hasSkyLight() ? section.getSkyLight(x, y, z) : 0;
         }
 
         return type == EnumSkyBlock.BLOCK ? section.getBlockLight(x, y, z) : type.defaultLightValue;
     }
 
-    // For skylight, luminosity is a heightmap property not a block one: open sky above means
-    // full-strength source, otherwise not a source at all
+    // For skylight, luminosity is a heightmap property: open sky above means a full-strength source, otherwise not a source at all
     private int getCursorLuminosity(IBlockState state, EnumSkyBlock lightType) {
         if (lightType == EnumSkyBlock.SKY) {
             return this.currentChunk.canSeeSky(this.currentPos) ? EnumSkyBlock.SKY.defaultLightValue : 0;

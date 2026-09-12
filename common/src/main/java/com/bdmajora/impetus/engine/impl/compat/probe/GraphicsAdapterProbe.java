@@ -14,12 +14,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-// Enumerates display adapters through operating-system facilities, needing no GL context at all
-// On Linux it reads the PCI ids exposed under /sys/class/drm; on Windows it queries Win32_VideoController through
-// PowerShell CIM
-// Both paths are strictly best-effort. Any failure — missing tools, a sandbox, an exotic setup — degrades to an
-// empty result rather than an exception, because the caller only uses this to REFINE warnings and never to gate
-// rendering
+// Enumerates display adapters via OS facilities (/sys/class/drm on Linux, Win32_VideoController via PowerShell on Windows); any failure degrades to an empty result
 public final class GraphicsAdapterProbe {
     private static final long PROCESS_TIMEOUT_SECONDS = 5;
 
@@ -66,8 +61,7 @@ public final class GraphicsAdapterProbe {
                         driver));
             }
         } catch (Exception e) {
-            // Whatever was collected before the failure is still usable; an adapter list is a hint, not a
-            // requirement, so a partial result beats none
+            // A partial adapter list is still a usable hint, so keep whatever was collected before the failure
         }
 
         return results;

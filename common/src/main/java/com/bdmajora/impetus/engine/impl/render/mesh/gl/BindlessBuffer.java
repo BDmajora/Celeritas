@@ -6,10 +6,7 @@ import com.bdmajora.impetus.lwjgl.GL30;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Immutable device-local storage made resident, so shaders reach it through a raw 64-bit pointer instead of a
-// binding point
-// Nothing here is ever mapped on the CPU: writes arrive through UploadStream's staging copies, which is what lets
-// the driver keep the allocation in the fastest memory it has
+// Immutable resident device-local storage reached by raw 64-bit pointer; never CPU-mapped, writes arrive via UploadStream staging so the driver keeps it in its fastest memory
 public class BindlessBuffer implements DeviceBuffer {
     private final int id;
     private final long size;
@@ -52,8 +49,7 @@ public class BindlessBuffer implements DeviceBuffer {
         LWJGL.glClearNamedBufferDataZero(this.id, GL30.GL_R8UI, GL30.GL_RED_INTEGER, GL11.GL_UNSIGNED_BYTE);
     }
 
-    // Zeroes a byte range; used to wipe a region's visibility bytes the frame it leaves the frustum, so stale
-    // "visible" flags cannot resurrect it next frame
+    // Zeroes a byte range; wipes a region's visibility bytes the frame it leaves the frustum so stale flags cannot resurrect it
     public void clearRange(long offset, long length) {
         LWJGL.glClearNamedBufferSubDataZero(this.id, GL30.GL_R8UI, offset, length, GL30.GL_RED_INTEGER, GL11.GL_UNSIGNED_BYTE);
     }

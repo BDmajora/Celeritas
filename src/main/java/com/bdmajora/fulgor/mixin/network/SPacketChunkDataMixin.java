@@ -8,10 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-// Mixes into SPacketChunkData to flush pending light updates before the chunk is serialized; the packet
-// copies light arrays straight out of the sections, so anything still queued would be silently omitted
-// Hooked on calculateChunkSize (the constructor's first call) rather than the constructor itself, since
-// a constructor injection can only fire at RETURN, after the packet is already built
+// Flushes pending light before the chunk is serialized, since the packet copies light arrays straight out of the sections; hooked on calculateChunkSize (the constructor's first call) since a constructor injection can only fire at RETURN
 @Mixin(SPacketChunkData.class)
 public abstract class SPacketChunkDataMixin {
     @Inject(method = "calculateChunkSize", at = @At("HEAD"))

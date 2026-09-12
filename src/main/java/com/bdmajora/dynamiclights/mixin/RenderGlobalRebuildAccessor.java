@@ -4,11 +4,7 @@ import net.minecraft.client.renderer.RenderGlobal;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
-// opens up RenderGlobal#markBlocksForUpdate so a light source can re-light its own chunks
-// Impetus @Overwrites that method to route into its own chunk renderer (core/terrain/RenderGlobalMixin),
-// so calling it here schedules an Impetus section rebuild rather than a vanilla one - which is
-// exactly what is wanted, and why this goes through the vanilla entry point instead of reaching for
-// the renderer directly
+// Opens RenderGlobal#markBlocksForUpdate so a source can re-light its chunks; Impetus @Overwrites it to route into its own renderer, so this schedules an Impetus rebuild through the vanilla entry point
 @Mixin(RenderGlobal.class)
 public interface RenderGlobalRebuildAccessor {
     @Invoker("markBlocksForUpdate")

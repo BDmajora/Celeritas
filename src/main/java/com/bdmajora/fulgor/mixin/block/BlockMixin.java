@@ -9,11 +9,7 @@ import net.minecraft.world.IBlockAccess;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 
-// Mixes into Block to cache whether it overrides Forge's position-aware getLightValue/getLightOpacity
-// overloads; most blocks don't, and skipping the double dispatch through state->block->state saves work
-// done for six neighbours of every position in every lighting batch
-// Resolved lazily via reflection (not in the constructor) since ASM coremods may still be rewriting
-// classes at block-construction time; both method names are Forge additions so unobfuscated either way
+// Caches on Block whether it overrides Forge's position-aware getLightValue/getLightOpacity, skipping the state->block->state double dispatch for six neighbours per position; resolved lazily by reflection since coremods may still be rewriting classes at construction, and both names are unobfuscated Forge additions
 @Mixin(Block.class)
 public abstract class BlockMixin implements LightInfoBlock {
     @Unique
@@ -57,8 +53,7 @@ public abstract class BlockMixin implements LightInfoBlock {
         return flags;
     }
 
-    // Fails safe: if the method can't be resolved (transformer removed it, security manager refused),
-    // treats the block as position-aware — slower but never wrong
+    // Fails safe: if the method cannot be resolved (transformer removed it, security manager refused), treat the block as position-aware, slower but never wrong
     @Unique
     private boolean fulgor$overrides(String name) {
         try {

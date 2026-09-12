@@ -2,10 +2,7 @@ package com.bdmajora.impetus.engine.impl.util.rand;
 
 import it.unimi.dsi.fastutil.HashCommon;
 
-// SplitMixRandom implementation from DSI Utilities, adopted in a minimal implementation to not
-// import Apache Commons.
-//
-// http://xoshiro.di.unimi.it/
+// Minimal SplitMixRandom from DSI Utilities (http://xoshiro.di.unimi.it/) to avoid importing Apache Commons
 public class SplitMixRandom {
     private static final long PHI = 0x9E3779B97F4A7C15L;
 

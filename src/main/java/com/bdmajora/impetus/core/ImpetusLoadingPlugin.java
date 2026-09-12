@@ -7,16 +7,7 @@ import net.minecraftforge.fml.relauncher.IFMLLoadingPlugin;
 import java.util.List;
 import java.util.Map;
 
-// Impetus' single coremod entry point. Forge's FMLCorePlugin manifest attribute takes exactly one
-// class, so this covers both jobs: bringing up Mixin when nothing else has, and registering Impetus'
-// own mixin configurations.
-//
-// Holds no org.spongepowered.asm reference of its own. BooterCore and ImpetusMixinRegistrar are the
-// Mixin-facing halves and are only ever invoked once Mixin is known to be on the classpath, which is
-// what lets Impetus load on a Forge install with no MixinBooter present.
-//
-// Sorted just after MixinBooter's Integer.MIN_VALUE + 1 so that an installed MixinBooter always wins
-// the race to claim the Mixin service and we observe it rather than compete with it.
+// Impetus' single coremod entry point (FMLCorePlugin takes one class): brings up Mixin when nothing else has and registers Impetus' configs, holding no org.spongepowered.asm reference; sorted just after MixinBooter's MIN_VALUE + 1 so an installed MixinBooter always wins the Mixin service
 @IFMLLoadingPlugin.Name("Impetus")
 @IFMLLoadingPlugin.MCVersion("1.12.2")
 @IFMLLoadingPlugin.SortingIndex(Integer.MIN_VALUE + 2)

@@ -5,8 +5,7 @@ import com.bdmajora.impetus.engine.impl.util.position.SectionPos;
 
 import java.util.Arrays;
 
-// Caches per-block light/occlusion data as packed ints (no value types in Java, so bit-pack instead of allocating objects)
-// Layout: BL/SL/LU 4 bits each, AO 16 bits @ 12-bit precision, then EM/OP/FO/FC single-bit flags - see pack/unpack methods below
+// Caches per-block light/occlusion data as packed ints (BL/SL/LU 4 bits each, AO 16 bits @ 12-bit precision, then EM/OP/FO/FC flag bits; see pack/unpack below)
 public abstract class LightDataAccess {
     private static final int NEIGHBOR_BLOCK_RADIUS = 2;
     private static final int BLOCK_LENGTH = 16 + (NEIGHBOR_BLOCK_RADIUS * 2);

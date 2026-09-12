@@ -15,9 +15,7 @@ import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 
-// The LWJGL3 backend of LWJGLService, selected when the game runs on LWJGL 3 — which on 1.12.2 means an
-// lwjgl3ify or RetroFuturaBootstrap setup
-// Same record shape as the LWJGL2 side: capability decisions resolved once at creation
+// LWJGL3 backend of LWJGLService (lwjgl3ify / RetroFuturaBootstrap on 1.12.2); capability decisions resolved once at creation
 public record LWJGL3Service(
         VAOMode vaoMode,
         TimerQueryMode timerQueryMode,
@@ -349,9 +347,7 @@ public record LWJGL3Service(
     // AMD workaround: null length forces null-terminator reliance, avoiding a driver read past the string
     @Override
     public void glShaderSourceSafe(int shader, CharSequence source) {
-        // AMD driver workaround: pass null for string length to force null-terminator reliance.
-        // Some AMD drivers don't receive or interpret the length correctly, resulting in an
-        // access violation when the driver tries to read past the string memory.
+        // AMD workaround: pass null for the string length so the driver relies on the null terminator instead of misreading the length
         try (org.lwjgl.system.MemoryStack stack = org.lwjgl.system.MemoryStack.stackPush()) {
             java.nio.ByteBuffer sourceBuffer = MemoryUtil.memUTF8(source, true);
             org.lwjgl.PointerBuffer pointers = stack.mallocPointer(1);
@@ -1141,8 +1137,7 @@ public record LWJGL3Service(
     // LWJGL3 has no positioned memAddress for a generic Buffer, so the offset is computed from the element size
     @Override
     public long memAddress(Buffer buffer, int position) {
-        // Generic Buffer doesn't have a positioned memAddress in LWJGL3, compute manually
-        // Get base address and add position offset based on element size
+        // Generic Buffer has no positioned memAddress in LWJGL3, so add the position offset (scaled by element size) to the base address
         long base = MemoryUtil.memAddress(buffer);
         int elementSize;
         if (buffer instanceof java.nio.ByteBuffer) {

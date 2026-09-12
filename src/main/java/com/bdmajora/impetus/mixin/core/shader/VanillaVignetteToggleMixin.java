@@ -8,9 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// the "vignette" shaders.properties toggle, wired through VanillaFeatureToggles
-// Complementary and Photon both set it false: their composite chain already applies its own
-// vignette, and vanilla's would be composited on top of the finished tonemapped image
+// The "vignette" shaders.properties toggle via VanillaFeatureToggles; Complementary and Photon apply their own in the composite chain, and vanilla's would composite over the tonemapped image
 @Mixin(GuiIngame.class)
 public class VanillaVignetteToggleMixin {
     @Inject(method = "renderVignette", at = @At("HEAD"), cancellable = true, require = 0)

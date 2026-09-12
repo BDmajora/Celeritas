@@ -3,15 +3,11 @@ package com.bdmajora.impetus.umbra.pipeline.shadow;
 import org.joml.Matrix4fc;
 import org.joml.Vector3f;
 
-// AdvancedShadowCullingFrustum with an inner voxelDistance box drawn unconditionally, selected by
-// shadow.culling = reversed; the stable inner set is what lets a pack's floodfill voxelise as the player turns
+// AdvancedShadowCullingFrustum with an inner voxelDistance box drawn unconditionally (shadow.culling = reversed); the stable inner set lets a pack's floodfill voxelise as the player turns
 public final class SafeZoneCullingFrustum extends AdvancedShadowCullingFrustum {
     private final ShadowBoxCuller distanceCuller;
 
-    // voxelCuller is the inner safe zone: anything inside it is always drawn
-    // distanceCuller is the outer bound: anything outside it is always culled
-    // A pack that declares no voxelDistance gets a zero-size safe zone, which degrades to plain advanced culling
-    // rather than to an error
+    // voxelCuller is the inner safe zone (always drawn), distanceCuller the outer bound (always culled); no voxelDistance means a zero-size zone, degrading to plain advanced culling
     public SafeZoneCullingFrustum(Matrix4fc modelViewProjection, Vector3f shadowLightVectorFromOrigin,
                                   ShadowBoxCuller voxelCuller, ShadowBoxCuller distanceCuller) {
         super(modelViewProjection, shadowLightVectorFromOrigin, voxelCuller);

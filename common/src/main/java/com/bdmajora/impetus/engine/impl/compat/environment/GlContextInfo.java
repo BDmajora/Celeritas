@@ -2,14 +2,9 @@ package com.bdmajora.impetus.engine.impl.compat.environment;
 
 import com.bdmajora.impetus.lwjgl.LWJGLServiceProvider;
 
-// A snapshot of the current context's GL_VENDOR, GL_RENDERER and GL_VERSION strings
-// capture() must run on a thread that owns a live GL context — on 1.12.2 that is the client thread, once the
-// display exists
-// The snapshot is immutable precisely so it can then be handed to the background compatibility checks, which have
-// no context of their own and could not query GL themselves
+// Immutable snapshot of GL_VENDOR/GL_RENDERER/GL_VERSION; capture() needs a live GL context, the snapshot is then handed to background checks that have none
 public record GlContextInfo(String vendor, String renderer, String version) {
-    // GL_VENDOR/GL_RENDERER/GL_VERSION are fixed by the GL specification; using the literals here avoids a
-    // dependency on the generated GL constant classes.
+    // Literals rather than the generated GL constant classes; these values are fixed by the GL spec
     private static final int GL_VENDOR = 0x1F00;
     private static final int GL_RENDERER = 0x1F01;
     private static final int GL_VERSION = 0x1F02;

@@ -19,9 +19,7 @@ import java.util.Set;
 
 final class TransformerProvider implements ITransformerProvider {
 
-    // Forge's re-entrant transformers, which must never process meta class data when bytecode is fetched for a
-    // mixin target, else resolving the target re-enters their pipeline. Other re-entrants are detected and
-    // excluded automatically at runtime via the re-entrance lock
+    // Forge's re-entrant transformers, which must never process meta class data when bytecode is fetched for a mixin target or resolving it re-enters their pipeline; others are excluded automatically via the re-entrance lock
     private static final Set<String> REENTRANT_EXCLUSIONS = Sets.newHashSet(
             "net.minecraftforge.fml.common.asm.transformers.EventSubscriptionTransformer",
             "cpw.mods.fml.common.asm.transformers.EventSubscriptionTransformer",

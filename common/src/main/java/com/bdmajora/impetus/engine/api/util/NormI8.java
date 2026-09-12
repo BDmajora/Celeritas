@@ -3,11 +3,7 @@ package com.bdmajora.impetus.engine.api.util;
 import org.joml.Math;
 import org.joml.Vector3f;
 
-// utilities for working with packed normal vectors; each component provides 8 bits of precision in the
-// range [-1.0, 1.0]
-// | 32        | 24        | 16        | 8          |
-// | 0000 0000 | 0110 1100 | 0110 1100 | 0110 1100  |
-// | Padding   | X         | Y         | Z          |
+// Packed normal vectors, 8 bits per component in [-1.0, 1.0]: X in bits 16-23, Y in 8-15, Z in 0-7, top byte padding
 public class NormI8 {
     private static final int X_COMPONENT_OFFSET = 0;
     private static final int Y_COMPONENT_OFFSET = 8;
@@ -16,9 +12,7 @@ public class NormI8 {
     // the maximum value of a normal's vector component
     private static final float COMPONENT_RANGE = 127.0f;
 
-    // constant that a floating-point vector component is multiplied by to get the normalized value
-    // the multiplication is slightly faster than a floating point division, and this code is a hot path
-    // which justifies it
+    // Multiplier used instead of dividing by COMPONENT_RANGE; multiplication is slightly faster and this is a hot path
     private static final float NORM = 1.0f / COMPONENT_RANGE;
 
     // Vector form of pack
@@ -26,8 +20,7 @@ public class NormI8 {
         return pack(normal.x(), normal.y(), normal.z());
     }
 
-    // packs the vector components into a 32-bit integer in XYZ ordering, with the 8 bits of padding at
-    // the end
+    // Packs the components into a 32-bit integer in XYZ order with the padding byte at the end
     public static int pack(float x, float y, float z) {
         int normX = encode(x);
         int normY = encode(y);

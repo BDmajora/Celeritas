@@ -10,8 +10,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 
-// Reaches AtomicStryker's Dynamic Lights without compiling against it, for held and dropped light sources
-// Bound via invokeExact so it inlines like a direct call; a missing class just leaves the bridge unavailable
+// Reaches AtomicStryker's Dynamic Lights without compiling against it, for held and dropped sources; bound via invokeExact so it inlines, and a missing class just leaves it unavailable
 final class DynamicLightsBridge {
     private static final String CLASS_NAME = "atomicstryker.dynamiclights.client.DynamicLights";
 
@@ -30,8 +29,7 @@ final class DynamicLightsBridge {
         try {
             return (int) GET_LIGHT_VALUE.invokeExact(state.getBlock(), state, world, pos);
         } catch (Throwable t) {
-            // invokeExact forces this catch; rethrow with the position since a bare MethodHandle
-            // stack trace is useless
+            // invokeExact forces this catch; rethrow with the position since a bare MethodHandle stack trace is useless
             throw new IllegalStateException("Dynamic Lights threw while reporting luminance at " + pos, t);
         }
     }

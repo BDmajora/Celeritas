@@ -8,8 +8,7 @@ import org.joml.Vector3i;
 
 import java.time.LocalDateTime;
 
-// frameTimeCounter wrapping at 3600 to keep float precision, and frameCounter wrapping at 720720 so every small
-// cycle length divides it. Ticked exactly once per frame or every time-driven effect runs at the wrong rate
+// frameTimeCounter wraps at 3600 for float precision, frameCounter at 720720 so every small cycle length divides it; ticked exactly once per frame or every time-driven effect runs at the wrong rate
 public final class SystemTimeUniforms {
     public static final Timer COUNTER = new Timer();
 
@@ -58,9 +57,7 @@ public final class SystemTimeUniforms {
         private float lastFrameTime;
         private long lastFrameTimeNanos = -1L;
 
-        // Advances the counters from a monotonic nanosecond timestamp
-        // Monotonic specifically: a wall-clock source would jump backwards on an NTP correction and hand the pack
-        // a negative frame time
+        // Advances the counters from a monotonic nanosecond timestamp; a wall clock would jump backwards on an NTP correction and hand the pack a negative frame time
         public void beginFrame(long nowNanos) {
             if (this.lastFrameTimeNanos >= 0) {
                 float deltaSeconds = (nowNanos - this.lastFrameTimeNanos) / 1_000_000_000.0f;
@@ -74,8 +71,7 @@ public final class SystemTimeUniforms {
             this.frameCounter = (this.frameCounter + 1) % FRAME_COUNTER_WRAP;
         }
 
-        // The previous frame's duration in seconds, OptiFine's frameTime — what packs multiply by to make an
-        // animation run at a rate independent of framerate
+        // The previous frame's duration in seconds, OptiFine's frameTime, what packs multiply by for framerate-independent animation
         public float getLastFrameTime() {
             return this.lastFrameTime;
         }

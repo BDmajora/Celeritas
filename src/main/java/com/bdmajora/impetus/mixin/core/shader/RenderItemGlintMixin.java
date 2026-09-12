@@ -9,12 +9,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// the held/dropped-item half of the enchantment glint, the counterpart to LayerArmorBaseGlintMixin
-// OptiFine brackets the same method (renderEffect) with
-// ShadersRender.renderEnchantedGlintBegin() / renderEnchantedGlintEnd()
-// OptiFine additionally gates on its own renderItemGui field, which vanilla does not have; no
-// substitute is needed here because UmbraRenderingPipeline#beginArmorGlint() already no-ops unless
-// world rendering is active, and GUI inventory items draw outside that window
+// The held/dropped-item half of the enchantment glint (counterpart to LayerArmorBaseGlintMixin), bracketing renderEffect like OptiFine; no renderItemGui gate needed since beginArmorGlint() already no-ops outside world rendering
 @Mixin(RenderItem.class)
 public class RenderItemGlintMixin {
     @Inject(method = "renderEffect", at = @At("HEAD"), require = 0)
