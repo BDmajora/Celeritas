@@ -22,36 +22,43 @@ public enum EmptyBlockAccess implements IBlockAccess {
         return null;
     }
 
+    // Full brightness
     @Override
     public int getCombinedLight(BlockPos blockPos, int lightValue) {
         return 0;
     }
 
+    // Always air
     @Override
     public IBlockState getBlockState(BlockPos pos) {
         return AIR;
     }
 
+    // Always
     @Override
     public boolean isAirBlock(BlockPos pos) {
         return true;
     }
 
+    // Plains
     @Override
     public Biome getBiome(BlockPos pos) {
         return Biomes.PLAINS;
     }
 
+    // None
     @Override
     public int getStrongPower(BlockPos blockPos, EnumFacing direction) {
         return 0;
     }
 
+    // Default
     @Override
     public WorldType getWorldType() {
         return WorldType.DEFAULT;
     }
 
+    // Never
     @Override
     public boolean isSideSolid(BlockPos blockPos, EnumFacing enumFacing, boolean bl) {
         return false;

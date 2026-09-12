@@ -12,14 +12,17 @@ public abstract class GlBuffer extends GlObject {
         this.setHandle(LWJGL.glGenBuffers());
     }
 
+    // The live mapping, or null
     public GlBufferMapping getActiveMapping() {
         return this.activeMapping;
     }
 
+    // Set by the device on map and unmap
     public void setActiveMapping(GlBufferMapping mapping) {
         this.activeMapping = mapping;
     }
 
+    // glDeleteBuffers
     @Override
     protected void destroyInternal() {
         LWJGL.glDeleteBuffers(this.handle());

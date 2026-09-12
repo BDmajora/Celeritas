@@ -24,6 +24,7 @@ public class ChunkBuildOutput extends ChunkTaskOutput {
         }
     }
 
+    // Frees the mesh buffers if the result was never consumed
     @Override
     public void delete() {
         for (BuiltSectionMeshParts data : this.meshes.values()) {

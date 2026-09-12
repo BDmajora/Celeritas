@@ -17,20 +17,24 @@ public class DynamicLightsMixinPlugin implements IMixinConfigPlugin {
     public void onLoad(String mixinPackage) {
     }
 
+    // Impetus reobfuscates mixins directly, so there is no refmap to name
     @Override
     public String getRefMapperConfig() {
         return null;
     }
 
+    // Always true; every mixin reads the mode switch at call time
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         return true;
     }
 
+    // Nothing to negotiate with other configs
     @Override
     public void acceptTargets(Set<String> myTargets, Set<String> otherTargets) {
     }
 
+    // Null means use the mixin list from the json
     @Override
     public List<String> getMixins() {
         return null;

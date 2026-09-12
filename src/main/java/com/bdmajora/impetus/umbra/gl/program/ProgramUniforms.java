@@ -31,14 +31,9 @@ import java.util.function.Supplier;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Every uniform bound to one GL program, plus the driver that uploads them
-// Built through Builder, which resolves each uniform's location at build time and silently DROPS the ones this
-// program does not declare — necessary because a pack references far more uniforms than any single program uses,
-// so most registrations legitimately resolve to nothing
-// update() follows Iris's cadence: DYNAMIC uploads on every bind, ONCE on first use only, PER_TICK when the world
-// tick changes, PER_FRAME when frameCounter changes
-// The cadence is not just an optimisation — the previous-frame suppliers ADVANCE when their per-frame uniform is
-// sampled, so uploading them more often than once a frame would roll the history forward several times
+// Every uniform bound to one GL program, plus the driver that uploads them at Iris's cadence:
+// DYNAMIC every bind, ONCE on first use, PER_TICK and PER_FRAME on change. The cadence matters because the
+// previous-frame suppliers advance when sampled, so uploading more often would roll history forward
 public class ProgramUniforms {
     // The uniforms that change per rendered OBJECT rather than per phase, re-uploaded from the per-object hooks
     // Deliberately tiny, and not simply the whole DYNAMIC set — see updatePerObject below for why that distinction
@@ -83,16 +78,19 @@ public class ProgramUniforms {
         updateStage(this.perObject);
     }
 
+    // World tick, or zero with no world
     private static long currentTick() {
         return Minecraft.getMinecraft().world == null ? 0L : Minecraft.getMinecraft().world.getTotalWorldTime();
     }
 
+    // Uploads one cadence bucket
     private static void updateStage(List<Uniform> uniforms) {
         for (int i = 0; i < uniforms.size(); i++) {
             uniforms.get(i).update();
         }
     }
 
+    // Uploads whichever buckets are due this bind
     public void update() {
         long currentTick = currentTick();
         int currentFrame = com.bdmajora.impetus.umbra.uniforms.SystemTimeUniforms.COUNTER.getFrameCounter();
@@ -116,6 +114,7 @@ public class ProgramUniforms {
         }
     }
 
+    // Starts registration for one program
     public static Builder builder(String name, int program) {
         return new Builder(name, program);
     }
@@ -192,22 +191,27 @@ public class ProgramUniforms {
             this.program = program;
         }
 
+        // Program name, for log lines
         public String getName() {
             return this.name;
         }
 
+        // glGetUniformLocation; -1 means the program does not declare it
         private int location(CharSequence uniformName) {
             return LWJGL.glGetUniformLocation(this.program, uniformName);
         }
 
+        // Queues a uniform until build resolves its location
         private void put(PendingUniform uniform) {
             this.pending.put(uniform.uniformName, uniform);
         }
 
+        // Records a resolved uniform under its cadence, or drops it when the location is -1
         private void add(String uniformName, ProvidedType provided, UniformUpdateFrequency frequency, Uniform uniform) {
             put(new PendingUniform(uniformName, provided, frequency, uniform, -1, null, null));
         }
 
+        // float
         public Builder uniform1f(UniformUpdateFrequency frequency, String uniformName, FloatSupplier value) {
             int location = location(uniformName);
             if (location != -1) {
@@ -217,6 +221,7 @@ public class ProgramUniforms {
             return this;
         }
 
+        // vec2
         public Builder uniform2f(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector2f> value) {
             int location = location(uniformName);
             if (location != -1) {
@@ -225,6 +230,7 @@ public class ProgramUniforms {
             return this;
         }
 
+        // int
         public Builder uniform1i(UniformUpdateFrequency frequency, String uniformName, IntSupplier value) {
             int location = location(uniformName);
             if (location != -1) {
@@ -234,6 +240,7 @@ public class ProgramUniforms {
             return this;
         }
 
+        // ivec2
         public Builder uniform2i(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector2i> value) {
             int location = location(uniformName);
             if (location != -1) {
@@ -242,6 +249,7 @@ public class ProgramUniforms {
             return this;
         }
 
+        // vec3
         public Builder uniform3f(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector3f> value) {
             int location = location(uniformName);
             if (location != -1) {
@@ -250,6 +258,7 @@ public class ProgramUniforms {
             return this;
         }
 
+        // ivec3
         public Builder uniform3i(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector3i> value) {
             int location = location(uniformName);
             if (location != -1) {
@@ -258,6 +267,7 @@ public class ProgramUniforms {
             return this;
         }
 
+        // vec4
         public Builder uniform4f(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector4f> value) {
             int location = location(uniformName);
             if (location != -1) {
@@ -266,6 +276,7 @@ public class ProgramUniforms {
             return this;
         }
 
+        // ivec4
         public Builder uniform4i(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector4i> value) {
             int location = location(uniformName);
             if (location != -1) {
@@ -274,6 +285,7 @@ public class ProgramUniforms {
             return this;
         }
 
+        // mat3
         public Builder uniformMatrix3(UniformUpdateFrequency frequency, String uniformName, Supplier<Matrix3fc> value) {
             int location = location(uniformName);
             if (location != -1) {
@@ -282,6 +294,7 @@ public class ProgramUniforms {
             return this;
         }
 
+        // mat4
         public Builder uniformMatrix(UniformUpdateFrequency frequency, String uniformName, Supplier<Matrix4fc> value) {
             int location = location(uniformName);
             if (location != -1) {
@@ -353,6 +366,7 @@ public class ProgramUniforms {
             return declared;
         }
 
+        // Resolves every pending location and returns the finished set
         public ProgramUniforms buildUniforms() {
             java.util.Map<String, ProvidedType> declared = declaredTypes();
             List<Uniform> dynamic = new ArrayList<>();

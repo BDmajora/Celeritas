@@ -30,6 +30,7 @@ public class UmbraPipeline {
         compilePrograms(pack);
     }
 
+    // Compiles every immediate-mode gbuffer program the pack ships
     private void compilePrograms(ShaderPack pack) {
         Map<String, String> defines = buildDefines(pack);
         Map<String, ProgramSource> declared = pack.getProgramSet().collectDeclaredPrograms();
@@ -51,6 +52,7 @@ public class UmbraPipeline {
 
     }
 
+    // The shared #define set: MC_* macros plus the pack's option values
     private static Map<String, String> buildDefines(ShaderPack pack) {
         Map<String, String> defines = pack.getEnvironmentDefines();
         try {
@@ -66,10 +68,12 @@ public class UmbraPipeline {
         return defines;
     }
 
+    // Compiled program by name, or null
     public UmbraProgram getProgram(String name) {
         return this.programs.get(name);
     }
 
+    // For the startup log
     public int getCompiledProgramCount() {
         return this.programs.size();
     }

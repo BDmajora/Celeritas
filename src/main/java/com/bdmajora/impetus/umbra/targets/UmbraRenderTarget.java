@@ -42,6 +42,7 @@ public class UmbraRenderTarget {
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
     }
 
+    // Allocates storage and sets the sampler state for one of the two textures
     private void setupTexture(int texture, int width, int height, boolean linear) {
         int filter = linear ? GL11.GL_LINEAR : GL11.GL_NEAREST;
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture);
@@ -53,6 +54,7 @@ public class UmbraRenderTarget {
                 this.internalFormat.getPixelFormat(), this.internalFormat.getPixelType(), NULL_BUFFER);
     }
 
+    // Reallocates both textures; contents are lost
     public void resize(int newWidth, int newHeight) {
         requireValid();
         this.width = newWidth;
@@ -65,6 +67,7 @@ public class UmbraRenderTarget {
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
     }
 
+    // Builds the mip chain for whichever texture was just rendered to
     public void generateMipmaps(boolean alt) {
         requireValid();
         if (!this.linear) {
@@ -78,6 +81,7 @@ public class UmbraRenderTarget {
         turnOnMips(alt);
     }
 
+    // Switches the sampler to a mipmapped filter
     public void turnOnMips(boolean alt) {
         if (alt) {
             this.altMipmapped = true;
@@ -86,6 +90,7 @@ public class UmbraRenderTarget {
         }
     }
 
+    // Returns both textures to the non-mipmapped filter
     public void resetMipmaps() {
         requireValid();
         if (this.mainMipmapped) {
@@ -98,6 +103,7 @@ public class UmbraRenderTarget {
         }
     }
 
+    // Switches one texture back to the non-mipmapped filter
     public void turnOffMips(boolean alt) {
         if (alt) {
             this.altMipmapped = false;
@@ -106,6 +112,7 @@ public class UmbraRenderTarget {
         }
     }
 
+    // The filter reset itself
     private void resetMipmapState(int texture) {
         int filter = this.linear ? GL11.GL_LINEAR : GL11.GL_NEAREST;
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture);
@@ -113,28 +120,34 @@ public class UmbraRenderTarget {
         LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, filter);
     }
 
+    // The format the pack requested for this buffer
     public InternalTextureFormat getInternalFormat() {
         return this.internalFormat;
     }
 
+    // The texture currently being read
     public int getMainTexture() {
         requireValid();
         return this.mainTexture;
     }
 
+    // The texture currently being written
     public int getAltTexture() {
         requireValid();
         return this.altTexture;
     }
 
+    // Current width
     public int getWidth() {
         return this.width;
     }
 
+    // Current height
     public int getHeight() {
         return this.height;
     }
 
+    // Frees both textures
     public void destroy() {
         requireValid();
         this.valid = false;
@@ -142,6 +155,7 @@ public class UmbraRenderTarget {
         LWJGL.glDeleteTextures(this.altTexture);
     }
 
+    // Throws if used after destroy
     private void requireValid() {
         if (!this.valid) {
             throw new IllegalStateException("Tried to use a destroyed UmbraRenderTarget");

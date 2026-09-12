@@ -33,6 +33,7 @@ public enum GlPrimitiveType {
         this.id = id;
     }
 
+    // GL mode constant
     public int getId() {
         return this.id;
     }

@@ -13,6 +13,7 @@ public interface DrawCommandList extends AutoCloseable {
 
     void flush();
 
+    // Ends tessellation, so try-with-resources always unbinds
     @Override
     default void close() {
         this.flush();

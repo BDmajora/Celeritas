@@ -37,6 +37,7 @@ public final class ChunkBuildBuffers {
         this.renderPassConfiguration = configuration;
     }
 
+    // Prepares every pass builder for a new section
     public void init(BuiltRenderSectionData renderData, int sectionIndex) {
         this.renderData = renderData;
         this.sectionIndex = sectionIndex;
@@ -45,14 +46,17 @@ public final class ChunkBuildBuffers {
         }
     }
 
+    // The section data being filled
     public BuiltRenderSectionData getSectionContextBundle() {
         return this.renderData;
     }
 
+    // Builder for the pass a material renders in
     public ChunkModelBuilder get(Material material) {
         return this.get(material.pass);
     }
 
+    // One builder per pass, with the pass's vertex type
     private ChunkModelBuilder createBuilder(TerrainRenderPass pass) {
         var vertexType = this.renderPassConfiguration.getVertexTypeForPass(pass);
         var builder = new BakedChunkModelBuilder(vertexType.createEncoder(), vertexType.getVertexFormat().getStride(), pass);
@@ -62,11 +66,13 @@ public final class ChunkBuildBuffers {
         return builder;
     }
 
+    // Builder for a pass, created lazily
     public ChunkModelBuilder get(TerrainRenderPass pass) {
         var builder = this.builders.get(pass);
         return builder != null ? builder : createBuilder(pass);
     }
 
+    // Passes that received geometry this section
     public Set<TerrainRenderPass> getBuilderPasses() {
         return this.builders.keySet();
     }
@@ -134,6 +140,7 @@ public final class ChunkBuildBuffers {
         return new BuiltSectionMeshParts(mergedBuffer, mergedIndexBuffer, TranslucentQuadAnalyzer.SortState.compacted(sortState), vertexRanges);
     }
 
+    // Frees every builder
     public void destroy() {
         this.sectionIndex = 0;
         this.renderData = null;

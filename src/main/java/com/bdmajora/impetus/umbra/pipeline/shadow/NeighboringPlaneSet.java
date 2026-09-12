@@ -29,18 +29,22 @@ public final class NeighboringPlaneSet {
         return TABLE[planeIndex >>> 1];
     }
 
+    // First adjacent plane index
     public int plane0() {
         return this.plane0;
     }
 
+    // Second adjacent plane index
     public int plane1() {
         return this.plane1;
     }
 
+    // Third adjacent plane index
     public int plane2() {
         return this.plane2;
     }
 
+    // Fourth adjacent plane index
     public int plane3() {
         return this.plane3;
     }

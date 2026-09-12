@@ -16,10 +16,12 @@ import java.util.Map;
 public record ChunkRebuildLists(Map<ChunkUpdateType, ArrayDeque<RenderSection>> byUpdateType, boolean hasAdditionalUpdates, Map<ChunkUpdateType, Integer> queueOverflowCounts) {
     public static final ChunkRebuildLists EMPTY;
 
+    // Sections queued for one update type
     public int getUpdateCount(ChunkUpdateType type) {
         return byUpdateType.get(type).size() + queueOverflowCounts.getOrDefault(type, 0);
     }
 
+    // Nothing queued
     public boolean isEmpty() {
         if (hasAdditionalUpdates) {
             return false;

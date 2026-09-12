@@ -38,6 +38,7 @@ public final class Material {
         return this.packed;
     }
 
+    // By pass and parameters
     @Override
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
@@ -45,11 +46,13 @@ public final class Material {
         return packed == material.packed && pass.equals(material.pass);
     }
 
+    // By pass and parameters
     @Override
     public int hashCode() {
         return Objects.hash(pass, packed);
     }
 
+    // For debugging
     @Override
     public String toString() {
         return "Material{" +

@@ -39,6 +39,7 @@ public final class ResourcePackScanner {
     private ResourcePackScanner() {
     }
 
+    // Cheap per-tick check that only scans when the active pack list changed
     public static void tick(Minecraft client) {
         if (ticksUntilScan-- > 0) {
             return;
@@ -48,6 +49,7 @@ public final class ResourcePackScanner {
         scanIfChanged(client);
     }
 
+    // Compares against the last scanned list by identity
     public static void scanIfChanged(Minecraft client) {
         if (client == null || client.getResourcePackRepository() == null) {
             return;
@@ -72,6 +74,7 @@ public final class ResourcePackScanner {
         scan(activePacks);
     }
 
+    // Warns about packs that override core shaders, which Impetus does not use
     private static void scan(List<ResourcePackRepository.Entry> activePacks) {
         List<String> riskyPacks = new ArrayList<>();
 
@@ -110,6 +113,7 @@ public final class ResourcePackScanner {
         ImpetusNotifications.warn("Resource pack compatibility", lines.toArray(new String[0]));
     }
 
+    // Probes for the vanilla shader directories
     private static boolean containsShaderAssets(IResourcePack pack) {
         for (String name : PROGRAM_NAMES) {
             if (exists(pack, "shaders/program/" + name + ".json")
@@ -128,6 +132,7 @@ public final class ResourcePackScanner {
         return false;
     }
 
+    // Packs without a minecraft domain cannot override shaders
     private static boolean hasMinecraftDomain(IResourcePack pack) {
         try {
             return pack.getResourceDomains().contains("minecraft");
@@ -136,6 +141,7 @@ public final class ResourcePackScanner {
         }
     }
 
+    // Resource existence without throwing
     private static boolean exists(IResourcePack pack, String path) {
         try {
             return pack.resourceExists(new ResourceLocation("minecraft", path.toLowerCase(Locale.ROOT)));

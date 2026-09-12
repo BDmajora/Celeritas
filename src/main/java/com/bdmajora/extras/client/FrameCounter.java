@@ -34,6 +34,7 @@ public final class FrameCounter {
     private FrameCounter() {
     }
 
+    // Records one frame time per render tick and recomputes the percentiles on a fixed interval
     @SubscribeEvent
     public static void onRenderTick(TickEvent.RenderTickEvent event) {
         if (event.phase != TickEvent.Phase.START) {
@@ -62,18 +63,22 @@ public final class FrameCounter {
         }
     }
 
+    // Mean over the sample window, cached between recalculations
     public static int getAverageFps() {
         return cachedAverageFps;
     }
 
+    // FPS at the 1st percentile of frame times, cached
     public static int getOnePercentLowFps() {
         return cachedOnePercentLowFps;
     }
 
+    // FPS at the 0.1st percentile of frame times, cached
     public static int getPointOnePercentLowFps() {
         return cachedPointOnePercentLowFps;
     }
 
+    // Sorts the current window and derives the three figures; zeros when empty
     private static void recalculate() {
         int size = sampleCount;
         if (size == 0) {
@@ -99,6 +104,7 @@ public final class FrameCounter {
         cachedPointOnePercentLowFps = percentileLow(deltas, 0.1);
     }
 
+    // Appends to the ring, doubling the arrays when full
     private static void addSample(long time, long delta) {
         if (sampleCount == sampleTimes.length) {
             int capacity = sampleTimes.length * 2;

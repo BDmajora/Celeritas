@@ -2,39 +2,24 @@ package com.bdmajora.equilibrium.common.util.math;
 
 import net.minecraft.util.math.MathHelper;
 
-// a replacement for the sine lookup table in MathHelper, reducing its size and improving the access
-// pattern for the paired sin/cos calls that dominate its callers
-// two identities do the work: sin(-x) = -sin(x), which removes the negative half of the domain, and
-// sin(x) = sin(pi/2 - x), which removes the supplementary angles
-// together they take the table from 65 536 entries (256 KB) down to 16 384 (64 KB), small enough to
-// stay resident in L2 rather than being streamed from memory every time an entity rotates
-// the reconstruction is branch-free integer arithmetic, so the cycles spent rebuilding the discarded
-// quadrants cost far less than the cache misses they avoid
-// unlike BetterFps' math algorithms - which trade accuracy for speed and offer a menu of how much
-// accuracy to give up - the values here are *bit-for-bit identical* to vanilla's
-// that matters more than it might seem: entity positions, projectile arcs and explosion ray directions
-// all run through sin, and a client that computes them differently from the server desyncs
-// init(float[]) verifies all 65 536 reconstructed values against the vanilla table before it is
-// discarded, so a mistake here fails loudly at startup rather than as a rubber-banding bug an hour
-// into a session
-// coderbot16 wrote the original implementation in Rust (https://gitlab.com/coderbot16/i73/-/tree/master/i73-trig/src)
-// jellysquid3 added further optimisations and the port to Java, in Lithium
+// Replaces MathHelper's sine table, folding 65 536 entries (256 KB) down to 16 384 (64 KB) via
+// sin(-x) = -sin(x) and sin(x) = sin(pi/2 - x), so it stays resident in L2
+// Values are bit-for-bit identical to vanilla, which matters because sin drives entity positions and
+// projectile arcs; a client that computes them differently desyncs
+// Original Rust implementation by coderbot16; Java port and further work by jellysquid3 in Lithium
 public class CompactSineLUT {
-    // raw float bits rather than floats
-    // the sign flip that reconstructs the negative half is a single XOR on the sign bit, which is only
-    // expressible on the integer representation, so storing ints avoids converting back and forth
+    // Raw float bits, because the sign flip that rebuilds the negative half is an XOR on the sign bit
     private static final int[] SINE_TABLE_INT = new int[16384 + 1];
 
     // sin(pi), the one index neither identity can reach.
     private static float sineTableMidpoint;
 
+    // Static-only
     private CompactSineLUT() {
     }
 
-    // builds the compact table from vanilla's, and proves the two agree
-    // called from the end of MathHelper's static initialiser, the only moment at which the vanilla
-    // table is both fully populated and not yet used by anything
-    // vanilla is that fully populated 65 536-entry table
+    // Builds the compact table from vanilla's and verifies all 65 536 values agree before it is discarded
+    // Called from the end of MathHelper's static init, the only point where vanilla's table is full and unused
     public static void init(float[] vanilla) {
         if (vanilla == null || vanilla.length != 65536) {
             throw new IllegalStateException("Expected a 65536-entry vanilla sine table, found "
@@ -68,6 +53,7 @@ public class CompactSineLUT {
         return lookup((int) (value * 10430.378F + 16384.0F) & 65535);
     }
 
+    // Rebuilds any of the four quadrants from the stored one using branch-free integer arithmetic
     private static float lookup(int index) {
         // sin(pi) is its own supplement and its own negation, so neither identity produces it.
         if (index == 32768) {

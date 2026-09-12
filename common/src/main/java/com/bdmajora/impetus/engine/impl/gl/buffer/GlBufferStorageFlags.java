@@ -19,6 +19,7 @@ public enum GlBufferStorageFlags implements EnumBit {
         this.bits = bits;
     }
 
+    // GL flag bit
     @Override
     public int getBits() {
         return this.bits;

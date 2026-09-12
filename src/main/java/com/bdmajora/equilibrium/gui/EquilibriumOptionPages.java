@@ -17,18 +17,19 @@ import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;
 
-// Optimizations page in Impetus' video options; separate from Performance since these are patches, not fidelity tradeoffs
-// Built by walking EquilibriumOptions instead of hardcoding, so new tree entries show up here for free
-// All toggles need REQUIRES_GAME_RESTART - options are read by EquilibriumMixinPlugin before the game window exists
+// Optimizations page in Impetus' video options, built by walking EquilibriumOptions so new entries appear for free
+// Every toggle needs REQUIRES_GAME_RESTART: options are read by the mixin plugin before the window exists
 public final class EquilibriumOptionPages {
     private static final String MOD_ID = "equilibrium";
 
     private static final OptionStorage<EquilibriumConfig> STORAGE = new OptionStorage<EquilibriumConfig>() {
+        // The options screen edits the live config directly
         @Override
         public EquilibriumConfig getData() {
             return Equilibrium.config();
         }
 
+        // Writes the file once the screen is dismissed
         @Override
         public void save() {
             Equilibrium.config().save();
@@ -38,6 +39,7 @@ public final class EquilibriumOptionPages {
     private EquilibriumOptionPages() {
     }
 
+    // Builds the page, one group per declared category, in declaration order
     public static OptionPage optimizations() {
         List<OptionGroup> groups = new ArrayList<>();
 
@@ -59,6 +61,7 @@ public final class EquilibriumOptionPages {
                 ImmutableList.copyOf(groups));
         }
 
+    // One checkbox per rule, wired to the config and labelled from the lang keys
     private static OptionImpl<EquilibriumConfig, Boolean> toggle(EquilibriumOptions.Entry entry) {
         String key = langKey(entry);
 
@@ -107,6 +110,7 @@ public final class EquilibriumOptionPages {
         return entry.path().replace('.', '_');
     }
 
+    // Lang key for a rule, derived from its path so a new option needs no GUI change
     private static String langKey(EquilibriumOptions.Entry entry) {
         return "impetus.options.equilibrium." + key(entry);
     }

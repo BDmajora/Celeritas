@@ -21,6 +21,7 @@ public interface ChunkVertexType {
     // a newly constructed vertex encoder for this vertex type
     ChunkVertexEncoder createEncoder();
 
+    // Defaults to none
     @MustBeInvokedByOverriders
     default Map<String, String> getDefines() {
         var defines = new HashMap<String, String>();

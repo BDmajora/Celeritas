@@ -19,11 +19,9 @@ import java.util.Set;
 
 final class TransformerProvider implements ITransformerProvider {
 
-    /**
-     * Forge's re-entrant transformers, which must never process meta class data when bytecode is fetched for a
-     * mixin target, else resolving the target re-enters their pipeline. Other re-entrants are detected and
-     * excluded automatically at runtime via the re-entrance lock.
-     */
+    // Forge's re-entrant transformers, which must never process meta class data when bytecode is fetched for a
+    // mixin target, else resolving the target re-enters their pipeline. Other re-entrants are detected and
+    // excluded automatically at runtime via the re-entrance lock
     private static final Set<String> REENTRANT_EXCLUSIONS = Sets.newHashSet(
             "net.minecraftforge.fml.common.asm.transformers.EventSubscriptionTransformer",
             "cpw.mods.fml.common.asm.transformers.EventSubscriptionTransformer",
@@ -49,6 +47,7 @@ final class TransformerProvider implements ITransformerProvider {
         return this.delegatedTransformers;
     }
 
+    // Every LaunchWrapper transformer wrapped as an ITransformer
     @Override
     public Collection<ITransformer> getTransformers() {
         List<IClassTransformer> transformers = Launch.classLoader.getTransformers();
@@ -63,17 +62,20 @@ final class TransformerProvider implements ITransformerProvider {
         return result;
     }
 
+    // The transformers Mixin runs before injecting, rebuilt when the list changes
     @Override
     public List<ITransformer> getDelegatedTransformers() {
         return Collections.unmodifiableList(this.getDelegatedLegacyTransformers());
     }
 
+    // Excludes a transformer by class name and invalidates the delegation list
     @Override
     public void addTransformerExclusion(String name) {
         this.excludeTransformers.add(name);
         this.delegatedTransformers = null;
     }
 
+    // Filters out Mixin's own proxy and anything excluded, in LaunchWrapper's order
     private void buildTransformerDelegationList() {
         ILogger logger = MixinService.getService().getLogger("TransformerProvider");
         logger.debug("Rebuilding transformer delegation list:");

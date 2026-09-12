@@ -14,12 +14,10 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
 
-/**
- * Advances the mixin environment to {@link org.spongepowered.asm.mixin.MixinEnvironment.Phase#INIT INIT} at the
- * one point in the boot where it is both safe and complete to do so, which is inside
- * {@code FMLDeobfTweaker#injectIntoClassLoader}, after {@code DeobfuscationTransformer} and the access transformers
- * have been registered, and before {@code net.minecraftforge.fml.common.Loader} is loaded and initialized.
- */
+// Advances the mixin environment to org.spongepowered.asm.mixin.MixinEnvironment.Phase#INIT INIT at the one
+// point in the boot where it is both safe and complete to do so, which is inside
+// FMLDeobfTweaker#injectIntoClassLoader, after DeobfuscationTransformer and the access transformers have been
+// registered, and before net.minecraftforge.fml.common.Loader is loaded and initialized
 public final class InitPhaseTrigger implements InvocationHandler {
 
     private static final String DEOBF_TWEAKER = "net.minecraftforge.fml.common.launcher.FMLDeobfTweaker";
@@ -38,6 +36,7 @@ public final class InitPhaseTrigger implements InvocationHandler {
         this.delegate = delegate;
     }
 
+    // Proxies Forge's logger field so the first log call from ModClassLoader advances Mixin to INIT
     static void install() {
         if (installed != null) {
             return;
@@ -65,6 +64,7 @@ public final class InitPhaseTrigger implements InvocationHandler {
         }
     }
 
+    // Restores the real logger once INIT has been reached
     static void uninstall() {
         InitPhaseTrigger trigger = installed;
         if (trigger == null) {
@@ -82,6 +82,7 @@ public final class InitPhaseTrigger implements InvocationHandler {
         }
     }
 
+    // Fires the phase change on first use, then forwards every call to the real logger
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
         if (!this.fired && args != null && args.length > 0 && MESSAGE.equals(args[0]) && "debug".equals(method.getName())) {
@@ -99,6 +100,7 @@ public final class InitPhaseTrigger implements InvocationHandler {
         }
     }
 
+    // Writes a static final via a handle, since the target field is final
     private static void setStatic(Field field, Object value) throws Throwable {
         field.set(null, value);
         if (field.get(null) != value) {
@@ -106,6 +108,7 @@ public final class InitPhaseTrigger implements InvocationHandler {
         }
     }
 
+    // The booter's own logger, resolved lazily
     private static ILogger logger() {
         return MixinService.getService().getLogger(Tags.MOD_NAME);
     }

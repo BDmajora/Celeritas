@@ -83,10 +83,12 @@ public final class BlockEntry implements Entry {
         return isTag ? new TagEntry(id, map) : new BlockEntry(id, map);
     }
 
+    // The block
     public NamespacedId getId() {
         return this.id;
     }
 
+    // property=value conditions, empty for any state
     public Map<String, String> getPropertyPredicates() {
         return this.propertyPredicates;
     }

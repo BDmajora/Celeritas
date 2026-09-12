@@ -17,16 +17,8 @@ import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;
 
-// Builds the Memory page in Impetus' video options, next to General, Quality, Performance and the Umbra pages
-// Same shape as UmbraOptionPages: one OptionStorage over the subsystem's config object, and OptionImpl bindings
-// whose setters write straight through to that object's fields
-//
-// Nearly every toggle here is flagged REQUIRES_GAME_RESTART, because CoartatioMixinPlugin reads the config once
-// to decide which mixins to apply, before the game window even exists. Flipping a switch at runtime cannot
-// un-apply an already-applied mixin or apply a skipped one, so the flag makes the screen say so instead of
-// letting the option look like it took effect
-// The live exceptions are built with an explicit builder rather than restartToggle: the two diagnostics, and the
-// two NBT map settings, which are re-read every time a compound is created
+// The Memory page in Impetus' video options, one OptionStorage over the config with setters writing straight through
+// Nearly everything is REQUIRES_GAME_RESTART since the mixin plugin reads the config before the window exists
 public final class CoartatioOptionPages {
     private static final String MOD_ID = "coartatio";
 
@@ -34,11 +26,13 @@ public final class CoartatioOptionPages {
     // asks CoartatioConfig.get() immediately
     // save() runs on every apply; that is fine because the file is seventeen lines and writes are user-paced
     private static final OptionStorage<CoartatioConfig> STORAGE = new OptionStorage<CoartatioConfig>() {
+        // The options screen edits the live config directly
         @Override
         public CoartatioConfig getData() {
             return CoartatioConfig.get();
         }
 
+        // Writes the file once the screen is dismissed
         @Override
         public void save() {
             CoartatioConfig.get().save();
@@ -48,6 +42,7 @@ public final class CoartatioOptionPages {
     private CoartatioOptionPages() {
     }
 
+    // Builds the page; group order here is on-screen order
     public static OptionPage memory() {
         // Groups render as titled blocks in page order, so the order of these adds is the on-screen order
         List<OptionGroup> groups = new ArrayList<>();

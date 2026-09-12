@@ -13,15 +13,16 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-// OR counterpart to ConditionAndMixin. OR branches can't flatten into property/value arrays
-// like AND can (children are arbitrary sub-trees), so this just swaps the Guava composite for an
-// array-backed, interned one — drops the retained Iterable and lets identical groups share an instance.
+// OR counterpart to ConditionAndMixin; children are arbitrary sub-trees so this cannot flatten to arrays
+// Swapping Guava's composite for an interned array-backed one drops the retained Iterable and shares groups
 @Mixin(ConditionOr.class)
 public class ConditionOrMixin {
+    // Vanilla keeps the child conditions as a lazily evaluated Iterable
     @Shadow
     @Final
     Iterable<ICondition> conditions;
 
+    // Cancelled at HEAD so Guava's Predicates.or chain is never built
     @Inject(method = "getPredicate", at = @At("HEAD"), cancellable = true)
     private void coartatio$flatten(BlockStateContainer container,
                                    CallbackInfoReturnable<Predicate<IBlockState>> cir) {

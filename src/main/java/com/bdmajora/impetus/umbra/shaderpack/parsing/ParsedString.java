@@ -9,6 +9,7 @@ public class ParsedString {
         this.text = text;
     }
 
+    // Consumes the token if it is next
     public boolean takeLiteral(String token) {
         if (!text.startsWith(token)) {
             return false;
@@ -19,6 +20,7 @@ public class ParsedString {
         return true;
     }
 
+    // Consumes at least one whitespace character
     public boolean takeSomeWhitespace() {
         if (text.isEmpty() || !Character.isWhitespace(text.charAt(0))) {
             return false;
@@ -30,6 +32,7 @@ public class ParsedString {
         return true;
     }
 
+    // Consumes a leading // and the spaces after it
     public boolean takeComments() {
         if (!text.startsWith("//")) {
             return false;
@@ -46,18 +49,22 @@ public class ParsedString {
         return true;
     }
 
+    // Whether the remainder contains the text
     public boolean currentlyContains(String text) {
         return this.text.contains(text);
     }
 
+    // Nothing left
     public boolean isEnd() {
         return text.isEmpty();
     }
 
+    // Everything remaining
     public String takeRest() {
         return text;
     }
 
+    // Consumes a fixed count
     private String takeCharacters(int numChars) {
         String result = text.substring(0, numChars);
         text = text.substring(numChars);
@@ -65,6 +72,7 @@ public class ParsedString {
         return result;
     }
 
+    // An identifier, or null
     public String takeWord() {
         if (isEnd()) {
             return null;
@@ -89,6 +97,7 @@ public class ParsedString {
         return takeCharacters(position);
     }
 
+    // A numeric literal, or null
     public String takeNumber() {
         if (isEnd()) {
             return null;
@@ -142,6 +151,7 @@ public class ParsedString {
         return takeCharacters(position);
     }
 
+    // Either, or null
     public String takeWordOrNumber() {
         String number = takeNumber();
 

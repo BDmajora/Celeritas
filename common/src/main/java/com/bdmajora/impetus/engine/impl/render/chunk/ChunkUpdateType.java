@@ -18,6 +18,7 @@ public enum ChunkUpdateType {
     // seen quickly
     IMPORTANT_REBUILD;
 
+    // Whether a new request outranks the one already queued
     @Deprecated
     public static boolean canPromote(ChunkUpdateType prev, ChunkUpdateType next) {
         return prev == null || (prev == REBUILD && next == IMPORTANT_REBUILD);

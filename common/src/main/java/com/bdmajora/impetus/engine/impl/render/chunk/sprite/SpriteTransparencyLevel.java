@@ -15,6 +15,7 @@ public enum SpriteTransparencyLevel {
     public interface Holder {
         SpriteTransparencyLevel impetus$getTransparencyLevel();
 
+        // From the platform sprite via its extension interface
         static SpriteTransparencyLevel getTransparencyLevel(Object o) {
             return ((Holder)o).impetus$getTransparencyLevel();
         }

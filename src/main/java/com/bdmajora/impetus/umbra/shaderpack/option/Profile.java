@@ -26,6 +26,7 @@ public final class Profile {
         this.disabledPrograms = disabledPrograms;
     }
 
+    // Whether every option the profile sets holds its value
     public boolean matches(OptionSet options, OptionValues values) {
         for (Map.Entry<String, String> entry : this.optionValues.entrySet()) {
             String option = entry.getKey();
@@ -59,18 +60,21 @@ public final class Profile {
             this.name = name;
         }
 
+        // Sets one option
         public Builder option(String optionId, String value) {
             this.optionValues.put(optionId, value);
 
             return this;
         }
 
+        // Turns one program off
         public Builder disableProgram(String programId) {
             this.disabledPrograms.add(programId);
 
             return this;
         }
 
+        // Inherits a parent profile
         public Builder addAll(Profile other) {
             this.optionValues.putAll(other.optionValues);
             this.disabledPrograms.addAll(other.disabledPrograms);
@@ -78,6 +82,7 @@ public final class Profile {
             return this;
         }
 
+        // Finalises
         public Profile build() {
             return new Profile(name,
                     Collections.unmodifiableMap(new HashMap<>(optionValues)),

@@ -34,24 +34,9 @@ import java.util.function.IntSupplier;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Owns the GL textures behind the pack's custom-texture directives, plus the per-stage sampler-unit overrides that
-// make programs actually read them
-// Port of Iris's CustomTextureManager, adapted to this pipeline's fixed-texture-unit architecture
-//
-// The architectural difference: Iris intercepts each program's sampler BINDINGS through
-// CustomTextureSamplerInterceptor, whereas here every sampler name has a fixed unit. So each directive gets a
-// dedicated unit above the pipeline's reserved range, the texture is bound there for the whole frame, and a
-// program belonging to that directive's stage has its sampler uniform pointed at the custom unit rather than the
-// standard one
-//
-// Directive semantics match Iris
-//   texture.<stage>.<sampler> overrides that sampler — and every alias of the same unit, e.g. gaux4 and colortex7 —
-//   during that stage only
-//   customTexture.<name> defines a named sampler available in every stage
-//   texture.noise replaces the generated noisetex
-//   a PNG uses the pack's own bytes with its mcmeta filtering; a namespace:path location resolves through the
-//   TextureManager at bind time, so resource reloads are safe; and minecraft:dynamic/lightmap_1 resolves to the
-//   live lightmap
+// The GL textures behind the pack's custom-texture directives, plus the per-stage sampler-unit overrides
+// Each directive gets a dedicated unit above the reserved range and the stage's programs are pointed at it
+// texture.<stage>.<sampler> overrides for one stage, customTexture.<name> is global, texture.noise replaces noisetex
 public class CustomTextureManager {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -193,6 +178,7 @@ public class CustomTextureManager {
         }
     }
 
+    // Next free unit in the fixed layout
     private int allocateUnit(String samplerName) {
         if (this.nextUnit > this.lastUnit) {
             LOGGER.error("[Umbra] Out of texture units for custom texture '{}' (units {}..{} exhausted); ignoring it",
@@ -237,6 +223,7 @@ public class CustomTextureManager {
         return null;
     }
 
+    // A texture from raw bytes with the declared dimensions and format
     private TextureRef createRawTexture(String name, CustomTextureData.RawData data) {
         try {
             int target = textureTarget(data.getTextureType());
@@ -276,6 +263,7 @@ public class CustomTextureManager {
         }
     }
 
+    // 1D, 2D or 3D from the directive
     private static int textureTarget(String value) {
         switch (value.toUpperCase(Locale.ROOT)) {
             case "TEXTURE_2D":
@@ -287,6 +275,7 @@ public class CustomTextureManager {
         }
     }
 
+    // Pack format name to GL
     private static int internalFormat(String value) {
         switch (value.toUpperCase(Locale.ROOT)) {
             case "R8": return GL30.GL_R8;
@@ -303,6 +292,7 @@ public class CustomTextureManager {
         }
     }
 
+    // Pack format name to GL client format
     private static int pixelFormat(String value) {
         switch (value.toUpperCase(Locale.ROOT)) {
             case "RED": return GL11.GL_RED;
@@ -314,6 +304,7 @@ public class CustomTextureManager {
         }
     }
 
+    // Pack type name to GL
     private static int pixelType(String value) {
         switch (value.toUpperCase(Locale.ROOT)) {
             case "BYTE": return GL11.GL_BYTE;
@@ -380,6 +371,7 @@ public class CustomTextureManager {
         return this.noiseTexture != null ? this.noiseTexture.getTextureId() : -1;
     }
 
+    // Whether the pack declared any custom textures
     public boolean isEmpty() {
         return this.bindings.isEmpty();
     }
@@ -405,6 +397,7 @@ public class CustomTextureManager {
         GlTextureUnits.resetToUnit0();
     }
 
+    // Frees every texture
     public void destroy() {
         for (PngTexture texture : this.ownedTextures) {
             texture.destroy();

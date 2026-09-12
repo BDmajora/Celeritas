@@ -4,6 +4,7 @@ import com.bdmajora.impetus.engine.api.util.ColorARGB;
 
 public class BoxBlur {
 
+    // Two-pass separable box blur; skipped entirely for a uniform buffer
     public static void blur(ColorBuffer buf, ColorBuffer tmp, int radius) {
         if (buf.width != tmp.width || buf.height != tmp.height) {
             throw new IllegalArgumentException("Color buffers must have same dimensions");
@@ -28,6 +29,7 @@ public class BoxBlur {
         blurImpl(tmp, data, width, height, radius); // Y-axis
     }
 
+    // One horizontal pass with a running sum
     private static void blurImpl(int[] src, int[] dst, int width, int height, int radius) {
         int multiplier = getAveragingMultiplier((radius * 2) + 1);
 
@@ -96,6 +98,7 @@ public class BoxBlur {
         return value;
     }
 
+    // Every pixel the same, so blurring would change nothing
     private static boolean isHomogenous(int[] array) {
         int first = array[0];
 
@@ -118,15 +121,18 @@ public class BoxBlur {
             this.height = height;
         }
 
+        // Writes one pixel
         public void set(int x, int y, int color) {
             this.data[getIndex(x, y, this.width)] = color;
         }
 
 
+        // Reads one pixel
         public int get(int x, int y) {
             return this.data[getIndex(x, y, this.width)];
         }
 
+        // Row-major index
         public static int getIndex(int x, int y, int width) {
             return (y * width) + x;
         }

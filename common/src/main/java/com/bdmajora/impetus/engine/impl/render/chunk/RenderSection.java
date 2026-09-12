@@ -102,6 +102,7 @@ public class RenderSection extends AbstractSection {
         this.disposed = true;
     }
 
+    // Installs built data; true when the visual flags changed
     public boolean setInfo(@Nullable BuiltRenderSectionData info) {
         boolean changed = !Objects.equals(info, this.contextData);
         if (changed) {
@@ -114,14 +115,17 @@ public class RenderSection extends AbstractSection {
         return changed;
     }
 
+    // Whether removed
     public boolean isDisposed() {
         return this.disposed;
     }
 
+    // Whether it has data
     public boolean isBuilt() {
         return this.contextData != null;
     }
 
+    // Owning region
     public RenderRegion getRegion() {
         return this.region;
     }
@@ -130,15 +134,18 @@ public class RenderSection extends AbstractSection {
         return this.contextData;
     }
 
+    // Refreshes the flags from the data
     public void updateCachedContextDataFlags() {
         this.visualsServiceFlags = this.contextData != null ? this.contextData.getVisualBitmaskForSection() : 0;
         this.hasAnythingToRender = this.visualsServiceFlags != 0;
     }
 
+    // Geometry, sprites or entities
     public boolean hasAnythingToRender() {
         return this.hasAnythingToRender;
     }
 
+    // Records what re-sorting each pass needs
     public void setTranslucencySortStates(@NotNull Map<TerrainRenderPass, TranslucentQuadAnalyzer.SortState> sortStates) {
         this.translucencySortStates = Map.copyOf(sortStates);
 
@@ -161,6 +168,7 @@ public class RenderSection extends AbstractSection {
         return this.buildCancellationToken;
     }
 
+    // So a superseded build can be cancelled
     public void setBuildCancellationToken(@Nullable CancellationToken token) {
         this.buildCancellationToken = token;
     }
@@ -169,6 +177,7 @@ public class RenderSection extends AbstractSection {
         return this.pendingUpdateType;
     }
 
+    // The queued rebuild type, or null
     public void setPendingUpdate(@Nullable ChunkUpdateType type) {
         this.pendingUpdateType = type;
     }
@@ -186,18 +195,22 @@ public class RenderSection extends AbstractSection {
         }
     }
 
+    // For result filtering
     public int getLastBuiltFrame() {
         return this.lastBuiltFrame;
     }
 
+    // Stamped on install
     public void setLastBuiltFrame(int lastBuiltFrame) {
         this.lastBuiltFrame = lastBuiltFrame;
     }
 
+    // For result filtering
     public int getLastSubmittedFrame() {
         return this.lastSubmittedFrame;
     }
 
+    // Stamped on submit
     public void setLastSubmittedFrame(int lastSubmittedFrame) {
         this.lastSubmittedFrame = lastSubmittedFrame;
     }

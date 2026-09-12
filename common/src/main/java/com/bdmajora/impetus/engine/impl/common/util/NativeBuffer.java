@@ -35,26 +35,31 @@ public class NativeBuffer {
         ACTIVE_BUFFERS.put(new PhantomReference<>(this, RECLAIM_QUEUE), this.ref);
     }
 
+    // Allocates and copies src's remaining bytes
     public static NativeBuffer copy(ByteBuffer src) {
         NativeBuffer dst = new NativeBuffer(src.remaining());
         LWJGL.memCopy(src, dst.getDirectBuffer());
         return dst;
     }
 
+    // The backing direct buffer; throws once freed
     public ByteBuffer getDirectBuffer() {
         this.ref.checkFreed();
 
         return LWJGL.memByteBuffer(this.ref.address, this.ref.length);
     }
 
+    // Releases immediately rather than waiting for the cleaner
     public void free() {
         deallocate(this.ref);
     }
 
+    // Capacity in bytes
     public int getLength() {
         return this.ref.length;
     }
 
+    // Frees every buffer whose owner was collected; forceGc runs a GC first
     public static void reclaim(boolean forceGc) {
         if (forceGc) {
             System.gc();
@@ -84,16 +89,19 @@ public class NativeBuffer {
         }
     }
 
+    // Live native bytes, for the debug screen
     public static long getTotalAllocated() {
         return ALLOCATED;
     }
 
+    // Allocation site, kept only when leak tracking is on
     private static StackTraceElement[] getStackTrace() {
         return ENABLE_MEMORY_TRACING ? Thread.currentThread().getStackTrace() : null;
     }
 
     private static final int MAX_ALLOCATION_ATTEMPTS = 3;
 
+    // Allocates off-heap and registers a phantom reference so a leak is still freed
     private static BufferReference allocate(int bytes) {
         long address = 0;
         int attempts = 0;
@@ -124,6 +132,7 @@ public class NativeBuffer {
         return ref;
     }
 
+    // Frees once, tolerant of a double call
     private static void deallocate(BufferReference ref) {
         ref.checkFreed();
         ref.freed = true;
@@ -147,6 +156,7 @@ public class NativeBuffer {
             this.allocationSite = allocationSite;
         }
 
+        // Throws on use after free
         private void checkFreed() {
             if (this.freed) {
                 throw new IllegalStateException("Buffer has been deleted");

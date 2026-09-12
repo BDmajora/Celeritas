@@ -3,10 +3,8 @@ package com.bdmajora.fulgor.lighting;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.IChunkProvider;
 
-// 5x5 snapshot of chunks around one column, for Chunk.recheckGaps: taken once up front (25 lookups)
-// instead of via the chunk provider per column-neighbour pair (1024 lookups into the same 25 chunks).
-// Entries may be null; use isLoaded rather than null-checking piecemeal, since a partial answer from
-// a partially loaded neighbourhood is exactly what produces skylight seams.
+// 5x5 chunk snapshot around one column for recheckGaps: 25 lookups up front instead of 1024 through the provider
+// Entries may be null; use isLoaded rather than piecemeal null checks, since a partial answer produces skylight seams
 public final class WorldChunkSlice {
     private static final int DIAMETER = 5;
     private static final int RADIUS = DIAMETER / 2;
@@ -52,6 +50,7 @@ public final class WorldChunkSlice {
         return true;
     }
 
+    // Slice-relative lookup; null for an unloaded neighbour
     private Chunk getChunk(int x, int z) {
         if (x < 0 || x >= DIAMETER || z < 0 || z >= DIAMETER) {
             return null;

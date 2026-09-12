@@ -23,6 +23,7 @@ public class DefaultColors {
     private DefaultColors() {
     }
 
+    // Per-mod colour from a fixed table, hashed for unknown mods
     public static int getModAccentColor(String modId) {
         if (modId == null || modId.isEmpty()) {
             return ELEMENT_ACTIVATED;
@@ -40,6 +41,7 @@ public class DefaultColors {
         };
     }
 
+    // Replaces the alpha byte
     public static int withAlpha(int color, int alpha) {
         return (color & 0x00FFFFFF) | ((alpha & 0xFF) << 24);
     }

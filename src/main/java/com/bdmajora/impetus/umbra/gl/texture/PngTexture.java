@@ -58,18 +58,22 @@ public class PngTexture extends GlResource {
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
     }
 
+    // For binding as a custom sampler
     public int getTextureId() {
         return getGlId();
     }
 
+    // Decoded width
     public int getWidth() {
         return this.width;
     }
 
+    // Decoded height
     public int getHeight() {
         return this.height;
     }
 
+    // Frees the texture
     @Override
     protected void destroyInternal() {
         LWJGL.glDeleteTextures(getGlId());

@@ -132,10 +132,6 @@ public abstract class ChunkMixin implements ChunkLightingData, LightingEnginePro
     // this version hands the column to LightingHooks#relightSkylightColumn instead, which records what
     // it cannot do now so it can be done on load
     // @author / @reason are Mixin's required metadata on an @Overwrite, not documentation
-    /**
-     * @reason Record cross-chunk relighting that cannot be done yet, instead of dropping it
-     * @author Angeline (Phosphor), Luna Mira Lage (Alfheim)
-     */
     @Overwrite
     private void relightBlock(int x, int y, int z) {
         int oldHeight = this.heightMap[z << 4 | x] & 255;
@@ -165,10 +161,6 @@ public abstract class ChunkMixin implements ChunkLightingData, LightingEnginePro
     // only the requested type is flushed, since the two propagate independently and a block-light read
     // has no reason to pay for pending skylight
     // @author / @reason are Mixin's required metadata on an @Overwrite, not documentation
-    /**
-     * @reason Flush the pending queue for the requested light type before reading
-     * @author Angeline (Phosphor)
-     */
     @Overwrite
     public int getLightFor(EnumSkyBlock lightType, BlockPos pos) {
         this.fulgor$lightingEngine.processLightUpdatesForType(lightType);
@@ -181,10 +173,6 @@ public abstract class ChunkMixin implements ChunkLightingData, LightingEnginePro
     // this seeds the emitting blocks into the engine instead and defers declaring the chunk lit until
     // its whole neighbourhood is lit too
     // @author / @reason are Mixin's required metadata on an @Overwrite, not documentation
-    /**
-     * @reason Seed the engine instead of relighting every column immediately
-     * @author Angeline (Phosphor)
-     */
     @Overwrite
     public void checkLight() {
         this.isTerrainPopulated = true;
@@ -196,10 +184,6 @@ public abstract class ChunkMixin implements ChunkLightingData, LightingEnginePro
     // snapshot; the vanilla body cannot simply be redirected because the lookups are spread across
     // four private helpers
     // @author / @reason are Mixin's required metadata on an @Overwrite, not documentation
-    /**
-     * @reason Snapshot the neighbourhood once instead of 1024 provider lookups
-     * @author Angeline (Phosphor)
-     */
     @Overwrite
     private void recheckGaps(boolean onlyOne) {
         this.world.profiler.startSection("recheckGaps");

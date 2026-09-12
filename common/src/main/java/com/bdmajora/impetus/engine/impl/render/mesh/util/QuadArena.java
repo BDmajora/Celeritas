@@ -5,14 +5,8 @@ import com.bdmajora.impetus.engine.impl.render.mesh.gl.BindlessBuffer;
 import com.bdmajora.impetus.engine.impl.render.mesh.gl.DeviceBuffer;
 import com.bdmajora.impetus.engine.impl.render.mesh.gl.SparseBindlessBuffer;
 
-// Every section's geometry, in one buffer, allocated a quad at a time
-//
-// Addresses handed out are quad indices, not bytes, which is what lets the mesh shader index terrainData with
-// (quadIndex << 2) + corner and skip a multiply. The 32-bit quad index is also what fits in the section header.
-//
-// Backed by a sparse buffer where the driver handles page commitment properly: the address space is set absurdly
-// large and physical pages appear only under live allocations, so fragmentation costs address space rather than
-// VRAM. Where sparse allocation misbehaves the fallback is a fixed dense buffer sized by the memory budget
+// Every section's geometry in one buffer, addressed by quad index so the mesh shader skips a multiply
+// Sparse-backed where the driver commits pages properly, so fragmentation costs address space rather than VRAM
 public class QuadArena {
     // Address space for the sparse buffer. Deliberately far beyond any real VRAM: it is virtual, never resident,
     // and a huge span means the allocator never has to compact
@@ -42,6 +36,7 @@ public class QuadArena {
         this.alloc(1);
     }
 
+    // The backing GPU buffer
     public DeviceBuffer getBuffer() {
         return this.buffer;
     }
@@ -63,6 +58,7 @@ public class QuadArena {
         return (int) address;
     }
 
+    // Returns a quad range to the allocator
     public void free(int quadAddress) {
         int quadCount = this.allocator.free(quadAddress);
         this.liveQuads -= quadCount;
@@ -93,10 +89,12 @@ public class QuadArena {
         return this.denseCapacity;
     }
 
+    // For the debug screen
     public long getUsedBytes() {
         return byteLength((int) this.liveQuads);
     }
 
+    // Frees the buffer
     public void delete() {
         this.buffer.delete();
     }
@@ -106,6 +104,7 @@ public class QuadArena {
         return Integer.toUnsignedLong(quadAddress) * 4L * this.bytesPerVertex;
     }
 
+    // Quads to bytes at the quad stride
     private long byteLength(int quadCount) {
         return (long) quadCount * 4L * this.bytesPerVertex;
     }

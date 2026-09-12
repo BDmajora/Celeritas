@@ -23,6 +23,7 @@ public class FlatLightPipeline implements LightPipeline {
     // If false, always shade by light face instead of quad normal
     private final boolean useQuadNormalsForShading;
 
+    // One light value for the whole quad, from the block in front of the face
     @Override
     public void calculate(ModelQuadView quad, int x, int y, int z, QuadLightData out, ModelQuadFacing cullFace, ModelQuadFacing lightFace, boolean shade, boolean applyAoDepthBlending) {
         int lightmap;
@@ -54,6 +55,7 @@ public class FlatLightPipeline implements LightPipeline {
         }
     }
 
+    // Per-vertex diffuse from the vertex normals
     public void applySidedBrightnessFromNormals(ModelQuadView quad, QuadLightData out, boolean shade) {
         int normal = quad.getModFaceNormal();
         Arrays.fill(out.br, this.diffuseProvider.getDiffuse(NormI8.unpackX(normal), NormI8.unpackY(normal), NormI8.unpackZ(normal), shade));

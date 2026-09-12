@@ -13,31 +13,37 @@ public abstract class GlObject {
 
     }
 
+    // Called once by the subclass constructor
     protected final void setHandle(int handle) {
         this.handle = handle;
     }
 
+    // The GL name; throws once deleted
     public final int handle() {
         this.checkHandle();
 
         return this.handle;
     }
 
+    // Throws on use after delete
     protected final void checkHandle() {
         if (!this.isHandleValid()) {
             throw new IllegalStateException("Handle is not valid");
         }
     }
 
+    // Whether not yet deleted
     protected final boolean isHandleValid() {
         return this.handle != INVALID_HANDLE;
     }
 
+    // Frees once; safe to call twice
     public final void delete() {
         this.destroyInternal();
         this.handle = INVALID_HANDLE;
     }
 
+    // Alias of delete
     @Deprecated // kept around to avoid huge diffs in old Umbra code
     public final void destroy() {
         this.delete();

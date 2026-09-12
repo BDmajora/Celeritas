@@ -15,6 +15,7 @@ public record DirectMultiDrawEmitter(MultiDrawBatch batch) implements MultiDrawE
         this(new MultiDrawBatch(MAX_COMMAND_COUNT));
     }
 
+    // Appends one draw per visible facing of a section
     @Override
     @SuppressWarnings("IntegerMultiplicationImplicitCastToLong")
     public void addDrawCommands(long pMeshData, int mask, int indexPointerMask) {
@@ -36,6 +37,7 @@ public record DirectMultiDrawEmitter(MultiDrawBatch batch) implements MultiDrawE
         batch.size = size;
     }
 
+    // glMultiDrawElementsBaseVertex over the batch
     @Override
     public void executeBatch(CommandList commandList, GlTessellation tessellation, GlPrimitiveType primitiveType) {
         try (DrawCommandList drawCommandList = commandList.beginTessellating(tessellation)) {
@@ -43,21 +45,25 @@ public record DirectMultiDrawEmitter(MultiDrawBatch batch) implements MultiDrawE
         }
     }
 
+    // Largest index count in the batch, for the shared index buffer
     @Override
     public int getIndexBufferSize() {
         return this.batch.getIndexBufferSize();
     }
 
+    // No draws
     @Override
     public boolean isEmpty() {
         return this.batch.isEmpty();
     }
 
+    // Resets for the next region
     @Override
     public void clear() {
         this.batch.clear();
     }
 
+    // Frees the native arrays
     @Override
     public void delete() {
         this.batch.delete();

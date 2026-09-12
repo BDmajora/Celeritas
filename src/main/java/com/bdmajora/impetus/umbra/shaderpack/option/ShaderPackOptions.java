@@ -10,15 +10,9 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-// Discovers, merges and applies the pack's configurable options across every source file it ships
-// Adapted from Iris's ShaderPackOptions, but the pipeline order differs. Iris works on an IncludeGraph: options are
-// discovered on per-file un-flattened source and applied lazily as include-time line transforms, scoped to each
-// weakly-connected include component. Impetus flattens includes textually AFTER option application, so this works
-// directly on the raw source map and hands IncludeProcessor a map of already-EDITED sources to flatten
-// One consequence of having no include graph: a boolean #define option is only confirmed configurable when its name
-// is referenced by an #ifdef or #ifndef somewhere, and the reference set is taken across the WHOLE pack rather than
-// per connected component. That is a safe over-approximation — it can expose an extra boolean option that nothing
-// in that component reads, but it can never corrupt source — and it matches OptiFine's permissive behaviour
+// Discovers, merges and applies the pack's options across every source file, adapted from Iris
+// Impetus flattens includes after option application, so this edits the raw source map and hands IncludeProcessor
+// the result. #define references are taken pack-wide rather than per include component: a safe over-approximation
 public class ShaderPackOptions {
     private final OptionSet optionSet;
     private final OptionValues optionValues;
@@ -50,10 +44,12 @@ public class ShaderPackOptions {
         this.editedSources = Collections.unmodifiableMap(edited);
     }
 
+    // Every option the pack declares
     public OptionSet getOptionSet() {
         return optionSet;
     }
 
+    // Current values
     public OptionValues getOptionValues() {
         return optionValues;
     }

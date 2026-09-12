@@ -28,10 +28,12 @@ public final class NamespacedId {
         this.name = Objects.requireNonNull(name);
     }
 
+    // Before the colon, minecraft when absent
     public String getNamespace() {
         return this.namespace;
     }
 
+    // After the colon
     public String getName() {
         return this.name;
     }
@@ -49,11 +51,13 @@ public final class NamespacedId {
         return this.namespace.equals(that.namespace) && this.name.equals(that.name);
     }
 
+    // Consistent with equals
     @Override
     public int hashCode() {
         return 31 * (31 + this.namespace.hashCode()) + this.name.hashCode();
     }
 
+    // namespace:name
     @Override
     public String toString() {
         return this.namespace + ":" + this.name;

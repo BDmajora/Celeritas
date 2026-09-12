@@ -28,6 +28,7 @@ public class OptionPageConstructionEvent extends ImpetusEvent {
         this.additionalGroups.add(group);
     }
 
+    // Mutable; handlers append
     public List<OptionGroup> getAdditionalGroups() {
         return Collections.unmodifiableList(this.additionalGroups);
     }

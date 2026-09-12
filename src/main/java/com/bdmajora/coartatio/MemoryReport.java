@@ -11,20 +11,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
-// Turns Coartatio's counters into bytes
-// Every other statistic in this mod is a hit count, which answers "is it working" but not "was it worth it".
-// This converts them into a number in megabytes
-//
-// Two figures are MEASURED, by summing the actual arrays before they are released: texture pixel data and the
-// class loader cache. Those are exact
-// The rest are ESTIMATES — a shared-object count times a per-object size. Every size below is for a 64-bit JVM
-// with compressed oops (the default under 4 GB of heap, which is every 1.12.2 instance) and is deliberately
-// rounded DOWN, because an estimate that flatters the mod is worse than no estimate at all. The report labels
-// the two kinds differently and never presents an estimate as a measurement
-//
-// What this cannot do is measure the heap before and after within one run, since "before" would mean launching
-// without the mod. Comparing Runtime.totalMemory across two launches is the honest way, and the command prints
-// the live heap so those numbers are to hand
+// Turns Coartatio's counters into megabytes, so the report answers "was it worth it" and not just "is it working"
+// Texture pixels and the class loader cache are MEASURED by summing arrays before release; the rest are ESTIMATES
+// from object counts times a per-object size, rounded down, and the report never presents one as the other
 public final class MemoryReport {
     // ---- object sizes, 64-bit JVM with compressed oops ----
 
@@ -59,14 +48,17 @@ public final class MemoryReport {
     private MemoryReport() {
     }
 
+    // Measured: pixel arrays summed before release
     public static void recordSpriteBytes(long bytes) {
         SPRITE_BYTES.addAndGet(bytes);
     }
 
+    // Measured: cache entries summed before release
     public static void recordClassLoaderBytes(long bytes) {
         CLASS_LOADER_BYTES.addAndGet(bytes);
     }
 
+    // Estimated: count of states whose table was replaced by a packed index
     public static void recordPackedStates(long states) {
         PACKED_STATE_COUNT.addAndGet(states);
     }
@@ -140,6 +132,7 @@ public final class MemoryReport {
         return new Line(name, Math.max(0, count) * each, false);
     }
 
+    // A line flagged as a measurement rather than an estimate
     private static Line measured(String name, long bytes) {
         return new Line(name, bytes, true);
     }

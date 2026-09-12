@@ -12,6 +12,7 @@ public class GlUniformMatrix3f extends GlUniform<Matrix3f> {
         super(index);
     }
 
+    // glUniformMatrix3fv via a scratch buffer
     @Override
     public void set(Matrix3f value) {
         try (MemoryStack stack = MemoryStack.stackPush()) {

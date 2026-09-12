@@ -1,6 +1,7 @@
 package com.bdmajora.impetus.engine.impl.util.sorting;
 
 public class InsertionSort extends AbstractSort {
+    // In-place on a range; the base case for merge sort on small runs
     public static void insertionSort(final int[] indices, final int fromIndex, final int toIndex, final float[] keys) {
         int index = fromIndex;
 

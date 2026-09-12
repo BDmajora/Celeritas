@@ -23,6 +23,7 @@ public enum GlBufferMapFlags implements EnumBit {
         this.bit = bit;
     }
 
+    // GL flag bit
     @Override
     public int getBits() {
         return this.bit;

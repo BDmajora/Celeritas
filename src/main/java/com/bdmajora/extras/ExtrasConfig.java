@@ -218,6 +218,7 @@ public final class ExtrasConfig {
         }
     }
 
+    // Reads every property, falling back to defaults for anything missing or out of range
     private void loadFrom(Configuration config) {
         booleans.forEach(property -> property.load(config));
         integers.forEach(property -> property.load(config));
@@ -302,15 +303,18 @@ public final class ExtrasConfig {
             this.key = key;
         }
 
+        // Lang key for the cycler label
         @Override
         public String translationKey() {
             return this.key;
         }
 
+        // Whether this corner sits on the bottom edge
         public boolean isBottom() {
             return this == BOTTOM_LEFT || this == BOTTOM_RIGHT;
         }
 
+        // Whether this corner sits on the right edge
         public boolean isRight() {
             return this == TOP_RIGHT || this == BOTTOM_RIGHT;
         }
@@ -328,6 +332,7 @@ public final class ExtrasConfig {
             this.key = key;
         }
 
+        // Lang key for the cycler label
         @Override
         public String translationKey() {
             return this.key;
@@ -346,6 +351,7 @@ public final class ExtrasConfig {
             this.key = key;
         }
 
+        // Lang key for the cycler label
         @Override
         public String translationKey() {
             return this.key;
@@ -369,6 +375,7 @@ public final class ExtrasConfig {
             this.key = key;
         }
 
+        // Lang key for the cycler label
         @Override
         public String translationKey() {
             return this.key;
@@ -392,6 +399,7 @@ public final class ExtrasConfig {
             this.key = key;
         }
 
+        // Lang key for the cycler label
         @Override
         public String translationKey() {
             return this.key;
@@ -411,6 +419,7 @@ public final class ExtrasConfig {
             this.key = key;
         }
 
+        // Lang key for the cycler label
         @Override
         public String translationKey() {
             return this.key;
@@ -429,6 +438,7 @@ public final class ExtrasConfig {
             this.key = key;
         }
 
+        // Lang key for the cycler label
         @Override
         public String translationKey() {
             return this.key;
@@ -439,6 +449,7 @@ public final class ExtrasConfig {
     public interface Localized {
         String translationKey();
 
+        // Resolves the translation key for display
         default String localizedName() {
             return I18n.format(this.translationKey());
         }

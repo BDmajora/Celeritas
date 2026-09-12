@@ -18,6 +18,7 @@ public enum DynamicLightsMode implements DynamicLightsConfig.Localized {
         this.key = key;
     }
 
+    // Anything but OFF
     public boolean isEnabled() {
         return this != OFF;
     }
@@ -32,6 +33,7 @@ public enum DynamicLightsMode implements DynamicLightsConfig.Localized {
         return this.delay;
     }
 
+    // Lang key for the cycler label
     @Override
     public String translationKey() {
         return this.key;

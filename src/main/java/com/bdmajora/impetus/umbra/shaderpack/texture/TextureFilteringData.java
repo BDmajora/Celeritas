@@ -12,14 +12,17 @@ public final class TextureFilteringData {
         this.clamp = clamp;
     }
 
+    // LINEAR rather than NEAREST
     public boolean shouldBlur() {
         return this.blur;
     }
 
+    // CLAMP_TO_EDGE rather than REPEAT
     public boolean shouldClamp() {
         return this.clamp;
     }
 
+    // For logging
     @Override
     public String toString() {
         return "TextureFilteringData{blur=" + this.blur + ", clamp=" + this.clamp + "}";

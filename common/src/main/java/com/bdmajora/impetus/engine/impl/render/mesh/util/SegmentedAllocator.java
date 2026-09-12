@@ -3,16 +3,9 @@ package com.bdmajora.impetus.engine.impl.render.mesh.util;
 import it.unimi.dsi.fastutil.longs.LongBidirectionalIterator;
 import it.unimi.dsi.fastutil.longs.LongRBTreeSet;
 
-// A first-fit free-list allocator over an abstract 1-D address space, with coalescing frees and in-place growth
-// Everything the mesh backend allocates goes through one of these: quads inside the geometry buffer, and bytes
-// inside the staging ring
-//
-// The trick that makes it cheap is packing (address, size) into a single long and keeping two sorted sets of them
-// with the fields in opposite order:
-//   FREE  is (size, address)    so iterating from a size finds the first block big enough
-//   TAKEN is (address, size)    so iterating from an address finds that allocation and its neighbours
-// Coalescing on free is then just looking at the previous and next TAKEN entries and seeing whether the gap to
-// them is non-zero, which is exactly the free block that has to be absorbed
+// First-fit free-list allocator with coalescing and in-place growth, used for quads and staging bytes
+// (address, size) packs into one long kept in two sorted sets with the fields swapped: FREE by size for
+// first-fit, TAKEN by address so coalescing is a look at the two neighbours
 public class SegmentedAllocator {
     // Returned by alloc() when the request cannot be satisfied within the limit; -1 rather than an exception
     // because running out is a normal, recoverable condition for the geometry arena
@@ -34,6 +27,7 @@ public class SegmentedAllocator {
     // when it has to grow or can shrink
     private boolean resized;
 
+    // Caps growth
     public void setLimit(long limit) {
         this.sizeLimit = limit;
     }
@@ -43,10 +37,12 @@ public class SegmentedAllocator {
         return this.totalSize;
     }
 
+    // Whether the last alloc grew the backing store, so callers re-fetch addresses
     public boolean didResize() {
         return this.resized;
     }
 
+    // First-fit from the free list, growing when nothing fits
     public long alloc(int size) {
         if (size <= 0) {
             throw new IllegalArgumentException("Allocation size must be positive");
@@ -201,6 +197,7 @@ public class SegmentedAllocator {
         return true;
     }
 
+    // Size of a live allocation
     public long getSize(long address) {
         address &= ADDR_MASK;
 

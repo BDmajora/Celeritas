@@ -37,28 +37,34 @@ public final class MultiDrawBatch {
         this.capacity = capacity;
     }
 
+    // Draws recorded
     public int size() {
         return this.size;
     }
 
+    // Maximum draws before the arrays are full
     public int capacity() {
         return this.capacity;
     }
 
+    // Resets the count; arrays are reused
     public void clear() {
         this.size = 0;
     }
 
+    // Frees the native arrays
     public void delete() {
         LWJGL.nmemAlignedFree(this.pElementPointer);
         LWJGL.nmemAlignedFree(this.pElementCount);
         LWJGL.nmemAlignedFree(this.pBaseVertex);
     }
 
+    // No draws recorded
     public boolean isEmpty() {
         return this.size <= 0;
     }
 
+    // Total indices across every draw, for sizing the shared index buffer
     public int getIndexBufferSize() {
         int elements = 0;
 

@@ -8,18 +8,9 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// Widens max/min calls whose arguments are both integer-typed uniforms to their float overloads, on #version 120
-// sources only
-// GLSL only gained max(int, int) in 130, so a pack using it is relying on Iris — which never hits the problem
-// because its TransformPatcher bumps every shader to at least #version 330. This port keeps legacy packs on 120 on
-// purpose, so the call has to be adapted rather than the version raised
-// Just Colored Lighting's gbuffers_skybasic writes
-// float(max(eyeBrightnessSmooth.y, eyeBrightness.y))/240., which the driver rejects outright with "ambiguous
-// overloaded function reference"
-// Declaring an int max(int, int) overload instead DOES NOT WORK, and was tried: adding it to the overload set makes
-// previously fine calls like max(0, someFloat) resolve to the integer candidate, and GLSL 120 forbids the implicit
-// float-to-int narrowing that follows. Sildur's and JCL both lost programs that way
-// Rewriting the specific call sites leaves every other call's resolution exactly as it was
+// Widens max/min on two integer uniforms to the float overloads, on 120 sources only, since max(int,int) arrived
+// in 130 and this port keeps legacy packs on 120. Declaring an int overload instead broke Sildur's and JCL, because
+// it captured calls like max(0, someFloat) that 120 then cannot narrow
 public final class GlslIntegerOverloadPolyfill {
 
     // The integer-typed uniforms in the OptiFine/Iris spec
@@ -44,6 +35,7 @@ public final class GlslIntegerOverloadPolyfill {
     private GlslIntegerOverloadPolyfill() {
     }
 
+    // Rewrites max/min calls on two integer uniforms to their float overloads, on 120 sources only
     public static String widenIntegerBuiltinCalls(String name, String source) {
         if (source == null || !isLegacyVersion(source)) {
             return source;

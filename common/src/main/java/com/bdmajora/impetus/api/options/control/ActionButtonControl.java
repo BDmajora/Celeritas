@@ -26,16 +26,19 @@ public class ActionButtonControl implements Control<Boolean> {
         this.action = Objects.requireNonNull(action, "Action must not be null");
     }
 
+    // A dummy option; the button has no value
     @Override
     public Option<Boolean> getOption() {
         return this.option;
     }
 
+    // The button widget
     @Override
     public ControlElement<Boolean> createElement(Dim2i dim) {
         return new Button(this.option, dim, this.actionLabel, this.action);
     }
 
+    // Label width plus padding
     @Override
     public int getMaxWidth() {
         return 70;
@@ -51,6 +54,7 @@ public class ActionButtonControl implements Control<Boolean> {
             this.action = action;
         }
 
+        // Button with its label
         @Override
         public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
             super.render(drawContext, mouseX, mouseY, delta);
@@ -67,6 +71,7 @@ public class ActionButtonControl implements Control<Boolean> {
             drawContext.drawString(">", this.dim.getLimitX() - 10, this.dim.getCenterY() - 4, color);
         }
 
+        // Runs the action
         @Override
         public boolean mouseClicked(InteractionContext context, double mouseX, double mouseY, int button) {
             if (this.option.isAvailable() && button == 0 && this.dim.containsCursor(mouseX, mouseY)) {

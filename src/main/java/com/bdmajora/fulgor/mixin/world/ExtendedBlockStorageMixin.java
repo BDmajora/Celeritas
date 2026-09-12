@@ -37,50 +37,35 @@ public abstract class ExtendedBlockStorageMixin implements SectionLightInfo {
     @Unique
     private int fulgor$lightRefCount = -1;
 
-    /**
-     * @reason Invalidate the cached light verdict.
-     * @author Angeline (Phosphor)
-     */
+    // Overwrite: writes through and marks the section's light dirty
     @Overwrite
     public void setSkyLight(int x, int y, int z, int value) {
         this.skyLight.set(x, y, z, value);
         this.fulgor$lightRefCount = -1;
     }
 
-    /**
-     * @reason Invalidate the cached light verdict.
-     * @author Angeline (Phosphor)
-     */
+    // Overwrite: writes through and marks the section's light dirty
     @Overwrite
     public void setBlockLight(int x, int y, int z, int value) {
         this.blockLight.set(x, y, z, value);
         this.fulgor$lightRefCount = -1;
     }
 
-    /**
-     * @reason Invalidate the cached light verdict.
-     * @author Angeline (Phosphor)
-     */
+    // Overwrite: replaces the array and marks dirty
     @Overwrite
     public void setSkyLight(NibbleArray array) {
         this.skyLight = array;
         this.fulgor$lightRefCount = -1;
     }
 
-    /**
-     * @reason Invalidate the cached light verdict.
-     * @author Angeline (Phosphor)
-     */
+    // Overwrite: replaces the array and marks dirty
     @Overwrite
     public void setBlockLight(NibbleArray array) {
         this.blockLight = array;
         this.fulgor$lightRefCount = -1;
     }
 
-    /**
-     * @reason A section with no blocks but non-trivial lighting still has to be sent to the client.
-     * @author Angeline (Phosphor)
-     */
+    // Overwrite: a section with pending light work is not empty, or its light would never propagate
     @Overwrite
     public boolean isEmpty() {
         if (this.blockRefCount != 0) {

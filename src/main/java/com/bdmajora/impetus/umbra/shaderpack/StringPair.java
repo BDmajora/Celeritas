@@ -16,10 +16,12 @@ public class StringPair {
         this.value = Objects.requireNonNull(value);
     }
 
+    // Key
     public String getKey() {
         return key;
     }
 
+    // Value
     public String getValue() {
         return value;
     }

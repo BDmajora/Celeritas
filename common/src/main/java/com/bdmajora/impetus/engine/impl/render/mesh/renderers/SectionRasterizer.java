@@ -22,11 +22,13 @@ public class SectionRasterizer {
                 .link();
     }
 
+    // Debug draw of section bounds
     public void raster(int visibleRegionCount) {
         this.program.bind();
         LWJGL.glDrawMeshTasksNV(0, visibleRegionCount);
     }
 
+    // Frees the program
     public void delete() {
         this.program.delete();
     }

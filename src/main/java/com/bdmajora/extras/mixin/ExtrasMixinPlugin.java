@@ -8,20 +8,15 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import java.util.List;
 import java.util.Set;
 
-// announces the subsystem; gates nothing
-// unlike FulgorMixinPlugin and CoartatioMixinPlugin, this one does *not* gate on the Extras config
-// every Extras mixin reads its switch at call time, which is what makes the switches live rather than
-// needing a restart, so gating them here would trade that away for nothing - a mixin that is applied
-// but inert costs a predictable-branch read
-// kept as a real plugin rather than dropped from the config because the load-order line in the log is
-// worth having next to the other four subsystems, and because this is where a genuine availability
-// check would belong if one is ever needed
+// Announces the subsystem; gates nothing, since every Extras mixin reads its switch at call time
+// Kept as a real plugin so the load-order log line sits beside the other subsystems
 public class ExtrasMixinPlugin implements IMixinConfigPlugin {
     // Nothing to prepare; the interface requires the method
     @Override
     public void onLoad(String mixinPackage) {
     }
 
+    // Impetus reobfuscates mixins directly, so there is no refmap to name
     @Override
     public String getRefMapperConfig() {
         return null;
@@ -40,19 +35,23 @@ public class ExtrasMixinPlugin implements IMixinConfigPlugin {
         return true;
     }
 
+    // Nothing to negotiate with other configs
     @Override
     public void acceptTargets(Set<String> myTargets, Set<String> otherTargets) {
     }
 
+    // Null means use the mixin list from the json
     @Override
     public List<String> getMixins() {
         return null;
     }
 
+    // No pre-apply rewriting needed
     @Override
     public void preApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
     }
 
+    // No post-apply rewriting needed
     @Override
     public void postApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
     }

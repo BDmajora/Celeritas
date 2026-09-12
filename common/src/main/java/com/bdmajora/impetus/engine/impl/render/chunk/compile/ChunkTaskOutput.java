@@ -11,6 +11,7 @@ public abstract class ChunkTaskOutput {
         this.buildTime = buildTime;
     }
 
+    // Subclasses free whatever they own
     public void delete() {
 
     }

@@ -27,10 +27,12 @@ public enum GlBufferTarget {
         this.binding = binding;
     }
 
+    // The GL binding target
     public int getTargetParameter() {
         return this.target;
     }
 
+    // The glGetInteger query for what is bound there
     public int getBindingParameter() {
         return this.binding;
     }

@@ -15,14 +15,17 @@ public class ChunkRenderContext {
         this.volume = volume;
     }
 
+    // The 3x3x3 cloned sections around the origin
     public ClonedChunkSection[] getSections() {
         return this.sections;
     }
 
+    // The section being built
     public SectionPos getOrigin() {
         return this.sectionCoord;
     }
 
+    // The block volume the slice covers
     public StructureBoundingBox getVolume() {
         return this.volume;
     }

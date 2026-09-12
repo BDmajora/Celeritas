@@ -49,6 +49,7 @@ public abstract class BakedQuadMixin implements BakedQuadView {
     @Unique
     private ModelQuadFacing normalFace;
 
+    // Lazily derived from the computed normal and cached; most quads are only ever asked once
     @Override
     public ModelQuadFacing getNormalFace() {
         var face = this.normalFace;
@@ -58,6 +59,7 @@ public abstract class BakedQuadMixin implements BakedQuadView {
         return face;
     }
 
+    // Lazily populated on first read, marked by IS_POPULATED so the work is done once
     @Override
     public int getFlags() {
         int f = this.flags;
@@ -67,16 +69,19 @@ public abstract class BakedQuadMixin implements BakedQuadView {
         return f;
     }
 
+    // ORs in flags set by the model builder, e.g. IS_VANILLA_SHADED
     @Override
     public void addFlags(int flags) {
         this.flags |= flags;
     }
 
+    // Vanilla's diffuse lighting flag, exposed under Sodium's name
     @Override
     public boolean hasShade() {
         return this.applyDiffuseLighting;
     }
 
+    // Derived from the raw array length and the format stride, so it is right for any vertex format
     @Override
     public int getVerticesCount() {
         return this.getVertexData().length / this.getFormat().getIntegerSize();
@@ -87,21 +92,25 @@ public abstract class BakedQuadMixin implements BakedQuadView {
         return null;
     }
 
+    // Position is always the first element of a vertex
     @Override
     public float getX(int idx) {
         return Float.intBitsToFloat(this.getVertexData()[idx * getFormat().getIntegerSize()]);
     }
 
+    // Position is always the first element of a vertex
     @Override
     public float getY(int idx) {
         return Float.intBitsToFloat(this.getVertexData()[idx * getFormat().getIntegerSize() + 1]);
     }
 
+    // Position is always the first element of a vertex
     @Override
     public float getZ(int idx) {
         return Float.intBitsToFloat(this.getVertexData()[idx * getFormat().getIntegerSize() + 2]);
     }
 
+    // Reads the colour element if the format has one, else opaque white
     @Override
     public int getColor(int idx) {
         var format = getFormat();
@@ -118,6 +127,7 @@ public abstract class BakedQuadMixin implements BakedQuadView {
         return this.sprite;
     }
 
+    // First UV set; the block atlas coordinates
     @Override
     public float getTexU(int idx) {
         var format = getFormat();
@@ -125,6 +135,7 @@ public abstract class BakedQuadMixin implements BakedQuadView {
         return Float.intBitsToFloat(this.getVertexData()[idx * format.getIntegerSize() + (offset / 4)]);
     }
 
+    // First UV set; the block atlas coordinates
     @Override
     public float getTexV(int idx) {
         var format = getFormat();
@@ -132,6 +143,7 @@ public abstract class BakedQuadMixin implements BakedQuadView {
         return Float.intBitsToFloat(this.getVertexData()[idx * format.getIntegerSize() + (offset / 4) + 1]);
     }
 
+    // Second UV set holds packed lightmap coordinates when present, else zero
     @Override
     public int getLight(int idx) {
         var format = getFormat();
@@ -143,6 +155,7 @@ public abstract class BakedQuadMixin implements BakedQuadView {
         }
     }
 
+    // Forge's packed per-vertex normal if the format carries one, else zero
     @Override
     public int getForgeNormal(int idx) {
         var format = getFormat();
@@ -154,6 +167,7 @@ public abstract class BakedQuadMixin implements BakedQuadView {
         }
     }
 
+    // Mods sometimes leave the face null; treated as up so the quad still shades
     @Override
     public ModelQuadFacing getLightFace() {
         // Handle mods not supplying a light face
@@ -161,6 +175,7 @@ public abstract class BakedQuadMixin implements BakedQuadView {
         return face == null ? ModelQuadFacing.POS_Y : VintageDiffuseProvider.fromEnumFacing(face);
     }
 
+    // Lazily computed from the vertex positions and cached; zero doubles as the unset marker
     @Override
     public int getComputedFaceNormal() {
         int n = this.normal;
@@ -170,6 +185,7 @@ public abstract class BakedQuadMixin implements BakedQuadView {
         return n;
     }
 
+    // Vanilla's tint index, exposed under Sodium's name
     @Override
     public int getColorIndex() {
         return this.tintIndex;

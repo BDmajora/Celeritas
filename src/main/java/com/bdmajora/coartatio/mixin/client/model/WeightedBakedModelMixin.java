@@ -12,16 +12,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.List;
 
-// Compacts WeightedBakedModel's model list. Each list is tiny (2-4 entries) but weighted models
-// are per-variant, so randomised grass/stone/ore textures create many of them; only ever read via
-// WeightedRandom.getRandomItem's indexed access, which FixedArrayList serves at the same O(1).
+// Compacts WeightedBakedModel's list; tiny per model but one per variant, so randomised blocks make many
+// Only ever read by WeightedRandom.getRandomItem's indexed access, which FixedArrayList serves at the same cost
 @Mixin(WeightedBakedModel.class)
 public class WeightedBakedModelMixin {
+    // Made mutable so the constructor injection can swap it after vanilla assigns it
     @Mutable
     @Shadow
     @Final
     private List<WeightedBakedModel.WeightedModel> models;
 
+    // At RETURN the list is fully populated and never written again
     @Inject(method = "<init>", at = @At("RETURN"))
     private void coartatio$compactModelList(CallbackInfo ci) {
         this.models = CollectionHelper.fixed(this.models);

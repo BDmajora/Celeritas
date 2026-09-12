@@ -20,26 +20,31 @@ public class VanillaLikeChunkVertex implements ChunkVertexType {
             .addElement("a_LightCoord", 24, GlVertexAttributeFormat.UNSIGNED_INT, 1, false, true)
             .build();
 
+    // Positions are stored as float
     @Override
     public float getPositionScale() {
         return 1f;
     }
 
+    // No offset
     @Override
     public float getPositionOffset() {
         return 0;
     }
 
+    // UVs are stored as float
     @Override
     public float getTextureScale() {
         return 1f;
     }
 
+    // Vanilla-like layout the shader pack transform expects
     @Override
     public GlVertexFormat getVertexFormat() {
         return VERTEX_FORMAT;
     }
 
+    // Writes one vertex per call
     @Override
     public ChunkVertexEncoder createEncoder() {
         return (ptr, material, vertex, sectionIndex) -> {
@@ -55,16 +60,19 @@ public class VanillaLikeChunkVertex implements ChunkVertexType {
         };
     }
 
+    // Material bits and section index into one int
     private static int encodeDrawParameters(Material material, int sectionIndex) {
         return (((sectionIndex & 0xFF) << 8) | ((material.bits() & 0xFF) << 0));
     }
 
+    // Packed light into the shader's lightmap coordinates
     private static int encodeLight(int light) {
         int block = light & 0xFF;
         int sky = (light >> 16) & 0xFF;
         return ((block << 0) | (sky << 8));
     }
 
+    // UVs pass through
     private static float encodeTexture(float value) {
         return Math.min(0.99999997F, value);
     }

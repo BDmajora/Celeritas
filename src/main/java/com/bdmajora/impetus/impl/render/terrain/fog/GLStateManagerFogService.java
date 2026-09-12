@@ -8,16 +8,19 @@ import com.bdmajora.impetus.engine.impl.render.chunk.shader.ChunkFogMode;
 import com.bdmajora.impetus.lwjgl.GL20;
 
 public class GLStateManagerFogService implements FogService {
+    // From GlStateManager's cached fog state
     @Override
     public float getFogEnd() {
         return GlStateManager.fogState.end;
     }
 
+    // From GlStateManager's cached fog state
     @Override
     public float getFogStart() {
         return GlStateManager.fogState.start;
     }
 
+    // From GlStateManager's cached fog state
     @Override
     public float getFogDensity() {
         return GlStateManager.fogState.density;
@@ -84,6 +87,7 @@ public class GLStateManagerFogService implements FogService {
         return new float[]{entityRenderer.fogColorRed, entityRenderer.fogColorGreen, entityRenderer.fogColorBlue, 1.0F};
     }
 
+    // Maps vanilla's fog mode constants to the chunk shader's
     @Override
     public ChunkFogMode getFogMode() {
         if (!GlStateManager.fogState.fog.currentState) {

@@ -17,13 +17,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-// Compiles a parsed ProgramSource into a linked UmbraProgram: applies the shared #define set, patches the source,
-// binds the OptiFine vertex-attribute slots, links
-// The bridge between the shader-pack model and the GL layer, and the compile path for every IMMEDIATE-MODE gbuffer
-// program — entities, hand, block entities, particles, held items. Terrain and the fullscreen passes have their own
-// transformers and are compiled elsewhere
-// Render thread only, since it issues GL calls. Callers are expected to catch ShaderCompileException and
-// ProgramCreationException and fall back to vanilla rendering rather than let a bad pack crash the game
+// Compiles a ProgramSource into a linked UmbraProgram: defines, patches, OptiFine attribute slots, link
+// The path for every immediate-mode gbuffer program; terrain and fullscreen passes have their own transformers
+// Render thread only; callers catch the exceptions and fall back to vanilla rather than crash on a bad pack
 public final class ShaderProgramCompiler {
     public static final String HAND_LIGHTMAP_UNIFORM = "impetus_HandLightmap";
 
@@ -47,6 +43,7 @@ public final class ShaderProgramCompiler {
         }
     }
 
+    // Applies defines and the name transforms without compiling, for inspection and caching
     public static PatchedSource patchSource(String name, ProgramSource source, Map<String, String> defines) {
         String vertexSource = source.getVertexSource().orElse(null);
         String fragmentSource = source.getFragmentSource().orElse(null);
@@ -100,6 +97,7 @@ public final class ShaderProgramCompiler {
                 drawBuffers);
     }
 
+    // Patches, compiles, binds attributes and links; throws on any failure
     public static UmbraProgram compile(String name, ProgramSource source, Map<String, String> defines) {
         PatchedSource patched = patchSource(name, source, defines);
         String processedVertex = patched.vertex;
@@ -141,6 +139,7 @@ public final class ShaderProgramCompiler {
         }
     }
 
+    // Fixes mc_Entity, mc_midTexCoord and at_tangent to OptiFine's slots so the draw path matches
     private static void bindOptifineAttributes(ProgramBuilder builder, String vertexSource) {
         // Only bind slots for attributes the vertex shader actually declares, matching OptiFine's setupProgram.
         if (declaresAttribute(vertexSource, UmbraVertexAttributes.MC_ENTITY)) {
@@ -154,6 +153,7 @@ public final class ShaderProgramCompiler {
         }
     }
 
+    // Whether the source mentions the attribute at all; unused ones must not be bound
     private static boolean declaresAttribute(String source, String attributeName) {
         // Matches OptiFine's `attribute <type> <name>` scan, tolerant of both GLSL 120 `attribute` and 150 `in`.
         return source.matches("(?s).*\\b(?:attribute|in)\\s+\\w+\\s+" + attributeName + "\\b.*");
@@ -198,6 +198,7 @@ public final class ShaderProgramCompiler {
         return source;
     }
 
+    // gbuffers_hand and gbuffers_hand_water get the hand-specific depth handling
     private static boolean isFirstPersonHandProgram(String name) {
         return "gbuffers_hand".equals(name) || "gbuffers_hand_water".equals(name);
     }
@@ -237,6 +238,7 @@ public final class ShaderProgramCompiler {
                 "vec4(" + HAND_LIGHTMAP_UNIFORM + ", 0.0, 1.0)");
     }
 
+    // Injects the shared #define block after #version
     private static String applyDefines(String source, Map<String, String> defines) {
         List<String> lines = new ArrayList<>(Arrays.asList(source.split("\n", -1)));
         List<String> processed = GlslPreprocessor.injectDefines(lines, defines);

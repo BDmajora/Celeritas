@@ -23,6 +23,7 @@ public class ImageBinding {
         this.textureID = textureID;
     }
 
+    // glBindImageTexture with the supplier's current texture
     public void update() {
         // Always layered: a layered binding exposes a 3D/array image whole, which is what every custom image
         // declared with a depth needs, and it is harmless for a 2D image (layer 0 is the only layer). Umbra binds

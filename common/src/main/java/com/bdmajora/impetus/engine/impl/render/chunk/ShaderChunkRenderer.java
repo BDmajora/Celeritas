@@ -69,6 +69,7 @@ public abstract class ShaderChunkRenderer implements ChunkRenderer {
             "#define texture texture2D"
     ) + "\n";
 
+    // Loads, preprocesses and compiles one stage
     private GlShader loadShader(ShaderType type, String path, ShaderConstants constants) {
         String shaderSource = ShaderParser.parseShader(ShaderLoader.getShaderSource(path), ShaderLoader::getShaderSource, constants);
         if (this.enableLegacyGLPatches) {
@@ -87,6 +88,7 @@ public abstract class ShaderChunkRenderer implements ChunkRenderer {
         return new GlShader(type, path, shaderSource);
     }
 
+    // Links the terrain program for a set of options, or a shader pack's override
     protected GlProgram<ChunkShaderInterface> createShader(String path, ChunkShaderOptions options) {
         ShaderConstants constants = options.constants();
 
@@ -114,12 +116,14 @@ public abstract class ShaderChunkRenderer implements ChunkRenderer {
         }
     }
 
+    // Fog and any platform extras
     protected List<ChunkShaderComponent.Factory<?>> getShaderComponents() {
         var componentFactories = new ArrayList<ChunkShaderComponent.Factory<?>>(4);
         componentFactories.add(ChunkShaderFogComponent.FOG_SERVICE.getFogMode());
         return componentFactories;
     }
 
+    // Binds the program for the pass's options
     protected void begin(TerrainRenderPass pass) {
         pass.startDrawing();
 
@@ -134,6 +138,7 @@ public abstract class ShaderChunkRenderer implements ChunkRenderer {
         }
     }
 
+    // Unbinds
     protected void end(TerrainRenderPass pass) {
         if (this.activeProgram != null) {
             this.activeProgram.getInterface().restoreState();
@@ -145,12 +150,14 @@ public abstract class ShaderChunkRenderer implements ChunkRenderer {
         pass.endDrawing();
     }
 
+    // Frees every cached program
     @Override
     public void delete(CommandList commandList) {
         this.programs.values().stream().filter(Objects::nonNull)
                 .forEach(GlProgram::delete);
     }
 
+    // The pass set in use
     @Override
     public RenderPassConfiguration<?> getRenderPassConfiguration() {
         return this.renderPassConfiguration;

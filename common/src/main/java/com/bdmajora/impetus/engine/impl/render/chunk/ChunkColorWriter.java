@@ -12,6 +12,7 @@ public enum ChunkColorWriter {
     // the pack wants to apply AO itself inside its own lighting model instead of receiving it pre-multiplied
     // Iris does exactly this split in XHFPTerrainVertex
     SEPARATE_AO {
+        // Applies AO to the colour for this mode
         @Override
         public int writeColor(int colorWithAlpha, float aoValue) {
             return ColorABGR.withAlpha(colorWithAlpha, aoValue);
@@ -21,6 +22,7 @@ public enum ChunkColorWriter {
     // aoValue is 0..1 and the mixer wants 0..255, hence the scale; alpha is left alone because it still carries
     // the quad's own translucency here
     IMPETUS {
+        // Applies AO to the colour for this mode
         @Override
         public int writeColor(int colorWithAlpha, float aoValue) {
             return ColorMixer.mulSingleWithoutAlpha(colorWithAlpha, (int)(aoValue * 255));
@@ -47,10 +49,12 @@ public enum ChunkColorWriter {
         private SeparateAoState() {
         }
 
+        // Switches the mode
         public static void set(boolean value) {
             enabled = value;
         }
 
+        // Current mode
         public static boolean isEnabled() {
             return enabled;
         }

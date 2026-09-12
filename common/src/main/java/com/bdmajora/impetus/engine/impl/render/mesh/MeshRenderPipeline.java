@@ -24,17 +24,9 @@ import java.util.BitSet;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The GPU-driven terrain frame
-//
-// Three phases, and the CPU only participates in the first:
-//   1. Frustum-cull REGIONS on the CPU (hundreds of boxes, not tens of thousands of sections), sort them
-//      front-to-back and write the scene UBO, which is mostly a table of GPU pointers.
-//   2. Rasterise the surviving region boxes; the fragment shader marks which regions were reached.
-//   3. Rasterise the section boxes of those regions; the fragment shader marks which sections were reached, and
-//      the task shader writes the indirect draw commands.
-// The terrain draw itself runs FIRST, from the commands phase 3 wrote LAST frame. That inversion is what lets
-// the whole thing run without a single GPU-to-CPU readback, at the cost of one frame of latency on newly
-// visible geometry
+// Mesh-shader terrain path: regions and sections live in bindless GPU buffers, a task shader culls regions,
+// a mesh shader culls sections and emits their quads, so the CPU issues one draw per frame
+// Requires NV_mesh_shader and bindless; MeshShaderSupport gates it
 public class MeshRenderPipeline {
     // Cap on live regions, and the thing that sizes every per-region buffer
     // A region is 8x4x8 sections, and 1.12.2's world height fixes the vertical span at four region layers, so
@@ -103,10 +95,12 @@ public class MeshRenderPipeline {
         this.terrainRasterizer = new TerrainRasterizer();
     }
 
+    // Section geometry and metadata
     public MeshSectionStore getSections() {
         return this.sections;
     }
 
+    // The staging ring uploads go through
     public UploadStream getUploadStream() {
         return this.uploadStream;
     }
@@ -188,6 +182,7 @@ public class MeshRenderPipeline {
         this.uploadStream.endFrame();
     }
 
+    // Frees every buffer and program
     public void delete() {
         this.regionRasterizer.delete();
         this.sectionRasterizer.delete();
@@ -306,11 +301,13 @@ public class MeshRenderPipeline {
         LWJGL.memPutByte(ptr + 2, (byte) (this.frameId++));
     }
 
+    // Writes a 64-bit address and advances
     private static long putPointer(long ptr, long address) {
         LWJGL.memPutLong(ptr, address);
         return ptr + 8;
     }
 
+    // Rounds up to a multiple
     private static int align(int value, int alignment) {
         int remainder = value % alignment;
         return remainder == 0 ? value : value + (alignment - remainder);

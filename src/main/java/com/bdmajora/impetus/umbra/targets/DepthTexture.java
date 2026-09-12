@@ -32,6 +32,7 @@ public class DepthTexture extends GlResource {
         allocate();
     }
 
+    // Creates the storage at the current size
     private void allocate() {
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, getGlId());
         LWJGL.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST);
@@ -43,16 +44,19 @@ public class DepthTexture extends GlResource {
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
     }
 
+    // Reallocates; contents are lost
     public void resize(int newWidth, int newHeight) {
         this.width = newWidth;
         this.height = newHeight;
         allocate();
     }
 
+    // For binding as a sampler
     public int getTextureId() {
         return getGlId();
     }
 
+    // Frees the texture
     @Override
     protected void destroyInternal() {
         LWJGL.glDeleteTextures(getGlId());

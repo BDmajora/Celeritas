@@ -5,6 +5,7 @@ import org.joml.Vector3f;
 import com.bdmajora.impetus.mixin.core.terrain.ActiveRenderInfoAccessor;
 
 public class CameraHelper {
+    // Camera offset for third person, so culling uses the real eye position
     public static Vector3f getThirdPersonOffset() {
         final Vector3f offset = new Vector3f(); // third person offset
         final Matrix4f inverseModelView = new Matrix4f(ActiveRenderInfoAccessor.getModelViewMatrix()).invert();

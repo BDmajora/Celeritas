@@ -13,6 +13,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Map;
 
 public record BuiltSectionMeshParts(NativeBuffer vertexBuffer, @Nullable NativeBuffer indexBuffer, @Nullable TranslucentQuadAnalyzer.SortState sortState, Map<ModelQuadFacing, VertexRange> ranges) {
+    // Frees the vertex buffer
     public void free() {
         vertexBuffer.free();
         if (indexBuffer != null) {
@@ -20,6 +21,7 @@ public record BuiltSectionMeshParts(NativeBuffer vertexBuffer, @Nullable NativeB
         }
     }
 
+    // Packs each pass's facing buffers into one mesh with per-facing ranges
     public static Reference2ReferenceMap<TerrainRenderPass, BuiltSectionMeshParts> groupFromBuildBuffers(ChunkBuildBuffers buffers, float relativeCameraX, float relativeCameraY, float relativeCameraZ) {
         Reference2ReferenceMap<TerrainRenderPass, BuiltSectionMeshParts> meshes = new Reference2ReferenceOpenHashMap<>();
 

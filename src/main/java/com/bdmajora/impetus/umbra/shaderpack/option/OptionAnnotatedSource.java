@@ -16,14 +16,9 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// One shader file's source plus every configurable option found inside it
-// Handles both ends of the shader-config process: discovering the options at parse time, and editing the source
-// back to apply the user's chosen values
-// Every line is parsed in ISOLATION, with one exception — boolean #define reference tracking, which needs to know
-// whether the name is read by an #ifdef anywhere before it can call the define configurable rather than a plain
-// constant
-// Ported from Iris; guava collections replaced with unmodifiable Java ones, fastutil IntList with List<Integer>,
-// and Iris's LineTransform indirection inlined into apply
+// One shader file's source plus every configurable option found inside it, both discovering them at parse time
+// and editing the source back to apply chosen values. Lines parse in isolation except #ifdef reference tracking
+// Ported from Iris with guava and fastutil replaced and the LineTransform indirection inlined
 public final class OptionAnnotatedSource {
     private final List<String> lines;
 
@@ -93,6 +88,7 @@ public final class OptionAnnotatedSource {
         this.booleanDefineReferences = Collections.unmodifiableMap(builder.booleanDefineReferences);
     }
 
+    // Classifies one line as a boolean define, a const, or nothing
     private static void parseLine(AnnotationsBuilder builder, int index, String lineText) {
         // Check to see if this line contains anything of interest before we try to parse it.
         if (!lineText.contains("#define")
@@ -117,6 +113,7 @@ public final class OptionAnnotatedSource {
         }
     }
 
+    // Records #ifdef references so unreferenced defines are not offered as options
     private static void parseIfdef(AnnotationsBuilder builder, int index, ParsedString line) {
         if (!line.takeSomeWhitespace()) {
             return;
@@ -134,6 +131,7 @@ public final class OptionAnnotatedSource {
                 .computeIfAbsent(name, n -> new ArrayList<>()).add(index);
     }
 
+    // const int/float/bool NAME = value; // [allowed values]
     private static void parseConst(AnnotationsBuilder builder, int index, ParsedString line) {
         // const is already taken.
 
@@ -243,6 +241,7 @@ public final class OptionAnnotatedSource {
         }
     }
 
+    // #define NAME [value] // [allowed values], possibly commented out
     private static void parseDefineOption(AnnotationsBuilder builder, int index, ParsedString line) {
         // Remove the leading comment for processing.
         boolean hasLeadingComment = line.takeComments();
@@ -346,22 +345,27 @@ public final class OptionAnnotatedSource {
         builder.stringOptions.put(index, option);
     }
 
+    // Boolean options by line
     public Map<Integer, BooleanOption> getBooleanOptions() {
         return booleanOptions;
     }
 
+    // Valued options by line
     public Map<Integer, StringOption> getStringOptions() {
         return stringOptions;
     }
 
+    // Lines that looked like options but were rejected, with why
     public Map<Integer, String> getDiagnostics() {
         return diagnostics;
     }
 
+    // Every #ifdef reference, by define name
     public Map<String, List<Integer>> getBooleanDefineReferences() {
         return booleanDefineReferences;
     }
 
+    // The options this file contributes, dropping defines nothing references
     public OptionSet getOptionSet(AbsolutePackPath filePath, Set<String> booleanDefineReferences) {
         OptionSet.Builder builder = OptionSet.builder();
 
@@ -395,6 +399,7 @@ public final class OptionAnnotatedSource {
         return source.toString();
     }
 
+    // Rewrites one option line to reflect the chosen value
     private String edit(OptionValues values, int index, String existing) {
         // See if it's a boolean option
         BooleanOption booleanOption = booleanOptions.get(index);
@@ -432,6 +437,7 @@ public final class OptionAnnotatedSource {
         return existing;
     }
 
+    // Substitutes a const's value in place
     private String editConst(String line, String currentValue, String newValue) {
         int equalsIndex = line.indexOf('=');
 
@@ -448,10 +454,12 @@ public final class OptionAnnotatedSource {
         return firstPart + secondPart;
     }
 
+    // Whether the define is commented out, meaning off
     private static boolean hasLeadingComment(String line) {
         return line.trim().startsWith("//");
     }
 
+    // Uncomments a define
     private static String removeLeadingComment(String line) {
         ParsedString parsed = new ParsedString(line);
 
@@ -461,6 +469,7 @@ public final class OptionAnnotatedSource {
         return parsed.takeRest();
     }
 
+    // Comments or uncomments a define to match the value
     private static String setBooleanDefineValue(String line, OptionalBoolean newValue, boolean defaultValue) {
         if (hasLeadingComment(line) && newValue.orElse(defaultValue)) {
             return removeLeadingComment(line);

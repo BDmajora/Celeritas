@@ -10,17 +10,13 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Function;
 
-// The shaders.properties switches that let a pack suppress vanilla world features it draws itself: sun, moon,
-// stars, sky, vignette, underwaterOverlay and weather
-// Complementary and Photon both turn several of these off because they reproduce the feature in their own passes.
-// Drawing vanilla's version on top gives doubled rain, a vignette composited over the pack's tonemapping, and a
-// vanilla sun disc punched through the pack's own sky
-// Every switch defaults to enabled, so an absent directive means "leave vanilla alone" — and so does having no
-// pack loaded at all, which is what keeps this inert when shaders are off
+// The sun, moon, stars, sky, vignette, underwaterOverlay and weather switches packs use to suppress vanilla
+// features they draw themselves. Everything defaults to enabled, and to enabled with no pack loaded
 public final class VanillaFeatureToggles {
     private VanillaFeatureToggles() {
     }
 
+    // Reads a directive from the active pack; true when unset or no pack
     private static boolean isEnabled(Function<ShaderProperties, Optional<Boolean>> directive) {
         ShaderPack pack = Umbra.getCurrentPack();
         if (pack == null || Umbra.getRenderingPipeline() == null) {
@@ -29,30 +25,37 @@ public final class VanillaFeatureToggles {
         return directive.apply(pack.getProperties()).orElse(Boolean.TRUE);
     }
 
+    // sun directive
     public static boolean shouldRenderSun() {
         return isEnabled(ShaderProperties::getRenderSun);
     }
 
+    // moon directive
     public static boolean shouldRenderMoon() {
         return isEnabled(ShaderProperties::getRenderMoon);
     }
 
+    // stars directive
     public static boolean shouldRenderStars() {
         return isEnabled(ShaderProperties::getRenderStars);
     }
 
+    // sky directive
     public static boolean shouldRenderSky() {
         return isEnabled(ShaderProperties::getRenderSky);
     }
 
+    // vignette directive
     public static boolean shouldRenderVignette() {
         return isEnabled(ShaderProperties::getRenderVignette);
     }
 
+    // underwaterOverlay directive
     public static boolean shouldRenderUnderwaterOverlay() {
         return isEnabled(ShaderProperties::getRenderUnderwaterOverlay);
     }
 
+    // weather directive
     public static boolean shouldRenderWeather() {
         return isEnabled(ShaderProperties::getRenderWeather);
     }

@@ -11,14 +11,17 @@ public final class ConfigTheme {
         this.accentColor = accentColor;
     }
 
+    // Which mod this styles
     public String getModId() {
         return this.modId;
     }
 
+    // Colour for its tabs and controls
     public int getAccentColor() {
         return this.accentColor;
     }
 
+    // Starts a theme
     public static Builder builder(String modId) {
         return new Builder(modId);
     }
@@ -31,11 +34,13 @@ public final class ConfigTheme {
             this.modId = Objects.requireNonNull(modId, "Mod id must not be null");
         }
 
+        // ARGB
         public Builder accentColor(int color) {
             this.accentColor = color;
             return this;
         }
 
+        // Finalises
         public ConfigTheme build() {
             return new ConfigTheme(this.modId, this.accentColor);
         }

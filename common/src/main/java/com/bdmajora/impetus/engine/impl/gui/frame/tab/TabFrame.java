@@ -69,14 +69,17 @@ public class TabFrame extends AbstractFrame {
         });
     }
 
+    // Every tab across every group
     private Stream<Tab<?>> tabStream() {
         return this.tabs.values().stream().flatMap(Collection::stream);
     }
 
+    // Starts a builder
     public static Builder createBuilder() {
         return new Builder();
     }
 
+    // Switches the selected tab and rebuilds the content frame
     public void setTab(Tab<?> tab) {
         this.selectedTab = tab;
         this.tabSectionSelectedTab.set(this.selectedTab.title());
@@ -91,6 +94,7 @@ public class TabFrame extends AbstractFrame {
             super(dim, false);
         }
 
+        // Lays out children for the current dimensions
         @Override
         public void buildFrame() {
             this.children.clear();
@@ -102,6 +106,7 @@ public class TabFrame extends AbstractFrame {
             super.buildFrame();
         }
 
+        // Recreates the tab header buttons
         private void rebuildTabs() {
             int offsetY = 0;
             int width = tabSection.width() - 4;
@@ -125,6 +130,7 @@ public class TabFrame extends AbstractFrame {
                             TabFrame.this.setTab(tab);
                         }
                     }) {
+                        // Indent for the tab label
                         @Override
                         protected int getLeftAlignedTextOffset(DrawContext drawContext) {
                             return TAB_OPTION_INDENT + super.getLeftAlignedTextOffset(drawContext);
@@ -146,6 +152,7 @@ public class TabFrame extends AbstractFrame {
         }
     }
 
+    // Lays out children for the current dimensions
     @Override
     public void buildFrame() {
         this.children.clear();
@@ -172,6 +179,7 @@ public class TabFrame extends AbstractFrame {
         super.buildFrame();
     }
 
+    // Recreates the content area for the selected tab
     private void rebuildTabFrame() {
         if (this.selectedTab == null) return;
         AbstractFrame frame = this.createSelectedContentFrame();
@@ -182,6 +190,7 @@ public class TabFrame extends AbstractFrame {
         }
     }
 
+    // The selected tab's frame at the content dimensions
     private AbstractFrame createSelectedContentFrame() {
         if (!this.selectedTab.stackable() || this.selectedTab.page() == null || this.selectedTab.verticalScrollBarOffset() == null) {
             return this.selectedTab.createFrame(this.frameSection);
@@ -216,6 +225,7 @@ public class TabFrame extends AbstractFrame {
                 .build();
     }
 
+    // The group the selected tab belongs to
     private List<Tab<?>> getSelectedTabGroup() {
         for (List<Tab<?>> group : this.tabs.values()) {
             if (group.contains(this.selectedTab)) {
@@ -226,6 +236,7 @@ public class TabFrame extends AbstractFrame {
         return Collections.singletonList(this.selectedTab);
     }
 
+    // Draws header, separator and content
     @Override
     public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
         for (AbstractWidget widget : this.children) {
@@ -238,11 +249,13 @@ public class TabFrame extends AbstractFrame {
         }
     }
 
+    // Forwards to children
     @Override
     public boolean mouseClicked(InteractionContext context, double mouseX, double mouseY, int button) {
         return (this.dim.containsCursor(mouseX, mouseY) && super.mouseClicked(context, mouseX, mouseY, button));
     }
 
+    // Scrolls the tab header when over it, else the content
     @Override
     public boolean mouseScrolled(InteractionContext context, double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         if (this.selectedFrame != null && this.frameSection.containsCursor(mouseX, mouseY)) {
@@ -260,36 +273,43 @@ public class TabFrame extends AbstractFrame {
         private AtomicReference<TextComponent> tabSectionSelectedTab = new AtomicReference<>(null);
         private AtomicReference<Integer> tabSectionScrollBarOffset = new AtomicReference<>(0);
 
+        // Frame bounds
         public Builder setDimension(Dim2i dim) {
             this.dim = dim;
             return this;
         }
 
+        // Debug outline
         public Builder shouldRenderOutline(boolean renderOutline) {
             this.renderOutline = renderOutline;
             return this;
         }
 
+        // Lets the caller populate grouped tabs
         public Builder addTabs(Consumer<Map<String, List<Tab<?>>>> tabs) {
             tabs.accept(this.functions);
             return this;
         }
 
+        // Callback after a tab switch
         public Builder onSetTab(Runnable onSetTab) {
             this.onSetTab = onSetTab;
             return this;
         }
 
+        // Shared ref so the selection survives a rebuild
         public Builder setTabSectionSelectedTab(AtomicReference<TextComponent> tabSectionSelectedTab) {
             this.tabSectionSelectedTab = tabSectionSelectedTab;
             return this;
         }
 
+        // Shared ref so the header scroll survives a rebuild
         public Builder setTabSectionScrollBarOffset(AtomicReference<Integer> tabSectionScrollBarOffset) {
             this.tabSectionScrollBarOffset = tabSectionScrollBarOffset;
             return this;
         }
 
+        // Finalises; needs the font to measure tab labels
         public TabFrame build(DrawContext font) {
             Objects.requireNonNull(this.dim, "Dimension must be specified");
 

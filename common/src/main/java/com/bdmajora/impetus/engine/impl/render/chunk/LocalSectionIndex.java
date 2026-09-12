@@ -6,6 +6,7 @@ public class LocalSectionIndex {
     private static final int Y_BITS = 0b11, Y_OFFSET = 0, Y_MASK = Y_BITS << Y_OFFSET;
     private static final int Z_BITS = 0b111, Z_OFFSET = 2, Z_MASK = Z_BITS << Z_OFFSET;
 
+    // Section-in-region coordinates to a local index
     public static int pack(int x, int y, int z) {
         return ((x & X_BITS) << X_OFFSET) | ((y & Y_BITS) << Y_OFFSET) | ((z & Z_BITS) << Z_OFFSET);
     }
@@ -40,14 +41,17 @@ public class LocalSectionIndex {
         return (idx & ~Z_MASK) | ((idx - (1 << Z_OFFSET)) & Z_MASK);
     }
 
+    // Back to x
     public static int unpackX(int idx) {
         return (idx >> X_OFFSET) & X_BITS;
     }
 
+    // Back to y
     public static int unpackY(int idx) {
         return (idx >> Y_OFFSET) & Y_BITS;
     }
 
+    // Back to z
     public static int unpackZ(int idx) {
         return (idx >> Z_OFFSET) & Z_BITS;
     }

@@ -32,10 +32,12 @@ public class EnumBitField<T extends Enum<T> & EnumBit> {
         return new EnumBitField<>(set);
     }
 
+    // The raw bits
     public int getBitField() {
         return this.bitfield;
     }
 
+    // Membership test
     public boolean contains(T flag) {
         return this.set.contains(flag);
     }

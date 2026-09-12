@@ -10,10 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.Map;
 
 // Gives every RegistrySimple a compact backing map, from LoliASM's optimizeRegistries
-// Vanilla builds one HashMap per registry through the createUnderlyingMap hook, which exists precisely so it
-// can be overridden — so this needs no field shadow and no constructor injection, just a different return value
-// Registries are numerous in a modded instance (blocks, items, sounds, biomes, potions, plus one per mod-added
-// registry) and several are large. An open-addressed map removes the per-entry Node allocation from all of them
+// Overriding the createUnderlyingMap hook drops the per-entry Node allocation across every modded registry
 @Mixin(RegistrySimple.class)
 public abstract class RegistrySimpleMixin<K, V> {
     // Cancelled at HEAD so vanilla's HashMap is never constructed at all

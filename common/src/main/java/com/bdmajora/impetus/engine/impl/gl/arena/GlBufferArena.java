@@ -53,6 +53,7 @@ public class GlBufferArena {
         this.stagingBuffer = stagingBuffer;
     }
 
+    // Allocates a larger buffer and compacts every live segment into it
     private void resize(CommandList commandList, int newCapacity) {
         if (this.used > newCapacity) {
             throw new UnsupportedOperationException("New capacity must be larger than used size");
@@ -81,6 +82,7 @@ public class GlBufferArena {
         this.checkAssertions();
     }
 
+    // Plans the compaction copies, merging adjacent segments into one copy
     private List<PendingBufferCopyCommand> buildTransferList(List<GlBufferSegment> usedSegments, int base) {
         List<PendingBufferCopyCommand> pendingCopies = new ArrayList<>();
         PendingBufferCopyCommand currentCopyCommand = null;
@@ -124,6 +126,7 @@ public class GlBufferArena {
         return pendingCopies;
     }
 
+    // Executes the planned copies into a fresh buffer and swaps it in
     private void transferSegments(CommandList commandList, Collection<PendingBufferCopyCommand> list, int capacity) {
         GlMutableBuffer srcBufferObj = this.arenaBuffer;
         GlMutableBuffer dstBufferObj = commandList.createMutableBuffer();
@@ -144,6 +147,7 @@ public class GlBufferArena {
         this.resizeIncrement = this.capacity / RESIZE_FACTOR;
     }
 
+    // Live segments in address order
     private ArrayList<GlBufferSegment> getUsedSegments() {
         ArrayList<GlBufferSegment> used = new ArrayList<>();
         GlBufferSegment seg = this.head;
@@ -161,24 +165,29 @@ public class GlBufferArena {
         return used;
     }
 
+    // Bytes in live segments
     @Deprecated
     public int getDeviceUsedMemory() {
         return this.used * this.stride;
     }
 
+    // Buffer capacity
     @Deprecated
     public int getDeviceAllocatedMemory() {
         return this.capacity * this.stride;
     }
 
+    // Long form
     public long getDeviceUsedMemoryL() {
         return (long)this.used * this.stride;
     }
 
+    // Long form
     public long getDeviceAllocatedMemoryL() {
         return (long)this.capacity * this.stride;
     }
 
+    // Carves from a free segment, splitting it if larger; null when nothing fits
     private GlBufferSegment alloc(int size) {
         GlBufferSegment a = this.findFree(size);
 
@@ -214,6 +223,7 @@ public class GlBufferArena {
         return result;
     }
 
+    // First-fit walk of the free list
     private GlBufferSegment findFree(int size) {
         GlBufferSegment entry = this.head;
         GlBufferSegment best = null;
@@ -235,6 +245,7 @@ public class GlBufferArena {
         return best;
     }
 
+    // Returns a segment and coalesces with free neighbours
     public void free(GlBufferSegment entry) {
         if (entry.isFree()) {
             throw new IllegalStateException("Already freed");
@@ -259,23 +270,28 @@ public class GlBufferArena {
         this.checkAssertions();
     }
 
+    // Frees the GL buffer
     public void delete(CommandList commands) {
         commands.deleteBuffer(this.arenaBuffer);
         this.capacity = -1;
     }
 
+    // Whether delete has run
     public boolean isDeleted() {
         return this.capacity < 0;
     }
 
+    // No live segments
     public boolean isEmpty() {
         return this.used <= 0;
     }
 
+    // The backing buffer, for binding
     public GlBuffer getBufferObject() {
         return this.arenaBuffer;
     }
 
+    // Allocates and uploads each pending buffer, growing the arena when it fills; true if it grew
     public boolean upload(CommandList commandList, Stream<PendingUpload> stream) {
         // Record the buffer object before we start any work
         // If the arena needs to re-allocate a buffer, this will allow us to check and return an appropriate flag
@@ -311,11 +327,13 @@ public class GlBufferArena {
         return this.arenaBuffer != buffer;
     }
 
+    // Uploads everything that fits, leaving the rest in the queue
     private void tryUploads(CommandList commandList, List<PendingUpload> queue) {
         queue.removeIf(upload -> this.tryUpload(commandList, upload));
         this.stagingBuffer.flush(commandList);
     }
 
+    // One allocation and staged copy; false when the arena is full
     private boolean tryUpload(CommandList commandList, PendingUpload upload) {
         ByteBuffer data = upload.getDataBuffer()
                 .getDirectBuffer();
@@ -336,6 +354,7 @@ public class GlBufferArena {
         return true;
     }
 
+    // Grows up front for a known batch
     public void ensureCapacity(CommandList commandList, int elementCount) {
         // Re-sizing the arena results in a compaction, so any free space in the arena will be
         // made into one contiguous segment, joined with the new segment of free space we're asking for
@@ -346,12 +365,14 @@ public class GlBufferArena {
         this.resize(commandList, Math.max(this.capacity + this.resizeIncrement, this.capacity + elementsNeeded));
     }
 
+    // Segment list invariants, debug builds only
     private void checkAssertions() {
         if (CHECK_ASSERTIONS) {
             this.checkAssertions0();
         }
     }
 
+    // The checks themselves
     private void checkAssertions0() {
         GlBufferSegment seg = this.head;
         int used = 0;

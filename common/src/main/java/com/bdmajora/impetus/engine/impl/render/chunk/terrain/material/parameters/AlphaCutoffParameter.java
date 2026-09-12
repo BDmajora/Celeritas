@@ -16,6 +16,7 @@ public enum AlphaCutoffParameter {
 
     private final float cutoff;
 
+    // Nearest supported cutoff to a float threshold
     public static AlphaCutoffParameter valueOf(float val) {
         for (var param : AlphaCutoffParameter.values()) {
             if (Math.abs(param.cutoff() - val) < 0.001f) {

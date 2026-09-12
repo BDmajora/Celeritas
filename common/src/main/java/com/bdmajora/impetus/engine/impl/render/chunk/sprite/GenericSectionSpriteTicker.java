@@ -17,16 +17,19 @@ public class GenericSectionSpriteTicker<T> implements SectionTicker {
         this.markActive = markActive;
     }
 
+    // Marks every sprite in a visible section as active
     @Override
     public void tickVisibleRenders() {
         this.sprites.forEach(this.markActive);
     }
 
+    // Sprite count
     @Override
     public String getDebugString() {
         return "A: " + this.sprites.size();
     }
 
+    // Caches the visible sprite set from the new lists
     @Override
     public void onRenderListUpdated(List<ChunkRenderList> renderLists) {
         var spriteSet = new ReferenceOpenHashSet<T>(this.sprites.size());

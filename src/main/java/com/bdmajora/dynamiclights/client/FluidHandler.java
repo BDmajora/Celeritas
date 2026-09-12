@@ -22,6 +22,7 @@ public final class FluidHandler {
         return isFluid(entity.world, new BlockPos(entity.getPositionEyes(partialTicks)));
     }
 
+    // Whether the position holds a liquid, checking Fluidlogged's second state when that mod is present
     public static boolean isFluid(IBlockAccess access, BlockPos pos) {
         IBlockState state = getFluidState(access, pos);
         return state.getMaterial().isLiquid() || state.getBlock() instanceof IFluidBlock;

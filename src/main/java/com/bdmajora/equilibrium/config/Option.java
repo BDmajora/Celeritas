@@ -8,38 +8,39 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-// one node of the option tree: a single mixin.* rule
-// ported from Lithium's Option unchanged in behaviour
-// an option carries three independent notions of "who set this" - the built-in default, a user
-// override from config/equilibrium.properties, and an override contributed by another mod
-// they are kept apart so the log can say why a mixin was skipped, which is the first thing anyone
-// needs when a patch does not apply
+// One node of the option tree: a single mixin.* rule, ported from Lithium's Option
+// Default, user override and mod override are tracked apart so the log can say why a mixin was skipped
 public class Option {
+    // Full dotted rule name, e.g. mixin.world.explosions
     private final String name;
 
-    // options this one requires, and the value each must hold
-    // Object2BooleanLinkedOpenHashMap rather than a plain map because the iteration order decides
-    // which unmet dependency gets reported first, and a stable report is worth more than the handful
-    // of bytes a linked map costs - there are at most a couple of hundred options
+    // Options this one requires and the value each must hold
+    // Linked because iteration order decides which unmet dependency is reported first
     private Object2BooleanLinkedOpenHashMap<Option> dependencies;
 
     // Mods that have overridden this option, or null if none have.
     private Set<String> modDefined = null;
 
+    // Current value after defaults, user config, mod overrides and dependency resolution
     private boolean enabled;
+
+    // True once the user's own config file set this, which keeps it uncommented on save
     private boolean userDefined;
 
+    // Built once per rule while the option tree is assembled
     public Option(String name, boolean enabled, boolean userDefined) {
         this.name = name;
         this.enabled = enabled;
         this.userDefined = userDefined;
     }
 
+    // Used by the config loader and the options screen; userDefined marks it as the user's own choice
     public void setEnabled(boolean enabled, boolean userDefined) {
         this.enabled = enabled;
         this.userDefined = userDefined;
     }
 
+    // Records that a mod forced this value, keeping every contributor so the log can name them all
     public void addModOverride(boolean enabled, String modId) {
         this.enabled = enabled;
 
@@ -50,41 +51,48 @@ public class Option {
         this.modDefined.add(modId);
     }
 
+    // This node's own value, ignoring ancestors; see isEnabledRecursive for the effective one
     public boolean isEnabled() {
         return this.enabled;
     }
 
-    // whether this option and every option above it in the package tree are enabled
-    // disabling mixin.world has to disable mixin.world.explosions even though the latter is still
-    // nominally true, otherwise a user turning off a whole category would leave its children applied
+    // This option and every ancestor; disabling mixin.world must also disable mixin.world.explosions
+    // even though the child is still nominally true
     public boolean isEnabledRecursive(EquilibriumConfig config) {
         return this.enabled && (config.getParent(this) == null || config.getParent(this).isEnabledRecursive(config));
     }
 
+    // True when anything moved this off its built-in default
     public boolean isOverridden() {
         return this.isUserDefined() || this.isModDefined();
     }
 
+    // Whether the value came from the user's config file
     public boolean isUserDefined() {
         return this.userDefined;
     }
 
+    // Whether any mod contributed an override
     public boolean isModDefined() {
         return this.modDefined != null;
     }
 
+    // The dotted rule name this option was registered under
     public String getName() {
         return this.name;
     }
 
+    // Drops mod overrides so a reload starts from the user's own values again
     public void clearModsDefiningValue() {
         this.modDefined = null;
     }
 
+    // Mod ids that overrode this, for the stats command; empty rather than null when none did
     public Collection<String> getDefiningMods() {
         return this.modDefined != null ? Collections.unmodifiableCollection(this.modDefined) : Collections.<String>emptyList();
     }
 
+    // Map is allocated lazily at size 1, since most options declare no dependencies at all
     public void addDependency(Option dependencyOption, boolean requiredValue) {
         if (this.dependencies == null) {
             this.dependencies = new Object2BooleanLinkedOpenHashMap<>(1);
@@ -93,8 +101,7 @@ public class Option {
     }
 
     // Turns this option off if any dependency is not in its required state
-    // Returns whether the option changed, so the caller knows to run another pass — one pass is not enough,
-    // because disabling an option can break a dependency of an option already visited
+    // Returns whether it changed, so the caller knows to sweep again
     public boolean disableIfDependenciesNotMet(EquilibriumConfig config) {
         if (this.dependencies != null && this.isEnabled()) {
             for (Object2BooleanMap.Entry<Option> dependency : this.dependencies.object2BooleanEntrySet()) {

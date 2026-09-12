@@ -37,10 +37,12 @@ public final class AbsolutePackPath {
         return fromAbsolutePath(parent + target);
     }
 
+    // Normalised, leading slash, forward slashes
     public String getPathString() {
         return this.path;
     }
 
+    // Resolves . and .., collapses separators
     private static String normalize(String raw) {
         String[] segments = raw.split("/");
         List<String> out = new ArrayList<>();
@@ -59,6 +61,7 @@ public final class AbsolutePackPath {
         return "/" + String.join("/", out);
     }
 
+    // By normalised string
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -70,11 +73,13 @@ public final class AbsolutePackPath {
         return this.path.equals(((AbsolutePackPath) o).path);
     }
 
+    // By normalised string
     @Override
     public int hashCode() {
         return Objects.hashCode(this.path);
     }
 
+    // The path string
     @Override
     public String toString() {
         return "AbsolutePackPath[" + this.path + "]";

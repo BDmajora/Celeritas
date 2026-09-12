@@ -24,6 +24,7 @@ public class MergedStringOption {
         this.locations = Collections.unmodifiableSet(set);
     }
 
+    // Unions locations; returns null when the definitions conflict
     public MergedStringOption merge(MergedStringOption other) {
         if (!this.option.getDefaultValue().equals(other.option.getDefaultValue())) {
             return null;
@@ -44,10 +45,12 @@ public class MergedStringOption {
         return new MergedStringOption(option, Collections.unmodifiableSet(mergedLocations));
     }
 
+    // The option
     public StringOption getOption() {
         return option;
     }
 
+    // Every file and line that defines it
     public Set<OptionLocation> getLocations() {
         return locations;
     }

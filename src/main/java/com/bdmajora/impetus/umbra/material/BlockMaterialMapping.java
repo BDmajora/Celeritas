@@ -68,6 +68,7 @@ public final class BlockMaterialMapping {
         return table;
     }
 
+    // Assigns the pack id to every state matching the entry's predicates; first mapping wins
     private static int addBlockStates(BlockEntry entry, int[] table, int intId) {
         ResourceLocation location = new ResourceLocation(entry.getId().getNamespace(), entry.getId().getName());
         if (!Block.REGISTRY.containsKey(location)) {
@@ -93,6 +94,7 @@ public final class BlockMaterialMapping {
         return mapped;
     }
 
+    // All named properties must match; properties the block lacks are ignored
     private static boolean matches(IBlockState state, Map<String, String> predicates, int intId) {
         if (predicates.isEmpty()) {
             return true;
@@ -110,6 +112,7 @@ public final class BlockMaterialMapping {
         return true;
     }
 
+    // Property by name on this block, or null
     private static IProperty<?> findProperty(IBlockState state, String name) {
         for (IProperty<?> property : state.getPropertyKeys()) {
             if (property.getName().equals(name)) {
@@ -119,6 +122,7 @@ public final class BlockMaterialMapping {
         return null;
     }
 
+    // The property's string form of the current value, as block.properties spells it
     private static <T extends Comparable<T>> String valueName(IBlockState state, IProperty<T> property) {
         return property.getName(state.getValue(property));
     }

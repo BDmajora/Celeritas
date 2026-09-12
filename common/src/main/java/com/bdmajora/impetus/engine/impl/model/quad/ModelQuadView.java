@@ -45,8 +45,10 @@ public interface ModelQuadView {
         return this.getColorIndex() != -1;
     }
 
+    // Defaults on
     default boolean hasAmbientOcclusion() { return true; }
 
+    // Defaults to none
     default int getVanillaLightEmission() {
         return 0;
     }

@@ -12,6 +12,7 @@ public sealed interface ChunkJobResult<OUTPUT> permits ChunkJobResult.Success, C
             Objects.requireNonNull(throwable);
         }
 
+        // Frees the output of a result nobody will consume
         public void abort() {
             if (this.throwable instanceof RuntimeException crashException) {
                 // Propagate RuntimeExceptions directly to provide extra information if they are a vanilla crash exception

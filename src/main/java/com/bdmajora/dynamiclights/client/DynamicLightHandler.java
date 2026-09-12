@@ -22,11 +22,14 @@ public interface DynamicLightHandler<T> {
     static <T extends EntityLivingBase> DynamicLightHandler<T> makeHandler(
             Function<T, Integer> luminance, Function<T, Boolean> waterSensitive) {
         return new DynamicLightHandler<T>() {
+            // Delegates to the function this handler was built with
             @Override
             public int getLuminance(T lightSource) {
                 return luminance.apply(lightSource);
             }
 
+            // Delegates to the function this handler was built with
+            // Explosive light always goes out underwater
             @Override
             public boolean isWaterSensitive(T lightSource) {
                 return waterSensitive.apply(lightSource);
@@ -46,6 +49,7 @@ public interface DynamicLightHandler<T> {
     static <T extends EntityCreeper> DynamicLightHandler<T> makeCreeperEntityHandler(
             DynamicLightHandler<T> handler) {
         return new DynamicLightHandler<T>() {
+            // Flash intensity drives brightness in FANCY mode; SIMPLE uses a constant once the fuse is lit
             @Override
             public int getLuminance(T entity) {
                 int luminance = 0;
@@ -67,6 +71,7 @@ public interface DynamicLightHandler<T> {
                 return luminance;
             }
 
+            // Explosive light always goes out underwater
             @Override
             public boolean isWaterSensitive(T lightSource) {
                 return true;

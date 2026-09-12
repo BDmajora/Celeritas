@@ -42,10 +42,12 @@ public class GlVertexAttribute {
         this.name = name;
     }
 
+    // Whether integer data maps to [0,1] or [-1,1]
     public boolean isNormalized() {
         return this.normalized;
     }
 
+    // Whether to use glVertexAttribIPointer
     public boolean isIntType() {
         return this.intType;
     }

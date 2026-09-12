@@ -21,6 +21,7 @@ public class StringOption extends BaseOption {
         this.allowedValues = allowedValues;
     }
 
+    // Parses the allowed values from the comment; null when there are none
     public static StringOption create(OptionType type, String name, String comment, String defaultValue) {
         if (comment == null) {
             return null;
@@ -60,10 +61,12 @@ public class StringOption extends BaseOption {
         return new StringOption(type, name, comment.trim(), defaultValue, Collections.unmodifiableList(builder));
     }
 
+    // Value in the source
     public String getDefaultValue() {
         return defaultValue;
     }
 
+    // From the [a b c] comment
     public List<String> getAllowedValues() {
         return allowedValues;
     }

@@ -69,17 +69,20 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
     private Set<TileEntity> setTileEntities;
     private ImpetusWorldRenderer renderer;
 
+    // Zero so vanilla allocates no chunk storage; Impetus owns terrain rendering
     @Redirect(method = "loadRenderers", at = @At(value = "FIELD", target = "Lnet/minecraft/client/settings/GameSettings;renderDistanceChunks:I", ordinal = 1))
     private int nullifyBuiltChunkStorage(GameSettings settings) {
         // Do not allow any resources to be allocated
         return 0;
     }
 
+    // Leaves quality follows the Impetus option rather than the global fancy toggle
     @Redirect(method = "loadRenderers", at = @At(value = "INVOKE", target = "Lnet/minecraft/block/BlockLeaves;setGraphicsLevel(Z)V"))
     private void useConfiguredLeavesGraphicsLevel(BlockLeaves leaves, boolean fancyGraphics) {
         leaves.setGraphicsLevel(ImpetusVintage.options().quality.leavesQuality.isFancy(fancyGraphics));
     }
 
+    // Creates the Impetus renderer alongside vanilla's RenderGlobal
     @Inject(method = "<init>", at = @At("RETURN"))
     private void init(Minecraft minecraft, CallbackInfo ci) {
         this.renderer = new ImpetusWorldRenderer();
@@ -108,6 +111,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         this.impetus$changingWorld = true;
     }
 
+    // Tears down and rebuilds the renderer for the new world inside a managed-code scope
     @Inject(method = "setWorldAndLoadRenderers", at = @At("RETURN"))
     private void onWorldChanged(WorldClient world, CallbackInfo ci) {
         this.impetus$changingWorld = false;
@@ -121,33 +125,25 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         }
     }
 
-    /**
-     * @reason Redirect to our renderer
-     * @author JellySquid
-     */
+    // Overwrite: from the Impetus renderer, for the debug screen
     @Overwrite
     public int getRenderedChunks() {
         return this.renderer.getVisibleChunkCount();
     }
 
-    /**
-     * @reason Redirect the check to our renderer
-     * @author JellySquid
-     */
+    // Overwrite: whether the Impetus build queue is empty
     @Overwrite
     public boolean hasNoChunkUpdates() {
         return this.renderer.isTerrainRenderComplete();
     }
 
+    // Forwards vanilla's update request to the Impetus renderer
     @Inject(method = "setDisplayListEntitiesDirty", at = @At("RETURN"))
     private void onTerrainUpdateScheduled(CallbackInfo ci) {
         this.renderer.scheduleTerrainUpdate();
     }
 
-    /**
-     * @reason Redirect the chunk layer render passes to our renderer
-     * @author JellySquid
-     */
+    // Overwrite: draws the layer through Impetus and returns zero, since vanilla's count is meaningless here
     @Overwrite
     public int renderBlockLayer(BlockRenderLayer blockLayerIn, double partialTicks, int pass, Entity entityIn) {
         RenderDevice.enterManagedCode();
@@ -175,10 +171,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         return 1;
     }
 
-    /**
-     * @reason Redirect the terrain setup phase to our renderer
-     * @author JellySquid
-     */
+    // Overwrite: runs the Impetus visibility update in place of vanilla's chunk graph walk
     @Overwrite
     public void setupTerrain(Entity entity, double tick, ICamera camera, int frame, boolean spectator) {
         RenderDevice.enterManagedCode();
@@ -209,10 +202,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
                 new org.joml.Vector3d(transform.x, transform.y, transform.z));
     }
 
-    /**
-     * @reason Redirect chunk updates to our renderer
-     * @author JellySquid
-     */
+    // Overwrite: schedules Impetus rebuilds for every section the box touches
     @Overwrite
     private void markBlocksForUpdate(int minX, int minY, int minZ, int maxX, int maxY, int maxZ, boolean important) {
         this.renderer.scheduleRebuildForBlockArea(minX, minY, minZ, maxX, maxY, maxZ, important);
@@ -225,6 +215,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         return false;
     }
 
+    // Vanilla's chunk task set is always empty since Impetus schedules its own
     @Redirect(method = "updateClouds", at = @At(value = "INVOKE", target = "Ljava/util/Set;isEmpty()Z", ordinal = 1))
     private boolean alwaysHaveNoTasks(Set instance) {
         return true;
@@ -284,11 +275,13 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         return getConfiguredCloudHeight(provider);
     }
 
+    // Fancy path shares the configured height
     @Redirect(method = "renderCloudsFancy", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/WorldProvider;getCloudHeight()F"))
     private float getConfiguredFancyCloudHeight(WorldProvider provider) {
         return getConfiguredCloudHeight(provider);
     }
 
+    // Cloud height comes from the Impetus option instead of the provider
     private float getConfiguredCloudHeight(WorldProvider provider) {
         return ImpetusVintage.options().quality.cloudHeight;
     }
@@ -307,6 +300,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         return Math.max(32, (int) Math.ceil(Math.min(requested, farPlane) / (double) cellSize));
     }
 
+    // Skipped mid world change, since onWorldChanged is about to rebuild everything anyway
     @Inject(method = "loadRenderers", at = @At("RETURN"))
     private void onReload(CallbackInfo ci) {
         // Mid-world-change this reload is for the world being left, and onWorldChanged is about to rebuild the
@@ -350,10 +344,7 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
         ci.cancel();
     }
 
-    /**
-     * @reason Replace the debug string
-     * @author JellySquid
-     */
+    // Overwrite: the C: line from the Impetus renderer
     @Overwrite
     public String getDebugInfoRenders() {
         return this.renderer.getChunksDebugString();
@@ -365,10 +356,6 @@ public abstract class RenderGlobalMixin implements SimpleWorldRenderer.Provider<
 
     // --- end TEMP DIAGNOSTIC -----------------------------------------------------------------------------------
 
-    /**
-     * @author embeddedt
-     * @reason reimplement entity render loop because vanilla's relies on the renderInfos list
-     */
     @Inject(method = "renderEntities", at = @At(value = "FIELD", target = "Lnet/minecraft/client/renderer/RenderGlobal;renderInfos:Ljava/util/List;", ordinal = 0))
     private void renderEntities(Entity renderViewEntity, ICamera camera, float partialTicks, CallbackInfo ci,
                                 @Local(ordinal = 1) List<Entity> outlineEntityList,

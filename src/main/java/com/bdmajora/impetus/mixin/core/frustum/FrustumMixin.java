@@ -18,6 +18,7 @@ public class FrustumMixin implements ViewportProvider {
     @Shadow
     private double x, y, z;
 
+    // Routes vanilla's box test through the JOML frustum; infinite bounds always pass
     @Overwrite
     public boolean isBoxInFrustum(double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
         // Infinite bounds (e.g. render chunks awaiting real bounds) always pass

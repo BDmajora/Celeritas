@@ -77,6 +77,7 @@ public final class GlslPreprocessor {
         return out;
     }
 
+    // #define lines to inject
     private static List<String> toDefineLines(Map<String, String> defines) {
         List<String> result = new ArrayList<>(defines.size());
         for (Map.Entry<String, String> e : defines.entrySet()) {
@@ -168,6 +169,7 @@ public final class GlslPreprocessor {
         return inBlockComment;
     }
 
+    // Evaluates one #if-family line and updates the active stack
     private static String foldDirective(String line, Map<String, String> defines, java.util.Deque<boolean[]> stack) {
         Matcher conditional = CONDITIONAL_DIRECTIVE.matcher(line);
         if (conditional.matches()) {
@@ -259,6 +261,7 @@ public final class GlslPreprocessor {
         return depth != 0;
     }
 
+    // Whether every enclosing conditional is currently true
     private static boolean allActive(java.util.Deque<boolean[]> stack) {
         for (boolean[] frame : stack) {
             if (!frame[0]) {

@@ -7,6 +7,7 @@ import java.util.EnumSet;
 import java.util.List;
 
 public interface TextComponent {
+    // Nested components, empty for a leaf
     default List<TextComponent> children() {
         return List.of();
     }
@@ -30,11 +31,13 @@ public interface TextComponent {
     }
 
     record Styled(TextComponent inner, EnumSet<TextFormattingStyle> styles) implements TextComponent {
+        // Nested components
         @Override
         public List<TextComponent> children() {
             return List.of(inner);
         }
 
+        // Copy with styles added
         @Override
         public TextComponent withStyle(TextFormattingStyle style, TextFormattingStyle... rest) {
             var newSet = EnumSet.copyOf(styles);
@@ -49,18 +52,22 @@ public interface TextComponent {
         }
     }
 
+    // Copy with styles added
     default TextComponent withStyle(TextFormattingStyle style, TextFormattingStyle... rest) {
         return new Styled(this, EnumSet.of(style, rest));
     }
 
+    // Plain text
     static TextComponent literal(String text) {
         return new Literal(text);
     }
 
+    // Lang key with format arguments
     static TextComponent translatable(String key, Object... args) {
         return new Translatable(List.of(key), Arrays.asList(args));
     }
 
+    // First lang key that has a translation
     static TextComponent translatable(List<String> keys, Object... args) {
         return new Translatable(keys, Arrays.asList(args));
     }

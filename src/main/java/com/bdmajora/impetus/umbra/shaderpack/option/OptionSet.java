@@ -20,18 +20,22 @@ public class OptionSet {
         this.stringOptions = Collections.unmodifiableMap(new HashMap<>(builder.stringOptions));
     }
 
+    // By name, merged across files
     public Map<String, MergedBooleanOption> getBooleanOptions() {
         return this.booleanOptions;
     }
 
+    // By name, merged across files
     public Map<String, MergedStringOption> getStringOptions() {
         return this.stringOptions;
     }
 
+    // Whether the name is a boolean rather than a valued option
     public boolean isBooleanOption(String name) {
         return booleanOptions.containsKey(name);
     }
 
+    // Starts an empty set
     public static Builder builder() {
         return new Builder();
     }
@@ -45,6 +49,7 @@ public class OptionSet {
             this.stringOptions = new HashMap<>();
         }
 
+        // Merges another set in
         public void addAll(OptionSet other) {
             if (this.booleanOptions.isEmpty()) {
                 this.booleanOptions.putAll(other.booleanOptions);
@@ -59,10 +64,12 @@ public class OptionSet {
             }
         }
 
+        // Records a boolean option found at a location
         public void addBooleanOption(OptionLocation location, BooleanOption option) {
             addBooleanOption(new MergedBooleanOption(location, option));
         }
 
+        // Merges an already-merged option; conflicting definitions are logged
         public void addBooleanOption(MergedBooleanOption proposed) {
             BooleanOption option = proposed.getOption();
             MergedBooleanOption existing = booleanOptions.get(option.getName());
@@ -83,10 +90,12 @@ public class OptionSet {
             booleanOptions.put(option.getName(), merged);
         }
 
+        // Records a valued option found at a location
         public void addStringOption(OptionLocation location, StringOption option) {
             addStringOption(new MergedStringOption(location, option));
         }
 
+        // Merges an already-merged option; conflicting definitions are logged
         public void addStringOption(MergedStringOption proposed) {
             StringOption option = proposed.getOption();
             MergedStringOption existing = stringOptions.get(option.getName());
@@ -107,6 +116,7 @@ public class OptionSet {
             stringOptions.put(option.getName(), merged);
         }
 
+        // Finalises
         public OptionSet build() {
             return new OptionSet(this);
         }

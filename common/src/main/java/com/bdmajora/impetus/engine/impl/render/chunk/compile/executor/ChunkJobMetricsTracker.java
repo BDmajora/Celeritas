@@ -13,7 +13,9 @@ import java.util.function.LongFunction;
 public class ChunkJobMetricsTracker {
     public static final long OBSERVATION_COUNT_TIME = TimeUnit.SECONDS.toNanos(1);
 
+    // Summary of one job type's durations
     public record MetricStats(long avg, long max, long min) {
+        // Formatted with a caller-supplied unit
         public String toString(LongFunction<String> observationStringifier) {
             return "avg = " + observationStringifier.apply(avg)
                     + ", max = " + observationStringifier.apply(max)
@@ -35,6 +37,7 @@ public class ChunkJobMetricsTracker {
         private int observationsInLastTimeInterval;
         private int observationsInCurrentTimeInterval;
 
+        // Adds a duration to the window
         public void collect(long observation) {
             if (observations.size() < MAX_OBSERVATIONS) {
                 observations.add(observation);
@@ -47,10 +50,12 @@ public class ChunkJobMetricsTracker {
             observationsInCurrentTimeInterval++;
         }
 
+        // Sample count in the window
         public int getObservationsInLastTimeInterval() {
             return this.observationsInLastTimeInterval;
         }
 
+        // Summary over the window
         public MetricStats getStats() {
             int count = observations.size();
             if (count == 0) {
@@ -74,6 +79,7 @@ public class ChunkJobMetricsTracker {
 
     private long lastTimeIntervalFlip = System.nanoTime();
 
+    // Rolls the window
     public void tick() {
         long time = System.nanoTime();
         if ((time - lastTimeIntervalFlip) >= OBSERVATION_COUNT_TIME) {
@@ -85,6 +91,7 @@ public class ChunkJobMetricsTracker {
         }
     }
 
+    // Records a job's duration under its output type
     public void collectMetrics(ChunkJobResult.Success<? extends ChunkTaskOutput> successfulResult) {
         if (successfulResult.executionTimeNanos() < 0) {
             return;
@@ -93,6 +100,7 @@ public class ChunkJobMetricsTracker {
         data.collect(successfulResult.executionTimeNanos());
     }
 
+    // Per-type metrics, for the debug screen
     public Reference2ReferenceMap<Class<? extends ChunkTaskOutput>, MetricsData> getMetrics() {
         return Reference2ReferenceMaps.unmodifiable(metricsByTask);
     }

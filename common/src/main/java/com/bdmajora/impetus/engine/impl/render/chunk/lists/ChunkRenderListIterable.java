@@ -7,6 +7,7 @@ import java.util.Iterator;
 public interface ChunkRenderListIterable {
     Iterator<ChunkRenderList> iterator(boolean reverse);
 
+    // Forward order
     default Iterator<ChunkRenderList> iterator() {
         return this.iterator(false);
     }

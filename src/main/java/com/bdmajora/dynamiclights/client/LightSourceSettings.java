@@ -14,15 +14,9 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
-// which entity and block entity types the user has switched off
-// upstream LambDynLights builds this list from the EntityType and BlockEntityType registries, and
-// 1.12.2 has equivalents - Forge's entity registry and TileEntity's class-to-id map - so unlike the
-// Extras particle toggles this needs no reflection or spawn-time discovery: the registries are
-// authoritative and complete by the time the options screen can be opened
-// only the disabled sets are user data; everything else is derived from the registries on demand
-// Celeritas Dynamic Lights carries the same option surface but never populates it - its settings map
-// is a fresh empty HashMap built inside the lookup, so every type reads as enabled and the toggles do
-// nothing - and this is the working version of that
+// Which entity and block entity types the user has switched off
+// Built from Forge's entity registry and TileEntity's class map, which are complete before the options screen can open
+// Only the disabled sets are user data; everything else is derived on demand
 public final class LightSourceSettings {
     private static final LightSourceSettings INSTANCE = new LightSourceSettings();
 
@@ -40,6 +34,7 @@ public final class LightSourceSettings {
     private LightSourceSettings() {
     }
 
+    // Single client-wide instance
     public static LightSourceSettings getInstance() {
         return INSTANCE;
     }
@@ -87,6 +82,7 @@ public final class LightSourceSettings {
         return cached.isEmpty() ? null : cached;
     }
 
+    // Registry id for a block entity's class, memoised per class since the registry lookup is a map walk
     private String blockEntityId(TileEntity tileEntity) {
         Class<?> clazz = tileEntity.getClass();
         String cached = this.blockEntityIds.get(clazz);
@@ -108,10 +104,12 @@ public final class LightSourceSettings {
         return this.disabledEntities.contains(id);
     }
 
+    // Whether the user switched this block entity type off
     public boolean isBlockEntityTypeDisabled(String id) {
         return this.disabledBlockEntities.contains(id);
     }
 
+    // Toggles one entity type; the set only stores disabled ids
     public void setEntityTypeEnabled(String id, boolean enabled) {
         if (enabled) {
             this.disabledEntities.remove(id);
@@ -120,6 +118,7 @@ public final class LightSourceSettings {
         }
     }
 
+    // Toggles one block entity type; the set only stores disabled ids
     public void setBlockEntityTypeEnabled(String id, boolean enabled) {
         if (enabled) {
             this.disabledBlockEntities.remove(id);
@@ -128,22 +127,27 @@ public final class LightSourceSettings {
         }
     }
 
+    // Replaces the disabled entity set from the config file
     public void loadDisabledEntities(String[] ids) {
         load(this.disabledEntities, ids);
     }
 
+    // Replaces the disabled block entity set from the config file
     public void loadDisabledBlockEntities(String[] ids) {
         load(this.disabledBlockEntities, ids);
     }
 
+    // Sorted for a stable config file
     public String[] getDisabledEntitiesArray() {
         return this.disabledEntities.stream().sorted().toArray(String[]::new);
     }
 
+    // Sorted for a stable config file
     public String[] getDisabledBlockEntitiesArray() {
         return this.disabledBlockEntities.stream().sorted().toArray(String[]::new);
     }
 
+    // Clears and refills, skipping blanks a hand-edited config might contain
     private static void load(Set<String> target, String[] ids) {
         target.clear();
         for (String id : ids) {

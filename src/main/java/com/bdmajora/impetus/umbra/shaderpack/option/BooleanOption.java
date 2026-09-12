@@ -9,10 +9,12 @@ public final class BooleanOption extends BaseOption {
         this.defaultValue = defaultValue;
     }
 
+    // Whether the define is uncommented in the source
     public boolean getDefaultValue() {
         return defaultValue;
     }
 
+    // For logging
     @Override
     public String toString() {
         return "BooleanDefineOption{" +

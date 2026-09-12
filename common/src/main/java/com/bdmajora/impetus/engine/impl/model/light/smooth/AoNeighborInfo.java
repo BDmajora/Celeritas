@@ -7,6 +7,7 @@ import com.bdmajora.impetus.engine.impl.model.quad.properties.ModelQuadFacing;
 @SuppressWarnings("UnnecessaryLocalVariable")
 enum AoNeighborInfo {
     POS_X(new ModelQuadFacing[] { ModelQuadFacing.NEG_Y, ModelQuadFacing.POS_Y, ModelQuadFacing.NEG_Z, ModelQuadFacing.POS_Z }, 0.6F) {
+        // Bilinear weights of the four corners for a point on this face
         @Override
         public void calculateCornerWeights(float x, float y, float z, float[] out) {
             final float u = z;
@@ -18,6 +19,7 @@ enum AoNeighborInfo {
             out[3] = (1.0f - v) * u;
         }
 
+        // Reorders corner data from neighbour order to this face's vertex order
         @Override
         public void mapCorners(int[] lm0, float[] ao0, int[] lm1, float[] ao1) {
             lm1[1] = lm0[0];
@@ -31,12 +33,14 @@ enum AoNeighborInfo {
             ao1[0] = ao0[3];
         }
 
+        // Distance from this face along its axis, for depth blending
         @Override
         public float getDepth(float x, float y, float z) {
             return 1.0f - x;
         }
     },
     POS_Y(new ModelQuadFacing[] { ModelQuadFacing.POS_X, ModelQuadFacing.NEG_X, ModelQuadFacing.NEG_Z, ModelQuadFacing.POS_Z }, 1.0F) {
+        // Bilinear weights of the four corners for a point on this face
         @Override
         public void calculateCornerWeights(float x, float y, float z, float[] out) {
             final float u = z;
@@ -48,6 +52,7 @@ enum AoNeighborInfo {
             out[3] = (1.0f - v) * u;
         }
 
+        // Reorders corner data from neighbour order to this face's vertex order
         @Override
         public void mapCorners(int[] lm0, float[] ao0, int[] lm1, float[] ao1) {
             lm1[2] = lm0[0];
@@ -61,12 +66,14 @@ enum AoNeighborInfo {
             ao1[1] = ao0[3];
         }
 
+        // Distance from this face along its axis, for depth blending
         @Override
         public float getDepth(float x, float y, float z) {
             return 1.0f - y;
         }
     },
     POS_Z(new ModelQuadFacing[] { ModelQuadFacing.NEG_X, ModelQuadFacing.POS_X, ModelQuadFacing.NEG_Y, ModelQuadFacing.POS_Y }, 0.8F) {
+        // Bilinear weights of the four corners for a point on this face
         @Override
         public void calculateCornerWeights(float x, float y, float z, float[] out) {
             final float u = y;
@@ -78,6 +85,7 @@ enum AoNeighborInfo {
             out[3] = u * (1.0f - v);
         }
 
+        // Reorders corner data from neighbour order to this face's vertex order
         @Override
         public void mapCorners(int[] lm0, float[] ao0, int[] lm1, float[] ao1) {
             lm1[0] = lm0[0];
@@ -91,12 +99,14 @@ enum AoNeighborInfo {
             ao1[3] = ao0[3];
         }
 
+        // Distance from this face along its axis, for depth blending
         @Override
         public float getDepth(float x, float y, float z) {
             return 1.0f - z;
         }
     },
     NEG_X(new ModelQuadFacing[] { ModelQuadFacing.POS_Y, ModelQuadFacing.NEG_Y, ModelQuadFacing.NEG_Z, ModelQuadFacing.POS_Z }, 0.6F) {
+        // Bilinear weights of the four corners for a point on this face
         @Override
         public void calculateCornerWeights(float x, float y, float z, float[] out) {
             final float u = z;
@@ -108,6 +118,7 @@ enum AoNeighborInfo {
             out[3] = (1.0f - v) * u;
         }
 
+        // Reorders corner data from neighbour order to this face's vertex order
         @Override
         public void mapCorners(int[] lm0, float[] ao0, int[] lm1, float[] ao1) {
             lm1[3] = lm0[0];
@@ -121,12 +132,14 @@ enum AoNeighborInfo {
             ao1[2] = ao0[3];
         }
 
+        // Distance from this face along its axis, for depth blending
         @Override
         public float getDepth(float x, float y, float z) {
             return x;
         }
     },
     NEG_Y(new ModelQuadFacing[] { ModelQuadFacing.NEG_X, ModelQuadFacing.POS_X, ModelQuadFacing.NEG_Z, ModelQuadFacing.POS_Z }, 0.5F) {
+        // Bilinear weights of the four corners for a point on this face
         @Override
         public void calculateCornerWeights(float x, float y, float z, float[] out) {
             final float u = z;
@@ -138,6 +151,7 @@ enum AoNeighborInfo {
             out[3] = (1.0f - v) * u;
         }
 
+        // Reorders corner data from neighbour order to this face's vertex order
         @Override
         public void mapCorners(int[] lm0, float[] ao0, int[] lm1, float[] ao1) {
             lm1[0] = lm0[0];
@@ -151,12 +165,14 @@ enum AoNeighborInfo {
             ao1[3] = ao0[3];
         }
 
+        // Distance from this face along its axis, for depth blending
         @Override
         public float getDepth(float x, float y, float z) {
             return y;
         }
     },
     NEG_Z(new ModelQuadFacing[] { ModelQuadFacing.POS_Y, ModelQuadFacing.NEG_Y, ModelQuadFacing.POS_X, ModelQuadFacing.NEG_X }, 0.8F) {
+        // Bilinear weights of the four corners for a point on this face
         @Override
         public void calculateCornerWeights(float x, float y, float z, float[] out) {
             final float u = 1.0f - x;
@@ -168,6 +184,7 @@ enum AoNeighborInfo {
             out[3] = (1.0f - v) * u;
         }
 
+        // Reorders corner data from neighbour order to this face's vertex order
         @Override
         public void mapCorners(int[] lm0, float[] ao0, int[] lm1, float[] ao1) {
             lm1[3] = lm0[0];
@@ -181,6 +198,7 @@ enum AoNeighborInfo {
             ao1[2] = ao0[3];
         }
 
+        // Distance from this face along its axis, for depth blending
         @Override
         public float getDepth(float x, float y, float z) {
             return z;

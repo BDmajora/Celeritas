@@ -25,6 +25,7 @@ public abstract class TextureAtlasSpriteMixin implements SpriteExtension, Sprite
 
     private SpriteTransparencyLevel impetus$transparencyLevel = SpriteTransparencyLevel.TRANSLUCENT;
 
+    // Classifies the sprite's transparency and, for block textures, fixes transparent-pixel colours before mipmapping
     @Inject(method = "generateMipmaps", at = @At("HEAD"))
     private void processSprite(int mipLevel, CallbackInfo ci) {
         if (this.framesTextureData == null) {
@@ -40,6 +41,7 @@ public abstract class TextureAtlasSpriteMixin implements SpriteExtension, Sprite
         this.impetus$transparencyLevel = level;
     }
 
+    // Path starts with block after the namespace; the colour rewrite is only safe for those
     private static boolean isBlockTexture(String iconName) {
         return iconName.startsWith("block", iconName.indexOf(':') + 1);
     }

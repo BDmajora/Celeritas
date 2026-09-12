@@ -1,12 +1,7 @@
 package com.bdmajora.impetus.umbra.uniforms.custom;
 
-// A custom-uniform value: a small vector of 1 to 4 float components
-// Scalars, booleans (as 0/1) and integers are all width-1; vec2/vec3/vec4 are widths 2/3/4. One representation for
-// all of them, because the expression language has no type declarations to distinguish them by
-// Arithmetic broadcasts a width-1 operand across a wider one, which is GLSL's own scalar-vector rule and close
-// enough for the expressions packs actually write
-// An original compact implementation rather than a port of the full expression library Iris bundles — it covers the
-// value shapes real packs use and nothing more
+// A custom-uniform value: 1 to 4 float components, with scalars and booleans at width 1
+// Arithmetic broadcasts a scalar across a vector, GLSL's own rule; compact original rather than a port of Iris's library
 public final class CustomUniformValue {
     public final float[] components;
     public final int width;
@@ -16,14 +11,17 @@ public final class CustomUniformValue {
         this.width = components.length;
     }
 
+    // Single component
     public static CustomUniformValue scalar(float value) {
         return new CustomUniformValue(new float[] { value });
     }
 
+    // 1 or 0
     public static CustomUniformValue bool(boolean value) {
         return scalar(value ? 1.0f : 0.0f);
     }
 
+    // Vector of any width
     public static CustomUniformValue of(float... components) {
         if (components.length < 1 || components.length > 4) {
             throw new IllegalArgumentException("Vector width must be 1-4, was " + components.length);
@@ -31,10 +29,12 @@ public final class CustomUniformValue {
         return new CustomUniformValue(components);
     }
 
+    // First component
     public float x() {
         return this.components[0];
     }
 
+    // Non-zero x
     public boolean asBoolean() {
         return this.components[0] != 0.0f;
     }
@@ -52,6 +52,7 @@ public final class CustomUniformValue {
         return new CustomUniformValue(out);
     }
 
+    // Applies to every component
     public CustomUniformValue map(java.util.function.DoubleUnaryOperator op) {
         float[] out = new float[this.width];
         for (int i = 0; i < this.width; i++) {
@@ -60,6 +61,7 @@ public final class CustomUniformValue {
         return new CustomUniformValue(out);
     }
 
+    // For logging
     @Override
     public String toString() {
         var sb = new StringBuilder("vec").append(this.width).append('(');

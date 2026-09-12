@@ -7,12 +7,8 @@ import net.minecraft.block.state.IBlockState;
 import java.util.Arrays;
 import java.util.List;
 
-// A flattened AND where every condition tests a boolean property
-// Ported from Hydrogen's class of the same name
-// This is the single most common multipart shape in the game — {"north": "true", "east": "false"} on every
-// fence, wall, pane, redstone wire and pipe — which is what makes it worth specialising over AllMatchOne
-// The saving is a boolean[] rather than an Object[] of boxed Booleans: one byte per property instead of a
-// reference, and the comparison is a primitive one that can never fall through to equals
+// A flattened AND where every condition tests a boolean property: the commonest multipart shape in the game,
+// on every fence, wall, pane and wire. A boolean[] instead of boxed Booleans, compared as primitives
 public final class AllMatchOneBoolean implements Predicate<IBlockState> {
     private final IProperty<?>[] properties;
     // Parallel to properties: the value that property must have for the condition to hold
@@ -57,6 +53,7 @@ public final class AllMatchOneBoolean implements Predicate<IBlockState> {
         return new AllMatchOneBoolean(properties, values);
     }
 
+    // Every boolean property must equal its expected value; fields are hoisted so the loop reads them once
     @Override
     public boolean apply(IBlockState state) {
         if (state == null) {
@@ -80,6 +77,7 @@ public final class AllMatchOneBoolean implements Predicate<IBlockState> {
         return true;
     }
 
+    // Structural equality over both arrays, which is what lets the canonicalizer intern these
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -93,6 +91,7 @@ public final class AllMatchOneBoolean implements Predicate<IBlockState> {
         return Arrays.equals(this.properties, other.properties) && Arrays.equals(this.values, other.values);
     }
 
+    // Precomputed at construction; the predicate is immutable
     @Override
     public int hashCode() {
         return this.hash;

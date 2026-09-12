@@ -6,25 +6,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// the option tree: every mixin.* rule Equilibrium recognises, its default, and what it does
-// Lithium generates this from @MixinConfigOption annotations on package-info files at build time,
-// writing out a properties resource the config loader then reads; that machinery is a Gradle plugin
-// plus a build-time annotation processor, neither of which this project has, and both of which exist
-// to solve a problem we do not have - Lithium ships three loader-specific option sets and needs them
-// generated per platform
-// so the tree is declared here instead, once, and three consumers read it: EquilibriumConfig builds
-// the rules from it, the config-file writer uses the descriptions as comments, and
-// EquilibriumOptionPages builds the GUI tab from it
-// the important property is preserved - an option's name *is* its mixin package path, so a rule
-// automatically governs every mixin beneath it without anything having to be wired up by hand
-// the tree is smaller than Lithium's, and deliberately so: roughly a third of Lithium's options patch
-// code that 1.12.2 does not have (everything touching VoxelShape, the brain-based AI rewrite, chunk
-// tickets, game events) and another handful patch code 1.12.2 already gets right - ExtendedBlockStorage
-// has counted its randomly-ticking blocks since 1.8, and every Profiler entry point already returns
-// immediately when profiling is off
-// an option that cannot remove work is worse than no option, because it invites a user to spend a
-// launch bisecting something that was never doing anything; EQUILIBRIUM_ROADMAP.md lists what was
-// dropped and why
+// The option tree: every mixin.* rule, its default and what it does, declared here once
+// An option's name is its mixin package path, so a rule governs everything beneath it with no wiring
+// Deliberately smaller than Lithium's: options that cannot remove work on 1.12.2 were dropped
 public final class EquilibriumOptions {
     // Immutable, in declaration order; the config file and the GUI both present them this way.
     private static final Map<String, Entry> ENTRIES = build();
@@ -49,14 +33,17 @@ public final class EquilibriumOptions {
             this.dependencies = dependencies;
         }
 
+        // Full dotted rule name
         public String name() {
             return this.name;
         }
 
+        // Value used when the user has not set the key
         public boolean enabledByDefault() {
             return this.enabledByDefault;
         }
 
+        // Prose written into the config file above the key
         public String description() {
             return this.description;
         }
@@ -66,6 +53,7 @@ public final class EquilibriumOptions {
             return this.nonVanilla;
         }
 
+        // Other rules this one requires, and the value each must hold
         public Map<String, Boolean> dependencies() {
             return this.dependencies;
         }
@@ -96,10 +84,12 @@ public final class EquilibriumOptions {
         }
     }
 
+    // The whole tree in declaration order, which is the order the config file is written in
     public static Map<String, Entry> entries() {
         return ENTRIES;
     }
 
+    // Single entry by rule name, or null when nothing declares it
     public static Entry get(String name) {
         return ENTRIES.get(name);
     }
@@ -119,6 +109,7 @@ public final class EquilibriumOptions {
         return categories;
     }
 
+    // Entries under one heading, used to build a GUI group
     public static List<Entry> inCategory(String category) {
         List<Entry> entries = new ArrayList<>();
 
@@ -131,6 +122,7 @@ public final class EquilibriumOptions {
         return entries;
     }
 
+    // Declares the option tree once; order here is the order users see everywhere
     private static Map<String, Entry> build() {
         Builder builder = new Builder();
 

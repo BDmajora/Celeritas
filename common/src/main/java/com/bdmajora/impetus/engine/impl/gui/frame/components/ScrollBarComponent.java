@@ -51,6 +51,7 @@ public class ScrollBarComponent extends AbstractWidget {
         this.extendedScrollArea = extendedTrackArea;
     }
 
+    // Recomputes the thumb rect from the offset and content size
     public void updateThumbPosition() {
         int scrollThumbLength = (this.viewPortLength * (this.mode == Mode.VERTICAL ? this.dim.height() : this.dim.width() - 6)) / this.frameLength;
         int maximumScrollThumbOffset = this.viewPortLength - scrollThumbLength;
@@ -58,6 +59,7 @@ public class ScrollBarComponent extends AbstractWidget {
         this.scrollThumb = new Dim2i(this.dim.x() + 2 + (this.mode == Mode.HORIZONTAL ? scrollThumbOffset : 0), this.dim.y() + 2 + (this.mode == Mode.VERTICAL ? scrollThumbOffset : 0), (this.mode == Mode.VERTICAL ? this.dim.width() : scrollThumbLength) - 4, (this.mode == Mode.VERTICAL ? scrollThumbLength : this.dim.height()) - 4);
     }
 
+    // Track and thumb
     @Override
     public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
         boolean hovered = this.dim.containsCursor(mouseX, mouseY);
@@ -68,6 +70,7 @@ public class ScrollBarComponent extends AbstractWidget {
         drawContext.fill(this.scrollThumb.x(), this.scrollThumb.y(), this.scrollThumb.getLimitX(), this.scrollThumb.getLimitY(), thumbColor);
     }
 
+    // Starts a drag on the thumb, or jumps on the track
     @Override
     public boolean mouseClicked(InteractionContext context, double mouseX, double mouseY, int button) {
         if (this.dim.containsCursor(mouseX, mouseY)) {
@@ -94,6 +97,7 @@ public class ScrollBarComponent extends AbstractWidget {
         return false;
     }
 
+    // Ends a drag
     @Override
     public boolean mouseReleased(InteractionContext context, double mouseX, double mouseY, int button) {
         if (button == 0) {
@@ -102,6 +106,7 @@ public class ScrollBarComponent extends AbstractWidget {
         return false;
     }
 
+    // Moves the thumb with the cursor
     @Override
     public boolean mouseDragged(InteractionContext context, double mouseX, double mouseY, int button, double deltaX, double deltaY) {
         if (this.isDragging) {
@@ -117,6 +122,7 @@ public class ScrollBarComponent extends AbstractWidget {
         return false;
     }
 
+    // Wheel scroll by a fixed step
     @Override
     public boolean mouseScrolled(InteractionContext context, double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         if (this.dim.containsCursor(mouseX, mouseY) || this.extendedScrollArea != null && this.extendedScrollArea.containsCursor(mouseX, mouseY)) {
@@ -129,16 +135,19 @@ public class ScrollBarComponent extends AbstractWidget {
         return false;
     }
 
+    // Scroll position in content pixels
     public int getOffset() {
         return this.offset;
     }
 
+    // Clamped to the scrollable range
     public void setOffset(int value) {
         this.offset = MathUtil.clamp(value, 0, this.maxScrollBarOffset);
         this.updateThumbPosition();
         this.onSetOffset.accept(this.offset);
     }
 
+    // Over the track
     @Override
     public boolean isMouseOver(double mouseX, double mouseY) {
         return this.dim.containsCursor(mouseX, mouseY) || this.extendedScrollArea != null && this.extendedScrollArea.containsCursor(mouseX, mouseY);

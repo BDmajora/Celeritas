@@ -28,6 +28,7 @@ public class MixinClassValidator {
         return mixins;
     }
 
+    // Class name from a path under the mixin root
     private static String classifyMixin(Path baseFolder, Path path) {
         try {
             String className = baseFolder.relativize(path).toString().replace('/', '.').replace('\\', '.');
@@ -37,6 +38,7 @@ public class MixinClassValidator {
         }
     }
 
+    // Reads the class and checks for a @Mixin annotation
     public static boolean isMixinClass(Path classPath) {
         byte[] bytecode;
 
@@ -50,6 +52,7 @@ public class MixinClassValidator {
         return isMixinClass(fromBytecode(bytecode));
     }
 
+    // Parses skipping code and debug, since only annotations are needed
     public static ClassNode fromBytecode(byte[] bytecode) {
         ClassNode node = new ClassNode();
         ClassReader reader = new ClassReader(bytecode);
@@ -58,6 +61,7 @@ public class MixinClassValidator {
         return node;
     }
 
+    // Whether @Mixin appears in the invisible annotations
     public static boolean isMixinClass(ClassNode node) {
         if(node.invisibleAnnotations == null) {
             return false;

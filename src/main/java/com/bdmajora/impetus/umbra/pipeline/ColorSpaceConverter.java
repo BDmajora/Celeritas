@@ -14,19 +14,15 @@ import java.util.Locale;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Final-presentation colourspace conversion, matching Iris: takes the finished sRGB frame and converts it to a
-// wide-gamut target (DCI-P3, Display-P3, Rec.2020 or Adobe RGB) for users whose monitor is configured for one
-// The very last step of the shader frame. The backbuffer colour is copied into a scratch texture, then a
-// fullscreen quad re-renders it through a conversion shader: sRGB EOTF decode, a 3x3 primaries transform, then the
-// target's OETF encode
-// The matrices are standard colorimetry, Rec.709 to XYZ to target at D65 — nothing tuned or approximated
-// Costs nothing when the target is sRGB, because the pass simply does not run
+// Final-presentation conversion from sRGB to a wide-gamut target (P3, Rec.2020, Adobe RGB) as Iris does:
+// scratch copy, then a fullscreen quad through decode, 3x3 primaries transform, encode. Does not run for sRGB
 public final class ColorSpaceConverter {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
     public enum ColorSpace {
         SRGB, DCI_P3, DISPLAY_P3, REC2020, ADOBE_RGB;
 
+        // Pack or option name to a colour space; SRGB when unknown
         public static ColorSpace byName(String name) {
             if (name == null) {
                 return SRGB;
@@ -49,14 +45,17 @@ public final class ColorSpaceConverter {
     private int scratchWidth = -1, scratchHeight = -1;
     private boolean broken;
 
+    // Selects the output transform
     public static void setColorSpace(ColorSpace space) {
         current = space != null ? space : ColorSpace.SRGB;
     }
 
+    // Current output transform
     public static ColorSpace getColorSpace() {
         return current;
     }
 
+    // Whether a non-sRGB transform is selected
     public boolean isActive() {
         return current != ColorSpace.SRGB && !this.broken;
     }
@@ -90,6 +89,7 @@ public final class ColorSpaceConverter {
         }
     }
 
+    // Frees the scratch texture and program
     public void destroy() {
         if (this.program != null) {
             this.program.destroy();
@@ -105,6 +105,7 @@ public final class ColorSpaceConverter {
         this.broken = false;
     }
 
+    // Lazily sizes the intermediate texture
     private void ensureScratch(int width, int height) {
         if (this.scratchTexture != -1 && this.scratchWidth == width && this.scratchHeight == height) {
             return;
@@ -124,6 +125,7 @@ public final class ColorSpaceConverter {
         this.scratchHeight = height;
     }
 
+    // Lazily compiles the conversion shader
     private void ensureProgram() {
         if (this.program != null && this.programSpace == current) {
             return;

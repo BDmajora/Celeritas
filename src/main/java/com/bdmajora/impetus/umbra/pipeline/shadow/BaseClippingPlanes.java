@@ -36,6 +36,7 @@ public final class BaseClippingPlanes {
         return vector;
     }
 
+    // The six camera frustum planes in world space
     public Vector4f[] getPlanes() {
         return this.planes;
     }

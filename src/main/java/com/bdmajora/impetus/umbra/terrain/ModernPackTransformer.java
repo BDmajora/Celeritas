@@ -3,22 +3,9 @@ package com.bdmajora.impetus.umbra.terrain;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// Stage normalisation for MODERN packs — Complementary, BSL and the rest written as #version 130+ single-source
-// files compiled as both stages, selected by #define VERTEX_SHADER / FRAGMENT_SHADER in the .vsh/.fsh entry points
-// and gated with matching #ifdefs
-//
-// This path deliberately does almost nothing, unlike FullscreenTransformer, which rewrites GLSL-120 Chocapic packs
-// into 330-core by renaming main, converting varying and hoisting globals — surgery that CORRUPTS a 5000-line
-// modern source
-// It can do nothing because 1.12.2 runs on a GL COMPATIBILITY context: the driver's own preprocessor already
-// evaluates the stage #ifdefs and the option #if gates, and every legacy built-in the pack relies on —
-// gl_FragCoord, gl_FragData, gl_Vertex, ftransform — is available
-// So the only change is normalising the #version up to 330 compatibility, a superset of 130 that keeps every
-// legacy feature while allowing the modern intrinsics (texelFetch, textureLod) these packs also use. The
-// already-include-flattened body is left exactly as the author wrote it
-//
-// Draw-buffer routing and fragment output locations are handled outside this class, so every terrain and
-// fullscreen path shares one Iris-style target mapping
+// Stage normalisation for modern single-source packs like Complementary and BSL, which compile the same file
+// as both stages under #ifdef gates. Deliberately does almost nothing: the compatibility context's preprocessor
+// handles the gates, so only #version is raised to 330 compatibility and the body is left as written
 public final class ModernPackTransformer {
     private static final Pattern VERSION = Pattern.compile("(?m)^\\s*#version\\s+(\\d+)(?:\\s+\\w+)?\\s*$");
     private static final Pattern UINT_DECLARATION = Pattern.compile(
@@ -71,6 +58,7 @@ public final class ModernPackTransformer {
         return version;
     }
 
+    // So the #version line lands first, as GLSL requires
     private static String stripLeadingBlankLines(String source) {
         int start = 0;
         while (start < source.length()) {
@@ -223,6 +211,7 @@ public final class ModernPackTransformer {
         return out.toString();
     }
 
+    // Fixes unsigned constructs 330 rejects that 130 tolerated
     static String rewriteUnsignedStrictness(String source) {
         Matcher constUint = UINT_DECLARATION.matcher(source);
         StringBuffer rewritten = new StringBuffer(source.length());
@@ -235,6 +224,7 @@ public final class ModernPackTransformer {
         return rewriteFixedFunctionVec2Narrowing(rewriteUnsignedVectorConstructors(rewritten.toString()));
     }
 
+    // uvec constructors from signed literals
     private static String rewriteUnsignedVectorConstructors(String source) {
         Matcher constructor = UVEC_CONSTRUCTOR.matcher(source);
         StringBuffer rewritten = new StringBuffer(source.length());
@@ -259,6 +249,7 @@ public final class ModernPackTransformer {
         return rewritten.toString();
     }
 
+    // Explicit .xy where a vec4 built-in is assigned to a vec2
     private static String rewriteFixedFunctionVec2Narrowing(String source) {
         Matcher declaration = VEC2_DECLARATION_FROM_FIXED_FUNCTION_VEC4.matcher(source);
         StringBuffer rewritten = new StringBuffer(source.length());

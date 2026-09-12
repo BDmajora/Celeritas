@@ -5,13 +5,8 @@ import com.bdmajora.impetus.lwjgl.GL11;
 
 import java.util.Locale;
 
-// Every shader program an OptiFine-style 1.12.2 pack may declare
-// Unlike modern Iris, which exposes the rendertype_* programs, 1.12.2 packs only ever use the classic OptiFine
-// families: gbuffers_*, shadow*, deferred*, composite* and final
-// The NUMBERED families — deferred, composite, shadowcomp — live in ProgramArrayId instead, because an enum
-// constant per index up to 100 would be unmanageable
-// A ProgramId only NAMES a .vsh/.gsh/.fsh triple that may exist in the pack's shaders/ directory; whether it is
-// actually present is decided at load time
+// Every program a 1.12.2 pack may declare: the classic gbuffers_*, shadow* and final families
+// Numbered families live in ProgramArrayId; an id only names a triple that may exist, presence is decided at load
 public enum ProgramId {
     // --- "Basic"/sky/textured family ---
     Basic("gbuffers_basic"),
@@ -119,6 +114,7 @@ public enum ProgramId {
         return this.defaultBlendMode;
     }
 
+    // File base name to id; null when not a known program
     public static ProgramId bySourceName(String name) {
         String lower = name.toLowerCase(Locale.ROOT);
         for (ProgramId id : values()) {

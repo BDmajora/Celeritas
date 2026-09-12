@@ -8,47 +8,12 @@ import org.apache.logging.log4j.Logger;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The ONE place allowed to move the texture-unit selector or bind a 2D texture on the pipeline's behalf
-//
-// Why it exists: 1.12.2's GlStateManager caches texture state, and it caches against its OWN idea of which unit is
-// selected. bindTexture reads textureState[activeTextureUnit] to decide whether to skip, records into that same
-// cached slot, and then issues a glBindTexture that affects the REAL unit
-//
-// That gives two distinct ways to desync it, and both have bitten this port
-//   Selector desync — a raw glActiveTexture moves real GL without telling the cache. And because setActiveTexture
-//   is ITSELF cached, the obvious repair of calling GlStateManager.setActiveTexture(GL_TEXTURE0) can be swallowed
-//   as a no-op, leaving real GL parked on a high unit indefinitely
-//   Binding desync — a raw glBindTexture on a unit inside the cache's range changes the real binding without
-//   updating the record. Every later GlStateManager.bindTexture of the value the cache still believes is bound then
-//   no-ops, and that unit keeps the wrong texture forever
-//
-// Either one makes Framebuffer.bindFramebufferTexture() — the fullscreen blit that puts the world on screen —
-// silently do nothing, so the blit samples whatever actually occupies the unit. A depth or shadow texture read as
-// colour is 1.0 everywhere: a white screen, every frame, until a restart
-// That is not hypothetical. It is the F2 white-screen bug, and vanilla's ScreenShotHelper.createScreenshot is one
-// of the cached binds that trips it
-//
-// Neither reference implementation lets the cache diverge at all
-//   OptiFine, on this same MC version, enlarges GlStateManager.textureState from 8 slots to 32 and routes EVERY
-//   unit through GlStateManager.setActiveTexture — 48 call sites and not one raw glActiveTexture in its shader
-//   code. Its tail idiom is setActiveTexture(GL_TEXTURE0), which is safe there precisely because its cache is
-//   never out of step
-//   Iris raw-binds for speed but keeps the cache authoritative through a GlStateManagerAccessor mixin: read the
-//   active unit from the cache, raw-bind, write the binding back into the cache, restore
-//
-// OptiFine's route is not cheaply available here: GlStateManager.TextureState is package-private with a private
-// constructor, so enlarging that array from a mixin means either constructing inaccessible instances or a
-// @ModifyConstant on <clinit> that would rewrite every matching literal in the class
-// So this class reaches the same position by a different means — units below CACHED_UNITS always go through
-// GlStateManager, units at or above it are raw because the cache cannot represent them at all, and every raw
-// sequence is handed back through releaseScratch(), which lands the cache and real GL on unit 0 TOGETHER
-//
-// The rules that follow from that
-//   Never call LWJGL.glActiveTexture outside this class; use selectScratch and releaseScratch
-//   Never call LWJGL.glBindTexture(GL_TEXTURE_2D, ...) on a unit below CACHED_UNITS, and never on "whatever unit
-//   happens to be selected" — use bindTexture2D, or do the work on a scratch unit
-//   Binding a NON-2D target (3D, array, cube) raw is fine at any unit, because GlStateManager only tracks 2D and
-//   the 2D record for that unit stays true. The selector still has to be handed back properly
+// The one place allowed to move the texture-unit selector or bind a 2D texture for the pipeline
+// GlStateManager caches texture state against its own idea of the selected unit; a raw glActiveTexture or
+// glBindTexture desyncs it, after which cached binds no-op and the fullscreen blit samples a depth texture: the F2
+// white-screen bug. Units below CACHED_UNITS go through GlStateManager, higher ones are raw, and releaseScratch
+// lands cache and real GL back on unit 0 together
+// Never call glActiveTexture or glBindTexture(GL_TEXTURE_2D) outside this class
 public final class GlTextureUnits {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 

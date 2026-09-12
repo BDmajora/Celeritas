@@ -19,11 +19,13 @@ public class ReversibleByteArrayIterator implements ByteIterator {
         this.currentIndex = reverse ? size - 1 : 0;
     }
 
+    // Direction-aware bounds check
     @Override
     public boolean hasNext() {
         return this.remaining > 0;
     }
 
+    // Next byte in the chosen direction, without sign extension
     @Override
     public int nextByteAsInt() {
         if (!this.hasNext()) {

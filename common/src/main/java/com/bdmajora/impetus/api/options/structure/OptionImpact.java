@@ -16,6 +16,7 @@ public enum OptionImpact implements TextProvider {
         this.text = TextComponent.translatable(text).withStyle(color);
     }
 
+    // Coloured impact label for the tooltip
     @Override
     public TextComponent getLocalizedName() {
         return this.text;

@@ -7,21 +7,9 @@ import com.bdmajora.impetus.engine.impl.render.chunk.vertex.format.ChunkVertexTy
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The terrain vertex format used while a shader pack is active
-// The leading part is byte-identical to VanillaLikeChunkVertex — float position, byte colour, float UV, packed
-// light and draw params — which is exactly the layout ImpetusTerrainTransformer's generated prologue decodes
-// Appended after it are the OptiFine per-vertex attributes packs expect
-//   the true face normal, which the shader sees as gl_Normal
-//   at_tangent
-//   mc_midTexCoord, the centre of the QUAD's texture region in atlas UV, i.e. the mean of its four vertex UVs and
-//   deliberately NOT the sprite centre — the two only agree for full-sprite quads
-//   mc_Entity, in the shader-facing shape (block id, render type, metadata, 1)
-// The block id is the pack's block.properties id when the pack maps that state, and the raw 1.12.2 block id
-// otherwise
-// All of it comes straight off ChunkVertexEncoder.Vertex's shader fields, which the mesher only bothers filling
-// while shaders are on
-// ImpetusWorldRenderer.chooseVertexType only selects this format while a pack is loaded, so the wider stride and
-// the extra per-vertex bandwidth cost nothing when there is no pack
+// The terrain vertex format while a pack is active: VanillaLikeChunkVertex's layout followed by the OptiFine
+// per-vertex attributes packs expect (normal, at_tangent, mc_midTexCoord, mc_Entity)
+// Only selected while a pack is loaded, so the wider stride costs nothing otherwise
 public class UmbraChunkVertexType implements ChunkVertexType {
     public static final UmbraChunkVertexType INSTANCE = new UmbraChunkVertexType();
 
@@ -50,26 +38,31 @@ public class UmbraChunkVertexType implements ChunkVertexType {
     private UmbraChunkVertexType() {
     }
 
+    // Position is stored as float, so no scale
     @Override
     public float getPositionScale() {
         return 1f;
     }
 
+    // No offset
     @Override
     public float getPositionOffset() {
         return 0;
     }
 
+    // UV is stored as float, so no scale
     @Override
     public float getTextureScale() {
         return 1f;
     }
 
+    // The attribute layout, including the OptiFine extras
     @Override
     public GlVertexFormat getVertexFormat() {
         return VERTEX_FORMAT;
     }
 
+    // Writes one vertex per call, pulling the shader fields the mesher filled
     @Override
     public ChunkVertexEncoder createEncoder() {
         return (ptr, material, vertex, sectionIndex) -> {
@@ -103,28 +96,34 @@ public class UmbraChunkVertexType implements ChunkVertexType {
         };
     }
 
+    // -128..127
     private static int clampByte(int value) {
         return value < -128 ? -128 : (value > 127 ? 127 : value);
     }
 
+    // 0..255
     private static int clampUnsignedByte(int value) {
         return value < 0 ? 0 : (value > 255 ? 255 : value);
     }
 
+    // Short range
     private static short clampShort(int value) {
         return (short) (value < Short.MIN_VALUE ? Short.MIN_VALUE : Math.min(value, Short.MAX_VALUE));
     }
 
+    // Packs material and section index into one int, matching the vanilla-like format
     private static int encodeDrawParameters(int materialBits, int sectionIndex) {
         return (((sectionIndex & 0xFF) << 8) | ((materialBits & 0xFF) << 0));
     }
 
+    // Packs sky and block light as the shader's lightmap coordinates
     private static int encodeLight(int light) {
         int block = light & 0xFF;
         int sky = (light >> 16) & 0xFF;
         return ((block << 0) | (sky << 8));
     }
 
+    // UVs pass through unchanged
     private static float encodeTexture(float value) {
         return Math.min(0.99999997F, value);
     }

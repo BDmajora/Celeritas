@@ -34,28 +34,19 @@ public class EnumFacingMixin {
         this.equilibrium$offsetZ = directionVec.getZ();
     }
 
-    /**
-     * @author JellySquid
-     * @reason Avoid indirection to aid inlining
-     */
+    // Overwrite: direct field read instead of a Vec3i call
     @Overwrite
     public int getXOffset() {
         return this.equilibrium$offsetX;
     }
 
-    /**
-     * @author JellySquid
-     * @reason Avoid indirection to aid inlining
-     */
+    // Overwrite: direct field read
     @Overwrite
     public int getYOffset() {
         return this.equilibrium$offsetY;
     }
 
-    /**
-     * @author JellySquid
-     * @reason Avoid indirection to aid inlining
-     */
+    // Overwrite: direct field read
     @Overwrite
     public int getZOffset() {
         return this.equilibrium$offsetZ;

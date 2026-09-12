@@ -10,16 +10,9 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// The string-level counterpart of Iris's TextureTransformer: renames a sampler identifier to a raw custom
-// texture's minted name, but ONLY in programs that declare it with a sampler type matching the directive's target
-// Iris does this over a parsed AST. Here the declaration is found with a regex over a comment-stripped copy of the
-// source, and the rename is applied to the original text
-// That covers every form packs actually write — `uniform sampler3D colortex6;` and comma lists like
-// `uniform sampler2D colortex0, colortex1;` — and silently declines to rename anything it cannot recognise
-// Declining is the safe direction: the sampler then keeps its standard render-target unit, exactly as if the
-// directive were absent, rather than being pointed somewhere wrong
-// The active patch list is installed by the pipeline at load rather than passed in, because the gbuffers, terrain
-// and shadow compile paths all reach this from static contexts that have no pack handle to thread through
+// String-level counterpart of Iris's TextureTransformer: renames a sampler to a custom texture's minted name,
+// but only where its declared type matches. Declines anything it cannot recognise, which leaves the standard unit
+// The patch list is installed statically since the compile paths have no pack handle to thread through
 public final class CustomTextureTransformer {
 
     // uniform <type> <name>[, <name>...]; — the declaration form every pack uses for samplers, including the
@@ -38,6 +31,7 @@ public final class CustomTextureTransformer {
         activePatches = patches == null ? Collections.<CustomTexturePatch>emptyList() : new ArrayList<>(patches);
     }
 
+    // Patches for the active pack
     public static List<CustomTexturePatch> getActivePatches() {
         return activePatches;
     }
@@ -106,6 +100,7 @@ public final class CustomTextureTransformer {
         return accepted.contains(declaredType.toLowerCase(Locale.ROOT));
     }
 
+    // GLSL sampler types valid for a texture type
     private static Set<String> acceptedSamplerTypes(String textureType) {
         String suffix;
         if ("TEXTURE_1D".equalsIgnoreCase(textureType)) {
@@ -126,6 +121,7 @@ public final class CustomTextureTransformer {
         return accepted;
     }
 
+    // Whole-word rename
     private static String renameIdentifier(String source, String from, String to) {
         return source.replaceAll("\\b" + Pattern.quote(from) + "\\b", Matcher.quoteReplacement(to));
     }

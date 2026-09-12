@@ -18,10 +18,12 @@ public class BasicFrame extends AbstractFrame {
         this.buildFrame();
     }
 
+    // Starts a builder
     public static Builder createBuilder() {
         return new Builder();
     }
 
+    // Instantiates each child factory at the frame's dimensions
     @Override
     public void buildFrame() {
         this.children.clear();
@@ -38,21 +40,25 @@ public class BasicFrame extends AbstractFrame {
         private Dim2i dim;
         private boolean renderOutline;
 
+        // Frame bounds
         public Builder setDimension(Dim2i dim) {
             this.dim = dim;
             return this;
         }
 
+        // Debug outline
         public Builder shouldRenderOutline(boolean renderOutline) {
             this.renderOutline = renderOutline;
             return this;
         }
 
+        // A child built lazily from the frame's dimensions
         public Builder addChild(Function<Dim2i, AbstractWidget> function) {
             this.functions.add(function);
             return this;
         }
 
+        // Finalises
         public BasicFrame build() {
             Objects.requireNonNull(this.dim, "Dimension must be specified");
 

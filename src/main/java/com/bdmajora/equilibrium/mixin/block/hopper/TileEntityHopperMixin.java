@@ -69,10 +69,7 @@ public abstract class TileEntityHopperMixin extends TileEntity implements IHoppe
         return this.equilibrium$destination;
     }
 
-    /**
-     * @author JellySquid
-     * @reason Reuse the previously resolved inventory when nothing about it has changed
-     */
+    // Overwrite: the facing inventory through this hopper's cache
     @Nullable
     @Overwrite
     private IInventory getInventoryForHopperTransfer() {
@@ -84,10 +81,7 @@ public abstract class TileEntityHopperMixin extends TileEntity implements IHoppe
                 this.getZPos() + facing.getZOffset());
     }
 
-    /**
-     * @author JellySquid
-     * @reason Reuse the previously resolved inventory when nothing about it has changed
-     */
+    // Overwrite: the inventory above through the cache when the hopper has one, else vanilla's lookup
     @Nullable
     @Overwrite
     public static IInventory getSourceInventory(IHopper hopper) {

@@ -24,6 +24,7 @@ public final class SingleMatchOne implements Predicate<IBlockState> {
         this.hash = 31 * property.hashCode() + Objects.hashCode(value);
     }
 
+    // One property against one expected value
     @Override
     public boolean apply(IBlockState state) {
         if (state == null) {
@@ -52,6 +53,7 @@ public final class SingleMatchOne implements Predicate<IBlockState> {
                 && Objects.equals(this.value, other.value);
     }
 
+    // Precomputed at construction; the predicate is immutable
     @Override
     public int hashCode() {
         return this.hash;

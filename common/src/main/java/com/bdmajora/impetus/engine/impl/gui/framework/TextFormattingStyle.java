@@ -21,6 +21,7 @@ public enum TextFormattingStyle {
     UNDERLINE,
     ITALIC;
 
+    // Colour codes versus modifiers like bold
     public boolean isColor() {
         return this.ordinal() < 16;
     }

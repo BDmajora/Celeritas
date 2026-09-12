@@ -47,6 +47,7 @@ public final class DynamicLightsEngine {
     private DynamicLightsEngine() {
     }
 
+    // Single client-wide instance
     public static DynamicLightsEngine get() {
         return INSTANCE;
     }
@@ -198,6 +199,7 @@ public final class DynamicLightsEngine {
         }
     }
 
+    // Lock-free negative answers for the common cases before taking the read lock
     public boolean containsLightSource(DynamicLightSource lightSource) {
         World world = lightSource.impetus$getDynamicLightWorld();
         if (world == null || !world.isRemote || this.sourceCount == 0) {
@@ -212,6 +214,7 @@ public final class DynamicLightsEngine {
         }
     }
 
+    // Drops a source and rebuilds whatever it was lighting, so its glow does not linger
     public void removeLightSource(DynamicLightSource lightSource) {
         this.lock.writeLock().lock();
         try {
@@ -277,18 +280,22 @@ public final class DynamicLightsEngine {
         }
     }
 
+    // Drops every non-player entity source, for the entities toggle
     public void removeEntitiesLightSource() {
         this.removeLightSources(source -> source instanceof Entity && !(source instanceof EntityPlayer));
     }
 
+    // Drops creeper sources, for the creeper mode switch
     public void removeCreeperLightSources() {
         this.removeLightSources(source -> source instanceof EntityCreeper);
     }
 
+    // Drops primed TNT sources, for the TNT mode switch
     public void removeTntLightSources() {
         this.removeLightSources(source -> source instanceof EntityTNTPrimed);
     }
 
+    // Drops block entity sources, for the block entities toggle
     public void removeBlockEntitiesLightSource() {
         this.removeLightSources(source -> source instanceof TileEntity);
     }
@@ -309,10 +316,12 @@ public final class DynamicLightsEngine {
         }
     }
 
+    // BlockPos overload of the section rebuild
     public static void scheduleChunkRebuild(RenderGlobal renderer, BlockPos chunkPos) {
         scheduleChunkRebuild(renderer, chunkPos.getX(), chunkPos.getY(), chunkPos.getZ());
     }
 
+    // Packed-long overload, the form the tracked-section sets store
     public static void scheduleChunkRebuild(RenderGlobal renderer, long packedChunkPos) {
         scheduleChunkRebuild(renderer, unpackX(packedChunkPos), unpackY(packedChunkPos), unpackZ(packedChunkPos));
     }
@@ -354,14 +363,17 @@ public final class DynamicLightsEngine {
                 | ((long) pos.getZ() & 0x3FFFFFFL);
     }
 
+    // Top 26 bits, sign-extended by the arithmetic shift
     public static int unpackX(long packed) {
         return (int) (packed >> 38);
     }
 
+    // Middle 12 bits
     public static int unpackY(long packed) {
         return (int) ((packed >> 26) & 0xFFFL);
     }
 
+    // Bottom 26 bits, sign-extended by shifting up then down
     public static int unpackZ(long packed) {
         return (int) (packed << 38 >> 38);
     }

@@ -23,10 +23,12 @@ public enum ProgramArrayId {
         this.numPrograms = numPrograms;
     }
 
+    // composite, deferred or final
     public String getBaseName() {
         return this.baseName;
     }
 
+    // How many numbered passes the family allows
     public int getNumPrograms() {
         return this.numPrograms;
     }

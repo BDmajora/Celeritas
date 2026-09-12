@@ -25,6 +25,7 @@ public abstract class TextureAtlasSpriteMixin implements SpriteExtension {
         }
     }
 
+    // Any UV read means the sprite is being drawn, which is what makes it eligible to animate
     @ModifyReturnValue(method = { "getMinU", "getInterpolatedU" }, at = @At("RETURN"))
     private float markActiveWhenGettingCoords(float original) {
         this.impetus$isActive = true;

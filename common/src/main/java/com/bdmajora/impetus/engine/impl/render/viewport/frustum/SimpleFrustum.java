@@ -9,6 +9,7 @@ public final class SimpleFrustum implements Frustum {
         this.frustum = frustumIntersection;
     }
 
+    // Delegates to JOML's frustum intersection
     @Override
     public boolean testAab(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
         return this.frustum.testAab(minX, minY, minZ, maxX, maxY, maxZ);

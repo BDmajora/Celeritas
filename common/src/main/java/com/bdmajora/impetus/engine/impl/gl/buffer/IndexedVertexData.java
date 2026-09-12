@@ -7,6 +7,7 @@ import com.bdmajora.impetus.engine.impl.common.util.NativeBuffer;
 public record IndexedVertexData(GlVertexFormat vertexFormat,
                                 NativeBuffer vertexBuffer,
                                 NativeBuffer indexBuffer) {
+    // Frees both native buffers
     public void delete() {
         this.vertexBuffer.free();
         this.indexBuffer.free();

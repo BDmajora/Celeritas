@@ -18,6 +18,7 @@ public final class ImpetusToastRenderer {
     private ImpetusToastRenderer() {
     }
 
+    // Draws the pending notification in the top-right corner
     public static void render(Minecraft client, ScaledResolution resolution) {
         if (!ImpetusVintage.options().notifications.showToasts) {
             return;
@@ -52,6 +53,7 @@ public final class ImpetusToastRenderer {
         }
     }
 
+    // Bar colour per severity
     private static int accentColor(ImpetusNotification.Level level) {
         return switch (level) {
             case INFO -> 0xFF00CBCB;
@@ -60,6 +62,7 @@ public final class ImpetusToastRenderer {
         };
     }
 
+    // Truncates with an ellipsis to fit the toast
     private static String trim(FontRenderer font, String text, int width) {
         return font.getStringWidth(text) <= width ? text : font.trimStringToWidth(text, width - font.getStringWidth("...")) + "...";
     }

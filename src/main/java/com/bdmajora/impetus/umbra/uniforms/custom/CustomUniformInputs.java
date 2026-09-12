@@ -17,37 +17,37 @@ import java.util.Map;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-// A UniformCollector that captures name -> supplier pairs instead of uploading anything
-// This is what lets a pack's custom uniform expressions read every built-in uniform — rainStrength, eyeAltitude,
-// sunPosition, frameTimeCounter and the rest — by going through the EXACT same registration calls the real
-// programs use. The alternative would be a second hand-maintained list that silently drifts out of step
-// Matrix registrations are accepted and then ignored: the expression language operates on 1-4 component vectors,
-// which covers everything packs actually reference, and rejecting them would mean the shared registration path
-// could not be shared
+// A UniformCollector that captures suppliers instead of uploading, so custom expressions read every built-in
+// through the exact registration path real programs use. Matrices are accepted and ignored
 public final class CustomUniformInputs implements UniformCollector {
     private final Map<String, Supplier<CustomUniformValue>> inputs = new HashMap<>();
 
+    // Value of a builtin uniform an expression referenced
     public CustomUniformValue resolve(String name) {
         Supplier<CustomUniformValue> supplier = this.inputs.get(name);
         return supplier != null ? supplier.get() : null;
     }
 
+    // Whether the builtin exists
     public boolean has(String name) {
         return this.inputs.containsKey(name);
     }
 
+    // Records the supplier so expressions can read it
     @Override
     public UniformCollector uniform1f(UniformUpdateFrequency frequency, String uniformName, FloatSupplier value) {
         this.inputs.put(uniformName, () -> CustomUniformValue.scalar(value.getAsFloat()));
         return this;
     }
 
+    // Records the supplier
     @Override
     public UniformCollector uniform1i(UniformUpdateFrequency frequency, String uniformName, IntSupplier value) {
         this.inputs.put(uniformName, () -> CustomUniformValue.scalar(value.getAsInt()));
         return this;
     }
 
+    // Records the supplier
     @Override
     public UniformCollector uniform2f(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector2f> value) {
         this.inputs.put(uniformName, () -> {
@@ -57,6 +57,7 @@ public final class CustomUniformInputs implements UniformCollector {
         return this;
     }
 
+    // Records the supplier
     @Override
     public UniformCollector uniform2i(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector2i> value) {
         this.inputs.put(uniformName, () -> {
@@ -66,6 +67,7 @@ public final class CustomUniformInputs implements UniformCollector {
         return this;
     }
 
+    // Records the supplier
     @Override
     public UniformCollector uniform3f(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector3f> value) {
         this.inputs.put(uniformName, () -> {
@@ -75,6 +77,7 @@ public final class CustomUniformInputs implements UniformCollector {
         return this;
     }
 
+    // Records the supplier
     @Override
     public UniformCollector uniform3i(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector3i> value) {
         this.inputs.put(uniformName, () -> {
@@ -84,6 +87,7 @@ public final class CustomUniformInputs implements UniformCollector {
         return this;
     }
 
+    // Records the supplier
     @Override
     public UniformCollector uniform4f(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector4f> value) {
         this.inputs.put(uniformName, () -> {
@@ -93,6 +97,7 @@ public final class CustomUniformInputs implements UniformCollector {
         return this;
     }
 
+    // Records the supplier
     @Override
     public UniformCollector uniform4i(UniformUpdateFrequency frequency, String uniformName, Supplier<Vector4i> value) {
         this.inputs.put(uniformName, () -> {
@@ -102,6 +107,7 @@ public final class CustomUniformInputs implements UniformCollector {
         return this;
     }
 
+    // Matrices are not expression inputs; ignored
     @Override
     public UniformCollector uniformMatrix3(UniformUpdateFrequency frequency, String uniformName, Supplier<Matrix3fc> value) {
         for (int column = 0; column < 3; column++) {
@@ -119,6 +125,7 @@ public final class CustomUniformInputs implements UniformCollector {
         return this;
     }
 
+    // Matrices are not expression inputs; ignored
     @Override
     public UniformCollector uniformMatrix(UniformUpdateFrequency frequency, String uniformName, Supplier<Matrix4fc> value) {
         // A matrix is not representable as an expression value, but OptiFine/Umbra custom uniforms can read single

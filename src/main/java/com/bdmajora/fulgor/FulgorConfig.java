@@ -13,9 +13,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Properties;
 
-// Feature switches for the lighting subsystem. Plain Properties file (like CoartatioConfig) because it
-// must be readable from FulgorMixinPlugin during coremod setup, before Forge/Minecraft classes are safe
-// to touch; the only outside class referenced here (Launch) is already loaded by that point.
+// Feature switches for the lighting subsystem, kept as a plain Properties file because the mixin
+// plugin reads it during coremod setup before Forge and Minecraft classes are safe to touch
 public final class FulgorConfig {
     private static final String FILE_NAME = "impetus-fulgor.cfg";
 
@@ -67,6 +66,7 @@ public final class FulgorConfig {
         this.showDebugOverlay = bool(props, "showDebugOverlay", false);
     }
 
+    // Loads on first use and caches; every reader shares the one instance
     public static FulgorConfig get() {
         if (instance == null) {
             instance = load();
@@ -74,6 +74,7 @@ public final class FulgorConfig {
         return instance;
     }
 
+    // Reads the file if present, otherwise starts from defaults and writes them out
     private static FulgorConfig load() {
         Path file = configDirectory().resolve(FILE_NAME);
 
@@ -100,6 +101,7 @@ public final class FulgorConfig {
         }
     }
 
+    // The config directory, created eagerly; falls back to the working directory when minecraftHome is unset
     private static Path configDirectory() {
         File home = Launch.minecraftHome;
         Path dir = (home == null ? Paths.get(".") : home.toPath()).resolve("config");
@@ -139,6 +141,7 @@ public final class FulgorConfig {
         }
     }
 
+    // Lenient boolean parse; anything unrecognised keeps the default
     private static boolean bool(Properties props, String key, boolean fallback) {
         String value = props.getProperty(key);
         if (value == null) {
@@ -150,6 +153,7 @@ public final class FulgorConfig {
                 : fallback;
     }
 
+    // Clamped integer parse; out-of-range and unparseable values keep the default
     private static int integer(Properties props, String key, int fallback, int min, int max) {
         String value = props.getProperty(key);
         if (value == null) {

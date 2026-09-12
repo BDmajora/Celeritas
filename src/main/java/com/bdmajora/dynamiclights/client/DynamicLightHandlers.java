@@ -93,6 +93,7 @@ public final class DynamicLightHandlers {
         return (DynamicLightHandler<T>) resolve(ENTITY_HANDLERS, ENTITY_LOOKUP, entity.getClass());
     }
 
+    // Handler for a block entity, walking up its class hierarchy and memoising the result
     @SuppressWarnings("unchecked")
     public static <T extends TileEntity> DynamicLightHandler<T> getDynamicLightHandler(T tileEntity) {
         return (DynamicLightHandler<T>) resolve(TILE_ENTITY_HANDLERS, TILE_ENTITY_LOOKUP, tileEntity.getClass());
@@ -130,6 +131,7 @@ public final class DynamicLightHandlers {
         return LightSourceSettings.getInstance().isEntityEnabled(entity);
     }
 
+    // Whether the user has left this block entity type enabled
     public static boolean canTileEntityLightUp(TileEntity tileEntity) {
         return LightSourceSettings.getInstance().isBlockEntityEnabled(tileEntity);
     }

@@ -20,6 +20,7 @@ public enum VintageDiffuseProvider implements DiffuseProvider {
         return com.bdmajora.impetus.umbra.material.WorldRenderingSettings.shouldDisableDirectionalShading();
     }
 
+    // Vanilla's per-normal diffuse, or full brightness when shading is off
     @Override
     public float getDiffuse(float normalX, float normalY, float normalZ, boolean shade) {
         if (!shade || directionalShadingDisabled()) {
@@ -28,6 +29,7 @@ public enum VintageDiffuseProvider implements DiffuseProvider {
         return LightUtil.diffuseLight(normalX, normalY, normalZ);
     }
 
+    // Sodium facing to vanilla; UNASSIGNED has no equivalent and yields null
     public static EnumFacing toEnumFacing(ModelQuadFacing facing) {
         return switch (facing) {
             case NEG_Y -> EnumFacing.DOWN;
@@ -40,6 +42,7 @@ public enum VintageDiffuseProvider implements DiffuseProvider {
         };
     }
 
+    // Vanilla facing to Sodium
     public static ModelQuadFacing fromEnumFacing(EnumFacing facing) {
         return switch (facing) {
             case DOWN  -> NEG_Y;
@@ -51,6 +54,7 @@ public enum VintageDiffuseProvider implements DiffuseProvider {
         };
     }
 
+    // Null-tolerant variant for quads with no light face
     public static ModelQuadFacing fromEnumFacingOrUnassigned(EnumFacing facing) {
         if (facing == null) {
             return UNASSIGNED;
@@ -58,6 +62,7 @@ public enum VintageDiffuseProvider implements DiffuseProvider {
         return fromEnumFacing(facing);
     }
 
+    // Per-face diffuse via the facing's normal
     @Override
     public float getDiffuse(ModelQuadFacing lightFace, boolean shade) {
         if (!shade || directionalShadingDisabled()) {

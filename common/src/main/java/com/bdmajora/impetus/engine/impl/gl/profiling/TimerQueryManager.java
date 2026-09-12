@@ -17,6 +17,7 @@ public class TimerQueryManager implements Closeable {
     // must not introduce — three frames is comfortably past any driver's queue depth
     private static final int QUERY_FRAME_LAG_COUNT = 3;
 
+    // A start and end timestamp query pair awaiting results
     private record InFlightQuery(int startTime, int endTime) {
         long getTimeDelta() {
             long startTime = LWJGL.glGetQueryObjectui64(this.startTime, GL32.GL_QUERY_RESULT);
@@ -38,6 +39,7 @@ public class TimerQueryManager implements Closeable {
     @Getter
     private long lastTime;
 
+    // From the pool, or a fresh glGenQueries
     private static int allocateQuery() {
         if (!QUERY_POOL.isEmpty()) {
             return QUERY_POOL.dequeueInt();
@@ -46,10 +48,12 @@ public class TimerQueryManager implements Closeable {
         }
     }
 
+    // Back to the pool
     private static void releaseQuery(int id) {
         QUERY_POOL.enqueue(id);
     }
 
+    // Issues the start timestamp
     public void startProfiling() {
         if (startQueryId != INVALID_ID) {
             throw new IllegalStateException("Query already started but not ended");
@@ -59,6 +63,7 @@ public class TimerQueryManager implements Closeable {
         startQueryId = id;
     }
 
+    // Issues the end timestamp and queues the pair
     public void finishProfiling() {
         if (startQueryId == INVALID_ID) {
             throw new IllegalStateException("Trying to end query that hasn't started yet");
@@ -69,6 +74,7 @@ public class TimerQueryManager implements Closeable {
         startQueryId = -1;
     }
 
+    // Reads back any completed pairs into the running total
     public void updateTime() {
         if (inFlightQueries.size() < QUERY_FRAME_LAG_COUNT) {
             return;
@@ -78,6 +84,7 @@ public class TimerQueryManager implements Closeable {
         query.delete();
     }
 
+    // Deletes every query
     @Override
     public void close() {
         while (!inFlightQueries.isEmpty()) {

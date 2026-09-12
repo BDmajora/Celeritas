@@ -12,10 +12,12 @@ public class ShaderCompileException extends RuntimeException {
         this.error = error;
     }
 
+    // Which pack file failed
     public String getFilename() {
         return this.filename;
     }
 
+    // The driver's info log
     public String getError() {
         return this.error;
     }

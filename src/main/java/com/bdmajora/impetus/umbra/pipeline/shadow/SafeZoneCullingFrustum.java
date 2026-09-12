@@ -3,14 +3,8 @@ package com.bdmajora.impetus.umbra.pipeline.shadow;
 import org.joml.Matrix4fc;
 import org.joml.Vector3f;
 
-// AdvancedShadowCullingFrustum with a guaranteed "safe zone" — Iris's
-// shadows.frustum.advanced.SafeZoneCullingFrustum, selected by shadow.culling = reversed
-// Two boxes bound the test. The distance box (shadowDistance) is a hard outer bound: outside it nothing is drawn
-// at all. The safe zone box (voxelDistance) is an inner region where everything is drawn UNCONDITIONALLY, skipping
-// the view-dependent frustum test
-// That inner box is what makes this mode usable for packs that voxelize in the shadow pass: inside it the drawn
-// section set depends only on camera position, so a pack's floodfill sees a stable voxel field as the player
-// turns. Outside it the advanced test applies and saves the work
+// AdvancedShadowCullingFrustum with an inner voxelDistance box drawn unconditionally, selected by
+// shadow.culling = reversed; the stable inner set is what lets a pack's floodfill voxelise as the player turns
 public final class SafeZoneCullingFrustum extends AdvancedShadowCullingFrustum {
     private final ShadowBoxCuller distanceCuller;
 
@@ -24,6 +18,7 @@ public final class SafeZoneCullingFrustum extends AdvancedShadowCullingFrustum {
         this.distanceCuller = distanceCuller;
     }
 
+    // Always visible inside the safe distance, otherwise defers to the advanced frustum
     @Override
     public boolean testAab(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
         // NB: ShadowBoxCuller.testAab is "true if visible", the inverse of Umbra's isCulled.

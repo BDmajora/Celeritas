@@ -16,10 +16,12 @@ public class FluidloggedCompat {
     public static final String MODID = "fluidlogged_api";
     public static final boolean IS_LOADED = Loader.isModLoaded(MODID);
 
+    // Fluidlogged's sentinel for no fluid
     public static FluidState getEmptyFluidState() {
         return FluidState.EMPTY;
     }
 
+    // Renders the fluid layer of a fluidlogged block through vanilla's dispatcher into the vintage buffers
     public static void renderFluidState(ImpetusBlockAccess blockAccess, BlockPos pos, IBlockState state, VintageChunkBuildContext context, BlockRendererDispatcher dispatcher) {
         FluidState fluidState = blockAccess.getFluidState(pos);
         // only render the fluid if the block isn't fluidloggable, or if it explicitly opts in to rendering the fluid underneath it

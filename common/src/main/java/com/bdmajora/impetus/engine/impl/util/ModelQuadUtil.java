@@ -20,18 +20,22 @@ public class ModelQuadUtil {
     // Size of vertex format in 4-byte integers
     public static final int VERTEX_SIZE = 8;
 
+    // Index into the flat vertex array for a vertex
     public static int vertexOffset(int vertexIndex) {
         return vertexIndex * VERTEX_SIZE;
     }
 
+    // Closest axis-aligned facing to a normal, or UNASSIGNED when none dominates
     public static ModelQuadFacing findNormalFace(float x, float y, float z) {
         return QuadUtil.findNormalFace(x, y, z);
     }
 
+    // Packed-normal form
     public static ModelQuadFacing findNormalFace(int normal) {
         return findNormalFace(NormI8.unpackX(normal), NormI8.unpackY(normal), NormI8.unpackZ(normal));
     }
 
+    // Face normal from the quad's vertex positions, packed
     public static int calculateNormal(ModelQuadView quad) {
         final float x0 = quad.getX(0);
         final float y0 = quad.getY(0);
@@ -71,16 +75,19 @@ public class ModelQuadUtil {
         return NormI8.pack(normX, normY, normZ);
     }
 
+    // Face normal into a vector, for the encoder path
     public static void calculateNormal(ChunkVertexEncoder.Vertex[] quad, Vector3f result) {
         QuadUtil.calculateNormal(quad, result);
     }
 
+    // Prefers the model's supplied normal, falling back to the computed one
     public static int mergeNormal(int packedNormal, int calcNormal) {
         if((packedNormal & 0xFFFFFF) == 0)
             return calcNormal;
         return packedNormal;
     }
 
+    // Combines baked light with vanilla emission, taking the brighter per channel
     public static int mergeBakedLight(int packedLight, int vanillaLightEmission, int calcLight) {
         // bail early in most cases
         if (packedLight == 0 && vanillaLightEmission == 0)

@@ -15,16 +15,19 @@ public final class ModelPipelineRegistry {
     private ModelPipelineRegistry() {
     }
 
+    // Adds a pipeline; order is priority
     public static void register(ModdedModelPipeline pipeline) {
         if (!PIPELINES.contains(pipeline)) {
             PIPELINES.add(pipeline);
         }
     }
 
+    // Every registered pipeline
     public static List<ModdedModelPipeline> getPipelines() {
         return List.copyOf(PIPELINES);
     }
 
+    // First available pipeline for a backend
     public static Optional<ModdedModelPipeline> findAvailable(ModelPipelineBackend backend) {
         return PIPELINES.stream()
                 .filter(pipeline -> pipeline.backend() == backend)

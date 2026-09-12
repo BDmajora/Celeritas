@@ -13,6 +13,7 @@ public interface GpuDevice {
 
     Set<GpuDeviceFeature> supportedFeatures();
 
+    // Feature set membership
     default boolean supports(GpuDeviceFeature feature) {
         return this.supportedFeatures().contains(feature);
     }

@@ -57,61 +57,73 @@ public class OptionImpl<S, T> implements Option<T> {
         this.reset();
     }
 
+    // Unique id, for lookup and events
     @Override
     public OptionIdentifier<T> getId() {
         return id;
     }
 
+    // Label
     @Override
     public TextComponent getName() {
         return this.name;
     }
 
+    // Hover text
     @Override
     public TextComponent getTooltip() {
         return this.tooltip;
     }
 
+    // Performance impact shown in the tooltip
     @Override
     public OptionImpact getImpact() {
         return this.impact;
     }
 
+    // The widget type
     @Override
     public Control<T> getControl() {
         return this.control;
     }
 
+    // Pending value, not yet applied
     @Override
     public T getValue() {
         return this.modifiedValue != null ? this.modifiedValue : this.binding.getValue(this.storage.getData());
     }
 
+    // Sets the pending value
     @Override
     public void setValue(T value) {
         this.modifiedValue = value;
     }
 
+    // Discards the pending value
     @Override
     public void reset() {
         this.modifiedValue = null;
     }
 
+    // Where the value lives
     @Override
     public OptionStorage<?> getStorage() {
         return this.storage;
     }
 
+    // From the enabled predicate; greyed out when false
     @Override
     public boolean isAvailable() {
         return this.enabled.getAsBoolean();
     }
 
+    // Pending differs from stored
     @Override
     public boolean hasChanged() {
         return this.modifiedValue != null && !this.binding.getValue(this.storage.getData()).equals(this.modifiedValue);
     }
 
+    // Writes pending into storage
     @Override
     public void applyChanges() {
         if (this.modifiedValue != null) {
@@ -120,6 +132,7 @@ public class OptionImpl<S, T> implements Option<T> {
         }
     }
 
+    // What must happen after applying: reload renderer, textures and so on
     @Override
     public Collection<OptionFlag> getFlags() {
         return this.flags;
@@ -148,6 +161,7 @@ public class OptionImpl<S, T> implements Option<T> {
             this.type = type;
         }
 
+        // Required
         public Builder<S, T> setId(OptionIdentifier<T> id) {
             Objects.requireNonNull(id, "Id must not be null");
 
@@ -156,6 +170,7 @@ public class OptionImpl<S, T> implements Option<T> {
             return this;
         }
 
+        // Required
         public Builder<S, T> setName(TextComponent name) {
             Objects.requireNonNull(name, "Argument must not be null");
 
@@ -164,6 +179,7 @@ public class OptionImpl<S, T> implements Option<T> {
             return this;
         }
 
+        // Required
         public Builder<S, T> setTooltip(TextComponent tooltip) {
             Objects.requireNonNull(tooltip, "Argument must not be null");
 
@@ -172,6 +188,7 @@ public class OptionImpl<S, T> implements Option<T> {
             return this;
         }
 
+        // Getter and setter over the storage object
         public Builder<S, T> setBinding(BiConsumer<S, T> setter, Function<S, T> getter) {
             Objects.requireNonNull(setter, "Setter must not be null");
             Objects.requireNonNull(getter, "Getter must not be null");
@@ -182,6 +199,7 @@ public class OptionImpl<S, T> implements Option<T> {
         }
 
 
+        // Binding object form
         public Builder<S, T> setBinding(OptionBinding<S, T> binding) {
             Objects.requireNonNull(binding, "Argument must not be null");
 
@@ -190,6 +208,7 @@ public class OptionImpl<S, T> implements Option<T> {
             return this;
         }
 
+        // Widget factory
         public Builder<S, T> setControl(Function<OptionImpl<S, T>, Control<T>> control) {
             Objects.requireNonNull(control, "Argument must not be null");
 
@@ -198,30 +217,35 @@ public class OptionImpl<S, T> implements Option<T> {
             return this;
         }
 
+        // Optional
         public Builder<S, T> setImpact(OptionImpact impact) {
             this.impact = impact;
 
             return this;
         }
 
+        // Evaluated every frame so a master switch greys its children live
         public Builder<S, T> setEnabledPredicate(BooleanSupplier value) {
             this.enabled = value;
 
             return this;
         }
 
+        // Constant form
         public Builder<S, T> setEnabled(boolean value) {
             setEnabledPredicate(value ? ALWAYS_ENABLED : ALWAYS_DISABLED);
 
             return this;
         }
 
+        // Post-apply side effects
         public Builder<S, T> setFlags(OptionFlag... flags) {
             Collections.addAll(this.flags, flags);
 
             return this;
         }
 
+        // Validates the required fields and finalises
         public OptionImpl<S, T> build() {
             if (this.id == null) {
                 // FIXME enforce IDs and make nullable

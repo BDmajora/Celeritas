@@ -9,6 +9,7 @@ public class GlImmutableBuffer extends GlBuffer {
         this.flags = flags;
     }
 
+    // Storage flags fixed at creation
     public EnumBitField<GlBufferStorageFlags> getFlags() {
         return this.flags;
     }

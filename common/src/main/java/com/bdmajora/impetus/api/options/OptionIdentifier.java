@@ -21,22 +21,27 @@ public final class OptionIdentifier<T> {
         this.clz = clz;
     }
 
+    // Owning mod
     public String getModId() {
         return this.modId;
     }
 
+    // Path within the mod
     public String getPath() {
         return this.path;
     }
 
+    // Value type, Void for groups and pages
     public Class<T> getType() {
         return this.clz;
     }
 
+    // Untyped id for groups and pages
     public static OptionIdentifier<Void> create(String modId, String path) {
         return create(modId, path, void.class);
     }
 
+    // Interned, so the same id always yields the same instance
     @SuppressWarnings("unchecked")
     public static synchronized <T> OptionIdentifier<T> create(String modId, String path, Class<T> clz) {
         if (modId.equals("impetus")) {
@@ -51,24 +56,29 @@ public final class OptionIdentifier<T> {
         return oldIdentifier;
     }
 
+    // Non-null and not the empty placeholder
     public static boolean isPresent(@Nullable OptionIdentifier<?> id) {
         return id != null && id != EMPTY;
     }
     
+    // Same mod and path, ignoring type
     public boolean matches(OptionIdentifier<?> other) {
         return this == other;
     }
 
+    // Unchecked retype
     @SuppressWarnings("unchecked")
     public <U> OptionIdentifier<U> cast() {
         return (OptionIdentifier<U>)this;
     }
 
+    // modId:path
     @Override
     public String toString() {
         return this.modId + ":" + this.path;
     }
 
+    // By mod, path and type
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -77,6 +87,7 @@ public final class OptionIdentifier<T> {
         return Objects.equals(modId, that.modId) && Objects.equals(path, that.path);
     }
 
+    // By mod, path and type
     @Override
     public int hashCode() {
         return Objects.hash(modId, path);

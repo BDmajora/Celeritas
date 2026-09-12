@@ -9,10 +9,8 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import java.util.List;
 import java.util.Set;
 
-// Gates each Fulgor mixin on its config switch, and refuses to load next to a world implementation
-// Fulgor can't reason about (e.g. Cubic Chunks). Mixins are declared in mixins.fulgor.json rather than
-// discovered by scanning, so "off" here means "never loaded", not "loaded and inert" — lets a suspected
-// mixin be pulled without a rebuild, which matters for something as load-bearing as the lighting engine
+// Gates each Fulgor mixin on its config switch and refuses to load beside world implementations it cannot
+// reason about, such as Cubic Chunks; off means never loaded, so a suspect mixin can be pulled without a rebuild
 public class FulgorMixinPlugin implements IMixinConfigPlugin {
     private static final String PACKAGE = "com.bdmajora.fulgor.mixin.";
 
@@ -26,6 +24,7 @@ public class FulgorMixinPlugin implements IMixinConfigPlugin {
 
     private boolean enabled;
 
+    // Reads the config once; a disabled Fulgor logs and falls back to vanilla lighting
     @Override
     public void onLoad(String mixinPackage) {
         this.config = FulgorConfig.get();
@@ -45,11 +44,13 @@ public class FulgorMixinPlugin implements IMixinConfigPlugin {
 
     }
 
+    // Impetus reobfuscates mixins directly, so there is no refmap to name
     @Override
     public String getRefMapperConfig() {
         return null;
     }
 
+    // Maps the mixin's simple name to its config switch; unknown names are refused
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         if (!this.enabled) {
@@ -96,19 +97,23 @@ public class FulgorMixinPlugin implements IMixinConfigPlugin {
         }
     }
 
+    // Nothing to negotiate with other configs
     @Override
     public void acceptTargets(Set<String> myTargets, Set<String> otherTargets) {
     }
 
+    // Null means use the mixin list from the json rather than adding any dynamically
     @Override
     public List<String> getMixins() {
         return null;
     }
 
+    // No pre-apply rewriting needed
     @Override
     public void preApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
     }
 
+    // No post-apply rewriting needed
     @Override
     public void postApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
     }

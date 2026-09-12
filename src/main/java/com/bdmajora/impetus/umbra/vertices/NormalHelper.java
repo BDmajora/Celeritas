@@ -80,6 +80,7 @@ public final class NormalHelper {
         return NormI8.pack(tangentx, tangenty, tangentz, tangentW);
     }
 
+    // Plain 1/sqrt; the fast approximation is not worth its error here
     private static float rsqrt(float value) {
         if (value == 0.0f) {
             return 1.0f;

@@ -70,6 +70,7 @@ public class UmbraTerrainShaderInterface implements ChunkShaderInterface {
         }
     }
 
+    // Binds the first of several possible uniform spellings, since packs and transforms name them differently
     private static GlUniformInt firstPresent(ShaderBindingContext context, String... names) {
         for (String name : names) {
             GlUniformInt uniform = context.bindUniformIfPresent(name, GlUniformInt::new);
@@ -80,10 +81,12 @@ public class UmbraTerrainShaderInterface implements ChunkShaderInterface {
         return null;
     }
 
+    // Uploads the pack's uniform set for this frame
     public void setUniforms(ProgramUniforms uniforms) {
         this.uniforms = uniforms;
     }
 
+    // Binds the gbuffer framebuffer and per-pass state before drawing terrain
     @Override
     public void setupState(TerrainRenderPass pass) {
         this.primitiveType = pass.primitiveType() == QuadPrimitiveType.DIRECT
@@ -111,6 +114,7 @@ public class UmbraTerrainShaderInterface implements ChunkShaderInterface {
         }
     }
 
+    // Returns to the main framebuffer and default state
     @Override
     public void restoreState() {
         if (!this.restoreAfterDraw) {
@@ -123,6 +127,7 @@ public class UmbraTerrainShaderInterface implements ChunkShaderInterface {
         }
     }
 
+    // Undoes the blend and depth tweaks the water pass applied
     private static void restoreOptifineWaterState() {
         GlStateManager.enableBlend();
         GlStateManager.tryBlendFuncSeparate(
@@ -131,11 +136,13 @@ public class UmbraTerrainShaderInterface implements ChunkShaderInterface {
         GlStateManager.depthMask(true);
     }
 
+    // Triangles, as the mesher emits
     @Override
     public GlPrimitiveType getPrimitiveType() {
         return this.primitiveType;
     }
 
+    // Engine projection into the generated prologue's uniform
     @Override
     public void setProjectionMatrix(Matrix4fc matrix) {
         if (this.uProjectionMatrix != null) {
@@ -143,6 +150,7 @@ public class UmbraTerrainShaderInterface implements ChunkShaderInterface {
         }
     }
 
+    // Engine model-view into the generated prologue's uniform
     @Override
     public void setModelViewMatrix(Matrix4fc matrix) {
         if (this.uModelViewMatrix != null) {
@@ -150,6 +158,7 @@ public class UmbraTerrainShaderInterface implements ChunkShaderInterface {
         }
     }
 
+    // Region origin for the prologue's position decode
     @Override
     public void setRegionOffset(float x, float y, float z) {
         if (this.uRegionOffset != null) {
@@ -157,6 +166,7 @@ public class UmbraTerrainShaderInterface implements ChunkShaderInterface {
         }
     }
 
+    // Block atlas or lightmap unit into the prologue's sampler
     @Override
     public void setTextureSlot(ChunkShaderTextureSlot slot, int val) {
         GlUniformInt uniform = this.uTextures.get(slot);

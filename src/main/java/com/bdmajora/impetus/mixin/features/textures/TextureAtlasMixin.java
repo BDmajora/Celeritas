@@ -64,6 +64,7 @@ public class TextureAtlasMixin implements TextureMapExtension {
         return this.impetus$quadTree.find(x, y);
     }
 
+    // Skips sprites nothing drew last frame when the animate-only-visible option is on
     @ModifyExpressionValue(method = "updateAnimations", at = @At(value = "INVOKE", target = "Ljava/util/List;iterator()Ljava/util/Iterator;"))
     private Iterator<TextureAtlasSprite> getFilteredIterator(Iterator<TextureAtlasSprite> iterator) {
         if (ImpetusVintage.options().performance.animateOnlyVisibleTextures) {

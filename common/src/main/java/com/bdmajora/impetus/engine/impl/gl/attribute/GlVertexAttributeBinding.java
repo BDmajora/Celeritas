@@ -9,6 +9,7 @@ public class GlVertexAttributeBinding extends GlVertexAttribute {
         this.index = index;
     }
 
+    // Shader attribute location
     public int getIndex() {
         return this.index;
     }

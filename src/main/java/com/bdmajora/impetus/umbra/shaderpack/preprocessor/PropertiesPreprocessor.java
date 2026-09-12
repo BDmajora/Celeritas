@@ -12,21 +12,16 @@ import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// Evaluates the C-preprocessor conditionals OptiFine allows inside *.properties files — #if MC_VERSION >= 11300,
-// #else, #endif and friends — producing the flattened property lines for the active define set
-// The counterpart of Iris's JCPP-backed PropertiesPreprocessor, written from scratch rather than pulling in JCPP
-// because properties files only ever use integer-comparison conditionals: no token pasting, no function macros
-// Directives handled: #if, #ifdef, #ifndef, #elif, #else, #endif
-// Expressions support integer literals, define names (value parsed as an integer, 0 when undefined or
-// non-numeric), defined(NAME) and defined NAME, parentheses, !, unary - and +, * / %, + -, comparisons, == and !=,
-// && and ||
-// Any other # line is treated as a comment and dropped, and backslash continuations are joined before processing
+// Evaluates the C-preprocessor conditionals OptiFine allows in *.properties files, written from scratch since
+// they only ever use integer comparisons. Handles #if/#ifdef/#ifndef/#elif/#else/#endif and defined()
+// Other # lines are dropped as comments and backslash continuations are joined first
 public final class PropertiesPreprocessor {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
     private PropertiesPreprocessor() {
     }
 
+    // Evaluates #if gates in a properties file against the option defines
     public static String preprocess(String source, Map<String, String> defines) {
         return preprocess(source, defines, false);
     }
@@ -55,6 +50,7 @@ public final class PropertiesPreprocessor {
         return preprocess(source, defines, true);
     }
 
+    // The pass itself; expandValues also substitutes defines into values
     private static String preprocess(String source, Map<String, String> defines, boolean expandValues) {
         List<String> logicalLines = joinContinuations(source);
         StringBuilder out = new StringBuilder(source.length());
@@ -208,6 +204,7 @@ public final class PropertiesPreprocessor {
         return null;
     }
 
+    // Integer or float literal
     private static boolean isNumeric(String text) {
         try {
             Long.decode(text);
@@ -281,6 +278,7 @@ public final class PropertiesPreprocessor {
         return lines;
     }
 
+    // A continuation line; an even count is an escaped backslash
     private static boolean endsWithOddBackslashes(String line) {
         int count = 0;
         for (int i = line.length() - 1; i >= 0 && line.charAt(i) == '\\'; i--) {
@@ -295,6 +293,7 @@ public final class PropertiesPreprocessor {
         return evaluateBooleanExpression(expression, defines).orElse(false);
     }
 
+    // Parses and evaluates a preprocessor condition; empty on a syntax error
     public static Optional<Boolean> evaluateBooleanExpression(String expression, Map<String, String> defines) {
         try {
             return Optional.of(new ExpressionParser(expression, defines).parse() != 0);
@@ -345,6 +344,7 @@ public final class PropertiesPreprocessor {
             return value;
         }
 
+        // ||
         private long parseOr() {
             long left = parseAnd();
             while (eat("||")) {
@@ -354,6 +354,7 @@ public final class PropertiesPreprocessor {
             return left;
         }
 
+        // &&
         private long parseAnd() {
             long left = parseEquality();
             while (eat("&&")) {
@@ -363,6 +364,7 @@ public final class PropertiesPreprocessor {
             return left;
         }
 
+        // == and !=
         private long parseEquality() {
             long left = parseComparison();
             while (true) {
@@ -376,6 +378,7 @@ public final class PropertiesPreprocessor {
             }
         }
 
+        // <, <=, >, >=
         private long parseComparison() {
             long left = parseAdditive();
             while (true) {
@@ -393,6 +396,7 @@ public final class PropertiesPreprocessor {
             }
         }
 
+        // + and -
         private long parseAdditive() {
             long left = parseMultiplicative();
             while (true) {
@@ -406,6 +410,7 @@ public final class PropertiesPreprocessor {
             }
         }
 
+        // *, / and %
         private long parseMultiplicative() {
             long left = parseUnary();
             while (true) {
@@ -423,6 +428,7 @@ public final class PropertiesPreprocessor {
             }
         }
 
+        // ! and unary -
         private long parseUnary() {
             skipWhitespace();
             if (eatChar('!')) {
@@ -437,6 +443,7 @@ public final class PropertiesPreprocessor {
             return parsePrimary();
         }
 
+        // Literals, defined(), parenthesised expressions and identifiers
         private long parsePrimary() {
             skipWhitespace();
             if (eatChar('(')) {
@@ -533,6 +540,7 @@ public final class PropertiesPreprocessor {
             }
         }
 
+        // An identifier's value; undefined identifiers evaluate to zero as in C
         private long resolveDefine(String name) {
             String value = this.defines.get(name);
             if (value == null || value.isEmpty() || this.defineDepth >= 8) {
@@ -575,6 +583,7 @@ public final class PropertiesPreprocessor {
             return false;
         }
 
+        // Consumes the character if it is next
         private boolean eatChar(char c) {
             skipWhitespace();
             if (this.pos < this.text.length() && this.text.charAt(this.pos) == c) {
@@ -584,6 +593,7 @@ public final class PropertiesPreprocessor {
             return false;
         }
 
+        // Advances past spaces and tabs
         private void skipWhitespace() {
             while (this.pos < this.text.length() && Character.isWhitespace(this.text.charAt(this.pos))) {
                 this.pos++;

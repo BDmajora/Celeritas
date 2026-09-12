@@ -32,10 +32,12 @@ public class StubShadowMap extends GlResource {
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, 0);
     }
 
+    // For binding as shadowtex0/1
     public int getTextureId() {
         return getGlId();
     }
 
+    // Frees the texture
     @Override
     protected void destroyInternal() {
         LWJGL.glDeleteTextures(getGlId());

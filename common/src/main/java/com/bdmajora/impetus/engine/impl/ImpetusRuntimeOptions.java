@@ -2,13 +2,8 @@ package com.bdmajora.impetus.engine.impl;
 
 import com.bdmajora.impetus.engine.impl.gui.ImpetusGameOptions;
 
-// A hot-readable snapshot of just the option values the render engine consults on hot paths: meshing,
-// translucency sorting, fluid rendering, entity sorting
-// The GUI writes user-facing values into ImpetusGameOptions; apply() then pushes the subset the engine reads
-// per-frame into plain static fields
-// The point is that those paths never touch a config object or take a lock — a mesh worker reading an option is a
-// static field read and nothing more
-// Populated once at startup and again on every Apply
+// A snapshot of the option values the engine reads on hot paths, as plain static fields
+// Populated at startup and on every Apply, so a mesh worker reading an option never touches a config object
 public final class ImpetusRuntimeOptions {
     private ImpetusRuntimeOptions() {
     }
@@ -28,6 +23,7 @@ public final class ImpetusRuntimeOptions {
     // filter because the atlas has no border between sprites. See BlockAtlasFiltering.
     public static ImpetusGameOptions.PixelFilteringMode pixelFiltering = ImpetusGameOptions.PixelFilteringMode.NEAREST;
 
+    // Copies the hot-path subset out of the config
     public static void apply(ImpetusGameOptions options) {
         var quality = options.quality;
         improvedTransparency = quality.improvedTransparency;

@@ -19,13 +19,9 @@ import org.apache.logging.log4j.Logger;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 
-// Sodium's cloud renderer, ported to 1.12.2's fixed-function cloud geometry.
-// Vanilla hides its cloud volume's interior faces with a two-pass depth-mask trick that only holds if both passes
-// rasterise identical depth; under a shader pipeline (custom blend state, different far plane) that bet fails and
-// every interior wall lights up at once. Sodium's fix, ported here, is to just not emit faces that can't be seen —
-// see net.caffeinemc.mods.sodium.mixin.features.render.world.clouds.CloudRendererMixin.
-// The 1.12-specific numbers (12-block cells, 4-block layer, per-face tints, 0.8 alpha, 2048-cell wrap) are kept as
-// vanilla left them since shader packs are written against them.
+// Sodium's cloud renderer on 1.12.2's fixed-function cloud geometry, omitting interior faces that cannot be seen
+// rather than vanilla's two-pass depth trick, which fails under a shader pipeline
+// The 1.12 numbers (12-block cells, 4-block layer, per-face tints) are kept since shader packs expect them
 public final class SodiumCloudRenderer {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Clouds");
     private static final ResourceLocation CLOUDS_TEXTURES = new ResourceLocation("textures/environment/clouds.png");
@@ -306,6 +302,7 @@ public final class SodiumCloudRenderer {
                 .endVertex();
     }
 
+    // Loads the cloud texture into a cell grid once, rebuilt on resource reload
     private static CloudCells getCells(Minecraft mc) {
         int textureReloadCount = CapturedRenderingState.INSTANCE.getTextureReloadCount();
         if (cachedTextureReloadCount == textureReloadCount) {
@@ -369,6 +366,7 @@ public final class SodiumCloudRenderer {
             }
         }
 
+        // Cell value with wrap-around
         private int get(int x, int z) {
             return this.flags[index(x, z)];
         }
@@ -378,6 +376,7 @@ public final class SodiumCloudRenderer {
             return (float) cellX / (float) this.width;
         }
 
+        // Texture v coordinate for a cell edge
         private float v(int cellZ) {
             return (float) cellZ / (float) this.height;
         }
@@ -387,6 +386,7 @@ public final class SodiumCloudRenderer {
             return ((float) cellX + 0.5F) / (float) this.width;
         }
 
+        // Texture v coordinate for a cell centre
         private float vCentre(int cellZ) {
             return ((float) cellZ + 0.5F) / (float) this.height;
         }
@@ -397,6 +397,7 @@ public final class SodiumCloudRenderer {
             return ((pixels[index(x, z)] >>> 24) & 255) >= 10;
         }
 
+        // Wrapped index into the cell array
         private int index(int x, int z) {
             // Row-major, matching BufferedImage#getRGB's scan order.
             return Math.floorMod(z, this.height) * this.width + Math.floorMod(x, this.width);

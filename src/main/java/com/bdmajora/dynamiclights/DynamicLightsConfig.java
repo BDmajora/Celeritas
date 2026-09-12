@@ -11,13 +11,9 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-// every setting the Dynamic Lights page owns, persisted to config/impetus-dynamiclights.cfg
-// built the same way as ExtrasConfig: booleans go in a declarative table so load and save cannot
-// drift apart, and enums are stored by ordinal
-// enum constant order is therefore part of the on-disk format - appending is safe, reordering
-// silently changes what a saved config means
-// the per-type light source toggles are not fields here; they live in LightSourceSettings, which this
-// class only persists
+// Every setting the Dynamic Lights page owns, persisted to config/impetus-dynamiclights.cfg
+// Booleans live in a declarative table so load and save cannot drift; enums are stored by ordinal, so
+// appending a constant is safe but reordering silently changes what a saved config means
 public final class DynamicLightsConfig {
     private static final String CAT_GENERAL = "general";
     private static final String CAT_SOURCES = "light_sources";
@@ -76,6 +72,7 @@ public final class DynamicLightsConfig {
         }
     }
 
+    // Reads every property, falling back to defaults for anything missing or out of range
     private void loadFrom(Configuration config) {
         booleans.forEach(property -> property.load(config));
 
@@ -130,6 +127,7 @@ public final class DynamicLightsConfig {
     public interface Localized {
         String translationKey();
 
+        // Resolves the translation key for display
         default String localizedName() {
             return I18n.format(this.translationKey());
         }

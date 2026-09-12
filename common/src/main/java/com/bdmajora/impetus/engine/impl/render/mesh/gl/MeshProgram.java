@@ -24,18 +24,22 @@ public class MeshProgram {
         this.handle = handle;
     }
 
+    // Starts a mesh shader program
     public static Builder builder(String name) {
         return new Builder(name);
     }
 
+    // glUseProgram
     public void bind() {
         LWJGL.glUseProgram(this.handle);
     }
 
+    // For log lines
     public String getName() {
         return this.name;
     }
 
+    // glDeleteProgram
     public void delete() {
         if (this.deleted) {
             return;
@@ -66,6 +70,7 @@ public class MeshProgram {
             return this;
         }
 
+        // Links the attached task, mesh and fragment stages; throws with the log on failure
         public MeshProgram link() {
             int program = LWJGL.glCreateProgram();
 

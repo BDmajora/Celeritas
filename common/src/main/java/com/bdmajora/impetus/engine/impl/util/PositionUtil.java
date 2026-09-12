@@ -18,6 +18,7 @@ public class PositionUtil {
     private static final int BIT_SHIFT_Z = SIZE_BITS_Y;
     private static final int BIT_SHIFT_Y = 0;
 
+    // Block position into one long, same layout as vanilla's BlockPos.toLong
     public static long packBlock(int x, int y, int z) {
         long l = 0L;
         l |= ((long) x & BITS_X) << BIT_SHIFT_X;
@@ -26,44 +27,54 @@ public class PositionUtil {
         return l;
     }
 
+    // Sign-extended x
     public static int unpackBlockX(long packed) {
         return (int) (packed << 64 - BIT_SHIFT_X - SIZE_BITS_X >> 64 - SIZE_BITS_X);
     }
 
+    // y
     public static int unpackBlockY(long packed) {
         return (int) (packed << 64 - SIZE_BITS_Y >> 64 - SIZE_BITS_Y);
     }
 
+    // Sign-extended z
     public static int unpackBlockZ(long packed) {
         return (int) (packed << 64 - BIT_SHIFT_Z - SIZE_BITS_Z >> 64 - SIZE_BITS_Z);
     }
 
     private static final long MAX_UNSIGNED_32BIT_INT = 4294967295L;
 
+    // Chunk column into one long, same layout as vanilla's ChunkPos.asLong
     public static long packChunk(int x, int z) {
         return (((long)z & MAX_UNSIGNED_32BIT_INT) << 32L) | ((long)x & MAX_UNSIGNED_32BIT_INT);
     }
 
+    // Low 32 bits
     public static int unpackChunkX(long key) {
         return (int)(key & MAX_UNSIGNED_32BIT_INT);
     }
 
+    // High 32 bits
     public static int unpackChunkZ(long key) {
         return (int)((key >>> 32) & MAX_UNSIGNED_32BIT_INT);
     }
 
+    // Section position into one long
     public static long packSection(int x, int y, int z) {
         return (((long)x & SECTION_XZ_MASK) << 42L) | (((long)y & SECTION_Y_MASK) << 0L) | (((long)z & SECTION_XZ_MASK) << 20L);
     }
 
+    // World coordinate to section index
     public static int posToSectionCoord(double coord) {
         return posToSectionCoord(MathUtil.mojfloor(coord));
     }
 
+    // Block coordinate to section index
     public static int posToSectionCoord(int coord) {
         return coord >> 4;
     }
 
+    // Section index plus local offset to block coordinate
     public static int sectionToBlockCoord(int sec, int block) {
         return (sec << 4) + block;
     }

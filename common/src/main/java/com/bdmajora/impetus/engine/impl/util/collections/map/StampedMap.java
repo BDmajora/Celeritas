@@ -17,6 +17,7 @@ public class StampedMap<K, V> implements Map<K, V> {
         this.lock = new StampedLock();
     }
 
+    // Under an optimistic read
     @Override
     public int size() {
         long readStamp = this.lock.readLock();
@@ -27,11 +28,13 @@ public class StampedMap<K, V> implements Map<K, V> {
         }
     }
 
+    // Under an optimistic read
     @Override
     public boolean isEmpty() {
         return size() == 0;
     }
 
+    // Under an optimistic read, retrying under the read lock on contention
     @Override
     public boolean containsKey(Object key) {
         long readStamp = this.lock.readLock();
@@ -42,6 +45,7 @@ public class StampedMap<K, V> implements Map<K, V> {
         }
     }
 
+    // Under the read lock; a full scan cannot be validated optimistically
     @Override
     public boolean containsValue(Object value) {
         long readStamp = this.lock.readLock();
@@ -52,6 +56,7 @@ public class StampedMap<K, V> implements Map<K, V> {
         }
     }
 
+    // Under an optimistic read, retrying under the read lock on contention
     @Override
     public V get(Object key) {
         long readStamp = this.lock.readLock();
@@ -72,6 +77,7 @@ public class StampedMap<K, V> implements Map<K, V> {
         }
     }
 
+    // Under the write lock
     @Override
     public V remove(Object key) {
         long stamp = this.lock.writeLock();
@@ -82,6 +88,7 @@ public class StampedMap<K, V> implements Map<K, V> {
         }
     }
 
+    // Under the write lock
     @Override
     public void putAll(@NotNull Map<? extends K, ? extends V> m) {
         long stamp = this.lock.writeLock();
@@ -92,6 +99,7 @@ public class StampedMap<K, V> implements Map<K, V> {
         }
     }
 
+    // Under the write lock
     @Override
     public void clear() {
         long stamp = this.lock.writeLock();
@@ -127,6 +135,7 @@ public class StampedMap<K, V> implements Map<K, V> {
         }
     }
 
+    // Delegates to the backing map under the read lock
     @Override
     public boolean equals(Object obj) {
         long readStamp = this.lock.readLock();
@@ -137,6 +146,7 @@ public class StampedMap<K, V> implements Map<K, V> {
         }
     }
 
+    // Delegates to the backing map under the read lock
     @Override
     public int hashCode() {
         long readStamp = this.lock.readLock();

@@ -19,15 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-// Entry point and global state holder for the Umbra shader layer
-// Owns three things that have different lifetimes and must not be conflated: the parsed ShaderPack, the compiled
-// UmbraPipeline, and the per-frame UmbraRenderingPipeline
-// The parse happens off the render thread, from the game directory; both pipelines are built lazily on the render
-// thread because they need a live GL context
-// Nothing here throws. Every failure path leaves shaders off and the renderer behaving exactly as it does with no
-// pack selected, which is what keeps this a zero-cost layer when disabled
-// Deliberately free of Minecraft classes at the entry point — callers pass the game directory in, and the Forge
-// @Mod wires it up
+// Entry point and state holder for the shader layer: the parsed ShaderPack, the compiled UmbraPipeline and the
+// per-frame UmbraRenderingPipeline, each with its own lifetime. Nothing here throws; every failure leaves shaders off
 public final class Umbra {
     public static final String MODNAME = "Impetus/Umbra";
     private static final Logger LOGGER = LogManager.getLogger(MODNAME);
@@ -58,10 +51,12 @@ public final class Umbra {
     private Umbra() {
     }
 
+    // The shader layer's logger
     public static Logger logger() {
         return LOGGER;
     }
 
+    // Selected pack name and the shaderpacks directory
     public static UmbraConfig getConfig() {
         return config;
     }
@@ -148,6 +143,7 @@ public final class Umbra {
         loadCurrentShaderpack();
     }
 
+    // Loads the pack's saved option values
     private static Map<String, String> readConfigProperties(Path path) {
         Map<String, String> result = new HashMap<>();
         if (!Files.exists(path)) {
@@ -166,6 +162,7 @@ public final class Umbra {
         return result;
     }
 
+    // Saves the pack's option values
     private static void writeConfigProperties(Path path, Properties properties) {
         try (OutputStream os = Files.newOutputStream(path)) {
             properties.store(os, "This file stores overrides for the shader pack's default options.");
@@ -221,6 +218,7 @@ public final class Umbra {
         return renderingPipeline;
     }
 
+    // Frees GL resources on pack unload; must run on the render thread
     private static void destroyPipelines() {
         if (pipeline != null) {
             pipeline.destroy();

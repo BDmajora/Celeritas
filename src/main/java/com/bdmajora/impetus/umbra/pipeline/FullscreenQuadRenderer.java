@@ -75,6 +75,7 @@ public class FullscreenQuadRenderer {
         LWJGL.glBindVertexArray(0);
     }
 
+    // Frees the quad's buffer
     public void destroy() {
         if (this.destroyed) {
             return;

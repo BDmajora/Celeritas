@@ -9,17 +9,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Debug transformer that records the stack which triggered the load of one or more watched classes.
- * Writing each captured stack to {@code logs/mixinbooter.log}. This helps diagnose
- * "mixin target was loaded too early" issues. As once a class is defined, its mixins can no longer apply,
- * and by the time the mixin subsystem notices, the causal stack is gone.
- * <p>
- * Watched class names are supplied through the {@code mixinbooter.watchedClasses} system property
- * (comma-separated), populated from the {@code debug.watchedClasses} option in {@code config/mixinbooter.cfg}.
- * The single token {@code *} enables "watch all" mode, tracing the load of every class (very verbose, each class
- * traced once). The transformer is inert (a single property read per class) until the property is set.</p>
- */
+// Debug transformer that logs the stack that triggered loading of a watched class, for diagnosing
+// "mixin target loaded too early". Watched names come from the mixinbooter.watchedClasses property; * watches all
+// Inert beyond one property read per class until the property is set
 public final class ClassLoadTracer implements IClassTransformer {
 
     public static final String WATCH_PROPERTY = "mixinbooter.watchedClasses";
@@ -29,6 +21,7 @@ public final class ClassLoadTracer implements IClassTransformer {
 
     private final Set<String> traced = Collections.synchronizedSet(new HashSet<>());
 
+    // Parses the watch property once; * means everything
     private static Set<String> watched() {
         Set<String> current = watched;
         if (current != null) {
@@ -49,11 +42,8 @@ public final class ClassLoadTracer implements IClassTransformer {
         return parsed;
     }
 
-    /**
-     * Trims the captured stack to the interesting portion.
-     * Drops the first 5 frames (transformer + classloader find/loading)
-     * Stopping at the LaunchWrapper/Minecraft entrypoint.
-     */
+    // Trims the captured stack to the interesting portion. Drops the first 5 frames (transformer + classloader
+    // find/loading) Stopping at the LaunchWrapper/Minecraft entrypoint
     private static StackTraceElement[] trim(StackTraceElement[] elements) {
         int start = Math.min(5, elements.length);
         int end = elements.length;
@@ -72,6 +62,7 @@ public final class ClassLoadTracer implements IClassTransformer {
         return kept.toArray(new StackTraceElement[0]);
     }
 
+    // Where to stop printing a trace: the launcher's main
     private static boolean isEntryPoint(StackTraceElement element) {
         String className = element.getClassName();
         String methodName = element.getMethodName();
@@ -79,6 +70,7 @@ public final class ClassLoadTracer implements IClassTransformer {
                 || ("net.minecraft.client.main.Main".equals(className) && "main".equals(methodName));
     }
 
+    // Frames inside the class loading machinery itself, skipped for readability
     private static boolean isInternalCall(StackTraceElement element) {
         String className = element.getClassName();
         String methodName = element.getMethodName();
@@ -91,6 +83,7 @@ public final class ClassLoadTracer implements IClassTransformer {
                 ("findClass".equals(methodName) || "loadClass".equals(methodName));
     }
 
+    // Never changes bytes; logs the loading stack for watched classes and passes through
     @Override
     public byte[] transform(String name, String transformedName, byte[] basicClass) {
         Set<String> watchedClasses = watched();

@@ -2,19 +2,9 @@ package com.google.common.collect;
 
 import java.util.Map;
 
-// An ImmutableMap replacement for the property->value map every block state carries
-//
-// The package is com.google.common.collect on purpose, not by accident: ImmutableMap's constructor is
-// package-private, so subclassing it requires sharing Guava's runtime package — same package name AND same
-// classloader. ClassDefineTool injects this class into whichever loader Guava ended up on, which is why the
-// imports below are only com.google.common.collect and java.*. Any other import resolves against a loader that
-// may not be able to see the Impetus jar and turns into a NoClassDefFoundError the first time it is touched.
-//
-// The saving: Guava's RegularImmutableMap allocates one ImmutableMapEntry per entry (key, value, hash, collision
-// pointer), an entry array, and a hash table about twice the entry count — roughly 240 bytes for a four-property
-// state. Here the keys array is shared by every state of a block, since all states of a block have the same
-// properties in the same order and differ only in the values, so a state costs this object plus its values array:
-// about 72 bytes, and the keys are paid for once per block instead of once per state.
+// An ImmutableMap for the property to value map every block state carries, sharing one keys array across every
+// state of a block. Lives in Guava's package on purpose: ImmutableMap's constructor is package-private, so this is
+// injected into Guava's loader by ClassDefineTool and may import only com.google.common.collect and java.*
 public final class CoartatioPropertyMap<K, V> extends ImmutableMap<K, V> {
     // Shared across every state of the owning block — never mutate, never hand out
     private final Object[] keys;
@@ -41,6 +31,7 @@ public final class CoartatioPropertyMap<K, V> extends ImmutableMap<K, V> {
         return -1;
     }
 
+    // Linear scan of the shared keys; property counts are single digits
     @Override
     @SuppressWarnings("unchecked")
     public V get(Object key) {
@@ -53,11 +44,13 @@ public final class CoartatioPropertyMap<K, V> extends ImmutableMap<K, V> {
         return index < 0 ? null : (V) this.values[index];
     }
 
+    // Keys array length
     @Override
     public int size() {
         return this.keys.length;
     }
 
+    // Only for a block with no properties
     @Override
     public boolean isEmpty() {
         return this.keys.length == 0;
@@ -70,6 +63,7 @@ public final class CoartatioPropertyMap<K, V> extends ImmutableMap<K, V> {
         return key != null && indexOf(key) >= 0;
     }
 
+    // Linear scan of the values
     @Override
     public boolean containsValue(Object value) {
         if (value == null) {

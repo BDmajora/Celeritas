@@ -26,12 +26,14 @@ public class ClonedChunkSectionCache {
         this.time = getMonotonicTimeSource();
     }
 
+    // Evicts sections not touched within the timeout
     public synchronized void cleanup() {
         this.time = getMonotonicTimeSource();
         this.positionToEntry.values()
                 .removeIf(entry -> this.time > (entry.getLastUsedTimestamp() + MAX_CACHE_DURATION));
     }
 
+    // Returns the cached copy or clones a fresh one, stamping it as just used
     @Nullable
     public synchronized ClonedChunkSection acquire(int x, int y, int z) {
         var pos = PositionUtil.packSection(x, y, z);
@@ -52,6 +54,7 @@ public class ClonedChunkSectionCache {
         return section;
     }
 
+    // Copies the live section; must run on the main thread
     @NotNull
     private ClonedChunkSection clone(int x, int y, int z) {
         Chunk chunk = this.world.getChunk(x, z);
@@ -63,10 +66,12 @@ public class ClonedChunkSectionCache {
         return new ClonedChunkSection(this.world, x, y, z);
     }
 
+    // Drops a copy after the section changed
     public synchronized void invalidate(int x, int y, int z) {
         this.positionToEntry.remove(PositionUtil.packSection(x, y, z));
     }
 
+    // Nanotime, since wall-clock jumps would evict wrongly
     private static long getMonotonicTimeSource() {
         // Should be monotonic in JDK 17 on sane platforms...
         return System.nanoTime();

@@ -14,6 +14,7 @@ final class BspTranslucencySorter {
     private BspTranslucencySorter() {
     }
 
+    // Builds a BSP over the quad planes and walks it back-to-front from the camera
     static int[] sort(float[] centers, float[] normals, int quadCount, float cameraX, float cameraY, float cameraZ) {
         if (quadCount > MAX_BSP_QUADS || centers == null || normals == null
                 || centers.length < quadCount * 3 || normals.length < quadCount * 3) {
@@ -49,6 +50,7 @@ final class BspTranslucencySorter {
         return cursor[0] == quadCount ? order : null;
     }
 
+    // Places a quad on the side of the node's plane its centre lies
     private static void insert(int node, int quad, float[] centers, float[] normals, int[] left, int[] right) {
         float side = signedDistanceToPlane(quad, node, centers, normals);
 
@@ -86,12 +88,14 @@ final class BspTranslucencySorter {
         }
     }
 
+    // Quad centre against another quad's plane
     private static float signedDistanceToPlane(int quad, int planeQuad, float[] centers, float[] normals) {
         int centerOffset = quad * 3;
         return signedDistanceToPlane(centers[centerOffset], centers[centerOffset + 1], centers[centerOffset + 2],
                 planeQuad, centers, normals);
     }
 
+    // Point against a quad's plane
     private static float signedDistanceToPlane(float x, float y, float z, int planeQuad, float[] centers, float[] normals) {
         int planeOffset = planeQuad * 3;
 

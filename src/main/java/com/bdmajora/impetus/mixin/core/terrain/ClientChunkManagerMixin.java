@@ -19,11 +19,13 @@ public abstract class ClientChunkManagerMixin {
     @Final
     private World world;
 
+    // Tells the chunk tracker a column is now fully present
     @Inject(method = "loadChunk", at = @At("RETURN"))
     private void afterLoadChunkFromPacket(int x, int z, CallbackInfoReturnable<Chunk> cir) {
         ChunkTrackerHolder.get(this.world).onChunkStatusAdded(x, z, ChunkStatus.FLAG_ALL);
     }
 
+    // Tells the chunk tracker a column is gone
     @Inject(method = "unloadChunk", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/chunk/Chunk;onUnload()V", shift = At.Shift.AFTER))
     private void afterUnloadChunk(int x, int z, CallbackInfo ci) {
         ChunkTrackerHolder.get(this.world).onChunkStatusRemoved(x, z, ChunkStatus.FLAG_ALL);

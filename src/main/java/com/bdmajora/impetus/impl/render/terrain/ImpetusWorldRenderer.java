@@ -24,6 +24,7 @@ import java.util.*;
 
 // extends vanilla's RenderGlobal with the Impetus terrain renderer's own draw and visibility entry points
 public class ImpetusWorldRenderer extends SimpleWorldRenderer<WorldClient, VintageRenderSectionManager, BlockRenderLayer, TileEntity, ImpetusWorldRenderer.TileEntityRenderContext>  {
+    // What the block entity pass needs from RenderGlobal
     @Desugar
     public record TileEntityRenderContext(Map<Integer, DestroyBlockProgress> damagedBlocks, float partialTicks) {}
 
@@ -37,21 +38,25 @@ public class ImpetusWorldRenderer extends SimpleWorldRenderer<WorldClient, Vinta
         return SimpleWorldRenderer.Provider.getWorldRendererNullable(Minecraft.getMinecraft().renderGlobal);
     }
 
+    // Zero on 1.12.2
     @Override
     public int getMinimumBuildHeight() {
         return 0;
     }
 
+    // 256 on 1.12.2
     @Override
     public int getMaximumBuildHeight() {
         return this.world.getHeight();
     }
 
+    // From game settings
     @Override
     public int getEffectiveRenderDistance() {
         return Minecraft.getMinecraft().gameSettings.renderDistanceChunks;
     }
 
+    // Captures vanilla's current projection and model-view for the chunk shader
     @Override
     protected ChunkRenderMatrices createChunkRenderMatrices() {
         if (com.bdmajora.impetus.umbra.pipeline.UmbraShadowRenderer.isShadowPass()) {
@@ -62,6 +67,7 @@ public class ImpetusWorldRenderer extends SimpleWorldRenderer<WorldClient, Vinta
         return new ChunkRenderMatrices(ActiveRenderInfoAccessor.getProjectionMatrix(), ActiveRenderInfoAccessor.getModelViewMatrix());
     }
 
+    // Factory hook for the 1.12.2 section manager
     @Override
     protected VintageRenderSectionManager createRenderSectionManager(CommandList commandList) {
         return VintageRenderSectionManager.create(chooseVertexType(), this.world, this.getEffectiveRenderDistance(), commandList);
@@ -88,6 +94,7 @@ public class ImpetusWorldRenderer extends SimpleWorldRenderer<WorldClient, Vinta
         GlStateManager.resetColor();
     }
 
+    // Interpolated camera position and rotation for this frame
     public static CameraState captureCameraState(double ticks) {
         Entity viewEntity = Objects.requireNonNull(Minecraft.getMinecraft().getRenderViewEntity(), "Client must have view entity");
 
@@ -103,6 +110,7 @@ public class ImpetusWorldRenderer extends SimpleWorldRenderer<WorldClient, Vinta
     }
 
 
+    // Draws each tile entity through vanilla's dispatcher, applying block damage overlays
     @Override
     protected void renderBlockEntityList(List<TileEntity> list, TileEntityRenderContext tileEntityRenderContext) {
         int pass = MinecraftForgeClient.getRenderPass();
@@ -124,6 +132,7 @@ public class ImpetusWorldRenderer extends SimpleWorldRenderer<WorldClient, Vinta
         }
     }
 
+    // Draws tile entities in every visible section; returns the count for the debug screen
     @Override
     public int renderBlockEntities(TileEntityRenderContext tileEntityRenderContext) {
         int pass = MinecraftForgeClient.getRenderPass();
@@ -152,6 +161,7 @@ public class ImpetusWorldRenderer extends SimpleWorldRenderer<WorldClient, Vinta
         return this.isBoxVisible(box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ);
     }
 
+    // Compact vertices unless the shader pipeline needs the full format
     private ChunkVertexType chooseVertexType() {
         // When a shader pack is active, terrain is drawn by the pack's transformed gbuffers_terrain, which reads
         // the vanilla-like float layout plus the OptiFine extended attributes (true normals, at_tangent,

@@ -13,6 +13,7 @@ public class LightDataCache extends LightDataAccess {
         this.world = world;
     }
 
+    // Packs opacity, emission and light levels for one block into the cache word
     protected int compute(int x, int y, int z) {
         BlockPos pos = this.pos.setPos(x, y, z);
         IBlockAccess world = this.world;

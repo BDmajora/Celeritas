@@ -22,6 +22,7 @@ public abstract class ChunkShaderFogComponent implements ChunkShaderComponent {
 
         }
 
+        // Uploads this mode's fog uniforms
         @Override
         public void setup() {
 
@@ -37,6 +38,7 @@ public abstract class ChunkShaderFogComponent implements ChunkShaderComponent {
             this.uFogDensity = context.bindUniform("u_FogDensity", GlUniformFloat::new);
         }
 
+        // Uploads this mode's fog uniforms
         @Override
         public void setup() {
             this.uFogColor.set(FOG_SERVICE.getFogColor());
@@ -58,6 +60,7 @@ public abstract class ChunkShaderFogComponent implements ChunkShaderComponent {
             this.uFogEnd = context.bindUniform("u_FogEnd", GlUniformFloat::new);
         }
 
+        // Uploads this mode's fog uniforms
         @Override
         public void setup() {
             this.uFogColor.set(FOG_SERVICE.getFogColor());

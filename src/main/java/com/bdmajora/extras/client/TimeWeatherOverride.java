@@ -33,6 +33,7 @@ public final class TimeWeatherOverride {
         }
     }
 
+    // Nudges the clock past the boundary rather than pinning it, so the cycle keeps advancing
     private static void applyTime(WorldServer world, ExtrasConfig.TimeOverride override) {
         if (!isCreative(world)) {
             return;
@@ -61,6 +62,7 @@ public final class TimeWeatherOverride {
         }
     }
 
+    // Forces the world info's rain and thunder flags to the chosen state
     private static void applyWeather(WorldServer world, ExtrasConfig.WeatherOverride override) {
         if (!isCreative(world)) {
             return;
@@ -93,6 +95,7 @@ public final class TimeWeatherOverride {
         }
     }
 
+    // The overrides only apply in creative, matching OptiFine
     private static boolean isCreative(WorldServer world) {
         return world.getWorldInfo().getGameType() == GameType.CREATIVE;
     }

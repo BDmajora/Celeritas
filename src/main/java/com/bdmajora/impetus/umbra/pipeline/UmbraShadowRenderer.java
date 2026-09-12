@@ -228,6 +228,7 @@ public class UmbraShadowRenderer {
         return texture;
     }
 
+    // GL filter constant from the pack's mipmap and nearest flags
     private static int shadowMinFilter(boolean mipmap, boolean nearest) {
         if (mipmap) {
             return nearest ? GL11.GL_NEAREST_MIPMAP_NEAREST : GL11.GL_LINEAR_MIPMAP_LINEAR;
@@ -239,6 +240,7 @@ public class UmbraShadowRenderer {
     // shadowcolorimgN
     public static final int SHADOW_COLOR_INTERNAL_FORMAT = GL11.GL_RGBA8;
 
+    // One shadowcolor texture at the shadow resolution
     private static int createShadowColorTexture(int resolution) {
         int texture = LWJGL.glGenTextures();
         // Scratch unit, for the same reason as createShadowDepthTexture.
@@ -256,26 +258,32 @@ public class UmbraShadowRenderer {
         return texture;
     }
 
+    // Whether the shadow pass is currently rendering, checked by mixins that must skip work
     public static boolean isShadowPass() {
         return shadowPassActive;
     }
 
+    // shadowtex0
     public int getDepthTextureId() {
         return this.depthTexture.getTextureId();
     }
 
+    // shadowtex1
     public int getDepthTextureNoTranslucentsId() {
         return this.depthTextureNoTranslucents.getTextureId();
     }
 
+    // shadowcolor0
     public int getColorTextureId() {
         return this.colorTexture0;
     }
 
+    // shadowcolor1
     public int getColorTexture1Id() {
         return this.colorTexture1;
     }
 
+    // Shadow map size from the pack
     public int getResolution() {
         return this.resolution;
     }
@@ -429,10 +437,12 @@ public class UmbraShadowRenderer {
         }
     }
 
+    // Terrain in the shadow pass still samples the atlas for cutouts
     private static void bindBlockAtlas(Minecraft mc) {
         mc.getTextureManager().bindTexture(net.minecraft.client.renderer.texture.TextureMap.LOCATION_BLOCKS_TEXTURE);
     }
 
+    // Mips on the depth textures the pack asked for
     private void generateMipmaps() {
         generateDepthMipmap(this.depthTexture, this.mipmapDepth[0], this.nearestDepth[0]);
         generateDepthMipmap(this.depthTextureNoTranslucents, this.mipmapDepth[1], this.nearestDepth[1]);
@@ -440,6 +450,7 @@ public class UmbraShadowRenderer {
         this.shaderPackResourceRestorer.run();
     }
 
+    // One depth texture's mip chain and filter
     private static void generateDepthMipmap(DepthTexture texture, boolean mipmap, boolean nearest) {
         if (!mipmap) {
             return;
@@ -566,6 +577,7 @@ public class UmbraShadowRenderer {
         }
     }
 
+    // Uploads a JOML matrix into the fixed-function stack
     private void loadMatrix(Matrix4f matrix) {
         matrix.get(this.matrixBuffer);
         GlStateManager.loadIdentity();
@@ -581,6 +593,7 @@ public class UmbraShadowRenderer {
     // use LOLIP_P. The "offset" was the model disagreeing with itself
     private static final String[] SHADOW_DISTORTION_MODELS = {"COMPLEMENTARY", "LOLIP_P"};
 
+    // Debug: share of the shadow map still at clear depth
     private static float fractionUntouched(float[] depth) {
         int cleared = 0;
         for (float d : depth) {
@@ -607,6 +620,7 @@ public class UmbraShadowRenderer {
         return rgba;
     }
 
+    // Debug formatting
     private static String pct(int count, int total) {
         return String.format("%.3f", 100.0 * count / total);
     }
@@ -676,14 +690,17 @@ public class UmbraShadowRenderer {
         }
     }
 
+    // For the shadow matrix uniforms
     public Matrix4f getShadowModelView() {
         return this.shadowModelView;
     }
 
+    // For the shadow matrix uniforms
     public Matrix4f getShadowProjection() {
         return this.shadowProjection;
     }
 
+    // Frees the FBO and textures
     public void destroy() {
         if (this.destroyed) {
             return;

@@ -10,10 +10,8 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 
-// Reaches AtomicStryker's Dynamic Lights without compiling against it; it reports luminance for
-// non-block light sources (held torches, dropped glowstone) by intercepting the lookup itself.
-// Bound via MethodHandle+invokeExact (inlines like a direct call) since this runs per-neighbour on
-// every light update; missing class/method just makes the bridge unavailable, falling back to vanilla.
+// Reaches AtomicStryker's Dynamic Lights without compiling against it, for held and dropped light sources
+// Bound via invokeExact so it inlines like a direct call; a missing class just leaves the bridge unavailable
 final class DynamicLightsBridge {
     private static final String CLASS_NAME = "atomicstryker.dynamiclights.client.DynamicLights";
 
@@ -22,10 +20,12 @@ final class DynamicLightsBridge {
     private DynamicLightsBridge() {
     }
 
+    // True only when the mod was found and the handle resolved
     static boolean isAvailable() {
         return GET_LIGHT_VALUE != null;
     }
 
+    // Asks the mod for luminance at a position; rethrows with the position since a bare handle trace is useless
     static int getLightValue(IBlockState state, IBlockAccess world, BlockPos pos) {
         try {
             return (int) GET_LIGHT_VALUE.invokeExact(state.getBlock(), state, world, pos);
@@ -36,6 +36,7 @@ final class DynamicLightsBridge {
         }
     }
 
+    // Looks the target method up once at class init; any failure yields null rather than a crash
     private static MethodHandle resolve() {
         if (!Fulgor.hasDynamicLights()) {
             return null;

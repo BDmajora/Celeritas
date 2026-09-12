@@ -3,28 +3,9 @@ package com.bdmajora.impetus.umbra.terrain;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// Moves non-constant global-variable initialisers into the generated main()
-//
-// GLSL requires a global initialiser to be a constant expression, but legacy packs freely write things like
-// `float comp = 1.0 - near/far/far;` at global scope. That is legal in practice under #version 120, where drivers
-// evaluate it per invocation. Under #version 330 NVIDIA accepts it silently but may evaluate it BEFORE the uniforms
-// are loaded, producing zeros and NaNs that quietly corrupt whole passes — this exact class of bug is what made
-// terrain render nothing until the prologue matrices were converted to defines
-// Hoisting the assignment into main() reproduces the 120 semantics exactly
-//
-// The transform is line-based with brace-depth tracking. Only depth-0, single-declarator initialisers of simple
-// types are touched, and only when the initialiser references an identifier that is not a literal or a type
-// constructor. Moving a genuinely constant initialiser would be safe too; the whitelist just keeps the churn down
-//
-// An initialiser expression may span several lines, and it must be collected whole. BSL writes
-// `weatherCol = mix( ... )` across nine lines, and hoisting only its single-line neighbours (weatherRain,
-// weatherWeight) while leaving weatherCol at global scope makes it evaluate against still-zero inputs, giving
-// vec4(0), which collapses lightCol and ambientCol to black — terrain goes near-black in rain. So the collector
-// accumulates continuation lines up to the statement-terminating ; at paren/bracket/brace nesting 0
-//
-// Top-level preprocessor conditionals are mirrored into the hoisted assignment stream. Packs such as Sildur's put
-// non-constant globals inside #ifdef option gates, and moving the assignments outside those gates would make the
-// generated main() reference declarations the GLSL preprocessor had already removed
+// Moves non-constant global initialisers into main(), reproducing #version 120 semantics under 330 where
+// NVIDIA may evaluate them before uniforms load and produce NaNs that corrupt whole passes
+// Multi-line initialisers are collected whole and top-level #ifdef gates are mirrored into the hoisted stream
 public final class GlslGlobalInitHoister {
     // Matches only the START of a global initialiser — indent, type, name, =, and whatever follows on that first
     // line. The rest is collected by hand, because a regex cannot balance the nesting a multi-line initialiser has
@@ -50,6 +31,7 @@ public final class GlslGlobalInitHoister {
     private GlslGlobalInitHoister() {
     }
 
+    // Returns the rewritten globals and the assignment block to inject at the top of main
     public static Result hoist(String source) {
         StringBuilder body = new StringBuilder(source.length());
         StringBuilder hoisted = new StringBuilder();
@@ -138,6 +120,7 @@ public final class GlslGlobalInitHoister {
         return null;
     }
 
+    // Simple-typed, single-declarator, initialised, at depth zero
     private static boolean isDeclarationCandidate(String trimmed) {
         return !trimmed.isEmpty()
                 && !trimmed.startsWith("const")
@@ -150,6 +133,7 @@ public final class GlslGlobalInitHoister {
                 && !trimmed.startsWith("out ");
     }
 
+    // Net brace count on a line, ignoring string and comment content
     private static int braceDelta(String line) {
         int delta = 0;
         for (int i = 0; i < line.length(); i++) {
@@ -163,6 +147,7 @@ public final class GlslGlobalInitHoister {
         return delta;
     }
 
+    // #if, #ifdef, #ifndef, #else, #elif or #endif
     private static boolean isConditionalDirective(String trimmed) {
         if (!trimmed.startsWith("#")) {
             return false;
@@ -176,6 +161,7 @@ public final class GlslGlobalInitHoister {
                 || directive.equals("endif");
     }
 
+    // Directive match tolerant of whitespace after the hash
     private static boolean startsDirective(String directive, String keyword) {
         if (!directive.startsWith(keyword)) {
             return false;
@@ -187,6 +173,7 @@ public final class GlslGlobalInitHoister {
         return next == '(' || Character.isWhitespace(next);
     }
 
+    // Literals and type constructors only; anything referencing an identifier is not
     private static boolean isConstantExpression(String expression) {
         Matcher identifiers = IDENTIFIER.matcher(expression);
         while (identifiers.find()) {

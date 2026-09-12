@@ -10,6 +10,7 @@ public final class FrameUpdateNotifier {
     // Registered at pipeline build and never removed: the notifier dies with the pipeline it belongs to
     private final List<Runnable> listeners = new ArrayList<>();
 
+    // Called once per frame before uniforms upload
     public void addListener(Runnable listener) {
         this.listeners.add(listener);
     }

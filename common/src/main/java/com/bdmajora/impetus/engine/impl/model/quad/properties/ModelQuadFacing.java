@@ -40,6 +40,7 @@ public enum ModelQuadFacing {
         this.packedNormal = NormI8.pack(stepX, stepY, stepZ);
     }
 
+    // UNASSIGNED maps to itself
     public ModelQuadFacing getOpposite() {
         return switch (this) {
             case POS_Y -> NEG_Y;
@@ -52,6 +53,7 @@ public enum ModelQuadFacing {
         };
     }
 
+    // Anything but UNASSIGNED
     public boolean isDirection() {
         return this != UNASSIGNED;
     }
@@ -61,6 +63,7 @@ public enum ModelQuadFacing {
         Y,
         Z;
 
+        // The positive or negative facing on this axis
         public ModelQuadFacing getFacing(boolean positive) {
             return switch (this) {
                 case X -> positive ? POS_X : NEG_X;

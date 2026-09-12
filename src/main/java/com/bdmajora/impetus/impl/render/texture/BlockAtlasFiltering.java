@@ -8,27 +8,10 @@ import org.lwjgl.opengl.EXTTextureFilterAnisotropic;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GLContext;
 
-// applies the block atlas' sampler state: vanilla minification, the user-selected magnification, and
-// an explicit anisotropy reset - called whenever the atlas is (re)built and whenever the options are
-// applied
-// minification is not configurable because the atlas packs every sprite edge to edge with no border,
-// so a sampler that reads outside the 16x16 sprite rect returns a *different block's* texels
-// vanilla's GL_NEAREST_MIPMAP_LINEAR never does that: it takes one texel per level
-// anisotropic filtering does - it walks a line of samples along the major axis of the pixel
-// footprint, and at grazing angles that line runs off the sprite - and so does any
-// GL_LINEAR_MIPMAP_* filter, whose bilinear tap straddles the border on the sprite's edge texels
-// in game it looks like coloured dashes tracing the block grid on distant terrain
-// measured with tools/anisocheck.c (RTX 5070; 512x512 atlas, 16x16 sprites, 4 mip levels, ground
-// plane of one-quad blocks) as the share of ground pixels showing a neighbouring sprite's colour,
-// excluding the handful of rows at the horizon where a whole block falls below one pixel:
-// NEAREST_MIPMAP_LINEAR is exactly 0/228000 at 1x anisotropy and 9.9% at 8x, while
-// LINEAR_MIPMAP_LINEAR bleeds at 1x already
-// supporting either properly needs a padded atlas - OptiFine grows every sprite by a replicated
-// border - which is a stitcher change; until then vanilla's filter is the only correct minification
-// magnification stays configurable: GL_LINEAR there only reaches one texel past the border, and it
-// is off by default
-// these parameters are stored on the GL texture object itself, so they persist across binds, and the
-// block atlas is re-stitched on resource reload - which is why TextureAtlasMixin re-applies them there
+// Applies the block atlas sampler state whenever the atlas is rebuilt or options are applied
+// Minification is fixed at vanilla's NEAREST_MIPMAP_LINEAR: the atlas has no sprite borders, so any filter that
+// samples past a sprite edge, including anisotropy, bleeds neighbouring blocks as coloured dashes on distant terrain
+// Magnification stays configurable since GL_LINEAR only reaches one texel past the border
 public final class BlockAtlasFiltering {
     private static Boolean anisotropySupported;
 
@@ -48,6 +31,7 @@ public final class BlockAtlasFiltering {
         }
     }
 
+    // Sets the three parameters on the bound texture; they persist across binds
     public static void apply(int glTextureId) {
         if (glTextureId <= 0) {
             return;
@@ -72,6 +56,7 @@ public final class BlockAtlasFiltering {
         }
     }
 
+    // Extension check, so the reset is skipped on drivers without it
     private static boolean isAnisotropySupported() {
         if (anisotropySupported == null) {
             try {

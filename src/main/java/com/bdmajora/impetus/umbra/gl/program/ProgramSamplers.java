@@ -17,30 +17,8 @@ import java.util.function.IntSupplier;
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
 // The samplers one program uses, each on a texture unit allocated for that program alone
-//
-// Why per-program rather than global: the scheme this replaces gave every sampler NAME one fixed global unit, with
-// the full-screen layout using unit == colortex index
-// That only works while the names fit in the driver's GL_MAX_TEXTURE_IMAGE_UNITS, and they do not. A pack may
-// declare 32 colortex, three depthtex, seven shadow samplers, noisetex, plus its own custom textures and images —
-// 49 names against 32 units
-// So the fixed layout had to cap MAX_COLOR_BUFFERS at 16 where Iris allows 32, and park depthtex on 16-18, shadow
-// on 19-25 and custom textures/images on 24-31 — which collide with colortex16..19 the moment that cap is raised
-// The visible consequence: Complementary's deferred1 declares RENDERTARGETS: 0,5,4,19,18, so colortex18 and 19 were
-// never allocated here and their attachments were silently dropped
-//
-// Allocating per program removes the conflict rather than rearranging it. A unit is consumed only when the program
-// genuinely declares the uniform, i.e. glGetUniformLocation != -1, and no single program in a real pack comes close
-// to declaring all 49 names. This is Iris's nextUnit++ model exactly
-//
-// Three deviations from Iris, all forced by 1.12.2
-//   Binding goes through GlTextureUnits rather than a raw bind plus a GlStateManagerAccessor cache patch, because
-//   1.12.2's GlStateManager.TextureState is package-private with a private constructor and the cache can only be
-//   written by calling GlStateManager itself
-//   Iris THROWS when a program runs out of units; this logs and drops the sampler, matching what ProgramImages
-//   already does — a pack that overruns the limit should lose one effect rather than take the whole pipeline down
-//   mid-frame on a machine that was otherwise rendering fine
-//   No GlSampler objects at all: this pipeline predates sampler objects, and every sampler uses the texture's own
-//   parameters
+// Per-program rather than global because a pack can declare 49 sampler names against 32 units; a unit is
+// consumed only when the program genuinely declares the uniform. Overruns log and drop rather than throw
 public final class ProgramSamplers {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -52,6 +30,7 @@ public final class ProgramSamplers {
         this.initializer = initializer;
     }
 
+    // Starts registration, skipping units the engine already uses
     public static Builder builder(int program, Set<Integer> reservedTextureUnits) {
         return new Builder(program, reservedTextureUnits);
     }
@@ -82,6 +61,7 @@ public final class ProgramSamplers {
         }
     }
 
+    // Units consumed
     public int getActiveSamplers() {
         return this.samplerBindings.size();
     }
@@ -181,6 +161,7 @@ public final class ProgramSamplers {
             return true;
         }
 
+        // Advances past units the engine owns
         private void skipReserved() {
             while (this.nextUnit < this.maxTextureUnits && this.reservedTextureUnits.contains(this.nextUnit)) {
                 this.nextUnit++;
@@ -192,6 +173,7 @@ public final class ProgramSamplers {
             return this.nextUnit;
         }
 
+        // Finalises the unit assignments
         public ProgramSamplers build() {
             return new ProgramSamplers(Collections.unmodifiableList(new ArrayList<>(this.samplers)),
                     new ArrayList<>(this.calls));

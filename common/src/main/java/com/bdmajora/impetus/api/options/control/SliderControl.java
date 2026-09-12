@@ -13,6 +13,7 @@ public class SliderControl implements Control<Integer> {
 
     private final ControlValueFormatter mode;
 
+    // Argument validation with a message
     private static void assertTrue(boolean condition, String msg) {
         if (!condition) {
             throw new IllegalArgumentException(msg);
@@ -32,16 +33,19 @@ public class SliderControl implements Control<Integer> {
         this.mode = mode;
     }
 
+    // The slider widget
     @Override
     public ControlElement<Integer> createElement(Dim2i dim) {
         return new Button(this.option, dim, this.min, this.max, this.interval, this.mode);
     }
 
+    // Bound option
     @Override
     public Option<Integer> getOption() {
         return this.option;
     }
 
+    // Widest the slider needs to be
     @Override
     public int getMaxWidth() {
         return 130;
@@ -76,6 +80,7 @@ public class SliderControl implements Control<Integer> {
             this.sliderHeld = false;
         }
 
+        // Track, thumb and formatted value; a value-only label when not hovered
         @Override
         public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
             super.render(drawContext, mouseX, mouseY, delta);
@@ -87,6 +92,7 @@ public class SliderControl implements Control<Integer> {
             }
         }
 
+        // Just the formatted value, when the slider is idle
         private void renderStandaloneValue(DrawContext drawContext) {
             int sliderX = this.sliderBounds.x();
             int sliderY = this.sliderBounds.y();
@@ -105,6 +111,7 @@ public class SliderControl implements Control<Integer> {
             drawContext.drawString(label, sliderX + sliderWidth - labelWidth, sliderY + (sliderHeight / 2) - 4, enabled ? 0xFFFFFFFF : this.getDisabledControlColor());
         }
 
+        // Track, thumb and value while hovered or dragging
         private void renderSlider(DrawContext drawContext) {
             int sliderX = this.sliderBounds.x();
             int sliderY = this.sliderBounds.y();
@@ -129,18 +136,22 @@ public class SliderControl implements Control<Integer> {
             drawContext.drawString(label, sliderX - labelWidth - 6, sliderY + (sliderHeight / 2) - 4, 0xFFFFFFFF);
         }
 
+        // Current value
         public int getIntValue() {
             return this.min + (this.interval * (int) Math.round(this.getSnappedThumbPosition() / this.interval));
         }
 
+        // Thumb position for the current value, snapped to the interval
         public double getSnappedThumbPosition() {
             return this.thumbPosition / (1.0D / this.range);
         }
 
+        // 0..1 along the track
         public double getThumbPositionForValue(int value) {
             return (value - this.min) * (1.0D / this.range);
         }
 
+        // Jumps to the click and starts a drag
         @Override
         public boolean mouseClicked(InteractionContext context, double mouseX, double mouseY, int button) {
             this.sliderHeld = false;
@@ -157,10 +168,12 @@ public class SliderControl implements Control<Integer> {
             return false;
         }
 
+        // Track position to value
         private void setValueFromMouse(double d) {
             this.setValue((d - (double) this.sliderBounds.x()) / (double) (this.sliderBounds.width() - 1));
         }
 
+        // Snaps to the interval and clamps
         public void setValue(double d) {
             this.thumbPosition = org.joml.Math.clamp(0.0D, 1.0D, d);
 
@@ -171,6 +184,7 @@ public class SliderControl implements Control<Integer> {
             }
         }
 
+        // Follows the cursor while dragging
         @Override
         public boolean mouseDragged(InteractionContext context, double mouseX, double mouseY, int button, double deltaX, double deltaY) {
             if (this.option.isAvailable() && button == 0 && this.sliderBounds.containsCursor(mouseX, mouseY)) {

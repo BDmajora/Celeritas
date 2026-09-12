@@ -8,30 +8,28 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.text.TextComponentString;
 import net.minecraft.util.text.TextFormatting;
 
-// /coartatio — prints what the memory subsystem has saved, in megabytes
-// Registered client-side, so it works in single-player and on any server, including servers without the mod
-// The output has two sections. The first is per-feature savings, and each line says whether its number was
-// MEASURED (texture pixel data and the class loader cache, where the released arrays were summed before being
-// dropped) or ESTIMATED (a shared-object count times a per-object size)
-// The second is the live heap. That is the figure to compare against a launch with the mod disabled, which is
-// the only honest before-and-after available, and the reason both sections are printed together rather than the
-// estimates being presented on their own
+// /coartatio prints what the memory subsystem saved, in megabytes, each line marked MEASURED or ESTIMATED
+// The live heap is printed alongside, since a launch without the mod is the only honest before-and-after
 public class CoartatioStatsCommand extends CommandBase {
+    // Command name, so this is /coartatio
     @Override
     public String getName() {
         return "coartatio";
     }
 
+    // Shown by /help
     @Override
     public String getUsage(ICommandSender sender) {
         return "/coartatio — report memory saved by Impetus' memory subsystem";
     }
 
+    // Zero so any player can run it; it only reads counters
     @Override
     public int getRequiredPermissionLevel() {
         return 0;
     }
 
+    // Indented lines are detail under a heading, so they are greyed
     @Override
     public void execute(MinecraftServer server, ICommandSender sender, String[] args) {
         for (String line : MemoryReport.lines()) {

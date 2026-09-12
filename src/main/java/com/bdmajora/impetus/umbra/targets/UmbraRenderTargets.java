@@ -10,14 +10,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-// The pool of colour buffers (colortex0..N) and depth copies (depthtex0..2) the gbuffer, deferred and composite
-// stages all draw from
-// The 1.12.2 analogue of OptiFine's dfb* arrays and of modern Iris's RenderTargets, built entirely on
-// UmbraRenderTarget and DepthTexture over the LWJGL abstraction — never on vanilla's Framebuffer, which supports
-// only one colour attachment
-// Colour targets are created LAZILY, defaulting to RGBA, so a pack that references colortex12 and nothing above it
-// allocates thirteen targets rather than sixteen
-// Format and size overrides must therefore be set before a target is first touched, since materialising it fixes both
+// The colortex0..N and depthtex0..2 pool every stage draws from, built on UmbraRenderTarget rather than
+// vanilla's single-attachment Framebuffer. Colour targets are created lazily, so overrides must be set before first use
 public class UmbraRenderTargets {
     // colortex0..15, matching modern Iris. Everything past 7 is created only when a pack actually references it
     public static final int MAX_COLOR_BUFFERS = 16;
@@ -53,6 +47,7 @@ public class UmbraRenderTargets {
         this.noHand = createDepthTexture();
     }
 
+    // One depth texture at the current size
     private DepthTexture createDepthTexture() {
         return new DepthTexture(this.width, this.height,
                 GL14.GL_DEPTH_COMPONENT24, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT);
@@ -84,6 +79,7 @@ public class UmbraRenderTargets {
         return Math.max(1, this.sizeRelative[index][0] ? (int) (this.width * override[0]) : (int) override[0]);
     }
 
+    // Per-target height, honouring size overrides
     public int getHeight(int index) {
         float[] override = this.sizeOverrides[index];
         if (override == null) {
@@ -108,6 +104,7 @@ public class UmbraRenderTargets {
         this.formats[index] = format;
     }
 
+    // Materialises the target on first touch, fixing its format and size
     public UmbraRenderTarget getOrCreate(int index) {
         requireValid();
         if (this.targets[index] == null) {
@@ -116,30 +113,37 @@ public class UmbraRenderTargets {
         return this.targets[index];
     }
 
+    // Existing target only; null if never created
     public UmbraRenderTarget get(int index) {
         return this.targets[index];
     }
 
+    // Which of each target's two textures is currently front
     public BufferFlipper getBufferFlipper() {
         return this.flipper;
     }
 
+    // depthtex0, everything
     public DepthTexture getDepthTexture() {
         return this.depthTexture;
     }
 
+    // depthtex1, before translucents
     public DepthTexture getDepthTextureNoTranslucents() {
         return this.noTranslucents;
     }
 
+    // depthtex2, before the hand
     public DepthTexture getDepthTextureNoHand() {
         return this.noHand;
     }
 
+    // Base width
     public int getWidth() {
         return this.width;
     }
 
+    // Base height
     public int getHeight() {
         return this.height;
     }
@@ -197,6 +201,7 @@ public class UmbraRenderTargets {
         return framebuffer;
     }
 
+    // Fails loudly with the purpose and attachments named, since an incomplete FBO renders nothing silently
     private static void checkFramebufferComplete(UmbraFramebuffer framebuffer, String purpose, int[] drawBuffers) {
         int status = framebuffer.getStatus();
         if (status != GL30.GL_FRAMEBUFFER_COMPLETE) {
@@ -205,6 +210,7 @@ public class UmbraRenderTargets {
         }
     }
 
+    // Resizes every created target and depth texture
     public void resize(int newWidth, int newHeight) {
         requireValid();
         if (newWidth == this.width && newHeight == this.height) {
@@ -223,6 +229,7 @@ public class UmbraRenderTargets {
         this.noHand.resize(newWidth, newHeight);
     }
 
+    // Frees everything
     public void destroy() {
         if (this.destroyed) {
             return;
@@ -243,6 +250,7 @@ public class UmbraRenderTargets {
         this.noHand.destroy();
     }
 
+    // Throws if used after destroy
     private void requireValid() {
         if (this.destroyed) {
             throw new IllegalStateException("Tried to use destroyed UmbraRenderTargets");

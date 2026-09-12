@@ -21,16 +21,9 @@ import net.minecraftforge.fml.relauncher.SideOnly;
 
 import java.util.concurrent.locks.ReentrantLock;
 
-// Batched light propagator replacing vanilla's recursive World.checkLightFor. One per World.
-// Ported from Phosphor (https://github.com/CaffeineMC/phosphor-fabric), dedup from Alfheim
-// (https://github.com/Desoroxxx/Alfheim).
-// Positions are only recorded here; nothing propagates until something reads light, at which point
-// the whole batch runs in one pass. DeduplicatedLongQueue collapses repeat scheduling of the same
-// position so N neighbours flagging one block cost one evaluation instead of N.
-// The pass walks light levels brightest-to-darkest, darkening then brightening each level in lockstep;
-// by the time level n is reached everything brighter is already settled, so nothing is revisited.
-// Coordinates are packed as [light(4)][y(8)][x(26)][z(26)] longs, x/z biased by 2^25 so a neighbour
-// offset is plain addition; Y_CHECK catches the y field's carry-out when stepping off the world.
+// Batched light propagator replacing vanilla's recursive checkLightFor; one per World, ported from Phosphor
+// Positions are only recorded until something reads light, then the whole batch runs brightest-to-darkest
+// Coordinates pack as [light(4)][y(8)][x(26)][z(26)] longs, x/z biased so a neighbour offset is plain addition
 public final class LightingEngine {
     private static final int MAX_LIGHT = 15;
 
@@ -204,6 +197,7 @@ public final class LightingEngine {
         }
     }
 
+    // Guards the render-thread-only cache reads
     @SideOnly(Side.CLIENT)
     private boolean isCallingFromMainThread() {
         return Minecraft.getMinecraft().isCallingFromMinecraftThread();
@@ -235,6 +229,7 @@ public final class LightingEngine {
         this.lock.lock();
     }
 
+    // Runs one full propagation pass; re-entry is a bug, so it throws rather than corrupting the queues
     private void processLightUpdatesForTypeInner(EnumSkyBlock lightType, DeduplicatedLongQueue queue) {
         if (this.updating) {
             throw new IllegalStateException("Already processing light updates");
@@ -255,6 +250,7 @@ public final class LightingEngine {
         }
     }
 
+    // The pass itself: sort scheduled positions into brighten/darken, then settle each level in lockstep
     private void propagate(EnumSkyBlock lightType, DeduplicatedLongQueue queue) {
         this.profiler.startSection("fulgor");
         this.profiler.startSection("sort");
@@ -466,6 +462,7 @@ public final class LightingEngine {
         return calculateNewLightFromCursor(luminosity, opacity, lightType);
     }
 
+    // Light a block should have given its own emission and the brightest neighbour minus opacity
     private int calculateNewLightFromCursor(int luminosity, int opacity, EnumSkyBlock lightType) {
         // Already at least as bright as anything could make it, so the neighbours cannot matter.
         if (luminosity >= MAX_LIGHT - opacity) {
@@ -487,6 +484,7 @@ public final class LightingEngine {
         return newLight;
     }
 
+    // Queues every neighbour that would get brighter from the cursor's new value
     private void spreadLightFromCursor(int currentLight, EnumSkyBlock lightType) {
         fetchNeighborDataFromCursor(lightType);
 
@@ -509,6 +507,7 @@ public final class LightingEngine {
         }
     }
 
+    // Cursor-relative overload so the hot loop avoids re-fetching chunk and data
     private void enqueueBrighteningFromCursor(int newLight, EnumSkyBlock lightType) {
         enqueueBrightening(this.currentPos, this.currentData, newLight, this.currentChunk, lightType);
     }
@@ -527,6 +526,7 @@ public final class LightingEngine {
         chunk.setLightFor(lightType, pos, 0);
     }
 
+    // Reads the chunk's cached level for the cursor without a world lookup
     private int getCursorCachedLight(EnumSkyBlock lightType) {
         return ((ChunkLightingData) this.currentChunk).fulgor$getCachedLightFor(lightType, this.currentPos);
     }
@@ -567,10 +567,12 @@ public final class LightingEngine {
         return MathHelper.clamp(LightUtil.getLightOpacity(state, this.world, pos, chunk), 1, MAX_LIGHT);
     }
 
+    // Loaded-only lookup; null for an unloaded chunk, which callers treat as a hard boundary
     private Chunk getChunk(BlockPos pos) {
         return this.world.getChunkProvider().getLoadedChunk(pos.getX() >> 4, pos.getZ() >> 4);
     }
 
+    // Unpacks a queue key back to a position, undoing the x/z bias
     private static MutableBlockPos decodeWorldCoord(MutableBlockPos pos, long key) {
         return pos.setPos(
                 (int) (key >> S_X & M_X) - (1 << L_X - 1),
@@ -578,6 +580,7 @@ public final class LightingEngine {
                 (int) (key >> S_Z & M_Z) - (1 << L_Z - 1));
     }
 
+    // Packs a position into a queue key; the bias keeps negative x/z from touching the sign bit
     private static long encodeWorldCoord(BlockPos pos) {
         return ((long) pos.getY() << S_Y)
                 | ((long) pos.getX() + (1 << L_X - 1) << S_X)

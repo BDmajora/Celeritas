@@ -11,11 +11,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// Registers Impetus' mixin configurations and suppresses superseded lighting engines.
-//
-// Talks to Mixin directly rather than through a booter-specific loader interface, so the same code
-// path works whether Mixin came from an installed MixinBooter or from Impetus' bundled copy. Kept
-// separate from ImpetusLoadingPlugin so that class can stay free of org.spongepowered.asm references.
+// Registers Impetus' mixin configurations and suppresses superseded lighting engines
+// Talks to Mixin directly so the same path works under an installed MixinBooter or the bundled copy
 final class ImpetusMixinRegistrar {
 
     // Maps legacy Phosphor lineage mods to their configs
@@ -37,6 +34,7 @@ final class ImpetusMixinRegistrar {
         return Collections.unmodifiableMap(mods);
     }
 
+    // Hijacks first so blacklists land before any config is queued
     static void apply() {
         hijackSupersededLighting();
         for (String config : mixinConfigs()) {
@@ -57,6 +55,7 @@ final class ImpetusMixinRegistrar {
                 "mixins.dynamiclights.json");
     }
 
+    // Blacklists Phosphor and Alfheim configs when their json is on the classpath, since two lighting engines corrupt light
     private static void hijackSupersededLighting() {
         for (Map.Entry<String, String> mod : SUPERSEDED_LIGHTING_MODS.entrySet()) {
             String config = mod.getValue();

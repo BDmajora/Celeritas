@@ -40,6 +40,7 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
 
     private Path configPath;
 
+    // Fresh defaults, used when no file exists
     public static ImpetusGameOptions defaults() {
         var options = new ImpetusGameOptions();
         options.configPath = getConfigPath(DEFAULT_FILE_NAME);
@@ -47,11 +48,13 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
         return options;
     }
 
+    // The options screen edits this object directly
     @Override
     public ImpetusGameOptions getData() {
         return this;
     }
 
+    // Writes changes back to disk
     @Override
     public void save() {
         try {
@@ -145,11 +148,13 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
             this.name = TextComponent.translatable(names);
         }
 
+        // Display name for the cycler
         @Override
         public TextComponent getLocalizedName() {
             return this.name;
         }
 
+        // Resolves DEFAULT against the global fancy toggle
         public boolean isFancy(boolean fancyGraphics) {
             return (this == FANCY) || (this == DEFAULT && fancyGraphics);
         }
@@ -167,6 +172,7 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
             this.name = TextComponent.translatable(key);
         }
 
+        // Display name for the cycler
         @Override
         public TextComponent getLocalizedName() {
             return this.name;
@@ -195,6 +201,7 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
             this.name = TextComponent.translatable(key);
         }
 
+        // Display name for the cycler
         @Override
         public TextComponent getLocalizedName() {
             return this.name;
@@ -212,11 +219,13 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
             this.name = TextComponent.translatable(key);
         }
 
+        // Display name for the cycler
         @Override
         public TextComponent getLocalizedName() {
             return this.name;
         }
 
+        // Anything but OFF
         public boolean isEnabled() {
             return this == ENABLED;
         }
@@ -233,6 +242,7 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
             this.name = TextComponent.translatable(key);
         }
 
+        // Display name for the cycler
         @Override
         public TextComponent getLocalizedName() {
             return this.name;
@@ -251,11 +261,13 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
             this.name = TextComponent.translatable(key);
         }
 
+        // Display name for the cycler
         @Override
         public TextComponent getLocalizedName() {
             return this.name;
         }
 
+        // Whether this window mode is fullscreen
         public boolean isFullscreen() {
             return this != OFF;
         }
@@ -267,10 +279,12 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
             .excludeFieldsWithModifiers(Modifier.PRIVATE)
             .create();
 
+    // Loads the default file name
     public static ImpetusGameOptions load() {
         return load(DEFAULT_FILE_NAME);
     }
 
+    // Reads the json, falling back to defaults and marking read-only if it cannot be parsed
     public static ImpetusGameOptions load(String name) {
         Path path = getConfigPath(name);
         ImpetusGameOptions config;
@@ -305,15 +319,18 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
         return config;
     }
 
+    // Under the config directory
     private static Path getConfigPath(String name) {
         return Paths.get("config", name);
     }
 
+    // Writes unless read-only
     @Deprecated
     public void writeChanges() throws IOException {
         writeToDisk(this);
     }
 
+    // Serialises to json, via a temp file so a crash mid-write cannot truncate the config
     public static void writeToDisk(ImpetusGameOptions config) throws IOException {
         if (config.isReadOnly()) {
             throw new IllegalStateException("Config file is read-only");
@@ -337,14 +354,17 @@ public class ImpetusGameOptions implements OptionStorage<ImpetusGameOptions> {
         Files.move(tempPath, config.configPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
     }
 
+    // Set when the file failed to parse, so a broken config is not silently overwritten
     public boolean isReadOnly() {
         return this.readOnly;
     }
 
+    // Marks read-only
     public void setReadOnly() {
         this.readOnly = true;
     }
 
+    // The file this was loaded from
     public String getFileName() {
         return this.configPath.getFileName().toString();
     }

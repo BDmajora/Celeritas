@@ -11,30 +11,9 @@ import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.Set;
 
-// Reclaims the caches LaunchWrapper and FML hold alive for the whole session
-// The largest single saving in Coartatio, and nothing in Hydrogen corresponds to it: Hydrogen was a Fabric mod,
-// where neither LaunchWrapper nor FML's remapper exists
-//
-// LaunchClassLoader.resourceCache is a Map<String, byte[]> holding the raw bytecode of EVERY class it has ever
-// loaded, kept forever so a transformer can ask for a class's bytes later. On a large 1.12.2 pack that is on
-// the order of 100-300 MB of live heap doing nothing at all after startup
-// There are two established treatments: FoamFix swaps the map for one with weak values so the GC can reclaim
-// entries under pressure while a late transformer request still usually hits, and LoliASM clears it outright
-// Weakening is what is implemented below, because it keeps the cache functional — coremods and
-// ModIdentifier-style crash reporters do read it after load
-//
-// What is deliberately NOT done here: an earlier version also cleared FMLDeobfuscatingRemapper's SRG tables, on
-// the assumption that nothing reads them once mod loading finishes. That is wrong and it crashes. Minecraft
-// classes are loaded LAZILY FOR THE ENTIRE SESSION and each is renamed from notch to SRG names as it loads, so
-// clearing the tables leaves every class loaded afterwards unmapped — in practice NarratorChatListener loaded
-// without its INSTANCE field and GuiIngame died with a NoSuchFieldError moments later
-// There is no safe point at which to clear them. LoliASM's optimizeFMLRemapper, which that was modelled on,
-// clears nothing: it swaps the tables for a more compact representation and keeps them fully functional, which
-// is a different and much larger piece of work
-//
-// Everything here is reflective and every step fails soft — a changed field name costs one warning line and the
-// memory that would have been saved, never a crash. That matters more than usual because this reaches into the
-// launcher rather than into the game
+// Reclaims the caches LaunchWrapper and FML hold alive all session, the largest single saving in Coartatio
+// LaunchClassLoader.resourceCache keeps the raw bytes of every class ever loaded, 100-300 MB on a large pack
+// Weakened rather than cleared, as FoamFix does, so late transformer and crash-reporter reads still usually hit
 public final class ClassLoaderCleaner {
     // Latched so a second call is a no-op; the entry point is reachable from more than one load phase
     private static boolean done;
@@ -57,6 +36,7 @@ public final class ClassLoaderCleaner {
         }
     }
 
+    // Swaps LaunchClassLoader's byte[] cache for a weak-valued map via reflection; failure leaves vanilla behaviour
     @SuppressWarnings("unchecked")
     private static void weakenResourceCache() {
         LaunchClassLoader loader = Launch.classLoader;

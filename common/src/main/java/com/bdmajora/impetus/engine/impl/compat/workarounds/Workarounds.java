@@ -41,6 +41,7 @@ public final class Workarounds {
         FRAME_HOOK_OVERLAY_PRESENT
     }
 
+    // Decides which workarounds apply to this driver and OS, once at startup
     public static void init(GlContextInfo context, List<GraphicsAdapterInfo> adapters) {
         var issues = EnumSet.noneOf(Issue.class);
         var os = OsKind.current();
@@ -79,10 +80,12 @@ public final class Workarounds {
         } while (!ACTIVE.compareAndSet(current, Collections.unmodifiableSet(updated)));
     }
 
+    // Whether a workaround is on
     public static boolean isActive(Issue issue) {
         return ACTIVE.get().contains(issue);
     }
 
+    // Intel Gen7 and older on Windows, whose driver breaks with certain buffer usage
     private static boolean isIntelLegacyWindowsDriver(GraphicsVendor vendor, OsKind os, List<GraphicsAdapterInfo> adapters) {
         if (vendor != GraphicsVendor.INTEL || os != OsKind.WINDOWS) {
             return false;

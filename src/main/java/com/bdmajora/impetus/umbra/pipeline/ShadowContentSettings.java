@@ -2,13 +2,8 @@ package com.bdmajora.impetus.umbra.pipeline;
 
 import com.bdmajora.impetus.umbra.shaderpack.ShaderProperties;
 
-// What the shadow pass is allowed to draw, from the pack's shadowTerrain, shadowTranslucent, shadowEntities,
-// shadowBlockEntities, shadowLightBlockEntities and shadowPlayer directives, plus shadow.culling
-// Every pack in real use sets several of these. Photon asks for shadowEntities = false, shadowBlockEntities =
-// false and shadowPlayer = true; Complementary flips them from its own entity-shadow option
-// Ignoring them is not a cosmetic shortcut: it costs real frame time drawing geometry the pack does not want
-// shadowed at all, and it shows up on screen as shadows the pack deliberately omitted
-// Defaults follow OptiFine — everything except shadowLightBlockEntities is drawn unless the pack says otherwise
+// What the shadow pass may draw, from the pack's shadowTerrain, shadowEntities and similar directives
+// Ignoring them costs frame time and shows shadows the pack omitted; defaults follow OptiFine
 public final class ShadowContentSettings {
     // shadow.culling — how the shadow pass decides which chunks to walk
     public enum Culling {
@@ -41,10 +36,12 @@ public final class ShadowContentSettings {
         this.culling = culling;
     }
 
+    // Everything rendered, no culling override
     public static ShadowContentSettings defaults() {
         return new ShadowContentSettings(true, true, true, true, false, true, Culling.ON);
     }
 
+    // Reads the shadow.* content directives
     public static ShadowContentSettings from(ShaderProperties properties) {
         return new ShadowContentSettings(
                 properties.getShadowTerrain().orElse(Boolean.TRUE),
@@ -56,6 +53,7 @@ public final class ShadowContentSettings {
                 parseCulling(properties.getShadowCulling().orElse(null)));
     }
 
+    // true, false or reversed
     private static Culling parseCulling(String value) {
         if (value == null) {
             return Culling.ON;
@@ -71,14 +69,17 @@ public final class ShadowContentSettings {
         }
     }
 
+    // shadowTerrain
     public boolean shouldRenderTerrain() {
         return this.terrain;
     }
 
+    // shadowTranslucent
     public boolean shouldRenderTranslucent() {
         return this.translucent;
     }
 
+    // shadowEntities
     public boolean shouldRenderEntities() {
         return this.entities;
     }
@@ -89,22 +90,27 @@ public final class ShadowContentSettings {
         return this.blockEntities || this.lightBlockEntities;
     }
 
+    // shadowBlockEntities
     public boolean shouldRenderBlockEntities() {
         return this.blockEntities;
     }
 
+    // shadowLightBlockEntities, which restricts to emissive ones
     public boolean shouldRenderLightBlockEntitiesOnly() {
         return !this.blockEntities && this.lightBlockEntities;
     }
 
+    // shadowPlayer
     public boolean shouldRenderPlayer() {
         return this.player;
     }
 
+    // Frustum culling mode for the shadow pass
     public Culling getCulling() {
         return this.culling;
     }
 
+    // For the startup log
     @Override
     public String toString() {
         return "terrain=" + this.terrain + ", translucent=" + this.translucent + ", entities=" + this.entities

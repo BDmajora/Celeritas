@@ -17,6 +17,7 @@ public class XoRoShiRoRandom extends Random {
 
     private static final SplitMixRandom seedUniquifier = new SplitMixRandom(System.nanoTime());
 
+    // A fresh seed from nanoTime mixed with a counter
     public static long randomSeed() {
         final long x;
 
@@ -35,6 +36,7 @@ public class XoRoShiRoRandom extends Random {
         this.setSeed(seed);
     }
 
+    // xoroshiro128++ step
     @Override
     public long nextLong() {
         final long s0 = this.s0;
@@ -51,16 +53,19 @@ public class XoRoShiRoRandom extends Random {
         return result;
     }
 
+    // Upper 32 bits of nextLong
     @Override
     public int nextInt() {
         return (int) this.nextLong();
     }
 
+    // Unbiased bounded int by rejection
     @Override
     public int nextInt(final int n) {
         return (int) this.nextLong(n);
     }
 
+    // Unbiased bounded long by rejection
     public long nextLong(final long n) {
         if (n <= 0) {
             throw new IllegalArgumentException("illegal bound " + n + " (must be positive)");
@@ -86,21 +91,25 @@ public class XoRoShiRoRandom extends Random {
 
     }
 
+    // 53 random bits scaled to [0, 1)
     @Override
     public double nextDouble() {
         return Double.longBitsToDouble(0x3FFL << 52 | this.nextLong() >>> 12) - 1.0;
     }
 
+    // 24 random bits scaled to [0, 1)
     @Override
     public float nextFloat() {
         return (this.nextLong() >>> 40) * 0x1.0p-24f;
     }
 
+    // Sign bit of a long
     @Override
     public boolean nextBoolean() {
         return this.nextLong() < 0;
     }
 
+    // Fills eight bytes per long
     @Override
     public void nextBytes(final byte[] bytes) {
         int i = bytes.length, n;
@@ -114,6 +123,7 @@ public class XoRoShiRoRandom extends Random {
         }
     }
 
+    // Expands the seed through SplitMix so the two state words are independent
     @Override
     public void setSeed(final long seed) {
         // Restore the previous initial state if the seed hasn't changed
@@ -142,6 +152,7 @@ public class XoRoShiRoRandom extends Random {
         }
     }
 
+    // Fluent setSeed
     public XoRoShiRoRandom setSeedAndReturn(final long seed) {
         this.setSeed(seed);
 

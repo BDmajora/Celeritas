@@ -8,16 +8,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// options that other mods take out of our hands, and how to tell those mods are installed
-// Lithium lets a mod ship a lithium:options block in its metadata and reads it out of the loader's mod
-// list; nothing equivalent is available here, because this runs during coremod setup where FML has not
-// built a mod list and Forge's own classes are not safe to touch
-// what *is* available is the class loader, and every mod that conflicts with something here is a
-// coremod - it has to be, because the things it does to the game are the same things we do
-// so detection is by class presence, and the table below is the whole of it: each entry names a mod, a
-// class that only exists when that mod does, and the options that mod makes unsafe
-// being conservative here is cheap - a disabled optimization costs frames, a mixin fighting another
-// mod's transformer over the same method costs the game
+// Options other mods take out of our hands, detected by class presence since FML has no mod list yet
+// Every conflicting mod is a coremod, so a class that only exists when it is installed is a reliable signal
 public final class ModCompatibility {
     // One mod's claim on one option.
     public static final class Override {
@@ -31,14 +23,17 @@ public final class ModCompatibility {
             this.enabled = enabled;
         }
 
+        // Mod that forced the value
         public String modId() {
             return this.modId;
         }
 
+        // Rule that was overridden
         public String option() {
             return this.option;
         }
 
+        // Value the mod forced
         public boolean enabled() {
             return this.enabled;
         }
@@ -63,6 +58,7 @@ public final class ModCompatibility {
     private ModCompatibility() {
     }
 
+    // Known incompatible mods and the rules they force off, keyed by mod id so duplicates collapse
     private static List<Conflict> conflicts() {
         Map<String, Conflict> conflicts = new LinkedHashMap<>();
 

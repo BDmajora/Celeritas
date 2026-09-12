@@ -43,6 +43,7 @@ public class CoartatioBlockState extends BlockStateContainer.StateImplementation
         this.value = this.mapper.register(this);
     }
 
+    // Mask-and-index through the mapper instead of a table lookup; returns this when the value is unchanged
     @Override
     public <T extends Comparable<T>, V extends T> IBlockState withProperty(IProperty<T> property, V newValue) {
         int packed = this.mapper.withValue(this.value, property, newValue);
@@ -112,6 +113,7 @@ public class CoartatioBlockState extends BlockStateContainer.StateImplementation
         return table;
     }
 
+    // Builds the same exception text vanilla would, so callers catching on the message keep working
     private IllegalArgumentException describeFailure(IProperty<?> property, Object newValue) {
         if (!getProperties().containsKey(property)) {
             return new IllegalArgumentException("Cannot set property " + property

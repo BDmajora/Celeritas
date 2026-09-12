@@ -9,6 +9,7 @@ public class EventHandlerRegistrar<T extends ImpetusEvent> {
 
     public EventHandlerRegistrar() {}
 
+    // Subscribes
     public void addListener(Handler<T> listener) {
         handlerList.add(listener);
     }
@@ -33,6 +34,7 @@ public class EventHandlerRegistrar<T extends ImpetusEvent> {
         return canceled;
     }
 
+    // Also posts to Forge's bus when running there
     private static <T extends ImpetusEvent> boolean postPlatformSpecificEvent(T event) {
         return false;
     }

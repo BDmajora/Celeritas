@@ -17,6 +17,7 @@ public final class QuadTree<T> extends Rect2i
 
     private List<Entry<T>> entries = null;
 
+    // An empty tree that finds nothing
     @SuppressWarnings("unchecked")
     public static <T> QuadTree<T> empty() {
         return (QuadTree<T>)EMPTY;
@@ -76,6 +77,7 @@ public final class QuadTree<T> extends Rect2i
         }
     }
 
+    // Freezes the tree after building so lookups need no bounds checks
     private void bake() {
         if (entries != null) {
             entries = List.copyOf(entries);
@@ -107,10 +109,12 @@ public final class QuadTree<T> extends Rect2i
         }
     }
 
+    // No items and no children
     private boolean isEmpty() {
         return entries == null && child0 == null && child1 == null && child2 == null && child3 == null;
     }
 
+    // Inserts into a quadrant if the item fits inside it entirely
     private boolean tryChildInsert(QuadTree<T> child, T item, Rect2i size) {
         if (child != null && child.contains(size)) {
             child.insert(item, size);
@@ -134,6 +138,7 @@ public final class QuadTree<T> extends Rect2i
         entries.add(new Entry<>(size, item));
     }
 
+    // Descends to the quadrant containing the point and scans its items
     public T find(int x, int y) {
         if (!this.contains(x, y)) {
             return null;

@@ -9,6 +9,7 @@ import it.unimi.dsi.fastutil.longs.LongArrayFIFOQueue;
 public class RenderAheadManager {
     private final LongArrayFIFOQueue fences = new LongArrayFIFOQueue();
 
+    // Inserts a fence for this frame and drops any beyond the limit
     public void startFrame(int renderAheadLimit) {
         while (this.fences.size() > renderAheadLimit) {
             var fence = this.fences.dequeueLong();
@@ -34,6 +35,7 @@ public class RenderAheadManager {
         }
     }
 
+    // Blocks on the oldest fence once the limit is reached, capping CPU run-ahead
     public void endFrame() {
         var fence = LWJGL.glFenceSync(GL32.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
 

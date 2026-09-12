@@ -36,11 +36,13 @@ public class MinecraftMixin {
     @Unique
     private final RenderAheadManager impetus$renderAheadManager = new RenderAheadManager();
 
+    // Opens the frame for the render-ahead limiter
     @Inject(method = "runTick", at = @At("HEAD"))
     private void preRender(CallbackInfo ci) {
         impetus$renderAheadManager.startFrame(ImpetusVintage.options().advanced.cpuRenderAheadLimit);
     }
 
+    // Closes the frame, which is where the limiter may block
     @Inject(method = "runTick", at = @At("RETURN"))
     private void postRender(CallbackInfo ci) {
         impetus$renderAheadManager.endFrame();

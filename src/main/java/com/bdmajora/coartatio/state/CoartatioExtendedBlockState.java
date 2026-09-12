@@ -12,15 +12,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-// Packed-state equivalent of Forge's ExtendedStateImplementation.
-// Implements IExtendedBlockState rather than extending Forge's class, since that class is protected static
-// and its withProperty is table-based; this keeps one packed-state code path via CoartatioBlockState.
-//
-// "Clean" states are the ordinary listed-property cartesian product the container builds and the mapper
-// registers (all unlisted values Optional.empty()). Setting an unlisted property produces a "dirty" state,
-// created on the fly and never registered, but still carrying the clean state's packed index — that's what
-// makes getClean() and listed-property changes O(1). Mirrors Forge's own cleanState, but threads an int
-// instead of an ImmutableTable.
+// Packed-state equivalent of Forge's ExtendedStateImplementation, implementing IExtendedBlockState directly
+// Clean states are the registered cartesian product; setting an unlisted property makes an unregistered dirty
+// state that still carries the clean packed index, which keeps getClean and listed changes O(1)
 public class CoartatioExtendedBlockState extends CoartatioBlockState implements IExtendedBlockState {
     private final ImmutableMap<IUnlistedProperty<?>, Optional<?>> unlistedProperties;
     private final boolean dirty;
@@ -43,6 +37,7 @@ public class CoartatioExtendedBlockState extends CoartatioBlockState implements 
         this.dirty = dirty;
     }
 
+    // Clean states return the registered instance; dirty ones re-wrap to carry their unlisted values across
     @Override
     public <T extends Comparable<T>, V extends T> IBlockState withProperty(IProperty<T> property, V newValue) {
         IBlockState clean = super.withProperty(property, newValue);
@@ -57,6 +52,7 @@ public class CoartatioExtendedBlockState extends CoartatioBlockState implements 
                 this.unlistedProperties, true, ((CoartatioBlockState) clean).value);
     }
 
+    // Produces a dirty state; throws on a property this block never declared, matching Forge
     @Override
     public <V> IExtendedBlockState withProperty(IUnlistedProperty<V> property, V newValue) {
         Optional<?> current = this.unlistedProperties.get(property);
@@ -95,11 +91,13 @@ public class CoartatioExtendedBlockState extends CoartatioBlockState implements 
                 builder.build(), true, this.value);
     }
 
+    // Every unlisted property the block declares, set or not
     @Override
     public Collection<IUnlistedProperty<?>> getUnlistedNames() {
         return this.unlistedProperties.keySet();
     }
 
+    // Null for an unset property; throws for one the block never declared, matching Forge
     @Override
     public <V> V getValue(IUnlistedProperty<V> property) {
         Optional<?> value = this.unlistedProperties.get(property);
@@ -112,11 +110,13 @@ public class CoartatioExtendedBlockState extends CoartatioBlockState implements 
         return property.getType().cast(value.orElse(null));
     }
 
+    // The full unlisted map, empty Optionals included
     @Override
     public ImmutableMap<IUnlistedProperty<?>, Optional<?>> getUnlistedProperties() {
         return this.unlistedProperties;
     }
 
+    // The registered state with no unlisted values, reached by packed index rather than a table walk
     @Override
     public IBlockState getClean() {
         return this.dirty ? this.mapper.byValue(this.value) : this;

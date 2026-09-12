@@ -30,14 +30,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 
-// The loaded pack's own option screen, drawn in the Sodium/Iris style
-// Layout comes from the pack's `screen` and `screen.<name>` directives, laid out as a grid of OptionButtonWidget
-// tiles. A pack that declares no layout at all still gets a screen — one is generated from the options themselves,
-// since otherwise a perfectly configurable pack would appear to have no settings
-// Labels and values are localised through PackLanguage rather than shown raw, so an option reads "Shadow Quality:
-// High" instead of "SHADOW_QUALITY: 2"
-// Rendering goes through the shared Impetus GUI framework via VintageDrawContext; the option model and its
-// persistence are the ported Iris backend sitting behind Umbra
+// The loaded pack's own option screen, laid out from its screen directives as a grid of tiles
+// A pack with no layout still gets one generated from its options; labels come through PackLanguage
 public class ShaderPackConfigScreen extends GuiScreen {
     private static final int DEFAULT_COLUMNS = 2;
     private static final int ROW_HEIGHT = 22;
@@ -65,6 +59,7 @@ public class ShaderPackConfigScreen extends GuiScreen {
         this.parent = parent;
     }
 
+    // Lays out the current screen's tiles from the pack's directives, or a generated layout when it has none
     @Override
     public void initGui() {
         this.widgets.clear();
@@ -155,6 +150,7 @@ public class ShaderPackConfigScreen extends GuiScreen {
         });
     }
 
+    // Bottom-bar button
     private FlatButtonWidget addButton(int x, int y, int w, int h, TextComponent label, Runnable action) {
         FlatButtonWidget button = new FlatButtonWidget(new Dim2i(x, y, w, h), label, action);
         this.widgets.add(button);
@@ -189,6 +185,7 @@ public class ShaderPackConfigScreen extends GuiScreen {
         return new OptionButtonWidget(dim, TextComponent.literal("§7" + token), null, 0, true, false, null, null, null);
     }
 
+    // Tile for a multi-valued option, cycling on click
     private OptionButtonWidget buildString(String name, Dim2i dim) {
         StringOption option = this.options.getStringOptions().get(name).getOption();
         String current = stringValueOf(name);
@@ -202,6 +199,7 @@ public class ShaderPackConfigScreen extends GuiScreen {
                 tooltip(name));
     }
 
+    // Tile for a boolean option, toggling on click
     private OptionButtonWidget buildBoolean(String name, Dim2i dim) {
         BooleanOption option = this.options.getBooleanOptions().get(name).getOption();
         boolean on = booleanValueOf(name);
@@ -216,6 +214,7 @@ public class ShaderPackConfigScreen extends GuiScreen {
         return new OptionButtonWidget(dim, label, value, VALUE_DEFAULT, false, true, toggle, toggle, tooltip(name));
     }
 
+    // The profile selector tile
     private OptionButtonWidget buildProfile(Dim2i dim) {
         ProfileSet.ProfileResult result = this.profileSet.scan(this.options, effectiveValues());
         String name = result.current.map(p -> this.lang.profileLabel(p.name)).orElse("§7Custom");
@@ -224,6 +223,7 @@ public class ShaderPackConfigScreen extends GuiScreen {
                 () -> applyProfile(true), () -> applyProfile(false), null);
     }
 
+    // Steps to the next or previous profile and applies its values
     private void applyProfile(boolean forward) {
         ProfileSet.ProfileResult result = this.profileSet.scan(this.options, effectiveValues());
         Profile target = forward ? result.next : result.previous;
@@ -233,6 +233,7 @@ public class ShaderPackConfigScreen extends GuiScreen {
         initGui();
     }
 
+    // Advances an option through its allowed values with wrap-around
     private void cycleString(String name, List<String> allowed, int direction) {
         if (allowed.isEmpty()) {
             return;
@@ -246,6 +247,7 @@ public class ShaderPackConfigScreen extends GuiScreen {
         initGui();
     }
 
+    // The option's localised comment, word-wrapped
     private List<String> tooltip(String name) {
         String comment = this.lang.comment(name);
         if (comment == null) {
@@ -275,6 +277,7 @@ public class ShaderPackConfigScreen extends GuiScreen {
         return tokens;
     }
 
+    // From the screen directive, defaulting to two
     private int columnCount() {
         if (this.currentScreen != null) {
             Integer c = this.properties.getSubScreenColumnCount().get(this.currentScreen);
@@ -293,6 +296,7 @@ public class ShaderPackConfigScreen extends GuiScreen {
         return v.orElseGet(() -> this.options.getStringOptions().get(name).getOption().getDefaultValue());
     }
 
+    // Current value, or the default when unset
     private boolean booleanValueOf(String name) {
         if (this.pending.containsKey(name)) {
             return "true".equals(this.pending.get(name));
@@ -301,12 +305,14 @@ public class ShaderPackConfigScreen extends GuiScreen {
         return this.currentValues.getBooleanValue(name).orElse(option.getDefaultValue());
     }
 
+    // Pending changes layered over the saved values
     private OptionValues effectiveValues() {
         MutableOptionValues values = this.currentValues.mutableCopy();
         values.addAll(this.pending);
         return values;
     }
 
+    // Saves and reloads the pack with the new values
     private void apply() {
         Map<String, String> changes = new HashMap<>(this.pending);
         this.pending.clear();
@@ -315,6 +321,7 @@ public class ShaderPackConfigScreen extends GuiScreen {
         initGui();
     }
 
+    // Rebuilds chunk renderers, since option changes can alter the terrain program
     private void reloadRenderers() {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.renderGlobal != null) {
@@ -333,6 +340,7 @@ public class ShaderPackConfigScreen extends GuiScreen {
         }
     }
 
+    // Draws tiles, tooltips and the bottom bar
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         this.drawDefaultBackground();
@@ -358,6 +366,7 @@ public class ShaderPackConfigScreen extends GuiScreen {
         }
     }
 
+    // Skips vanilla's dirt background when a world is loaded
     @Override
     public void drawWorldBackground(int tint) {
         if (this.mc.world != null) {

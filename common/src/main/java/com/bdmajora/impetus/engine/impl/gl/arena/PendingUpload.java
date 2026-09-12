@@ -18,10 +18,12 @@ public class PendingUpload {
         return new PendingUpload(data);
     }
 
+    // The bytes to upload
     public NativeBuffer getDataBuffer() {
         return this.data;
     }
 
+    // Set by the arena once allocated
     protected void setResult(GlBufferSegment result) {
         if (this.result != null) {
             throw new IllegalStateException("Result already provided");
@@ -30,6 +32,7 @@ public class PendingUpload {
         this.result = result;
     }
 
+    // Where the data landed; throws if not yet uploaded
     public GlBufferSegment getResult() {
         if (this.result == null) {
             throw new IllegalStateException("Result not computed");
@@ -38,6 +41,7 @@ public class PendingUpload {
         return this.result;
     }
 
+    // Bytes
     public int getLength() {
         return this.data.getLength();
     }

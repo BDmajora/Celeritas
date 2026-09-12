@@ -19,34 +19,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
-// Packs every listed property of a block into the bits of one int, so a state needs a single field instead of
-// a per-state lookup table
-//
-// What this replaces: vanilla gives every StateImplementation its own
-// ImmutableTable<IProperty, Comparable, IBlockState> mapping "this property set to that value" onto the
-// resulting state. For a block with P properties averaging V values that is P * (V - 1) table cells PER STATE,
-// and there are V^P states. It is the single largest structure in a modded heap — routinely 250-400 MB across a
-// 300-mod pack — and it is pure redundancy, since every state's table is derivable from the block's property set
-//
-// Here each property gets a contiguous bit range wide enough to index its allowed values. A state is then just
-// an index into one IBlockState[] shared by every state of the block, and withProperty becomes a mask-and-index
-// rather than a hash lookup in a per-state table. The table disappears; what is left is one array per block
-// plus one int per state
-//
-// The technique is FoamFix's, and FerriteCore later did the same on modern versions. This port differs in three
-// ways that matter
-// Value indices resolve through the block's OWN property instance. FoamFix keys its per-property value tables
-// by identity, so passing an equal-but-distinct IProperty — which vanilla accepts, because a state's property
-// map is equals-keyed — silently builds a second mapping with a possibly different ordering. Here the property
-// NAME resolves to this block's entry and the value is looked up inside that entry
-// Allocation is bounded. Bit ranges are padded to powers of two, so the state array can be larger than the
-// state count; FoamFix only rejects a block past 31 bits, which permits a multi-gigabyte array. Anything over
-// MAX_STATE_ARRAY slots is refused here and that block keeps vanilla states
-// The table can still be produced on demand — see CoartatioBlockState.getPropertyValueTable()
-//
-// Layout: properties are ordered by how much of their bit range they waste, least first. That puts the
-// worst-fitting property in the HIGH bits, where its unused range is simply never addressed off the end of the
-// array rather than multiplying through every lower property
+// Packs every listed property of a block into the bits of one int, replacing vanilla's per-state
+// ImmutableTable, the largest single structure in a modded heap at 250-400 MB across a 300-mod pack
+// Each property gets a bit range wide enough for its values; a state is an index into one shared array
+// FoamFix's technique, differing in three ways: values resolve through the block's own property instance,
+// allocation is bounded by MAX_STATE_ARRAY, and the table can still be produced on demand
+// Properties are ordered least-wasteful first so the worst fit lands in the high bits, off the end of the array
 public final class PropertyValueMapper {
     // Hard ceiling on the shared state array, a million slots. A block needing more than that is pathological,
     // and falling back to vanilla for it costs a table that was never going to fit anyway
@@ -163,6 +141,7 @@ public final class PropertyValueMapper {
         return new PropertyValueMapper(entries, offsets, indexByName, new IBlockState[(int) size]);
     }
 
+    // Prefix match against the config blacklist, for blocks whose state handling breaks under packing
     private static boolean isBlacklisted(Block block) {
         String name = block.getClass().getName();
 
@@ -257,6 +236,7 @@ public final class PropertyValueMapper {
         return (packed & ~mask) | (valueIndex << offset);
     }
 
+    // Counts for /coartatio
     public static String statistics() {
         return String.format("%d blocks packed, %d left on vanilla states, %d tables rebuilt on demand",
                 BLOCKS_MAPPED.get(), BLOCKS_SKIPPED.get(), TABLES_MATERIALISED.get());
@@ -277,6 +257,7 @@ public final class PropertyValueMapper {
         }
     }
 
+    // Chooses the tightest entry type for a property's values; null means it cannot be packed
     private static Entry buildEntry(IProperty<?> property) {
         Collection<?> allowed = property.getAllowedValues();
         int count = allowed.size();
@@ -391,6 +372,7 @@ public final class PropertyValueMapper {
             this.minimum = minimum;
         }
 
+        // Null unless every value is an Integer and they form one unbroken run, which lets the value be the index
         static ContiguousIntegerEntry tryCreate(IProperty<?> property, Collection<?> allowed) {
             int minimum = Integer.MAX_VALUE;
             int maximum = Integer.MIN_VALUE;

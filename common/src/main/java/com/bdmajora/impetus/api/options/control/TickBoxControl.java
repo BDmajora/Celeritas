@@ -12,16 +12,19 @@ public class TickBoxControl implements Control<Boolean> {
         this.option = option;
     }
 
+    // The checkbox widget
     @Override
     public ControlElement<Boolean> createElement(Dim2i dim) {
         return new TickBoxControlElement(this.option, dim);
     }
 
+    // Fixed box width
     @Override
     public int getMaxWidth() {
         return 30;
     }
 
+    // Bound option
     @Override
     public Option<Boolean> getOption() {
         return this.option;
@@ -36,6 +39,7 @@ public class TickBoxControl implements Control<Boolean> {
             this.button = new Dim2i(dim.getLimitX() - 16, dim.getCenterY() - 5, 10, 10);
         }
 
+        // Box with a tick when set
         @Override
         public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
             super.render(drawContext, mouseX, mouseY, delta);
@@ -63,6 +67,7 @@ public class TickBoxControl implements Control<Boolean> {
             drawContext.drawBorder(x, y, w, h, color);
         }
 
+        // Toggles on click
         @Override
         public boolean mouseClicked(InteractionContext context, double mouseX, double mouseY, int button) {
             if (this.option.isAvailable() && button == 0 && this.dim.containsCursor(mouseX, mouseY)) {
@@ -75,6 +80,7 @@ public class TickBoxControl implements Control<Boolean> {
             return false;
         }
 
+        // Flips the value
         public void toggleControl() {
             this.option.setValue(!this.option.getValue());
         }

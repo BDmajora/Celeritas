@@ -49,6 +49,7 @@ public class MappedStagingBuffer implements StagingBuffer {
         this.remaining = this.capacity;
     }
 
+    // Needs persistent mapping and buffer storage
     public static boolean isSupported(RenderDevice instance) {
         var functions = instance.getDeviceFunctions();
         return functions.bufferStorageFunctions() != BufferStorageFunctions.NONE
@@ -56,6 +57,7 @@ public class MappedStagingBuffer implements StagingBuffer {
                 && functions.bufferMapRangeFunctions() == BufferMapRangeFunctions.CORE;
     }
 
+    // Writes into the persistent map and records the copy for flush
     @Override
     public void enqueueCopy(CommandList commandList, ByteBuffer data, GlBuffer dst, long writeOffset) {
         int length = data.remaining();
@@ -84,11 +86,13 @@ public class MappedStagingBuffer implements StagingBuffer {
         this.remaining -= length;
     }
 
+    // Records one copy, coalescing with the previous when contiguous
     private void addTransfer(ByteBuffer data, GlBuffer dst, long readOffset, long writeOffset) {
         this.mappedBuffer.map.write(data, (int) readOffset);
         this.pendingCopies.add(new CopyCommand(dst, readOffset, writeOffset, data.remaining()));
     }
 
+    // Issues every recorded copy and fences the region so it is not reused too early
     @Override
     public void flush(CommandList commandList) {
         if (this.pendingCopies.isEmpty()) {
@@ -115,6 +119,7 @@ public class MappedStagingBuffer implements StagingBuffer {
         this.start = this.pos;
     }
 
+    // Merges adjacent copies to the same destination
     private static List<CopyCommand> consolidateCopies(List<CopyCommand> queue) {
         List<CopyCommand> merged = new ArrayList<>();
         CopyCommand last = null;
@@ -141,6 +146,7 @@ public class MappedStagingBuffer implements StagingBuffer {
         return merged;
     }
 
+    // Unmaps and frees
     @Override
     public void delete(CommandList commandList) {
         this.mappedBuffer.delete(commandList);
@@ -148,6 +154,7 @@ public class MappedStagingBuffer implements StagingBuffer {
         this.pendingCopies.clear();
     }
 
+    // Reclaims regions whose fences have signalled
     @Override
     public void flip() {
         while (!this.fencedRegions.isEmpty()) {
@@ -189,16 +196,19 @@ public class MappedStagingBuffer implements StagingBuffer {
 
     private record MappedBuffer(GlImmutableBuffer buffer,
                                 GlBufferMapping map) {
+        // Frees the region's fence
         public void delete(CommandList commandList) {
             commandList.unmap(this.map);
             commandList.deleteBuffer(this.buffer);
         }
     }
 
+    // A region of the ring awaiting its fence
     private record FencedMemoryRegion(GlFence fence, int length) {
 
     }
 
+    // For the debug screen
     @Override
     public String toString() {
         return "Mapped (%s/%s MiB)".formatted(MathUtil.toMib(this.remaining), MathUtil.toMib(this.capacity));

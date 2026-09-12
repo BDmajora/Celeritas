@@ -8,13 +8,8 @@ import com.bdmajora.impetus.engine.impl.util.Dim2i;
 
 import java.util.List;
 
-// One tile on a shader-option screen, drawn flat in the Sodium/Iris style
-// Two shapes: an option tile with a left-aligned label and a right-aligned coloured value, or a sub-screen link
-// with a single centred label
-// Left-click runs the primary action (cycle forward, or open the sub-screen); right-click runs the secondary one
-// (cycle backward), matching how OptiFine's option screens behave
-// Label and value are captured at build time rather than read live, because the owning screen rebuilds every widget
-// whenever a value changes — there is nothing to keep in sync
+// One flat tile on a shader-option screen: label left and coloured value right, or a centred sub-screen link
+// Left-click cycles forward, right-click backward, as OptiFine does; label and value are captured at build time
 public class OptionButtonWidget extends AbstractWidget {
     private static final int BG_DEFAULT = 0x40101010;
     private static final int BG_HOVERED = 0x90101010;
@@ -47,6 +42,7 @@ public class OptionButtonWidget extends AbstractWidget {
         this.tooltip = tooltip;
     }
 
+    // Flat tile with label left and coloured value right, or a centred label for a link
     @Override
     public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
         boolean hovered = this.enabled && this.dim.containsCursor(mouseX, mouseY);
@@ -70,6 +66,7 @@ public class OptionButtonWidget extends AbstractWidget {
         }
     }
 
+    // Left runs the primary action, right the secondary
     @Override
     public boolean mouseClicked(InteractionContext context, double mouseX, double mouseY, int button) {
         if (!this.enabled || !this.dim.containsCursor(mouseX, mouseY)) {
@@ -88,19 +85,23 @@ public class OptionButtonWidget extends AbstractWidget {
         return false;
     }
 
+    // Bounds test
     @Override
     public boolean isMouseOver(double mouseX, double mouseY) {
         return this.dim.containsCursor(mouseX, mouseY);
     }
 
+    // Always; tiles are never greyed
     public boolean isEnabled() {
         return this.enabled;
     }
 
+    // The option's comment lines
     public List<String> getTooltip() {
         return this.tooltip;
     }
 
+    // Tile bounds
     public Dim2i getDim() {
         return this.dim;
     }

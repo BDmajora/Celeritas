@@ -18,6 +18,7 @@ public final class FullscreenResolutions {
     private FullscreenResolutions() {
     }
 
+    // Fullscreen-capable display modes, sorted and deduplicated by size
     private static List<DisplayMode> modes() {
         if (modes == null) {
             var seen = new LinkedHashSet<String>();
@@ -55,6 +56,7 @@ public final class FullscreenResolutions {
         return modes().size() + 1;
     }
 
+    // WxH text for the cycler; index zero is the desktop resolution
     public static String label(int index) {
         if (index <= 0 || index > modes().size()) {
             return I18n.format("impetus.options.fullscreen_resolution.current");

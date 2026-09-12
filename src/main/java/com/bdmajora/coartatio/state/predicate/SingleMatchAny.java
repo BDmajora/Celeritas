@@ -6,11 +6,8 @@ import net.minecraft.block.state.IBlockState;
 
 import java.util.Arrays;
 
-// property=a|b|c — one property against a set of accepted values
-// Vanilla builds the same thing as a Predicates.or over one anonymous inner class per value: a composite
-// object, a transformed Iterable, and N closures. This is one object and one array
-// property and values are public because AllMatchAnyObject.tryFlatten reads them straight out when folding a
-// list of these into its own arrays
+// property=a|b|c, one property against a set of accepted values: one object and one array where vanilla
+// builds a composite, a transformed Iterable and N closures. Fields are public for AllMatchAnyObject to fold
 public final class SingleMatchAny implements Predicate<IBlockState> {
     public final IProperty<?> property;
     public final Object[] values;
@@ -23,6 +20,7 @@ public final class SingleMatchAny implements Predicate<IBlockState> {
         this.hash = 31 * property.hashCode() + Arrays.hashCode(values);
     }
 
+    // Linear scan of the accepted values; sets here are two or three long
     @Override
     public boolean apply(IBlockState state) {
         if (state == null) {
@@ -40,6 +38,7 @@ public final class SingleMatchAny implements Predicate<IBlockState> {
         return false;
     }
 
+    // Structural equality, which is what lets the canonicalizer intern these
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -54,6 +53,7 @@ public final class SingleMatchAny implements Predicate<IBlockState> {
                 && Arrays.equals(this.values, other.values);
     }
 
+    // Precomputed at construction; the predicate is immutable
     @Override
     public int hashCode() {
         return this.hash;

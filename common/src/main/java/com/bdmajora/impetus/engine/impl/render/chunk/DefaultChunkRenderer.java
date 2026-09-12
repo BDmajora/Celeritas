@@ -42,10 +42,12 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
         this.sharedIndexBuffers = new Reference2ReferenceOpenHashMap<>();
     }
 
+    // Skip faces pointing away from the camera
     protected boolean useBlockFaceCulling() {
         return true;
     }
 
+    // The shared index buffer for a primitive type, created lazily
     protected final SharedQuadIndexBuffer getSharedIndexBuffer(ChunkPrimitiveType type, CommandList commandList) {
         var buffer = this.sharedIndexBuffers.get(type);
         if (buffer == null) {
@@ -182,6 +184,7 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
     // A compile-time constant, so the branch folds away entirely when it is false
     private static final boolean DEBUG_BLOCK_FACE_CULLING = false;
 
+    // Which facings can face the camera, from the section's position relative to it
     private static int getVisibleFaces(int originX, int originY, int originZ, int chunkX, int chunkY, int chunkZ) {
         // This is carefully written so that we can keep everything branch-less.
         //
@@ -236,6 +239,7 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
         return planes;
     }
 
+    // Region offset relative to the split camera position
     private static void setModelMatrixUniforms(ChunkShaderInterface shader, RenderRegion region, CameraTransform camera) {
         float x = getCameraTranslation(region.getOriginX(), camera.intX, camera.fracX);
         float y = getCameraTranslation(region.getOriginY(), camera.intY, camera.fracY);
@@ -244,10 +248,12 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
         shader.setRegionOffset(x, y, z);
     }
 
+    // One axis of the camera-relative offset
     private static float getCameraTranslation(int chunkBlockPos, int cameraBlockPos, float cameraPos) {
         return (chunkBlockPos - cameraBlockPos) - cameraPos;
     }
 
+    // The region's tessellation, built on first use
     private GlTessellation prepareTessellation(CommandList commandList, RenderRegion region) {
         var resources = region.getResources(this.currentVertexFormat);
         var tessellation = this.currentRenderPass.isSorted() ? resources.getIndexedTessellation() : resources.getTessellation();
@@ -264,6 +270,7 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
         return tessellation;
     }
 
+    // Attribute bindings from the vertex format
     private GlVertexAttributeBinding[] generateVertexAttributeBindings() {
         var attributes = this.currentVertexFormat.getAttributes();
         var bindings = new GlVertexAttributeBinding[attributes.size()];
@@ -275,6 +282,7 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
         return bindings;
     }
 
+    // Vertex and index buffer bindings for a region
     protected TessellationBinding[] makeTessellationBindingArray(CommandList commandList, RenderRegion.DeviceResources resources) {
         return new TessellationBinding[] {
                 TessellationBinding.forVertexBuffer(resources.getVertexBuffer(), this.generateVertexAttributeBindings()),
@@ -282,6 +290,7 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
         };
     }
 
+    // A VAO over the region's buffers
     protected GlTessellation createRegionTessellation(CommandList commandList, RenderRegion.DeviceResources resources) {
         var bindings = makeTessellationBindingArray(commandList, resources);
         GlVertexArrayTessellation tessellation = new GlVertexArrayTessellation(new GlVertexArray(), bindings);
@@ -290,6 +299,7 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
         return tessellation;
     }
 
+    // Frees shared buffers and programs
     @Override
     public void delete(CommandList commandList) {
         super.delete(commandList);

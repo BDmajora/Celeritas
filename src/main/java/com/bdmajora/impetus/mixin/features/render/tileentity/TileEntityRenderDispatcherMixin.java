@@ -14,10 +14,6 @@ public class TileEntityRenderDispatcherMixin {
     // modern vanilla versions do this for all of them, but we cannot here: mods rely on their TESR
     // not being invoked once the tile entity is invalid
     // @author / @reason are Mixin's required metadata on an overwrite-class injector
-    /**
-     * @author embeddedt
-     * @reason allow some invalid TEs to still be rendered
-     */
     @WrapOperation(method = "getRenderer(Lnet/minecraft/tileentity/TileEntity;)Lnet/minecraft/client/renderer/tileentity/TileEntitySpecialRenderer;", at = @At(value = "INVOKE", target = "Lnet/minecraft/tileentity/TileEntity;isInvalid()Z"))
     private boolean allowSomeInvalidTESRs(TileEntity te, Operation<Boolean> original) {
         if (te instanceof TileEntityPiston) {

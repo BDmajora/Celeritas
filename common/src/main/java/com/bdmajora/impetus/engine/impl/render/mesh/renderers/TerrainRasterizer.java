@@ -6,14 +6,8 @@ import com.bdmajora.impetus.lwjgl.GLNv;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Phase 3: the actual terrain draw, sourced entirely from a command buffer the GPU wrote
-//
-// Nothing here knows how many sections there are or where they live; it binds the command buffer by address and
-// issues one multi-draw. The task shader picks the quad ranges facing the camera, the mesh shader turns quads
-// into triangles.
-//
-// The commands come from the *previous* frame's section rasteriser, which is why the caller passes last frame's
-// region count. That one-frame lag is the price of never reading GPU state back on the CPU
+// The terrain draw, sourced entirely from a command buffer the GPU wrote last frame; one multi-draw by address
+// The one-frame lag is the price of never reading GPU state back on the CPU
 public class TerrainRasterizer {
     // Each command is a uvec2: meshlet count and the section index base
     private static final int COMMAND_BYTES = 8;
@@ -28,6 +22,7 @@ public class TerrainRasterizer {
                 .link();
     }
 
+    // The real draw: one glDrawMeshTasksIndirectNV over every visible region
     public void raster(int regionCount, long commandBufferAddress) {
         this.program.bind();
 
@@ -37,6 +32,7 @@ public class TerrainRasterizer {
         LWJGL.glMultiDrawMeshTasksIndirectNV(0L, regionCount, 0);
     }
 
+    // Frees the program
     public void delete() {
         this.program.delete();
     }

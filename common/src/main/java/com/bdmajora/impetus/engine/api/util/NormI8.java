@@ -21,6 +21,7 @@ public class NormI8 {
     // which justifies it
     private static final float NORM = 1.0f / COMPONENT_RANGE;
 
+    // Vector form of pack
     public static int pack(Vector3f normal) {
         return pack(normal.x(), normal.y(), normal.z());
     }

@@ -18,13 +18,8 @@ import java.util.Map;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Owns the pack's writable custom images — the image.* directives, Iris's imageStore/imageLoad extension, which
-// in practice means Complementary's coloured-lighting voxel and floodfill volumes
-// Each image gets a GL 4.2 image unit in declaration order, bound READ_WRITE every frame, and its paired sampler
-// name gets a dedicated texture unit — so a program addresses both through a plain glUniform1i, like every other
-// sampler in this pipeline
-// Contents persist exactly as the pack declares, and no extra clears are added. Complementary's floodfill
-// ping-pongs through 3D images, so an unrequested clear destroys the history buffer every other frame
+// The pack's writable image.* directives, Complementary's coloured-lighting voxel and floodfill volumes
+// Each gets a GL 4.2 image unit bound READ_WRITE every frame; contents persist since the floodfill ping-pongs history
 public class CustomImageManager {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
     private static final int MAX_DECLARED_IMAGES = 16;
@@ -169,12 +164,14 @@ public class CustomImageManager {
                 .orElse(0);
     }
 
+    // Integer formats need integer client formats and integer clears
     private static boolean isIntegerFormat(String name) {
         return com.bdmajora.impetus.umbra.gl.texture.InternalTextureFormat.fromString(name)
                 .map(com.bdmajora.impetus.umbra.gl.texture.InternalTextureFormat::isInteger)
                 .orElse(Boolean.FALSE);
     }
 
+    // Pack format name to GL internal format
     private static int glFormat(String name) {
         switch (name) {
             case "red_integer": return GL30.GL_RED_INTEGER;
@@ -189,6 +186,7 @@ public class CustomImageManager {
         }
     }
 
+    // A client type legal for that format
     private static int glPixelType(String name) {
         switch (name) {
             case "unsigned_int": return GL11.GL_UNSIGNED_INT;
@@ -203,10 +201,12 @@ public class CustomImageManager {
         }
     }
 
+    // Screen-relative width for this frame
     private int relativeSizeX(CustomImageDefinition definition) {
         return definition.relative ? Math.max(1, (int) (this.renderWidth * definition.relativeX)) : definition.sizeX;
     }
 
+    // Screen-relative height for this frame
     private int relativeSizeY(CustomImageDefinition definition) {
         return definition.relative ? Math.max(1, (int) (this.renderHeight * definition.relativeY)) : definition.sizeY;
     }
@@ -244,6 +244,7 @@ public class CustomImageManager {
         }
     }
 
+    // Whether the pack declared any images
     public boolean isEmpty() {
         return this.images.isEmpty();
     }
@@ -291,6 +292,7 @@ public class CustomImageManager {
         }
     }
 
+    // Zero-fills via a blank upload
     private void clearTexture(int texture, int format, int pixelType) {
         // Umbra clears custom images with a null data pointer, which means "clear to zero" and avoids any
         // interaction with client memory or a currently-bound pixel-unpack buffer.
@@ -318,6 +320,7 @@ public class CustomImageManager {
         GlTextureUnits.resetToUnit0();
     }
 
+    // Releases every image unit
     public void unbindAll() {
         for (Image image : this.images) {
             if (image.samplerUnit >= 0) {
@@ -328,6 +331,7 @@ public class CustomImageManager {
         GlTextureUnits.resetToUnit0();
     }
 
+    // Frees every texture
     public void destroy() {
         for (Image image : this.images) {
             LWJGL.glDeleteTextures(image.texture);

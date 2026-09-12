@@ -31,6 +31,7 @@ public class SearchBarWidget extends AbstractWidget {
         this.queryListener = queryListener;
     }
 
+    // Box, placeholder or query, and a caret when focused
     @Override
     public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
         boolean highlight = this.focused || this.dim.containsCursor(mouseX, mouseY);
@@ -55,11 +56,13 @@ public class SearchBarWidget extends AbstractWidget {
         }
     }
 
+    // Bounds test
     @Override
     public boolean isMouseOver(double mouseX, double mouseY) {
         return this.dim.containsCursor(mouseX, mouseY);
     }
 
+    // Focuses on click inside, blurs on click outside
     @Override
     public boolean mouseClicked(InteractionContext context, double mouseX, double mouseY, int button) {
         var inside = this.dim.containsCursor(mouseX, mouseY);
@@ -67,6 +70,7 @@ public class SearchBarWidget extends AbstractWidget {
         return inside;
     }
 
+    // Edits the query when focused; backspace, escape and printable characters
     @Override
     public boolean keyTyped(char typedChar, int keyCode) {
         if (!this.focused) {
@@ -94,14 +98,17 @@ public class SearchBarWidget extends AbstractWidget {
         return true;
     }
 
+    // Notifies the listener
     private void fireQueryChanged() {
         this.queryListener.accept(this.query.toString());
     }
 
+    // Whether keystrokes go here
     public boolean isFocused() {
         return this.focused;
     }
 
+    // Current text
     public String getQuery() {
         return this.query.toString();
     }

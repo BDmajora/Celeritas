@@ -26,6 +26,7 @@ public class ChunkRenderList {
         this.region = region;
     }
 
+    // Records the section and which of its flags apply
     public void add(RenderSection render) {
         if (this.size >= RenderRegion.REGION_SIZE) {
             throw new ArrayIndexOutOfBoundsException("Render list is full");
@@ -70,26 +71,32 @@ public class ChunkRenderList {
         return new ByteArrayIterator(this.sectionsWithEntities, this.sectionsWithEntitiesCount);
     }
 
+    // For the terrain pass
     public int getSectionsWithGeometryCount() {
         return this.sectionsWithGeometryCount;
     }
 
+    // For sprite animation
     public int getSectionsWithSpritesCount() {
         return this.sectionsWithSpritesCount;
     }
 
+    // For the block entity pass
     public int getSectionsWithEntitiesCount() {
         return this.sectionsWithEntitiesCount;
     }
 
+    // The region every listed section belongs to
     public RenderRegion getRegion() {
         return this.region;
     }
 
+    // Sections listed
     public int size() {
         return this.size;
     }
 
+    // For debugging
     @Override
     public String toString() {
         var iterator = this.sectionsWithGeometryIterator(false);

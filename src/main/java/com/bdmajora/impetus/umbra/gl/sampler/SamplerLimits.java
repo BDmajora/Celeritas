@@ -19,6 +19,7 @@ public final class SamplerLimits {
         this.maxDrawBuffers = LWJGL.glGetInteger(GL_MAX_DRAW_BUFFERS);
     }
 
+    // Queried on first use and cached
     public static SamplerLimits get() {
         if (instance == null) {
             instance = new SamplerLimits();
@@ -31,10 +32,12 @@ public final class SamplerLimits {
         instance = null;
     }
 
+    // GL_MAX_TEXTURE_IMAGE_UNITS
     public int getMaxTextureUnits() {
         return this.maxTextureUnits;
     }
 
+    // GL_MAX_DRAW_BUFFERS
     public int getMaxDrawBuffers() {
         return this.maxDrawBuffers;
     }

@@ -26,19 +26,13 @@ public class EnumFacingMixin {
     @Final
     private int opposite;
 
-    /**
-     * @author JellySquid
-     * @reason Avoid the modulo and abs operations
-     */
+    // Overwrite: precomputed table instead of a values() lookup
     @Overwrite
     public EnumFacing getOpposite() {
         return VALUES[this.opposite];
     }
 
-    /**
-     * @author JellySquid
-     * @reason Do not allocate an excessive number of EnumFacing arrays
-     */
+    // Overwrite: indexes the cached values array instead of cloning it
     @Overwrite
     public static EnumFacing random(Random rand) {
         return VALUES[rand.nextInt(VALUES.length)];

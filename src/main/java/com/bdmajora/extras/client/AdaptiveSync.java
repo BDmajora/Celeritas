@@ -7,16 +7,9 @@ import org.lwjgl.opengl.Display;
 
 import java.lang.reflect.Method;
 
-// adaptive VSync - swap interval -1, which honours VSync above the refresh rate and disengages below
-// it, so a dropped frame costs one frame rather than half the refresh period
-// Sodium Extra and Celeritas Extra both implement this by mixing into the window's swap-interval call,
-// which is not available here: on stock Forge 1.12.2 "org.lwjgl." is in LaunchWrapper's class-loader
-// exclusions, so a mixin targeting Display is never given the chance to apply and would fail the
-// config's required check
-// applying it from the outside instead works on both windowing backends and needs no mixin at all
-// everything GLFW is reached reflectively: the LWJGL3 classes exist only on Cleanroom-style launchers,
-// and src/main compiles against LWJGL2 - on LWJGL2 there is no swap-interval API at all, so
-// isSupported() is false and the option is not offered
+// Adaptive VSync: swap interval -1 honours VSync above the refresh rate and disengages below it
+// Applied from outside rather than by mixin, since org.lwjgl. is class-loader excluded on stock Forge 1.12.2
+// GLFW is reached reflectively; on LWJGL2 there is no swap-interval API, so the option is not offered
 public final class AdaptiveSync {
     private static final String GLFW_CLASS = "org.lwjgl.glfw.GLFW";
 
@@ -100,6 +93,7 @@ public final class AdaptiveSync {
         }
     }
 
+    // Calls glfwSwapInterval through the resolved handle; a failure is logged and the option left as it was
     private static void setSwapInterval(int interval) {
         Method method = swapInterval;
         if (method == null) {

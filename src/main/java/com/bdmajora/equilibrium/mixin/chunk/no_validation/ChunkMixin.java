@@ -50,10 +50,7 @@ public abstract class ChunkMixin {
         this.equilibrium$debugWorld = this.world.getWorldType() == WorldType.DEBUG_ALL_BLOCK_STATES;
     }
 
-    /**
-     * @author JellySquid
-     * @reason Resolve the world type once rather than on every block read
-     */
+    // Overwrite: skips the crash-report wrapping; an out-of-range read here is a programming error, not a data error
     @Overwrite
     public IBlockState getBlockState(final int x, final int y, final int z) {
         if (this.equilibrium$debugWorld) {

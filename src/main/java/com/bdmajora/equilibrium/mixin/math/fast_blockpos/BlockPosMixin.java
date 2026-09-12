@@ -19,109 +19,73 @@ public abstract class BlockPosMixin extends Vec3i {
         super(x, y, z);
     }
 
-    /**
-     * @author JellySquid
-     * @reason Simplify and inline
-     */
+    // Overwrite: direct constructor call instead of offset() through EnumFacing
     @Overwrite
     public BlockPos up() {
         return new BlockPos(this.getX(), this.getY() + 1, this.getZ());
     }
 
-    /**
-     * @author JellySquid
-     * @reason Simplify and inline
-     */
+    // Overwrite: returns this for n == 0, matching vanilla
     @Overwrite
     public BlockPos up(int n) {
         return n == 0 ? (BlockPos) (Object) this : new BlockPos(this.getX(), this.getY() + n, this.getZ());
     }
 
-    /**
-     * @author JellySquid
-     * @reason Simplify and inline
-     */
+    // Overwrite: direct constructor call
     @Overwrite
     public BlockPos down() {
         return new BlockPos(this.getX(), this.getY() - 1, this.getZ());
     }
 
-    /**
-     * @author JellySquid
-     * @reason Simplify and inline
-     */
+    // Overwrite: returns this for n == 0
     @Overwrite
     public BlockPos down(int n) {
         return n == 0 ? (BlockPos) (Object) this : new BlockPos(this.getX(), this.getY() - n, this.getZ());
     }
 
-    /**
-     * @author JellySquid
-     * @reason Simplify and inline
-     */
+    // Overwrite: direct constructor call
     @Overwrite
     public BlockPos north() {
         return new BlockPos(this.getX(), this.getY(), this.getZ() - 1);
     }
 
-    /**
-     * @author JellySquid
-     * @reason Simplify and inline
-     */
+    // Overwrite: returns this for n == 0
     @Overwrite
     public BlockPos north(int n) {
         return n == 0 ? (BlockPos) (Object) this : new BlockPos(this.getX(), this.getY(), this.getZ() - n);
     }
 
-    /**
-     * @author JellySquid
-     * @reason Simplify and inline
-     */
+    // Overwrite: direct constructor call
     @Overwrite
     public BlockPos south() {
         return new BlockPos(this.getX(), this.getY(), this.getZ() + 1);
     }
 
-    /**
-     * @author JellySquid
-     * @reason Simplify and inline
-     */
+    // Overwrite: returns this for n == 0
     @Overwrite
     public BlockPos south(int n) {
         return n == 0 ? (BlockPos) (Object) this : new BlockPos(this.getX(), this.getY(), this.getZ() + n);
     }
 
-    /**
-     * @author JellySquid
-     * @reason Simplify and inline
-     */
+    // Overwrite: direct constructor call
     @Overwrite
     public BlockPos west() {
         return new BlockPos(this.getX() - 1, this.getY(), this.getZ());
     }
 
-    /**
-     * @author JellySquid
-     * @reason Simplify and inline
-     */
+    // Overwrite: returns this for n == 0
     @Overwrite
     public BlockPos west(int n) {
         return n == 0 ? (BlockPos) (Object) this : new BlockPos(this.getX() - n, this.getY(), this.getZ());
     }
 
-    /**
-     * @author JellySquid
-     * @reason Simplify and inline
-     */
+    // Overwrite: direct constructor call
     @Overwrite
     public BlockPos east() {
         return new BlockPos(this.getX() + 1, this.getY(), this.getZ());
     }
 
-    /**
-     * @author JellySquid
-     * @reason Simplify and inline
-     */
+    // Overwrite: returns this for n == 0
     @Overwrite
     public BlockPos east(int n) {
         return n == 0 ? (BlockPos) (Object) this : new BlockPos(this.getX() + n, this.getY(), this.getZ());

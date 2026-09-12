@@ -23,6 +23,7 @@ public final class LightUtil {
         return posToState(pos, chunk.getBlockStorageArray()[pos.getY() >> 4]);
     }
 
+    // Section-local state read, masking the position to its 0-15 coordinates
     public static IBlockState posToState(BlockPos pos, ExtendedBlockStorage section) {
         if (section == Chunk.NULL_BLOCK_STORAGE) {
             return AIR;

@@ -19,6 +19,7 @@ public class MatrixUniform extends Uniform {
         this.value = value;
     }
 
+    // Uploads unconditionally; see the class comment
     @Override
     public void update() {
         Matrix4fc matrix = this.value.get();

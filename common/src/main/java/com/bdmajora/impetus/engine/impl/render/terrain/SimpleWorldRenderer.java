@@ -225,6 +225,7 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
         }
     }
 
+    // Tears down and recreates the section manager, e.g. after a render distance change
     public void reload() {
         if (this.world == null) {
             return;
@@ -237,6 +238,7 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
 
     protected abstract SECTIONMANAGER createRenderSectionManager(CommandList commandList);
 
+    // Creates the section manager for the current world
     protected void initRenderer(CommandList commandList) {
         if (this.renderSectionManager != null) {
             this.renderSectionManager.destroy();
@@ -266,6 +268,7 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
 
     protected abstract void renderBlockEntityList(List<BLOCKENTITY> list, BLOCKENTITY_RENDER_CONTEXT context);
 
+    // Block entities in visible sections only
     private int renderCulledBlockEntities(BLOCKENTITY_RENDER_CONTEXT renderContext) {
         int count = 0;
         SortedRenderLists renderLists = this.renderSectionManager.getRenderLists();
@@ -310,6 +313,7 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
         return count;
     }
 
+    // Block entities that render regardless of distance, e.g. beacons
     private int renderGlobalBlockEntities(BLOCKENTITY_RENDER_CONTEXT renderContext) {
         int count = 0;
         for (var renderSection : this.renderSectionManager.getSectionsWithGlobalEntities()) {
@@ -333,6 +337,7 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
         return count;
     }
 
+    // Both passes; returns the count for the debug screen
     public int renderBlockEntities(BLOCKENTITY_RENDER_CONTEXT renderContext) {
         int count = 0;
         count += this.renderCulledBlockEntities(renderContext);
@@ -346,6 +351,7 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
     public abstract int getMinimumBuildHeight();
     public abstract int getMaximumBuildHeight();
 
+    // Whether the section containing a point was drawn
     public boolean isPointVisible(double x, double y, double z) {
         if (y < getMinimumBuildHeight() + 0.5D || y > getMaximumBuildHeight() - 0.5D) {
             return true;
@@ -358,6 +364,7 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
         );
     }
 
+    // Whether any section a box overlaps was drawn
     public boolean isBoxVisible(double x1, double y1, double z1, double x2, double y2, double z2) {
         // Boxes outside the valid world height will never map to a rendered chunk
         // Always render these boxes or they'll be culled incorrectly!
@@ -391,6 +398,7 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
         return false;
     }
 
+    // The C: line for the debug screen
     public String getChunksDebugString() {
         // C: visible/total D: distance
         return String.format("C: %d/%d D: %d %s", this.renderSectionManager.getVisibleChunkCount(),
@@ -398,6 +406,7 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
                 this.renderSectionManager.getTickerDebugString());
     }
 
+    // The pass set in use
     public RenderPassConfiguration<?> getRenderPassConfiguration() {
         return this.renderSectionManager.getRenderPassConfiguration();
     }
@@ -441,6 +450,7 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
         return debugStrings;
     }
 
+    // Whether a section has been built at least once
     public boolean isSectionReady(int x, int y, int z) {
         return this.renderSectionManager.isSectionBuilt(x, y, z);
     }

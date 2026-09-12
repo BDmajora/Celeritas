@@ -11,23 +11,10 @@ import java.nio.FloatBuffer;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Replays the block selection box AFTER the composite/final chain, for packs that ship no gbuffers_line
-//
-// A deliberate 1.12.2 deviation from both Iris and OptiFine, which draw the outline inside the world pass straight
-// into the gbuffer. That works on modern packs because they ship a gbuffers_line written for exactly that
-// A pre-deferred pack has none, so OptiFine's fallback chain drops the box into gbuffers_basic — and colortex0 is
-// ALBEDO, not the finished image. Whatever lands there, the pack's program or vanilla fixed-function, is then
-// multiplied by the scene lighting in the composite chain. Next to a torch that light is warm, so vanilla's 40%
-// black line comes back out as a dark red line that shifts as the view angle changes, because the lighting does
-//
-// Not fixable by changing WHAT is written pre-composite. The colour, the blend mode, the draw-buffer mask and the
-// bound program were each tried and none of them moved it, because every one still wrote into albedo. The only
-// thing that reproduces vanilla's appearance is darkening the FINISHED image, which means drawing after
-// finishWorldRendering()
-//
-// The composite passes clobber the projection and modelview matrices — the post-composite hand path rebuilds its
-// own from scratch — so the world matrices are captured at the original draw site and restored here rather than
-// assumed to have survived
+// Replays the block selection box after the composite chain, for packs with no gbuffers_line
+// Drawn in the world pass it lands in colortex0, which is albedo, and the composite lighting turns vanilla's
+// black line dark red beside a torch. Only darkening the finished image reproduces vanilla, so the world matrices
+// are captured at the original draw and restored here
 public final class DeferredBlockOutline {
     private static final FloatBuffer PROJECTION = BufferUtils.createFloatBuffer(16);
     private static final FloatBuffer MODELVIEW = BufferUtils.createFloatBuffer(16);

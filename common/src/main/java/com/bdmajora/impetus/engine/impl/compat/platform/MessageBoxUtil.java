@@ -15,14 +15,17 @@ public final class MessageBoxUtil {
     private MessageBoxUtil() {
     }
 
+    // Native warning dialog
     public static void showWarning(String title, String message) {
         show(title, message, javax.swing.JOptionPane.WARNING_MESSAGE);
     }
 
+    // Native error dialog
     public static void showError(String title, String message) {
         show(title, message, javax.swing.JOptionPane.ERROR_MESSAGE);
     }
 
+    // Through TinyFD when available, else Swing
     private static void show(String title, String message, int type) {
         if (type == javax.swing.JOptionPane.ERROR_MESSAGE) {
             LOGGER.error("{}: {}", title, message.replace('\n', ' '));

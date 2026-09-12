@@ -20,21 +20,10 @@ import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
-// the set of particle classes seen so far, and which of them the user has switched off
-// Sodium Extra can enumerate particles from the ParticleType registry, but 1.12.2 has no such registry
-// - ParticleManager holds an int -> IParticleFactory map, and the concrete Particle subclass a factory
-// produces is not recoverable from its type
-// so discovery runs from three places, in decreasing order of authority:
-//   scanFactories(ParticleManager) - reflection over the registered factories, run once per
-//   effectRenderer by ParticleDiscoveryHandler, resolving vanilla and any mod factory whose shape gives
-//   the particle class away
-//   recordClass(Class) - recorded when a particle actually spawns, the only thing that works for
-//   factories registered as lambdas or anonymous classes
-//   registerFactoryMod(IParticleFactory, String) - the owning mod captured at registerParticle time,
-//   used to group the toggles by mod
-// discovered classes are a cache: persisted so previously seen particles have toggles from the next
-// launch, and reconciled against what still loads
-// only disabledClasses is user data
+// The set of particle classes seen so far, and which the user has switched off
+// 1.12.2 has no particle registry, so classes are discovered three ways in decreasing authority: reflecting over
+// registered factories, recording a class when a particle spawns, and the mod captured at registerParticle time
+// Discovered classes are a persisted cache; only disabledClasses is user data
 public final class ParticleClassRegistry {
     private static final ParticleClassRegistry INSTANCE = new ParticleClassRegistry();
 
@@ -62,6 +51,7 @@ public final class ParticleClassRegistry {
     private ParticleClassRegistry() {
     }
 
+    // Single client-wide instance
     public static ParticleClassRegistry getInstance() {
         return INSTANCE;
     }
@@ -202,6 +192,7 @@ public final class ParticleClassRegistry {
         return modIdFromCodeSource(clazz);
     }
 
+    // Maps a class to its mod by the jar it loaded from; null when it cannot be told
     private String modIdFromCodeSource(Class<?> clazz) {
         try {
             CodeSource source = clazz.getProtectionDomain().getCodeSource();
@@ -227,6 +218,7 @@ public final class ParticleClassRegistry {
         }
     }
 
+    // Jar-to-mod-id map, built lazily from the loaded mod list and cached
     private Map<File, String> sourceMap() {
         Map<File, String> map = sourceToModId;
         if (map == null) {
@@ -268,6 +260,7 @@ public final class ParticleClassRegistry {
         return disabledClasses.isEmpty();
     }
 
+    // Toggles one class and marks the config dirty only if something actually changed
     public void setClassEnabled(String fullClassName, boolean enabled) {
         boolean changed = enabled
                 ? disabledClasses.remove(fullClassName)
@@ -277,6 +270,7 @@ public final class ParticleClassRegistry {
         }
     }
 
+    // Replaces the disabled set from the config file, skipping blanks
     public void loadDisabledClasses(String[] classes) {
         disabledClasses.clear();
         for (String name : classes) {
@@ -286,6 +280,7 @@ public final class ParticleClassRegistry {
         }
     }
 
+    // Sorted for a stable config file
     public String[] getDisabledClassesArray() {
         return disabledClasses.stream().sorted().toArray(String[]::new);
     }
@@ -299,10 +294,12 @@ public final class ParticleClassRegistry {
         return Collections.unmodifiableMap(discoveredClasses);
     }
 
+    // Whether a toggle changed since the last save
     public boolean isDirty() {
         return dirty;
     }
 
+    // Called after the config is written
     public void markClean() {
         dirty = false;
     }
@@ -333,6 +330,7 @@ public final class ParticleClassRegistry {
         }
     }
 
+    // Serialises the cache as class|modId lines, sorted for stability
     public String[] getDiscoveredClassesArray() {
         return discoveredClasses.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
@@ -371,6 +369,7 @@ public final class ParticleClassRegistry {
         return name;
     }
 
+    // Resolves symlinks so a jar reached two ways maps to one entry; falls back to absolute on IO failure
     private static File canonical(File file) {
         try {
             return file.getCanonicalFile();

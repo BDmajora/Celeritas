@@ -4,13 +4,8 @@ import com.bdmajora.impetus.umbra.gl.program.DrawBuffers;
 
 import java.util.regex.Pattern;
 
-// Rewrites a GLSL-120 full-screen pack program — composite, deferred or final — to #version 330 core
-// Full-screen passes are trivial in the vertex stage: all they do is pass the quad's position and texcoord through.
-// So this injects an a_Position/a_TexCoord attribute pair, aliases the gl_* built-ins onto them, and promotes the
-// fragment outputs
-// The aliasing includes an ortho model-view-projection, so a pack writing ftransform() or
-// gl_ModelViewProjectionMatrix * gl_Vertex still maps the [0,1] quad onto NDC [-1,1] and lands where it expects
-// The pack's own colortexN and depthtexN samplers are left completely alone — the pipeline binds those
+// Rewrites a GLSL-120 composite, deferred or final program to 330 core: injects quad attributes, aliases the gl_*
+// built-ins onto them including an ortho MVP so ftransform() still maps the quad, and promotes fragment outputs
 public final class FullscreenTransformer {
     private static final Pattern VERSION = Pattern.compile("^\\s*#version[^\\n]*\\n", Pattern.MULTILINE);
 
@@ -100,6 +95,7 @@ public final class FullscreenTransformer {
         ) + "\n";
     }
 
+    // Injects the quad attributes and ortho aliases, then modernises
     public static String transformVertexShader(String source) {
         String body = strip(source);
         body = renameMain(body);
@@ -130,10 +126,12 @@ public final class FullscreenTransformer {
         return out.append("}\n").toString();
     }
 
+    // Fragment rewrite with default draw buffers
     public static String transformFragmentShader(String source) {
         return transformFragmentShader(source, DrawBuffers.DEFAULT);
     }
 
+    // Fragment rewrite routing gl_FragData to the given targets
     public static String transformFragmentShader(String source, int[] drawBuffers) {
         String body = strip(source);
         body = renameMain(body);
@@ -146,6 +144,7 @@ public final class FullscreenTransformer {
         return transformed;
     }
 
+    // Removes #version and the pack's own attribute lines
     private static String strip(String source) {
         return VERSION.matcher(source).replaceFirst("");
     }
@@ -165,10 +164,12 @@ public final class FullscreenTransformer {
                 "$1$2" + direction);
     }
 
+    // Removes attribute declarations the transform supplies itself
     private static String dropAttribute(String source) {
         return source.replaceAll("(?m)^(\\s*)attribute\\s+", "$1");
     }
 
+    // varying to in/out, gl_FragColor to a declared output, and the rest of the 120 to 330 delta
     private static String modernize(String source) {
         source = rewriteLegacyProjectionProducts(source);
         source = rewriteFogParameters(source);
@@ -196,6 +197,7 @@ public final class FullscreenTransformer {
                 "$2 * vec4($1)");
     }
 
+    // gl_Fog.* onto the pipeline's fog uniforms
     private static String rewriteFogParameters(String source) {
         return FogParameters.rewrite(source);
     }

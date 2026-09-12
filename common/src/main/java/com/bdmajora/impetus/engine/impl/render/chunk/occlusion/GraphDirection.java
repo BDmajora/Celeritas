@@ -38,18 +38,22 @@ public class GraphDirection {
         Z[SOUTH] = 1;
     }
 
+    // Flips the axis bit
     public static int opposite(int direction) {
         return OPPOSITE[direction];
     }
 
+    // Unit x offset for the direction
     public static int x(int direction) {
         return X[direction];
     }
 
+    // Unit y offset
     public static int y(int direction) {
         return Y[direction];
     }
 
+    // Unit z offset
     public static int z(int direction) {
         return Z[direction];
     }

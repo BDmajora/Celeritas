@@ -20,6 +20,7 @@ public final class SectionTree {
     private Node root;
     private int sectionCount;
 
+    // Inserts, expanding the root until the section fits
     public void add(OcclusionNode section) {
         int x = section.getChunkX();
         int y = section.getChunkY();
@@ -38,6 +39,7 @@ public final class SectionTree {
         }
     }
 
+    // Removes and collapses empty subtrees
     public void remove(OcclusionNode section) {
         if (this.root == null) {
             return;
@@ -53,15 +55,18 @@ public final class SectionTree {
         }
     }
 
+    // Drops the root
     public void clear() {
         this.root = null;
         this.sectionCount = 0;
     }
 
+    // No root or an empty root
     public boolean isEmpty() {
         return this.sectionCount == 0;
     }
 
+    // Walks nodes whose bounds pass the frustum and distance tests
     public void forEachVisible(Viewport viewport, float searchDistance, Consumer<OcclusionNode> consumer) {
         if (this.root != null) {
             this.root.visit(viewport, searchDistance, consumer);
@@ -84,12 +89,14 @@ public final class SectionTree {
             this.size = size;
         }
 
+        // Whether a point is inside this node's bounds
         private boolean contains(int x, int y, int z) {
             return x >= this.minX && x < this.minX + this.size
                     && y >= this.minY && y < this.minY + this.size
                     && z >= this.minZ && z < this.minZ + this.size;
         }
 
+        // Grows the root one level in the direction of a point outside it
         private Node expandToward(int x, int y, int z) {
             int newSize = this.size << 1;
             int newMinX = x < this.minX ? this.minX - this.size : this.minX;
@@ -103,6 +110,7 @@ public final class SectionTree {
             return parent;
         }
 
+        // Descends to a leaf, splitting when full
         private boolean insert(OcclusionNode section) {
             if (this.children != null) {
                 return this.getOrCreateChild(section).insert(section);
@@ -123,6 +131,7 @@ public final class SectionTree {
             return true;
         }
 
+        // Descends and removes; true if this node became empty
         private boolean remove(OcclusionNode section) {
             if (!this.contains(section.getChunkX(), section.getChunkY(), section.getChunkZ())) {
                 return false;
@@ -157,6 +166,7 @@ public final class SectionTree {
             return false;
         }
 
+        // No sections and no children
         private boolean isEmpty() {
             if (this.children != null) {
                 for (Node child : this.children) {
@@ -171,6 +181,7 @@ public final class SectionTree {
             return this.sections.isEmpty();
         }
 
+        // Turns a leaf into eight children and redistributes its sections
         private void split() {
             ArrayList<OcclusionNode> oldSections = this.sections;
 
@@ -183,6 +194,7 @@ public final class SectionTree {
             }
         }
 
+        // The child octant a section belongs in
         private Node getOrCreateChild(OcclusionNode section) {
             int index = this.childIndex(section.getChunkX(), section.getChunkY(), section.getChunkZ());
             Node child = this.children[index];
@@ -200,6 +212,7 @@ public final class SectionTree {
             return child;
         }
 
+        // Octant index from position relative to the centre
         private int childIndex(int x, int y, int z) {
             int half = this.size >> 1;
             int midX = this.minX + half;
@@ -211,6 +224,7 @@ public final class SectionTree {
                     | (z >= midZ ? 4 : 0);
         }
 
+        // Leaf sections are tested individually; inner nodes recurse
         private void visit(Viewport viewport, float searchDistance, Consumer<OcclusionNode> consumer) {
             if (!this.isNodeVisible(viewport, searchDistance)) {
                 return;
@@ -230,6 +244,7 @@ public final class SectionTree {
             }
         }
 
+        // Recurses into non-null children
         private void visitChildren(Viewport viewport, float searchDistance, Consumer<OcclusionNode> consumer) {
             Vector3ic cameraSection = viewport.getChunkCoord();
             int nearIndex = this.childIndex(cameraSection.x(), cameraSection.y(), cameraSection.z());
@@ -243,6 +258,7 @@ public final class SectionTree {
             }
         }
 
+        // Node bounds against distance then frustum
         private boolean isNodeVisible(Viewport viewport, float searchDistance) {
             int minBlockX = this.minX << 4;
             int minBlockY = this.minY << 4;
@@ -281,6 +297,7 @@ public final class SectionTree {
             return ((((dx * dx) + (dz * dz)) < (maxDistance * maxDistance)) && (Math.abs(dy) < maxDistance));
         }
 
+        // Closest value in a range to zero
         @SuppressWarnings("ManualMinMaxCalculation")
         private static int nearestToZero(int min, int max) {
             int clamped = 0;

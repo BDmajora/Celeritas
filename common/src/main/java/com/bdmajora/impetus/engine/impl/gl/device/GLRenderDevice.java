@@ -32,6 +32,7 @@ public class GLRenderDevice implements RenderDevice {
         throw new IllegalStateException("The host mod should replace the VANILLA_STATE_RESETTER with an implementation specific to the platform.");
     };
 
+    // The single command list; GL has no real command buffers
     @Override
     public CommandList createCommandList() {
         GLRenderDevice.this.checkDeviceActive();
@@ -39,6 +40,7 @@ public class GLRenderDevice implements RenderDevice {
         return this.commandList;
     }
 
+    // Marks the device usable on this thread and resets the state tracker
     @Override
     public void makeActive() {
         if (this.isActive) {
@@ -55,6 +57,7 @@ public class GLRenderDevice implements RenderDevice {
         }
     }
 
+    // Marks the device unusable; calls after this throw
     @Override
     public void makeInactive() {
         if (!this.isActive) {
@@ -70,11 +73,13 @@ public class GLRenderDevice implements RenderDevice {
         this.isActive = false;
     }
 
+    // The best available implementations of each optional GL feature
     @Override
     public DeviceFunctions getDeviceFunctions() {
         return this.functions;
     }
 
+    // Capability description captured at creation
     @Override
     public GpuDevice getGpuDevice() {
         if (this.deviceInfo == null) {
@@ -85,6 +90,7 @@ public class GLRenderDevice implements RenderDevice {
         return this.deviceInfo;
     }
 
+    // Throws if used outside enterManagedCode
     private void checkDeviceActive() {
         if (!this.isActive) {
             throw new IllegalStateException("Tried to access device from unmanaged context");
@@ -98,6 +104,7 @@ public class GLRenderDevice implements RenderDevice {
             this.stateTracker = stateTracker;
         }
 
+        // Through the state tracker, so a redundant bind is skipped
         @Override
         public void bindVertexArray(GlVertexArray array) {
             if (this.stateTracker.makeVertexArrayActive(array)) {
@@ -105,6 +112,7 @@ public class GLRenderDevice implements RenderDevice {
             }
         }
 
+        // glBufferData from a buffer, recording the new size
         @Override
         public void uploadData(GlMutableBuffer glBuffer, ByteBuffer byteBuffer, GlBufferUsage usage) {
             this.bindBuffer(GlBufferTarget.ARRAY_BUFFER, glBuffer);
@@ -113,6 +121,7 @@ public class GLRenderDevice implements RenderDevice {
             glBuffer.setSize(byteBuffer.remaining());
         }
 
+        // glBufferData from a raw pointer, recording the new size
         @Override
         public void uploadData(GlMutableBuffer glBuffer, long ptr, long bytes, GlBufferUsage usage) {
             this.bindBuffer(GlBufferTarget.ARRAY_BUFFER, glBuffer);
@@ -121,11 +130,13 @@ public class GLRenderDevice implements RenderDevice {
             glBuffer.setSize(bytes);
         }
 
+        // Through the best available copy function
         @Override
         public void copyBufferSubData(GlBuffer src, GlBuffer dst, long readOffset, long writeOffset, long bytes) {
             GLRenderDevice.this.functions.bufferCopyFunctions().copyBufferSubData(this, src, dst, readOffset, writeOffset, bytes);
         }
 
+        // Through the state tracker; null unbinds
         @Override
         public void bindBuffer(GlBufferTarget target, @Nullable GlBuffer buffer) {
             if (this.stateTracker.makeBufferActive(target, buffer)) {
@@ -133,6 +144,7 @@ public class GLRenderDevice implements RenderDevice {
             }
         }
 
+        // Binds VAO zero through the tracker
         @Override
         public void unbindVertexArray() {
             if (this.stateTracker.makeVertexArrayActive(null)) {
@@ -140,6 +152,7 @@ public class GLRenderDevice implements RenderDevice {
             }
         }
 
+        // Uninitialised glBufferData, recording the new size
         @Override
         public void allocateStorage(GlMutableBuffer buffer, long bufferSize, GlBufferUsage usage) {
             this.bindBuffer(GlBufferTarget.ARRAY_BUFFER, buffer);
@@ -148,6 +161,7 @@ public class GLRenderDevice implements RenderDevice {
             buffer.setSize(bufferSize);
         }
 
+        // Unmaps if mapped, tells the tracker, then deletes
         @Override
         public void deleteBuffer(GlBuffer buffer) {
             if (buffer.getActiveMapping() != null) {
@@ -159,6 +173,7 @@ public class GLRenderDevice implements RenderDevice {
             buffer.delete();
         }
 
+        // Tells the tracker, then deletes
         @Override
         public void deleteVertexArray(GlVertexArray vertexArray) {
             this.stateTracker.notifyVertexArrayDeleted(vertexArray);
@@ -166,11 +181,13 @@ public class GLRenderDevice implements RenderDevice {
             vertexArray.delete();
         }
 
+        // glFlush
         @Override
         public void flush() {
             // NO-OP
         }
 
+        // Binds the tessellation and returns the draw list for it
         @Override
         public DrawCommandList beginTessellating(GlTessellation tessellation) {
             GLRenderDevice.this.activeTessellation = tessellation;
@@ -179,11 +196,13 @@ public class GLRenderDevice implements RenderDevice {
             return GLRenderDevice.this.drawCommandList;
         }
 
+        // Frees the VAO or buffer bindings behind it
         @Override
         public void deleteTessellation(GlTessellation tessellation) {
             tessellation.delete(this);
         }
 
+        // Maps a range through the best available function, tracking the mapping on the buffer
         @Override
         public GlBufferMapping mapBuffer(GlBuffer buffer, long offset, long length, EnumBitField<GlBufferMapFlags> flags) {
             if (buffer.getActiveMapping() != null) {
@@ -227,6 +246,7 @@ public class GLRenderDevice implements RenderDevice {
             return mapping;
         }
 
+        // Unmaps and clears the buffer's active mapping
         @Override
         public void unmap(GlBufferMapping map) {
             checkMapDisposed(map);
@@ -240,6 +260,7 @@ public class GLRenderDevice implements RenderDevice {
             map.dispose();
         }
 
+        // For explicit-flush mappings
         @Override
         public void flushMappedRange(GlBufferMapping map, int offset, int length) {
             checkMapDisposed(map);
@@ -250,22 +271,26 @@ public class GLRenderDevice implements RenderDevice {
             LWJGL.glFlushMappedBufferRange(GlBufferTarget.COPY_READ_BUFFER.getTargetParameter(), offset, length);
         }
 
+        // glFenceSync
         @Override
         public GlFence createFence() {
             return new GlFence(LWJGL.glFenceSync(GL32.GL_SYNC_GPU_COMMANDS_COMPLETE, 0));
         }
 
+        // Throws on use after unmap
         private void checkMapDisposed(GlBufferMapping map) {
             if (map.isDisposed()) {
                 throw new IllegalStateException("Buffer mapping is already disposed");
             }
         }
 
+        // A buffer that can be reallocated with glBufferData
         @Override
         public GlMutableBuffer createMutableBuffer() {
             return new GlMutableBuffer();
         }
 
+        // A buffer with fixed storage, via the best available storage function
         @Override
         public GlImmutableBuffer createImmutableBuffer(long bufferSize, EnumBitField<GlBufferStorageFlags> flags) {
             GlImmutableBuffer buffer = new GlImmutableBuffer(flags);
@@ -283,6 +308,7 @@ public class GLRenderDevice implements RenderDevice {
 
         }
 
+        // Issues the batch through the best available multidraw function
         @Override
         public void multiDrawElementsBaseVertex(MultiDrawBatch batch, GlPrimitiveType primitiveType, GlIndexType indexType) {
             GLRenderDevice.this.functions.multidrawFunctions().multiDrawElementsBaseVertex(primitiveType.getId(),
@@ -293,17 +319,20 @@ public class GLRenderDevice implements RenderDevice {
                     batch.pBaseVertex);
         }
 
+        // Draws from an indirect buffer
         @Override
         public void multiDrawElementsIndirect(GlBuffer indirectBuffer, int count, GlPrimitiveType primitiveType, GlIndexType indexType) {
             LWJGL.glMultiDrawElementsIndirect(primitiveType.getId(), indexType.getFormatId(), 0, count, 0);
         }
 
+        // Unbinds the tessellation
         @Override
         public void endTessellating() {
             GLRenderDevice.this.activeTessellation.unbind(GLRenderDevice.this.commandList);
             GLRenderDevice.this.activeTessellation = null;
         }
 
+        // glFlush
         @Override
         public void flush() {
             if (GLRenderDevice.this.activeTessellation != null) {

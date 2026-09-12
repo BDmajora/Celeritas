@@ -19,16 +19,19 @@ public class ChunkJobTyped<TASK extends ChunkBuilderTask<OUTPUT>, OUTPUT>
         this.consumer = consumer;
     }
 
+    // Whether cancel was requested
     @Override
     public boolean isCancelled() {
         return this.cancelled;
     }
 
+    // Requests cancellation; a running task checks the token
     @Override
     public void setCancelled() {
         this.cancelled = true;
     }
 
+    // Runs the task, catching everything into a failure result so a worker never dies
     @Override
     public void execute(ChunkBuildContext context) {
         // Task was cancelled before starting
@@ -63,6 +66,7 @@ public class ChunkJobTyped<TASK extends ChunkBuilderTask<OUTPUT>, OUTPUT>
         }
     }
 
+    // Whether a worker picked it up
     @Override
     public boolean isStarted() {
         return this.started;

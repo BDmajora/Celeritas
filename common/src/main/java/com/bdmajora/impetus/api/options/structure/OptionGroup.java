@@ -18,14 +18,17 @@ public class OptionGroup {
         this.options = options;
     }
 
+    // Group id
     public OptionIdentifier<Void> getId() {
         return id;
     }
 
+    // Starts a builder
     public static Builder createBuilder() {
         return new Builder();
     }
 
+    // In declaration order
     public List<Option<?>> getOptions() {
         return this.options;
     }
@@ -35,18 +38,21 @@ public class OptionGroup {
 
         private OptionIdentifier<Void> id;
 
+        // Required
         public Builder setId(OptionIdentifier<Void> id) {
             this.id = id;
 
             return this;
         }
 
+        // Appends
         public Builder add(Option<?> option) {
             this.options.add(option);
 
             return this;
         }
 
+        // Appends only when the condition holds, without building otherwise
         public Builder addConditionally(boolean shouldAdd, Supplier<Option<?>> option) {
             if (shouldAdd) {
                 add(option.get());
@@ -55,6 +61,7 @@ public class OptionGroup {
             return this;
         }
 
+        // Fires the construction event so other mods can add options, then finalises
         public OptionGroup build() {
             if (this.id == null) {
                 this.id = OptionGroup.DEFAULT_ID;

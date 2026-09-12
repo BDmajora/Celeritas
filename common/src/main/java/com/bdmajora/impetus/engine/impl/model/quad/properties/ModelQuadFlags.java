@@ -30,6 +30,7 @@ public class ModelQuadFlags {
         return (flags & mask) != 0;
     }
 
+    // Classifies a quad as aligned, partial or parallel to its face, from its vertex positions
     public static int getQuadFlags(ModelQuadView quad, ModelQuadFacing face) {
         return getQuadFlags(quad, face, 0);
     }

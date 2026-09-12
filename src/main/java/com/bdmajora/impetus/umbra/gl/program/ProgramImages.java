@@ -14,15 +14,8 @@ import java.util.function.IntSupplier;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The images one program uses, each on an image unit allocated for that program alone
-// This is the per-program half of Iris's allocation model. A unit is consumed only when the program genuinely
-// declares the uniform — glGetUniformLocation != -1 — so a program that never mentions floodfill_img spends
-// nothing on it
-// The older scheme in CustomImageManager assigns one fixed GLOBAL unit per declared image and binds all of them
-// for every program. That works, but it scales with the pack's declaration count rather than with what any one
-// program needs, and runs out of units on drivers with a small GL_MAX_IMAGE_UNITS
-// The glUniform1i calls that point each image uniform at its unit are deferred to the first update() rather than
-// issued at build time, because glUniform1i writes into the CURRENTLY bound program and nothing is bound then
+// The images one program uses, each on a unit allocated for that program alone and only when it declares the
+// uniform. The glUniform1i calls wait for the first update, since they write to the currently bound program
 public class ProgramImages {
     private final List<ImageBinding> imageBindings;
     private List<Uniform1iCall> initializer;
@@ -32,6 +25,7 @@ public class ProgramImages {
         this.initializer = initializer;
     }
 
+    // Starts registration for one program
     public static Builder builder(int program) {
         return new Builder(program);
     }
@@ -51,6 +45,7 @@ public class ProgramImages {
         }
     }
 
+    // Units consumed
     public int getActiveImages() {
         return this.imageBindings.size();
     }
@@ -74,11 +69,13 @@ public class ProgramImages {
             this.maxImageUnits = ImageLimits.get().getMaxImageUnits();
         }
 
+        // Whether the program declared this image uniform
         @Override
         public boolean hasImage(String name) {
             return LWJGL.glGetUniformLocation(this.program, name) != -1;
         }
 
+        // Allocates a unit only if the uniform resolves
         @Override
         public void addTextureImage(IntSupplier textureID, int internalFormat, String name) {
             int location = LWJGL.glGetUniformLocation(this.program, name);
@@ -100,6 +97,7 @@ public class ProgramImages {
             this.nextImageUnit++;
         }
 
+        // Finalises; the glUniform1i calls wait for first update
         public ProgramImages build() {
             return new ProgramImages(Collections.unmodifiableList(new ArrayList<>(this.images)),
                     new ArrayList<>(this.calls));

@@ -34,6 +34,7 @@ public class MuiGuiScaleHook {
         }).findFirst().orElse(null);
     }
 
+    // Modern UI's scale ceiling when present, else vanilla's
     public static int getMaxGuiScale() {
         if (calcGuiScalesMethod != null) {
             try {
@@ -47,6 +48,7 @@ public class MuiGuiScaleHook {
         return calculateScale(0, forceUnicode);
     }
 
+    // Modern UI's scale formula when present, else vanilla's
     public static int calculateScale(int guiScale, boolean forceUnicode) {
         int i;
         // vanilla's algorithm: grow the scale until the next step would shrink the scaled resolution below 320x240

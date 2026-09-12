@@ -69,27 +69,33 @@ public class EntityRendererMixin {
     @Shadow
     private boolean renderHand;
 
+    // Shadow
     @Shadow
     private void renderHand(float partialTicks, int pass) {
     }
 
+    // Shadow
     @Shadow
     private float getFOVModifier(float partialTicks, boolean useFOVSetting) {
         return 0.0f;
     }
 
+    // Shadow
     @Shadow
     private void hurtCameraEffect(float partialTicks) {
     }
 
+    // Shadow
     @Shadow
     private void applyBobbing(float partialTicks) {
     }
 
+    // Shadow
     @Shadow
     public void enableLightmap() {
     }
 
+    // Shadow
     @Shadow
     public void disableLightmap() {
     }

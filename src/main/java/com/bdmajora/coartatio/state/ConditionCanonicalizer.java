@@ -20,12 +20,9 @@ import net.minecraft.client.renderer.block.model.multipart.ICondition;
 import java.util.ArrayList;
 import java.util.List;
 
-// Builds and interns the Predicate<IBlockState> objects behind multipart blockstate definitions.
-// Two savings stack: flattening (from Hydrogen) turns a tree of Guava composites/anonymous classes into
-// one object holding arrays, and interning (from FerriteCore/LoliASM's CanonicalConditions) shares one
-// instance between every selector testing the same thing (e.g. facing=north appears in hundreds of files).
-// Flattened predicates compare equal by construction, so interning after flattening actually finds matches.
-// The pool is bake-scoped: predicates stay shared for the models' lifetime, only the index drops on reload.
+// Builds and interns the Predicate<IBlockState> objects behind multipart blockstate definitions
+// Flattening turns Guava composites into one object over arrays; interning then shares that object between
+// every selector testing the same thing, which works because flattened predicates compare equal by construction
 public final class ConditionCanonicalizer {
     // Matches vanilla ConditionPropertyValue.SPLITTER; re-declared to avoid shadowing a private static.
     private static final Splitter VALUE_SPLITTER = Splitter.on('|').omitEmptyStrings();
@@ -36,10 +33,12 @@ public final class ConditionCanonicalizer {
     private ConditionCanonicalizer() {
     }
 
+    // Arms the pool for a bake
     public static void open() {
         POOL.open();
     }
 
+    // Drops the pool index after a bake; the shared predicates themselves live on in the models
     public static void close() {
         POOL.close();
     }
@@ -49,6 +48,7 @@ public final class ConditionCanonicalizer {
         return POOL.shared();
     }
 
+    // Hit and miss counts for /coartatio
     public static String statistics() {
         return POOL.toString();
     }
@@ -141,6 +141,7 @@ public final class ConditionCanonicalizer {
         return resolved;
     }
 
+    // Parses one value token; an unknown value is a broken blockstate file, so it throws like vanilla
     private static Object parseValue(BlockStateContainer container, IProperty<?> property, String raw, String original) {
         Optional<?> parsed = property.parseValue(raw);
 
@@ -151,6 +152,7 @@ public final class ConditionCanonicalizer {
         return parsed.get();
     }
 
+    // Returns the pooled instance, or registers this one if it is the first
     private static Predicate<IBlockState> intern(Predicate<IBlockState> predicate) {
         return POOL.deduplicate(predicate);
     }

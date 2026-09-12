@@ -53,10 +53,12 @@ public class MergedBooleanOption {
         return new MergedBooleanOption(option, Collections.unmodifiableSet(mergedLocations));
     }
 
+    // The option
     public BooleanOption getOption() {
         return option;
     }
 
+    // Every file and line that defines it
     public Set<OptionLocation> getLocations() {
         return locations;
     }

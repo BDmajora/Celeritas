@@ -11,11 +11,8 @@ import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
 
-// Decides whether Impetus supplies the Mixin subsystem itself or stands down for a real MixinBooter.
-//
-// Deliberately references no org.spongepowered.asm type. It runs before any Mixin implementation is
-// guaranteed to exist, so touching one here would fail to link on a vanilla-Forge install. Everything
-// Mixin-facing lives in BooterCore and is only reached once this class reports MIXIN_OWNED.
+// Decides whether Impetus supplies the Mixin subsystem itself or stands down for a real MixinBooter
+// References no org.spongepowered.asm type, since it runs before any Mixin implementation is guaranteed to exist
 public final class BooterBootstrap {
 
     // A real MixinBooter (or any other service provider) already owns Mixin; do nothing at all.
@@ -40,10 +37,12 @@ public final class BooterBootstrap {
 
     private BooterBootstrap() { }
 
+    // DEFERRED or MIXIN_OWNED once initialize has run; -1 before
     public static int state() {
         return state;
     }
 
+    // Resolves once and caches; safe to call repeatedly
     public static int initialize() {
         if (state != -1) {
             return state;
@@ -52,6 +51,7 @@ public final class BooterBootstrap {
         return state;
     }
 
+    // The detection ladder: existing service property, foreign booter class, existing Mixin, then extract our own
     private static int resolve() {
         // Someone set mixin.service before us, so a service provider is already committed.
         String service = System.getProperty("mixin.service");
@@ -98,6 +98,7 @@ public final class BooterBootstrap {
         return MIXIN_OWNED;
     }
 
+    // Writes the nested libs jar to disk and adds it to both class loaders; false on any failure
     private static boolean extractAndAttachLibs() {
         InputStream in = BooterBootstrap.class.getResourceAsStream(NESTED_LIBS);
         if (in == null) {
@@ -173,16 +174,19 @@ public final class BooterBootstrap {
         }
     }
 
+    // Probes the launch loader first, then the system loader
     private static URL resource(String path) {
         URL url = Launch.classLoader.getResource(path);
         return url != null ? url : ClassLoader.getSystemClassLoader().getResource(path);
     }
 
+    // minecraftHome, or the working directory when a launcher never set it
     private static File gameDir() {
         File home = Launch.minecraftHome;
         return home != null ? home : new File(".");
     }
 
+    // Plain buffered copy; runs once per launch
     private static void copy(InputStream in, File target) throws IOException {
         OutputStream out = new FileOutputStream(target);
         try {
@@ -196,6 +200,7 @@ public final class BooterBootstrap {
         }
     }
 
+    // Swallows close errors; nothing useful can be done this early
     private static void closeQuietly(java.io.Closeable closeable) {
         try {
             if (closeable != null) {

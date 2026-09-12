@@ -13,6 +13,7 @@ public class IrisApi {
     // The API is handed out as a singleton because callers cache a bound MethodHandle against this instance
     private static final IrisApi INSTANCE = new IrisApi();
 
+    // The singleton other mods reach by reflection
     public static IrisApi getInstance() {
         return INSTANCE;
     }

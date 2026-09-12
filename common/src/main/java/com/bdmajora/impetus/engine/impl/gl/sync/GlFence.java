@@ -16,6 +16,7 @@ public class GlFence {
         this.id = id;
     }
 
+    // Polls without blocking
     public boolean isCompleted() {
         this.checkDisposed();
 
@@ -33,21 +34,25 @@ public class GlFence {
         return result == GL32.GL_SIGNALED;
     }
 
+    // Blocks until signalled
     public void sync() {
         this.checkDisposed();
         this.sync(Long.MAX_VALUE);
     }
 
+    // Blocks up to the timeout
     public void sync(long timeout) {
         this.checkDisposed();
         LWJGL.glWaitSync(this.id, GL32.GL_SYNC_FLUSH_COMMANDS_BIT, timeout);
     }
 
+    // glDeleteSync
     public void delete() {
         LWJGL.glDeleteSync(this.id);
         this.disposed = true;
     }
 
+    // Throws on use after delete
     private void checkDisposed() {
         if (this.disposed) {
             throw new IllegalStateException("Fence object has been disposed");

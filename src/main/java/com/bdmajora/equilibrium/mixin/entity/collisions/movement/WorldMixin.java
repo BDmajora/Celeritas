@@ -34,10 +34,6 @@ import java.util.List;
 // to vanilla than allocating
 @Mixin(World.class)
 public abstract class WorldMixin {
-    /**
-     * @author JellySquid
-     * @reason Resolve one chunk section per column rather than one chunk per block
-     */
     @Overwrite
     private boolean getCollisionBoxes(@Nullable Entity entityIn, AxisAlignedBB aabb, boolean stopOnFirst,
                                       @Nullable List<AxisAlignedBB> outList) {

@@ -16,13 +16,10 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * The Mixin-facing half of the bundled booter, ported from MixinBooter's MixinBooterPlugin.
- * <p>
- * Every class this touches lives in {@code org.spongepowered.asm}, so it must not be loaded until
- * {@link BooterBootstrap} has confirmed a Mixin implementation is on the classpath. ImpetusLoadingPlugin
- * enforces that ordering; do not reference this class from anywhere that runs earlier.
- */
+// The Mixin-facing half of the bundled booter, ported from MixinBooter's MixinBooterPlugin. Every class this
+// touches lives in org.spongepowered.asm, so it must not be loaded until BooterBootstrap has confirmed a Mixin
+// implementation is on the classpath. ImpetusLoadingPlugin enforces that ordering; do not reference this class
+// from anywhere that runs earlier
 public final class BooterCore {
 
     private BooterCore() { }
@@ -54,6 +51,7 @@ public final class BooterCore {
         MixinBootstrap.getPlatform().inject();
     }
 
+    // Keeps Mixin and our service on the parent loader and registers the tracing transformer
     private static void installClassLoaderExclusionsAndTransformers() {
         Launch.classLoader.addClassLoaderExclusion("org.spongepowered.asm.launch.");
         Launch.classLoader.addClassLoaderExclusion("org.spongepowered.asm.service.");
@@ -69,12 +67,14 @@ public final class BooterCore {
         }
     }
 
+    // Inserts the rescuer tweak at index 0 so it runs before Forge's injection tweaker
     @SuppressWarnings("unchecked")
     private static void registerCoremodsRescuer() {
         List<String> tweakClasses = (List<String>) Launch.blackboard.get("TweakClasses");
         tweakClasses.add(0, "com.bdmajora.impetus.booter.service.CoremodsRescuer");
     }
 
+    // Walks FML's coremod wrappers for hijackers and early loaders, applying blacklists as it goes
     private static Collection<IEarlyMixinLoader> gatherEarlyLoaders(List<?> coremodList) {
         ILogger logger = MixinService.getService().getLogger(Tags.MOD_NAME);
         Field fmlPluginWrapper$coreModInstance = null;
@@ -105,6 +105,7 @@ public final class BooterCore {
         return queuedLoaders;
     }
 
+    // Queues each loader's configs, asking the loader whether each should apply
     private static void loadEarlyLoaders(Collection<IEarlyMixinLoader> queuedLoaders) {
         ILogger logger = MixinService.getService().getLogger(Tags.MOD_NAME);
         for (IEarlyMixinLoader queuedLoader : queuedLoaders) {

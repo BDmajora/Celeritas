@@ -40,10 +40,12 @@ public class GlShader extends GlResource {
         setHandle(handle);
     }
 
+    // Pack path, for compile error messages
     public String getName() {
         return this.name;
     }
 
+    // glDeleteShader
     @Override
     protected void destroyInternal() {
         LWJGL.glDeleteShader(getGlId());

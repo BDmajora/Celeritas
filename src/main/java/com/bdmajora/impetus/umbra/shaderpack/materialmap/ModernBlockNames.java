@@ -6,26 +6,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-// Translates the flattened 1.13+ vanilla block names a modern pack writes in its block.properties into the 1.12.2
-// registry names that mean the same thing
-//
-// Why it is needed at all: packs written for 1.16+ only — Photon being the reference case — wrap their whole ID map
-// in `#if MC_VERSION >= 11300` and leave the #else branch empty
-// Preprocessed honestly for 1.12.2 that yields ZERO declared IDs, so every block reaches the shader as
-// mc_Entity.x == 0 and every material test in the pack fails: water renders as an untagged translucent quad with
-// no wave displacement, no water normals, no SSR and no water fog; nothing waves; leaves get no subsurface
-// scattering; no light source is emissive
-// So IdMap falls back to the pack's 1.13+ branch instead and runs every entry through here
-//
-// The table holds RENAMES only. A name the flattening left unchanged (glowstone, beacon, obsidian) comes back
-// as-is, and so does a name with no 1.12.2 counterpart at all (sculk, froglight) — BlockMaterialMapping already
-// skips identifiers the registry does not know, which is the right outcome for both
-//
-// Blockstate predicates from the pack's entry are carried onto the translated name, which is what turns
-// sunflower:half=lower into double_plant:half=lower
-// Harmless where the flattening turned a state into its own block: redstone_lamp:lit=true becomes
-// lit_redstone_lamp, whose states have no `lit` property, and a predicate naming an absent property is ignored by
-// design
+// Translates 1.13+ flattened block names in a modern pack's block.properties to their 1.12.2 registry names
+// Packs like Photon gate their map on MC_VERSION >= 11300 with an empty else, which would leave every block
+// untagged; so IdMap uses the modern branch and runs it through here. Renames only; predicates are carried over
 public final class ModernBlockNames {
     // Modern name -> the 1.12.2 entry tokens covering it. An array because one flattened name can need several
     // 1.12.2 entries, and the tokens may carry state predicates of their own
@@ -159,6 +142,7 @@ public final class ModernBlockNames {
         return translated;
     }
 
+    // 1.13+ flattened names back to 1.12.2 block:meta tokens
     private static String[] legacyTokensFor(String name, Map<String, String> predicates) {
         // Lit states that became separate blocks. The pack names the modern block plus `lit=true`; an unlit entry has
         // to keep pointing at the unlit 1.12.2 block, so this cannot go in the flat rename table.
@@ -205,6 +189,7 @@ public final class ModernBlockNames {
         return "light_gray".equals(color) ? LEGACY_LIGHT_GRAY : color;
     }
 
+    // Applies the modern entry's predicates to a legacy token
     private static BlockEntry withInheritedPredicates(String token, Map<String, String> inherited) {
         BlockEntry parsed = (BlockEntry) BlockEntry.parse(token);
         if (inherited.isEmpty()) {

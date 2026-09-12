@@ -9,25 +9,26 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import java.util.List;
 import java.util.Set;
 
-// Gates each Coartatio mixin on its config switch. Unlike ImpetusVintageMixinPlugin (which
-// self-discovers mixins via getMixins(), bypassing shouldApplyMixin entirely), these mixins are
-// declared in mixins.coartatio.json so they route through here - "off" means never loaded,
-// not loaded-and-inert, so a feature suspected of causing a crash can be disabled without a rebuild.
+// Gates each Coartatio mixin on its config switch; off means never loaded, not loaded-and-inert,
+// so a feature suspected of causing a crash can be disabled without a rebuild
 public class CoartatioMixinPlugin implements IMixinConfigPlugin {
     private static final String PACKAGE = "com.bdmajora.coartatio.mixin.";
 
     private CoartatioConfig config;
 
+    // Reads the config once; it is a Properties file precisely so this is safe during coremod setup
     @Override
     public void onLoad(String mixinPackage) {
         this.config = CoartatioConfig.get();
     }
 
+    // Impetus reobfuscates mixins directly, so there is no refmap to name
     @Override
     public String getRefMapperConfig() {
         return null;
     }
 
+    // Maps the mixin's simple name to its switch; anything unlisted is refused
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         String name = mixinClassName.startsWith(PACKAGE)
@@ -83,19 +84,23 @@ public class CoartatioMixinPlugin implements IMixinConfigPlugin {
         }
     }
 
+    // Nothing to negotiate with other configs
     @Override
     public void acceptTargets(Set<String> myTargets, Set<String> otherTargets) {
     }
 
+    // Null means use the mixin list from the json
     @Override
     public List<String> getMixins() {
         return null;
     }
 
+    // No pre-apply rewriting needed
     @Override
     public void preApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
     }
 
+    // No post-apply rewriting needed
     @Override
     public void postApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
     }

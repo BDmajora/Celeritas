@@ -12,15 +12,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// The pack's parsed ID-map properties: block.properties, item.properties, entity.properties
-// Port of Iris's IdMap, working over the in-memory sources map rather than the filesystem
-// Each file goes through PropertiesPreprocessor first, so version- and option-gated sections resolve exactly as
-// they would under OptiFine or Iris rather than being read literally
-// Free of Minecraft: entries here are name and predicate DESCRIPTIONS. BlockMaterialMapping resolves them against
-// the 1.12.2 block registry later, when the pipeline is built
-// When a pack ships no block.properties at all, hasBlockProperties() is false and the terrain mesher keeps
-// emitting raw 1.12.2 block IDs — which is exactly what classic OptiFine packs like LIGHT and Chocapic are written
-// against, so no legacy-defaults table is needed here the way Iris needs its LegacyIdMap
+// The pack's block, item and entity .properties, preprocessed first so option gates resolve, as descriptions
+// BlockMaterialMapping resolves them against the registry later. No block.properties means raw block ids, which
+// is what classic packs expect, so no legacy table is needed
 public final class IdMap {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -104,6 +98,7 @@ public final class IdMap {
         return overrides;
     }
 
+    // layer.<name> value to a render layer; null when unknown
     private static net.minecraft.util.BlockRenderLayer parseRenderLayer(String name) {
         switch (name) {
             case "solid":
@@ -315,14 +310,17 @@ public final class IdMap {
         return this.hasBlockProperties;
     }
 
+    // block.properties entries by pack id
     public Map<Integer, List<BlockEntry>> getBlockProperties() {
         return this.blockPropertiesMap;
     }
 
+    // item.properties
     public Map<NamespacedId, Integer> getItemIdMap() {
         return this.itemIdMap;
     }
 
+    // entity.properties
     public Map<NamespacedId, Integer> getEntityIdMap() {
         return this.entityIdMap;
     }

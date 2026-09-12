@@ -18,10 +18,12 @@ class ChunkJobQueue {
     // per frame by the scheduling controller to detect under-provisioning of the in-flight target.
     private final AtomicBoolean workerBlocked = new AtomicBoolean(false);
 
+    // False after shutdown
     public boolean isRunning() {
         return this.isRunning.get();
     }
 
+    // Important jobs go to the front
     public void add(ChunkJob job, boolean important) {
         if (!this.isRunning()) {
             throw new IllegalStateException("Queue is no longer running");
@@ -36,6 +38,7 @@ class ChunkJobQueue {
         this.semaphore.release(1);
     }
 
+    // Next job or null, without blocking
     @Nullable
     public ChunkJob pollJob() {
         if (this.isRunning() && this.semaphore.tryAcquire()) {
@@ -45,6 +48,7 @@ class ChunkJobQueue {
         }
     }
 
+    // Blocks until a job arrives or shutdown
     @Nullable
     public ChunkJob waitForNextJob() throws InterruptedException {
         if (!this.isRunning()) {
@@ -69,6 +73,7 @@ class ChunkJobQueue {
         return this.workerBlocked.getAndSet(false);
     }
 
+    // Removes a specific job if still queued, so a thief can run it
     public boolean stealJob(ChunkJob job) {
         if (!this.semaphore.tryAcquire()) {
             return false;
@@ -84,12 +89,14 @@ class ChunkJobQueue {
         return success;
     }
 
+    // Important queue first
     @Nullable
     private ChunkJob getNextTask() {
         return this.jobs.poll();
     }
 
 
+    // Stops accepting and returns whatever was still queued
     public Collection<ChunkJob> shutdown() {
         var list = new ArrayDeque<ChunkJob>();
 
@@ -109,10 +116,12 @@ class ChunkJobQueue {
         return list;
     }
 
+    // Both queues
     public int size() {
         return this.semaphore.availablePermits();
     }
 
+    // Both queues
     public boolean isEmpty() {
         return this.size() == 0;
     }

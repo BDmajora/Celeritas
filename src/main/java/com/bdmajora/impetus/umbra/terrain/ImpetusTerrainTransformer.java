@@ -181,6 +181,7 @@ public final class ImpetusTerrainTransformer {
             ""
     ) + "\n";
 
+    // Full vertex rewrite: version bump, main rename, generated decode prologue
     public static String transformVertexShader(String source) {
         String body = stripVersion(source);
         body = renameMain(body);
@@ -193,15 +194,18 @@ public final class ImpetusTerrainTransformer {
         return VERTEX_PROLOGUE + attributeAdapterDefines(source) + hoist.body + vertexMain(hoist.hoistedAssignments);
     }
 
+    // Fragment rewrite with default draw buffers
     public static String transformFragmentShader(String source) {
         return transformFragmentShader(source, DrawBuffers.DEFAULT);
     }
 
+    // Fragment rewrite routing gl_FragData to the given targets
     public static String transformFragmentShader(String source, int[] drawBuffers) {
         return transformFragmentShader(source, drawBuffers,
                 "    if (iris_FragData[0].a < iris_AlphaCutoff) { discard; }\n");
     }
 
+    // Fragment rewrite with an injected alpha test, for cutout passes
     public static String transformFragmentShader(String source, int[] drawBuffers, String alphaTestSnippet) {
         String body = stripVersion(source);
         body = renameMain(body);
@@ -239,15 +243,18 @@ public final class ImpetusTerrainTransformer {
         return compatFor(VERTEX_PROLOGUE, source) + attributeAdapterDefines(source) + body + vertexMain("");
     }
 
+    // Modern-pack variant that leaves the body alone
     public static String transformFragmentShaderModern(String source) {
         return transformFragmentShaderModern(source, DrawBuffers.DEFAULT);
     }
 
+    // Modern-pack variant with draw buffer routing
     public static String transformFragmentShaderModern(String source, int[] drawBuffers) {
         return transformFragmentShaderModern(source, drawBuffers,
                 "    if (iris_FragData[0].a < iris_AlphaCutoff) { discard; }\n");
     }
 
+    // Modern-pack variant with alpha test
     public static String transformFragmentShaderModern(String source, int[] drawBuffers, String alphaTestSnippet) {
         String body = stripVersion(source);
         body = renameMain(body);
@@ -339,6 +346,7 @@ public final class ImpetusTerrainTransformer {
         }
     }
 
+    // Removes the pack's #version so the transform can emit its own
     private static String stripVersion(String source) {
         return VERSION.matcher(source).replaceFirst("");
     }
@@ -406,6 +414,7 @@ public final class ImpetusTerrainTransformer {
         return source;
     }
 
+    // gl_Fog.* onto the pipeline's fog uniforms
     private static String rewriteFogParameters(String source) {
         return FogParameters.rewrite(source);
     }

@@ -30,12 +30,11 @@
 package com.bdmajora.impetus.engine.impl.util.sorting;
 
 
-/**
- * Based upon {@link it.unimi.dsi.fastutil.ints.IntArrays} implementation.
- */
+// Based upon it.unimi.dsi.fastutil.ints.IntArrays implementation
 public class MergeSort extends AbstractSort {
     private static final int INSERTION_SORT_THRESHOLD = 16;
 
+    // Returns the permutation that sorts keys ascending
     public static int[] mergeSort(float[] keys) {
         var indices = createIndexBuffer(keys.length);
         mergeSort(indices, keys);
@@ -43,10 +42,12 @@ public class MergeSort extends AbstractSort {
         return indices;
     }
 
+    // Sorts an index array by its keys in place
     public static void mergeSort(final int[] indices, final float[] keys) {
         mergeSort(indices, keys, 0, indices.length, null);
     }
 
+    // Recursive top-down merge with an insertion-sort base case
     private static void mergeSort(final int[] indices, final float[] keys, final int fromIndex, final int toIndex, int[] supp) {
         int len = toIndex - fromIndex;
 

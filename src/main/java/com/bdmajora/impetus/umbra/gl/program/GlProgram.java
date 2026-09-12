@@ -18,6 +18,7 @@ public class GlProgram extends GlResource {
         setHandle(handle);
     }
 
+    // glUseProgram
     public void bind() {
         LWJGL.glUseProgram(getGlId());
     }
@@ -34,14 +35,17 @@ public class GlProgram extends GlResource {
         return LWJGL.glGetUniformLocation(getGlId(), name);
     }
 
+    // glGetAttribLocation
     public int getAttributeLocation(CharSequence name) {
         return LWJGL.glGetAttribLocation(getGlId(), name);
     }
 
+    // For log lines
     public String getName() {
         return this.name;
     }
 
+    // glDeleteProgram
     @Override
     protected void destroyInternal() {
         LWJGL.glDeleteProgram(getGlId());

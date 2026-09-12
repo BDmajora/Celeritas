@@ -30,16 +30,19 @@ final class BytecodeProvider implements IClassBytecodeProvider {
         this.classLoaderUtil = classLoaderUtil;
     }
 
+    // Transformed by default, matching what Mixin expects to inject into
     @Override
     public ClassNode getClassNode(String name) throws ClassNotFoundException, IOException {
         return this.getClassNode(name, true, ClassReader.EXPAND_FRAMES);
     }
 
+    // Default reader flags
     @Override
     public ClassNode getClassNode(String name, boolean runTransformers) throws ClassNotFoundException, IOException {
         return this.getClassNode(name, runTransformers, ClassReader.EXPAND_FRAMES);
     }
 
+    // Reads raw bytes, optionally runs the delegated transformers, then parses
     @Override
     public ClassNode getClassNode(String name, boolean runTransformers, int readerFlags) throws ClassNotFoundException, IOException {
         String transformedName = name.replace('/', '.');
@@ -56,6 +59,7 @@ final class BytecodeProvider implements IClassBytecodeProvider {
         return classNode;
     }
 
+    // Raw bytes from LaunchClassLoader, remapped through FML's deobfuscator when names differ
     private static byte[] getClassBytes(String name, String transformedName) throws IOException {
         byte[] classBytes = Launch.classLoader.getClassBytes(name);
         if (classBytes != null) {
@@ -70,6 +74,7 @@ final class BytecodeProvider implements IClassBytecodeProvider {
         }
     }
 
+    // Runs every non-Mixin transformer in LaunchWrapper's order
     private byte[] applyTransformers(String name, String transformedName, byte[] basicClass) {
         if (basicClass == null) {
             return null;
@@ -88,6 +93,7 @@ final class BytecodeProvider implements IClassBytecodeProvider {
         return basicClass;
     }
 
+    // SRG back to notch, for reading the obfuscated jar in production
     private String unmapClassName(String className) {
         if (this.nameTransformer == null) {
             for (IClassTransformer transformer : Launch.classLoader.getTransformers()) {

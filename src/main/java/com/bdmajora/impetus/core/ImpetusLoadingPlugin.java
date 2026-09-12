@@ -29,6 +29,7 @@ public class ImpetusLoadingPlugin implements IFMLLoadingPlugin {
         }
     }
 
+    // Runs the booter's own injection when Impetus owns Mixin, then registers Impetus' configs under either booter
     @Override
     public void injectData(Map<String, Object> data) {
         if (BooterBootstrap.state() == BooterBootstrap.MIXIN_OWNED) {

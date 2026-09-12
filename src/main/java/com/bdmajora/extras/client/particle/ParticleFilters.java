@@ -4,15 +4,9 @@ import com.bdmajora.extras.Extras;
 import com.bdmajora.extras.ExtrasConfig;
 import net.minecraft.util.EnumParticleTypes;
 
-// the named particle switches, resolved by vanilla particle id
-// matching on id rather than on the Particle subclass is what makes the finer OptiFine switches
-// possible at all, because several ids share a class: ParticleSuspendedTown alone backs
-// SUSPENDED_DEPTH (void), TOWN_AURA and VILLAGER_HAPPY, so a class-keyed "void particles" switch
-// would take the villager's happy particles with it
-// the per-class toggles in ParticleClassRegistry stay class-keyed because a modded particle has no id
-// we can reason about
-// the ids are read once into a lookup table: EnumParticleTypes.getParticleID() is a field read, but
-// this sits on the particle spawn path and the table keeps it to one array index
+// The named particle switches, resolved by vanilla particle id rather than class, because several ids share
+// a class: ParticleSuspendedTown backs void, town aura and villager happy particles alike
+// Ids are read once into a table so the spawn path pays one array index
 public final class ParticleFilters {
     // Which switch governs each particle id; null means "no named switch".
     private static final Filter[] BY_ID = buildTable();
@@ -38,6 +32,7 @@ public final class ParticleFilters {
         return filter == null || filter.isEnabled(options);
     }
 
+    // Builds the id-indexed table once at class init
     private static Filter[] buildTable() {
         int size = 0;
         for (EnumParticleTypes type : EnumParticleTypes.values()) {
@@ -66,6 +61,7 @@ public final class ParticleFilters {
         return table;
     }
 
+    // Assigns one filter to every id it governs
     private static void put(Filter[] table, Filter filter, EnumParticleTypes... types) {
         for (EnumParticleTypes type : types) {
             table[type.getParticleID()] = filter;

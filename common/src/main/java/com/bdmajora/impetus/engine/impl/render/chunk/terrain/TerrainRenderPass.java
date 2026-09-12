@@ -70,42 +70,52 @@ public class TerrainRenderPass {
         this.extraDefines = Map.copyOf(extraDefines);
     }
 
+    // Draw back-to-front, for translucents
     public boolean isReverseOrder() {
         return this.useReverseOrder;
     }
 
+    // Whether sections in this pass keep sorted index buffers
     public boolean isSorted() {
         return this.useTranslucencySorting;
     }
 
+    // Passes drawn without the lightmap, e.g. unlit overlays
     public boolean hasNoLightmap() {
         return this.hasNoLightmap;
     }
 
+    // Applies the pass's GL state
     public void startDrawing() {
         this.pipelineState.setup();
     }
 
+    // Restores GL state
     public void endDrawing() {
         this.pipelineState.clear();
     }
 
+    // Whether the shader may discard, for cutout passes
     public boolean supportsFragmentDiscard() {
         return this.fragmentDiscard;
     }
 
+    // Quads or triangles
     public ChunkPrimitiveType primitiveType() {
         return this.primitiveType;
     }
 
+    // The vertex format this pass builds
     public ChunkVertexType vertexType() {
         return this.vertexType;
     }
 
+    // Pass-specific shader defines
     public Map<String, String> extraDefines() {
         return this.extraDefines;
     }
 
+    // The pass name
     @Override
     public String toString() {
         return "TerrainRenderPass[name=" + this.name + "]";
@@ -113,11 +123,13 @@ public class TerrainRenderPass {
 
     public interface PipelineState {
         PipelineState DEFAULT = new PipelineState() {
+            // Builder hook run at startDrawing
             @Override
             public void setup() {
 
             }
 
+            // Builder hook run at endDrawing
             @Override
             public void clear() {
 

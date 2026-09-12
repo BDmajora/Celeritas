@@ -23,6 +23,7 @@ public class ControlElement<T> extends AbstractWidget implements OptionControlEl
         this.dim = dim;
     }
 
+    // Background, hover highlight and the option name
     @Override
     public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
         String name = drawContext.extractString(this.option.getName());
@@ -50,27 +51,33 @@ public class ControlElement<T> extends AbstractWidget implements OptionControlEl
         drawContext.drawString(label, this.dim.x() + 6, this.dim.getCenterY() - 4, style.textDefault);
     }
 
+    // Bound option
     public Option<T> getOption() {
         return this.option;
     }
 
+    // Bounds
     public Dim2i getDimensions() {
         return this.dim;
     }
 
+    // Owning mod's colour
     protected int getAccentColor(DrawContext drawContext) {
         var id = this.option.getId();
         return drawContext.getModAccentColor(id != null ? id.getModId() : null);
     }
 
+    // Greyed text colour
     protected int getDisabledControlColor() {
         return DefaultColors.TEXT_DISABLED;
     }
 
+    // Strikes through or greys a value when unavailable
     protected TextComponent formatDisabledControlValue(TextComponent value) {
         return value.withStyle(TextFormattingStyle.GRAY, TextFormattingStyle.STRIKETHROUGH);
     }
 
+    // Bounds test
     @Override
     public boolean isMouseOver(double x, double y) {
         return this.dim.containsCursor(x, y);

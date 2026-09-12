@@ -13,15 +13,8 @@ import java.util.Deque;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The only way anything reaches a device buffer in this backend
-//
-// upload() hands back a writable address inside one persistently mapped staging buffer and records where the
-// bytes eventually have to land; commit() flushes and issues the buffer-to-buffer copies in one batch. Staging
-// space is not reused until a fence proves the GPU finished the copy, which is what stops the CPU overwriting
-// bytes still in flight.
-//
-// Consecutive uploads try to extend the previous staging allocation rather than take a new one, so a frame that
-// writes a hundred small section headers usually costs one allocation and one flush, not a hundred of each
+// The only path to a device buffer: upload hands back a staging address, commit flushes and batches the copies
+// Staging space is fenced so the CPU never overwrites bytes in flight; consecutive uploads extend one allocation
 public class UploadStream {
     private final SegmentedAllocator allocator = new SegmentedAllocator();
     private final MappedUploadBuffer staging;
@@ -119,6 +112,7 @@ public class UploadStream {
         releaseCompletedFrames();
     }
 
+    // Frees the staging ring
     public void delete() {
         for (Frame frame : this.frames) {
             frame.fence.delete();
@@ -127,6 +121,7 @@ public class UploadStream {
         this.staging.delete();
     }
 
+    // Reclaims staging space whose fences have signalled
     private void releaseCompletedFrames() {
         while (!this.frames.isEmpty()) {
             // Frames were fenced in submission order, so the first unsignalled one means every later one is too
@@ -164,11 +159,14 @@ public class UploadStream {
         throw new IllegalStateException("Terrain upload buffer could not fit a " + size + " byte upload after flushing");
     }
 
+    // glFenceSync
     private static GlFence createFence() {
         return new GlFence(LWJGL.glFenceSync(GL32.GL_SYNC_GPU_COMMANDS_COMPLETE, 0));
     }
 
+    // A staged copy awaiting flush
     private record PendingCopy(DeviceBuffer target, long stagingOffset, long targetOffset, long size) {}
 
+    // A frame's staging allocations, reclaimed when its fence signals
     private record Frame(GlFence fence, LongArrayList allocations) {}
 }

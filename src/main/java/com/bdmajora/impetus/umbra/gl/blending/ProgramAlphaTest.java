@@ -11,15 +11,9 @@ import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 import java.util.Locale;
 import java.util.Optional;
 
-// The `alphaTest.<program> = off | <func> <ref>` directive, Iris's AlphaTest
-// Iris runs on core profile, where no fixed-function alpha test exists, so it compiles the comparison into a
-// discard in the fragment shader
-// On 1.12.2 the alpha test is REAL GL state that vanilla itself sets per render type, so the faithful thing here is
-// to override that state while the pack's program is bound and restore vanilla's afterwards — same shape as
-// ProgramBlendState
-// This matters in practice rather than in theory: Photon sets `off` on essentially every gbuffer program because it
-// does its own discard, and Complementary sets GREATER 0.0001 on the sky, water and weather programs
-// Ignoring the directive leaves vanilla's threshold in place, which silently culls fragments the pack meant to keep
+// The alphaTest.<program> directive. Iris compiles it to a discard; on 1.12.2 the alpha test is real GL state
+// vanilla sets per render type, so it is overridden while the program is bound and restored after
+// Photon sets off everywhere; ignoring that leaves vanilla's threshold culling fragments the pack meant to keep
 public final class ProgramAlphaTest {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -53,10 +47,12 @@ public final class ProgramAlphaTest {
         this.reference = reference;
     }
 
+    // No directive; vanilla's alpha test stays
     public static ProgramAlphaTest empty() {
         return EMPTY;
     }
 
+    // Reads alphaTest.<program>
     public static ProgramAlphaTest from(ShaderProperties properties, String programName) {
         Optional<String> value = properties.getAlphaTestOverride(programName);
         if (!value.isPresent()) {
@@ -92,6 +88,7 @@ public final class ProgramAlphaTest {
         return new ProgramAlphaTest(true, function == GL11.GL_ALWAYS, function, reference);
     }
 
+    // GREATER, GEQUAL and the rest to GL constants; null when unknown
     private static Integer parseFunction(String name) {
         switch (name.toUpperCase(Locale.ROOT)) {
             case "NEVER":
@@ -115,6 +112,7 @@ public final class ProgramAlphaTest {
         }
     }
 
+    // Whether anything needs applying
     public boolean hasDirectives() {
         return this.specified;
     }

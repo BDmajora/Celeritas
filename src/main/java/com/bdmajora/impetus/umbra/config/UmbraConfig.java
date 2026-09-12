@@ -27,6 +27,7 @@ public final class UmbraConfig {
         this.propertiesFile = gameDirectory.resolve("optionsshaders.txt");
     }
 
+    // The shaderpacks folder under the game directory, created on first access
     public Path getShaderpacksDirectory() {
         return this.shaderpacksDirectory;
     }
@@ -36,6 +37,7 @@ public final class UmbraConfig {
         return this.shaderPackName;
     }
 
+    // Records the chosen pack; null means shaders off
     public void setShaderPackName(String name) {
         this.shaderPackName = (name == null || name.trim().isEmpty()) ? NO_PACK : name.trim();
     }

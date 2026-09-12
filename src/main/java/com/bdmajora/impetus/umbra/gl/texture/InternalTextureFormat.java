@@ -10,15 +10,9 @@ import com.bdmajora.impetus.lwjgl.GL41;
 import java.util.Locale;
 import java.util.Optional;
 
-// Every colour buffer format an OptiFine-style pack can ask for, via the formatN / buffer.format keys in
-// shaders.properties
-// Each constant carries the GL sized internal format plus a (pixelFormat, pixelType) pair valid to hand to
-// glTexImage2D when allocating empty storage
-// The pair does not have to match the internal format's precision — the GPU stores at whatever the internal format
-// says — it only has to form a LEGAL combination. The one hard rule is that an integer internal format must be
-// paired with an *_INTEGER client format, which is why that distinction is tracked per constant rather than
-// assumed
-// Constant names match the OptiFine/Iris spelling exactly, so a pack's format string resolves through valueOf
+// Every colour buffer format a pack can request via formatN, each with a (pixelFormat, pixelType) pair legal
+// for glTexImage2D. Integer formats need *_INTEGER client formats, so that is tracked per constant
+// Names match the OptiFine spelling so a pack's string resolves through valueOf
 public enum InternalTextureFormat {
     // Default — OptiFine's implicit format. Umbra resolves it to the SIZED RGBA8 rather than the base GL_RGBA
     // constant, and the distinction is load-bearing: glBindImageTexture only accepts sized formats, so binding a
@@ -121,22 +115,27 @@ public enum InternalTextureFormat {
         this.integer = integer;
     }
 
+    // Sized GL internal format
     public int getInternalFormat() {
         return this.internalFormat;
     }
 
+    // A client format legal with the internal one
     public int getPixelFormat() {
         return this.pixelFormat;
     }
 
+    // A client type legal with the internal one
     public int getPixelType() {
         return this.pixelType;
     }
 
+    // Integer formats need *_INTEGER client formats
     public boolean isInteger() {
         return this.integer;
     }
 
+    // valueOf without the exception, for pack-supplied names
     public static Optional<InternalTextureFormat> fromString(String name) {
         try {
             return Optional.of(InternalTextureFormat.valueOf(name.toUpperCase(Locale.ROOT)));

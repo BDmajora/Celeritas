@@ -17,10 +17,12 @@ public enum GlIndexType {
         this.stride = stride;
     }
 
+    // GL type constant
     public int getFormatId() {
         return this.id;
     }
 
+    // Bytes per index
     public int getStride() {
         return this.stride;
     }

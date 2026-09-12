@@ -26,6 +26,7 @@ public final class GraphicsAdapterProbe {
     private GraphicsAdapterProbe() {
     }
 
+    // Enumerates adapters via sysfs on Linux or CIM on Windows; empty elsewhere
     public static List<GraphicsAdapterInfo> probe() {
         try {
             return switch (OsKind.current()) {
@@ -38,6 +39,7 @@ public final class GraphicsAdapterProbe {
         }
     }
 
+    // Walks /sys/bus/pci for display-class devices
     private static List<GraphicsAdapterInfo> probeLinuxSysFs() {
         var results = new ArrayList<GraphicsAdapterInfo>();
         var drm = Paths.get("/sys/class/drm");
@@ -71,6 +73,7 @@ public final class GraphicsAdapterProbe {
         return results;
     }
 
+    // Queries Win32_VideoController through PowerShell
     private static List<GraphicsAdapterInfo> probeWindowsCim() {
         // AdapterCompatibility|Name|DriverVersion, one adapter per line.
         var lines = runProcess(
@@ -93,6 +96,7 @@ public final class GraphicsAdapterProbe {
         return results;
     }
 
+    // Vendor from the adapter name string
     private static GraphicsVendor classifyWindowsVendor(String description) {
         var lower = description.toLowerCase(java.util.Locale.ROOT);
 
@@ -107,6 +111,7 @@ public final class GraphicsAdapterProbe {
         return GraphicsVendor.OTHER;
     }
 
+    // Runs a command and captures stdout lines, with a timeout
     private static List<String> runProcess(String... command) {
         try {
             var process = new ProcessBuilder(command)
@@ -136,6 +141,7 @@ public final class GraphicsAdapterProbe {
         }
     }
 
+    // File contents trimmed; null on failure
     private static String readTrimmed(Path path) {
         try {
             return new String(Files.readAllBytes(path), StandardCharsets.UTF_8).trim();
@@ -144,6 +150,7 @@ public final class GraphicsAdapterProbe {
         }
     }
 
+    // 0x-prefixed hex to int
     private static int parsePciId(String value) {
         try {
             return Integer.decode(value);
@@ -152,6 +159,7 @@ public final class GraphicsAdapterProbe {
         }
     }
 
+    // One KEY=value line from a uevent file
     private static String readUeventValue(Path uevent, String key) {
         try {
             for (var line : Files.readAllLines(uevent, StandardCharsets.UTF_8)) {

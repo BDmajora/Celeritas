@@ -18,14 +18,17 @@ public abstract class BaseOption {
         }
     }
 
+    // DEFINE or CONST
     public OptionType getType() {
         return type;
     }
 
+    // The identifier
     public String getName() {
         return name;
     }
 
+    // Trailing comment, used as the tooltip
     public Optional<String> getComment() {
         return Optional.ofNullable(comment);
     }

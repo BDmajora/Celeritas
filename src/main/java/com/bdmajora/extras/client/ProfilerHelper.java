@@ -30,6 +30,7 @@ public final class ProfilerHelper {
         }
     }
 
+    // Identical check at push and pop, so the two can never go out of balance
     private static boolean shouldProfile(World world, Object renderer) {
         return world != null
                 && renderer != null
@@ -37,6 +38,7 @@ public final class ProfilerHelper {
                 && !sectionName(renderer).isEmpty();
     }
 
+    // Simple class name, memoised per renderer class
     private static String sectionName(Object renderer) {
         return NAME_CACHE.computeIfAbsent(renderer.getClass(), Class::getSimpleName);
     }

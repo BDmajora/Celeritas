@@ -2,13 +2,8 @@ package com.bdmajora.coartatio.dedup;
 
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 
-// A string pool striped across independently locked shards
-// DeduplicationCache takes one lock per call, which is right for the model pools because a bake is
-// single-threaded. NBT keys are not: they are interned from the netty worker decoding packets, from the chunk
-// IO thread and from the client thread, several thousand times a second while chunks stream in, and one global
-// monitor there turns a memory win into a throughput loss
-// Striping by hash means threads working on different keys almost never contend, and because a key's shard is
-// fixed it still resolves to exactly one canonical instance
+// A string pool striped across independently locked shards, for NBT keys interned concurrently from the netty,
+// chunk IO and client threads. A key's shard is fixed by hash, so it still resolves to one canonical instance
 public final class ShardedStringCache {
     // Sixteen is enough to make contention negligible at 1.12.2's thread counts without the per-shard hash
     // tables costing more than the strings they save
@@ -36,6 +31,7 @@ public final class ShardedStringCache {
         }
     }
 
+    // Returns the canonical instance, spreading the hash first since short similar keys cluster on low bits
     public String deduplicate(String value) {
         if (value == null) {
             return null;
@@ -92,6 +88,7 @@ public final class ShardedStringCache {
         return this.hits;
     }
 
+    // Sum over shards, each under its own lock
     public int size() {
         int total = 0;
 
@@ -104,6 +101,7 @@ public final class ShardedStringCache {
         return total;
     }
 
+    // Hit-rate summary; counters are read without a lock since a torn read only costs a slightly wrong log line
     @Override
     public String toString() {
         // requests/hits are written under per-shard locks and read without one; they are statistics,

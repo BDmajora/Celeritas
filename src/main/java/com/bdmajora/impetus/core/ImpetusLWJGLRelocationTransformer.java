@@ -21,6 +21,7 @@ public class ImpetusLWJGLRelocationTransformer implements IClassTransformer {
     // Cache byte sequence of target string for rapid memory scanning
     private static final byte[] TARGET_BYTES = "org/lwjgl/".getBytes(StandardCharsets.UTF_8);
     
+    // Rewrites org.lwjgl references to org.lwjgl3 in Impetus classes only; everything else passes through untouched
     @Override
     public byte[] transform(String name, String transformedName, byte[] basicClass) {
         // Ignore null classes or anything outside the base impetus package
@@ -66,6 +67,7 @@ public class ImpetusLWJGLRelocationTransformer implements IClassTransformer {
     }
 
     private static class LwjglRemapper extends Remapper {
+        // Prefix swap without regex, since this runs for every type reference in every transformed class
         @Override
         public String map(String internalName) {
             // Fast-path string swap without regex overhead

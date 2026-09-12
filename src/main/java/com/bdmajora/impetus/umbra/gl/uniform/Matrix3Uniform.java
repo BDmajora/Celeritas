@@ -16,6 +16,7 @@ public class Matrix3Uniform extends Uniform {
         this.value = value;
     }
 
+    // Uploads unconditionally; diffing nine floats is not cheaper than the upload
     @Override
     public void update() {
         Matrix3fc matrix = this.value.get();

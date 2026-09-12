@@ -36,6 +36,7 @@ public abstract class BiomeColorCache<BIOME, RESOLVER> {
         this.tempColorBuffer = new ColorBuffer(sizeXZ, sizeXZ);
     }
 
+    // Re-centres the cache on a new section, invalidating every slice
     public void update(SectionPos origin) {
         this.minX = (origin.minX() - NEIGHBOR_BLOCK_RADIUS) - this.blendRadius;
         this.minY = (origin.minY() - NEIGHBOR_BLOCK_RADIUS);
@@ -48,6 +49,7 @@ public abstract class BiomeColorCache<BIOME, RESOLVER> {
         this.populateStamp++;
     }
 
+    // Blended colour at a block, computing the slice on first touch
     public int getColor(RESOLVER resolver, int blockX, int blockY, int blockZ) {
         var relX = MathUtil.clamp(blockX, this.minX, this.maxX) - this.minX;
         var relY = MathUtil.clamp(blockY, this.minY, this.maxY) - this.minY;
@@ -71,6 +73,7 @@ public abstract class BiomeColorCache<BIOME, RESOLVER> {
         return buffer.get(relX, relZ);
     }
 
+    // One slice per y layer of the cached region
     private Slice[] initializeSlices() {
         var slice = new Slice[this.sizeY];
 
@@ -83,6 +86,7 @@ public abstract class BiomeColorCache<BIOME, RESOLVER> {
 
     protected abstract int resolveColor(RESOLVER resolver, BIOME biome, int relativeX, int relativeY, int relativeZ);
 
+    // Fills a slice: resolves every biome colour then box-blurs by the configured radius
     private void updateColorBuffers(int relY, RESOLVER resolver, Slice slice) {
         int worldY = this.minY + relY;
 
@@ -128,6 +132,7 @@ public abstract class BiomeColorCache<BIOME, RESOLVER> {
             this.buffer = new ColorBuffer(size, size);
         }
 
+        // The scratch buffer the blur writes into
         public ColorBuffer getBuffer() {
             return this.buffer;
         }

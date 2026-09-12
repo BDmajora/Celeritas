@@ -9,6 +9,7 @@ import com.bdmajora.impetus.engine.impl.gui.framework.InteractionContext;
 public enum VintageInteractionContext implements InteractionContext {
     INSTANCE;
 
+    // Maps Sodium's modifier keys onto LWJGL2 keyboard state
     @Override
     public boolean isSpecialKeyDown(SpecialKey key) {
         return switch (key) {
@@ -18,6 +19,7 @@ public enum VintageInteractionContext implements InteractionContext {
         };
     }
 
+    // Vanilla's button click
     @Override
     public void playClickSound() {
         Minecraft.getMinecraft().getSoundHandler().playSound(

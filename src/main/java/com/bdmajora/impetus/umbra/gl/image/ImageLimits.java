@@ -21,6 +21,7 @@ public final class ImageLimits {
         this.maxImageUnits = Math.max(0, LWJGL.glGetInteger(GL_MAX_IMAGE_UNITS));
     }
 
+    // Queried on first use and cached
     public static ImageLimits get() {
         if (instance == null) {
             instance = new ImageLimits();
@@ -33,6 +34,7 @@ public final class ImageLimits {
         instance = null;
     }
 
+    // GL_MAX_IMAGE_UNITS
     public int getMaxImageUnits() {
         return this.maxImageUnits;
     }

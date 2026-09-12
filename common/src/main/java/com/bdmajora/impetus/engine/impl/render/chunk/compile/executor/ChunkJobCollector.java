@@ -20,11 +20,13 @@ public class ChunkJobCollector {
         this.collector = collector;
     }
 
+    // Counts a completion and stores the result
     public void onJobFinished(ChunkJobResult<? extends ChunkTaskOutput> result) {
         this.semaphore.release(1);
         this.collector.accept(result);
     }
 
+    // Blocks until every submitted job finished, stealing work meanwhile
     public void awaitCompletion(ChunkBuilder builder) {
         if (this.submitted.size() == 0) {
             return;
@@ -58,10 +60,12 @@ public class ChunkJobCollector {
         }
     }
 
+    // Tracks a job so awaitCompletion knows what to wait for
     public void addSubmittedJob(ChunkJob job) {
         this.submitted.add(job);
     }
 
+    // Whether more jobs may be submitted this frame under the budget
     public boolean canOffer() {
         return (this.budget - this.submitted.size()) > 0;
     }

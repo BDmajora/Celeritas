@@ -13,18 +13,16 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-// Replaces ConditionAnd.getPredicate: vanilla allocates a Predicates.and/Iterables.transform chain
-// that keeps the original ICondition list and BlockStateContainer alive for the model's lifetime.
-// When every child is a plain property=value test (the common case), the whole tree collapses to
-// one AllMatchOne holding two arrays instead.
-// conditions is shadowed package-private since vanilla/mappings render its visibility differently,
-// and a Mixin shadow must be at least as visible as its target.
+// Vanilla's Predicates.and chain retains the ICondition list and BlockStateContainer for the model's lifetime
+// When every child is a plain property=value test the whole tree collapses to one AllMatchOne over two arrays
 @Mixin(ConditionAnd.class)
 public class ConditionAndMixin {
+    // Package-private to match the target's visibility, which mappings render inconsistently
     @Shadow
     @Final
     Iterable<ICondition> conditions;
 
+    // Cancelled at HEAD so the Guava chain is never built
     @Inject(method = "getPredicate", at = @At("HEAD"), cancellable = true)
     private void coartatio$flatten(BlockStateContainer container,
                                    CallbackInfoReturnable<Predicate<IBlockState>> cir) {

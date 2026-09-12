@@ -17,6 +17,7 @@ public class ExpiringSupplier<T> implements Supplier<@NotNull T> {
         this.expiryTime = TimeUnit.NANOSECONDS.convert(duration, unit);
     }
 
+    // Recomputes once the cached value is older than the interval
     @Override
     public T get() {
         if (lastValue == null || (System.nanoTime() - lastTime) >= expiryTime) {

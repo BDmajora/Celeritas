@@ -16,26 +16,32 @@ public final class CameraUniforms {
     private CameraUniforms() {
     }
 
+    // Registers the per-frame position capture
     public static void attach(FrameUpdateNotifier notifier) {
         notifier.addListener(TRACKER::update);
     }
 
+    // Shifted position, for cameraPosition
     public static Vector3d getCurrentCameraPosition() {
         return TRACKER.getCurrentCameraPosition();
     }
 
+    // Last frame's shifted position
     public static Vector3d getPreviousCameraPosition() {
         return TRACKER.getPreviousCameraPosition();
     }
 
+    // Raw world position
     public static Vector3d getCurrentCameraPositionUnshifted() {
         return TRACKER.getCurrentCameraPositionUnshifted();
     }
 
+    // Last frame's raw position
     public static Vector3d getPreviousCameraPositionUnshifted() {
         return TRACKER.getPreviousCameraPositionUnshifted();
     }
 
+    // Integer part, for the split-precision uniform
     public static Vector3i getCameraPositionInt(Vector3d originalPos) {
         return new Vector3i(
                 (int) Math.floor(originalPos.x),
@@ -43,6 +49,7 @@ public final class CameraUniforms {
                 (int) Math.floor(originalPos.z));
     }
 
+    // Fractional part
     public static Vector3f getCameraPositionFract(Vector3d originalPos) {
         return new Vector3f(
                 (float) (originalPos.x - Math.floor(originalPos.x)),
@@ -50,6 +57,7 @@ public final class CameraUniforms {
                 (float) (originalPos.z - Math.floor(originalPos.z)));
     }
 
+    // Interpolated eye position from the render view entity
     private static Vector3d getUnshiftedCameraPosition() {
         Entity camera = Minecraft.getMinecraft().getRenderViewEntity();
         if (camera == null) {
@@ -75,6 +83,7 @@ public final class CameraUniforms {
         private Vector3d previousCameraPositionUnshifted = new Vector3d();
         private Vector3d currentCameraPositionUnshifted = new Vector3d();
 
+        // How much to re-centre by when the camera crosses a shift boundary
         private static double getShift(double value, double prevValue) {
             if (Math.abs(value) > WALK_RANGE || Math.abs(value - prevValue) > TP_RANGE) {
                 return -(value - (value % WALK_RANGE));
@@ -82,6 +91,7 @@ public final class CameraUniforms {
             return 0.0;
         }
 
+        // Per-frame capture and shift maintenance
         private void update() {
             this.previousCameraPosition = this.currentCameraPosition;
             this.previousCameraPositionUnshifted = this.currentCameraPositionUnshifted;
@@ -90,6 +100,7 @@ public final class CameraUniforms {
             updateShift();
         }
 
+        // Re-centres far from origin, matching OptiFine, so float precision holds
         private void updateShift() {
             double dX = getShift(this.currentCameraPosition.x, this.previousCameraPosition.x);
             double dZ = getShift(this.currentCameraPosition.z, this.previousCameraPosition.z);
@@ -98,6 +109,7 @@ public final class CameraUniforms {
             }
         }
 
+        // Applies a shift to both current and previous
         private void applyShift(double dX, double dZ) {
             this.shift.x += dX;
             this.currentCameraPosition.x += dX;
@@ -107,18 +119,22 @@ public final class CameraUniforms {
             this.previousCameraPosition.z += dZ;
         }
 
+        // Instance accessor
         private Vector3d getCurrentCameraPosition() {
             return this.currentCameraPosition;
         }
 
+        // Instance accessor
         private Vector3d getPreviousCameraPosition() {
             return this.previousCameraPosition;
         }
 
+        // Instance accessor
         private Vector3d getCurrentCameraPositionUnshifted() {
             return this.currentCameraPositionUnshifted;
         }
 
+        // Instance accessor
         private Vector3d getPreviousCameraPositionUnshifted() {
             return this.previousCameraPositionUnshifted;
         }

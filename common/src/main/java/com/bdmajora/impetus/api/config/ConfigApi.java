@@ -15,11 +15,13 @@ public final class ConfigApi {
     private ConfigApi() {
     }
 
+    // Adds a whole page to the options screen
     public static void registerPage(Supplier<OptionPage> page) {
         Objects.requireNonNull(page, "Page supplier must not be null");
         OptionGUIConstructionEvent.BUS.addListener(event -> event.addPage(page.get()));
     }
 
+    // Adds a group to an existing page
     public static void registerGroup(OptionIdentifier<Void> pageId, Supplier<OptionGroup> group) {
         Objects.requireNonNull(pageId, "Page id must not be null");
         Objects.requireNonNull(group, "Group supplier must not be null");
@@ -31,6 +33,7 @@ public final class ConfigApi {
         });
     }
 
+    // Adds an option to an existing group
     public static void registerOption(OptionIdentifier<Void> groupId, Supplier<Option<?>> option) {
         Objects.requireNonNull(groupId, "Group id must not be null");
         Objects.requireNonNull(option, "Option supplier must not be null");

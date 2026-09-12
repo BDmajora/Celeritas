@@ -10,6 +10,7 @@ import java.util.Iterator;
 
 public class EagerlyLoadEventClassTransformer implements IClassTransformer, Opcodes {
 
+    // Only touches Forge's EventBus; everything else passes through
     @Override
     public byte[] transform(String name, String transformedName, byte[] classBytes) {
         if ("$wrapper.net.minecraftforge.fml.common.asm.transformers.EventSubscriptionTransformer".equals(name)) {
@@ -18,6 +19,7 @@ public class EagerlyLoadEventClassTransformer implements IClassTransformer, Opco
         return classBytes;
     }
 
+    // Makes EventBus load an event class before subscribing, so a mixin on it applies before first use
     private byte[] eagerlyLoadEventClass(byte[] classBytes) {
         ClassNode node = new ClassNode();
         ClassReader reader = new ClassReader(classBytes);

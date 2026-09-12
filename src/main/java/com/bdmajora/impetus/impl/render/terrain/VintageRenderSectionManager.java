@@ -53,25 +53,30 @@ public class VintageRenderSectionManager extends RenderSectionManager {
         return com.bdmajora.impetus.umbra.pipeline.UmbraShadowRenderer.isShadowPass();
     }
 
+    // Factory, since the base class needs the vertex type before construction
     public static VintageRenderSectionManager create(ChunkVertexType vertexType, WorldClient world, int renderDistance, CommandList commandList) {
         return new VintageRenderSectionManager(VintageRenderPassConfigurationBuilder.build(vertexType), world, renderDistance, commandList, 0, 16);
     }
 
+    // From the Impetus option
     @Override
     protected AsyncOcclusionMode getAsyncOcclusionMode() {
         return ImpetusVintage.options().performance.asyncOcclusionMode;
     }
 
+    // Always; 1.12.2 has no reason to let the queue grow unbounded
     @Override
     protected boolean shouldRespectUpdateTaskQueueSizeLimit() {
         return true;
     }
 
+    // From the Impetus option
     @Override
     protected boolean useFogOcclusion() {
         return ImpetusVintage.options().performance.useFogOcclusion;
     }
 
+    // Off inside opaque blocks or in spectator, matching vanilla
     @Override
     protected boolean shouldUseOcclusionCulling(Viewport positionedViewport, boolean spectator) {
         if (isInShadowPass()) {
@@ -101,6 +106,7 @@ public class VintageRenderSectionManager extends RenderSectionManager {
         return useOcclusionCulling;
     }
 
+    // Empty sections skip building entirely
     @Override
     protected boolean isSectionVisuallyEmpty(int x, int y, int z) {
         Chunk chunk = this.world.getChunk(x, z);
@@ -128,17 +134,20 @@ public class VintageRenderSectionManager extends RenderSectionManager {
         return new ChunkBuilderMeshingTask(render, context, frame, this.cameraPosition);
     }
 
+    // From the Impetus option
     @Override
     protected boolean allowImportantRebuilds() {
         return !ImpetusVintage.options().performance.alwaysDeferChunkUpdates;
     }
 
+    // Forwards to the base scheduler with the importance flag
     @Override
     protected void scheduleSectionForRebuild(int x, int y, int z, boolean important) {
         this.sectionCache.invalidate(x, y, z);
         super.scheduleSectionForRebuild(x, y, z, important);
     }
 
+    // Runs the build queue, immediately when requested by a block change
     @Override
     public void updateChunks(boolean updateImmediately) {
         this.sectionCache.cleanup();
@@ -157,6 +166,7 @@ public class VintageRenderSectionManager extends RenderSectionManager {
         }
     }
 
+    // Installs a build result and records its tile entities for the block entity pass
     @Override
     protected boolean updateSectionInfo(RenderSection render, @Nullable BuiltRenderSectionData info) {
         if (info instanceof MinecraftBuiltRenderSectionData<?,?> mcData) {
@@ -197,6 +207,7 @@ public class VintageRenderSectionManager extends RenderSectionManager {
             return ImpetusVintage.options().performance.useBlockFaceCulling;
         }
 
+        // Uploads fog and texture state before drawing
         @Override
         protected void configureShaderInterface(ChunkShaderInterface shader) {
             shader.setTextureSlot(ChunkShaderTextureSlot.BLOCK, 0);

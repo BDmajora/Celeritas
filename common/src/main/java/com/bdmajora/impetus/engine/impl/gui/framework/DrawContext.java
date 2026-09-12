@@ -7,10 +7,12 @@ import org.jetbrains.annotations.Nullable;
 public interface DrawContext extends FontMetricsProvider {
     void fill(int x1, int y1, int x2, int y2, int color);
 
+    // Plain string without shadow
     default int drawString(String str, int x, int y, int color) {
         return drawString(TextComponent.literal(str), x, y, color);
     }
 
+    // Component without shadow
     default int drawString(TextComponent str, int x, int y, int color) {
         return drawString(str, x, y, color, false);
     }
@@ -29,6 +31,7 @@ public interface DrawContext extends FontMetricsProvider {
 
     void disableScissor();
 
+    // One-pixel outline from four fills
     default void drawBorder(int x1, int y1, int x2, int y2, int color) {
         fill(x1, y1, x2, y1 + 1, color);
         fill(x1, y2 - 1, x2, y2, color);
@@ -40,10 +43,12 @@ public interface DrawContext extends FontMetricsProvider {
         return null;
     }
 
+    // Defaults to the id; platforms override with the display name
     default TextComponent getFriendlyModName(String modId) {
         return TextComponent.literal(modId);
     }
 
+    // Defaults to the theme's per-mod colour
     default int getModAccentColor(String modId) {
         return DefaultColors.getModAccentColor(modId);
     }

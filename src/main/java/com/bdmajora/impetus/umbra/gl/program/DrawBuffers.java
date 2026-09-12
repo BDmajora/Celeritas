@@ -70,6 +70,7 @@ public final class DrawBuffers {
         return parseActive(fragmentSource, com.bdmajora.impetus.umbra.gl.shader.ShaderMacros.standard());
     }
 
+    // Parses honouring #ifdef gates, so an option can change which targets a pass writes
     public static int[] parseActive(String fragmentSource, Map<String, String> defines) {
         if (fragmentSource == null) {
             return DEFAULT.clone();
@@ -91,6 +92,7 @@ public final class DrawBuffers {
         }
     }
 
+    // Parses the first directive found, ignoring gates
     public static int[] parse(String fragmentSource) {
         if (fragmentSource == null) {
             return DEFAULT.clone();
@@ -100,10 +102,12 @@ public final class DrawBuffers {
         return directives.isEmpty() ? DEFAULT.clone() : directives.get(0).buffers.clone();
     }
 
+    // Drops out-of-range targets silently
     public static int[] sanitize(int[] drawBuffers, int maxExclusive) {
         return sanitize(drawBuffers, maxExclusive, null);
     }
 
+    // Drops out-of-range targets, reporting each
     public static int[] sanitize(int[] drawBuffers, int maxExclusive, IntConsumer invalidBufferConsumer) {
         if (drawBuffers == null || drawBuffers.length == 0) {
             return DEFAULT.clone();
@@ -143,6 +147,7 @@ public final class DrawBuffers {
         return rewriteNamedFragmentOutputs(rewritten);
     }
 
+    // gl_FragColor onto gl_FragData[0] so both spellings route the same way
     private static String rewriteFragColor(String source) {
         String[] lines = source.split("\n", -1);
         for (int i = 0; i < lines.length; i++) {
@@ -209,6 +214,7 @@ public final class DrawBuffers {
         return directives.get(directives.size() - 1).buffers.clone();
     }
 
+    // Every DRAWBUFFERS and RENDERTARGETS comment with its enclosing conditional
     private static List<Directive> directives(String fragmentSource) {
         List<Directive> directives = new ArrayList<>();
 
@@ -235,6 +241,7 @@ public final class DrawBuffers {
         return directives;
     }
 
+    // Comma-separated form
     private static int[] parseRenderTargets(String value) {
         String trimmed = value.trim();
         if (trimmed.isEmpty()) {

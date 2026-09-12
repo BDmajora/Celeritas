@@ -18,6 +18,7 @@ public class ShaderLoader {
         return new GlShader(type, name, ShaderParser.parseShader(getShaderSource(name), ShaderLoader::getShaderSource, constants));
     }
 
+    // Reads a bundled shader from the jar, throwing with the name if missing
     public static String getShaderSource(String name) {
         String[] splitStr;
         if(name.contains(":")) {

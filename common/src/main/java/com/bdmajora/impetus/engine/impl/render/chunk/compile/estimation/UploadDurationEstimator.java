@@ -11,6 +11,7 @@ public final class UploadDurationEstimator {
     private long lastUploadDurationNanos;
     private long lastUploadEstimateNanos;
 
+    // Bytes to nanoseconds from the running throughput
     public long estimateUploadDuration(long byteCount) {
         if (byteCount <= 0) {
             return 0L;
@@ -19,6 +20,7 @@ public final class UploadDurationEstimator {
         return Math.max(1L, (long)(this.nanosPerByte * byteCount));
     }
 
+    // Feeds an observation into the moving average
     public void recordUpload(long byteCount, long durationNanos) {
         if (byteCount <= 0 || durationNanos <= 0) {
             return;
@@ -38,14 +40,17 @@ public final class UploadDurationEstimator {
         }
     }
 
+    // For the debug screen
     public long getLastUploadBytes() {
         return this.lastUploadBytes;
     }
 
+    // For the debug screen
     public long getLastUploadDurationNanos() {
         return this.lastUploadDurationNanos;
     }
 
+    // For the debug screen
     public long getLastUploadEstimateNanos() {
         return this.lastUploadEstimateNanos;
     }

@@ -8,10 +8,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.LongAdder;
 
-// Entry points for Impetus' lighting subsystem. Fulgor is a backport of Phosphor (via the Phosphor-Forge
-// -> Hesperus 1.12.2 lineage), folding in Alfheim's corrections; see FULGOR_ROADMAP.md for the feature inventory.
-// Not an FML entry point itself — the mixins do the work, each World owns a LightingEngine. This class
-// owns the logger, optional-mod detection the engine's hot path branches on, and the /fulgor counters.
+// Entry points for the lighting subsystem, a Phosphor backport folding in Alfheim's corrections
+// Not an FML entry point; the mixins do the work and each World owns a LightingEngine
 public final class Fulgor {
     public static final Logger LOGGER = LogManager.getLogger("Fulgor");
 
@@ -50,10 +48,12 @@ public final class Fulgor {
         cachedBlockLightInfo = FulgorConfig.get().cacheBlockLightInfo && !dynamicLights && !fluidloggedApi;
     }
 
+    // Whether AtomicStryker's Dynamic Lights was detected at startup
     public static boolean hasDynamicLights() {
         return dynamicLights;
     }
 
+    // Whether Fluidlogged API was detected at startup
     public static boolean hasFluidloggedApi() {
         return fluidloggedApi;
     }
@@ -66,10 +66,12 @@ public final class Fulgor {
         return cachedBlockLightInfo;
     }
 
+    // Counts a position handed to the engine, for /fulgor
     public static void recordScheduled() {
         SCHEDULED.increment();
     }
 
+    // Counts a scheduled position the queue collapsed as a repeat
     public static void recordDeduplicated() {
         DEDUPLICATED.increment();
     }
@@ -98,12 +100,14 @@ public final class Fulgor {
                 compact(SCHEDULED.sum()), percentOfScheduled(DEDUPLICATED.sum()));
     }
 
+    // Ratio against the scheduled count, guarding the divide-by-zero on a fresh session
     private static String percentOfScheduled(long value) {
         long scheduled = SCHEDULED.sum();
 
         return scheduled == 0 ? "0%" : String.format("%.0f%%", (value * 100.0D) / scheduled);
     }
 
+    // Human-readable magnitude suffix so the report fits in chat
     private static String compact(long value) {
         if (value < 1_000L) {
             return Long.toString(value);

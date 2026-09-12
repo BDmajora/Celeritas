@@ -12,6 +12,7 @@ public class GlUniformFloatArray extends GlUniform<float[]> {
         super(index);
     }
 
+    // glUniform1fv from an array
     @Override
     public void set(float[] value) {
         try (MemoryStack stack = LWJGL.stackPush()) {
@@ -22,6 +23,7 @@ public class GlUniformFloatArray extends GlUniform<float[]> {
         }
     }
 
+    // glUniform1fv from a buffer
     public void set(FloatBuffer value) {
         LWJGL.glUniform1fv(this.index, value);
     }

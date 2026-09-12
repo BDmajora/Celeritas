@@ -7,22 +7,9 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.URL;
 
-// Defines a class into another class's runtime package
-// Java enforces package-private access by RUNTIME package, meaning the same package name AND the same
-// classloader. Guava's ImmutableMap has a package-private constructor, so a subclass must be loaded by whatever
-// loader loaded Guava. Simply shipping a com.google.common.collect class inside our own jar is not enough: if
-// Guava came from a different loader, the JVM refuses the access at first use with an IllegalAccessError
-// thrown a long way from its cause
-// Hydrogen calls this category of trick "things too dirty to put in Lithium", and this is the only place
-// Coartatio does anything of the sort
-// Three tiers are tried, most preferred first: MethodHandles.privateLookupIn(...).defineClass on Java 9+, which
-// is what an lwjgl3ify/RetroFuturaBootstrap setup runs; ClassLoader.defineClass unlocked with setAccessible,
-// the ordinary 1.12.2-on-Java-8 case where the module system is not there to stop it; and giving up, in which
-// case defineClass returns null, the caller disables its feature, and the game starts normally
-// Two rules for anything injected this way. It may reference ONLY its host package and java.* — no Coartatio
-// imports, because if Guava is on a loader that cannot see our jar an import turns into a NoClassDefFoundError
-// at first use instead of the clean, detectable failure this class produces. And classes must be defined in
-// reverse dependency order, innermost helper first, so a partial failure cannot leave a half-linked class behind
+// Defines a class into another class's runtime package, since package-private access needs the same loader
+// Three tiers: privateLookupIn on Java 9+, unlocked defineClass on Java 8, or give up and return null
+// Injected classes may reference only their host package and java.*, and are defined innermost first
 public final class ClassDefineTool {
     private static boolean warned;
 
@@ -105,6 +92,7 @@ public final class ClassDefineTool {
         }
     }
 
+    // Loads the class file bytes from our own jar, since the target loader cannot see it
     private static byte[] readBytecode(String name) {
         String path = "/" + name.replace('.', '/') + ".class";
         URL url = ClassDefineTool.class.getResource(path);

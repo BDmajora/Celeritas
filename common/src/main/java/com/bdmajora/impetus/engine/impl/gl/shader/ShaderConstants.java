@@ -11,10 +11,12 @@ public class ShaderConstants {
         this.defines = defines;
     }
 
+    // The #define lines
     public List<String> getDefineStrings() {
         return this.defines;
     }
 
+    // Starts an empty set
     public static ShaderConstants.Builder builder() {
         return new Builder();
     }
@@ -28,10 +30,12 @@ public class ShaderConstants {
 
         }
 
+        // #define NAME
         public ShaderConstants.Builder add(String name) {
             return this.add(name, EMPTY_VALUE);
         }
 
+        // #define NAME value
         public ShaderConstants.Builder add(String name, String value) {
             String prev = this.constants.get(name);
 
@@ -43,6 +47,7 @@ public class ShaderConstants {
             return this;
         }
 
+        // Finalises
         public ShaderConstants build() {
             List<String> defines = new ArrayList<>(this.constants.size());
 
@@ -60,6 +65,7 @@ public class ShaderConstants {
             return new ShaderConstants(Collections.unmodifiableList(defines));
         }
 
+        // Bulk value-less defines
         public ShaderConstants.Builder addAll(Collection<String> defines) {
             for (String value : defines) {
                 this.add(value);
@@ -67,6 +73,7 @@ public class ShaderConstants {
             return this;
         }
 
+        // Bulk valued defines
         public ShaderConstants.Builder addAll(Map<String, String> defines) {
             defines.forEach(this::add);
             return this;

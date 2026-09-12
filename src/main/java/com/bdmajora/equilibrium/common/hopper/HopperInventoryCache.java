@@ -12,27 +12,10 @@ import net.minecraft.world.World;
 
 import javax.annotation.Nullable;
 
-// one hopper's memory of the inventory on one of its two sides
-// a hopper resolves the inventory above it and the one it faces on every transfer attempt, which is
-// every eight ticks when it is moving items and *every tick* when it is not, because the cooldown
-// only gets set on a successful transfer
-// resolving means a block read, a tile entity lookup that may construct a tile entity as a side
-// effect, and - when neither turns up an inventory - an entity query over the block
-// a row of idle hoppers is the most reliable source of tick lag on this version, and almost all of it
-// is this
-// cached: the tile entity, keyed on the block state that was there when it was resolved
-// block states are singletons, so an identity comparison answers "has this block changed" exactly and
-// for the cost of a field load, and a tile entity that has been invalidated fails the check
-// separately, which covers removal without a state change
-// not cached: anything about chests, because BlockChest.getContainer inspects all four horizontal
-// neighbours to decide whether this is half of a double chest and placing the other half does not
-// change either chest's block state - a cache keyed on state would keep handing back a single-chest
-// view of what is now a double chest, so chests take the vanilla path every time
-// not cached: the entity fallback, because an inventory entity can move into or out of the block
-// without anything nearby changing; instead of caching it the whole query is skipped when the world
-// provably holds no inventory entities at all - see InventoryEntityTracker
-// the cache lives on the hopper and is never shared, so it needs no synchronisation, and each hopper
-// has two: one for the block above it and one for the block it faces
+// One hopper's memory of the inventory on one side, keyed on the block state that was there when resolved
+// States are singletons, so identity answers "has this block changed" for the cost of a field load
+// Chests are never cached since placing the other half of a double chest changes neither state; the entity fallback
+// is never cached either, the whole query is skipped when the world provably holds no inventory entities
 public final class HopperInventoryCache {
     // The state that was at the cached position when it was last resolved. Null means unresolved.
     private IBlockState state;
@@ -66,6 +49,7 @@ public final class HopperInventoryCache {
         return HopperEntityLookup.findInventoryEntity(world, x, y, z);
     }
 
+    // Resolves the inventory at a position, handling chests separately so they never enter the cache
     @Nullable
     private IInventory resolveTileEntityInventory(World world, BlockPos pos) {
         IBlockState state = world.getBlockState(pos);
@@ -114,6 +98,7 @@ public final class HopperInventoryCache {
         return this.inventory;
     }
 
+    // Prefers the non-creating lookup, so probing an empty position cannot force a tile entity into being
     @Nullable
     private TileEntity lookup(World world, BlockPos pos) {
         if (world instanceof TileEntityAccess) {

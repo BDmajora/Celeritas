@@ -12,10 +12,12 @@ public record NormalPlanes(float nx, float ny, float nz, float[] distances) {
     // crossings, while collapsing float noise from the mesher
     private static final int QUANT_SCALE = 126;
 
+    // Nearest plane along this normal
     public float minDistance() {
         return this.distances[0];
     }
 
+    // Farthest plane along this normal
     public float maxDistance() {
         return this.distances[this.distances.length - 1];
     }

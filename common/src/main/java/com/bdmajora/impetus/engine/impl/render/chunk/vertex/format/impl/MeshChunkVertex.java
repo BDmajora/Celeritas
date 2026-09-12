@@ -10,16 +10,8 @@ import java.util.Map;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The 16-byte terrain vertex the mesh-shader backend reads
-//
-// Four bytes narrower than CompactChunkVertex, and the saving is the point: the mesh shader fetches four of these
-// per quad through a raw pointer, so the format has to be a uvec4 the shader can load in one go. Getting there
-// costs two things CompactChunkVertex does not pay:
-//   - shade is folded into the colour on the CPU, so alpha is free and RGB packs into 24 bits
-//   - light drops from two 16-bit coordinates to two bytes, clamped away from the atlas edges
-//
-// There is no GlVertexFormat worth declaring, because nothing binds this as vertex attributes; the field exists
-// only because ChunkVertexType demands one, and it describes the stride and nothing else
+// The 16-byte terrain vertex the mesh shader reads as one uvec4: shade is folded into 24-bit colour on the CPU
+// and light drops to two bytes. The GlVertexFormat exists only because ChunkVertexType demands one; nothing binds it
 public class MeshChunkVertex implements ChunkVertexType {
     public static final int STRIDE = 16;
 
@@ -42,26 +34,31 @@ public class MeshChunkVertex implements ChunkVertexType {
 
     public static final MeshChunkVertex INSTANCE = new MeshChunkVertex();
 
+    // Positions are packed integers over the section
     @Override
     public float getPositionScale() {
         return MODEL_SCALE;
     }
 
+    // Shift so a small negative margin fits
     @Override
     public float getPositionOffset() {
         return -MODEL_ORIGIN;
     }
 
+    // UVs are packed integers
     @Override
     public float getTextureScale() {
         return TEXTURE_SCALE;
     }
 
+    // Layout the mesh shader unpacks
     @Override
     public GlVertexFormat getVertexFormat() {
         return VERTEX_FORMAT;
     }
 
+    // Writes one packed vertex per call
     @Override
     public ChunkVertexEncoder createEncoder() {
         return (ptr, material, vertex, sectionIndex) -> {
@@ -76,6 +73,7 @@ public class MeshChunkVertex implements ChunkVertexType {
         };
     }
 
+    // Tells the shader the mesh layout is in use
     @Override
     public Map<String, String> getDefines() {
         var map = ChunkVertexType.super.getDefines();
@@ -90,10 +88,12 @@ public class MeshChunkVertex implements ChunkVertexType {
         return LWJGL.memGetInt(ptr) & 0xFFFF;
     }
 
+    // Reads the packed y field from a vertex in memory
     public static int readPackedY(long ptr) {
         return (LWJGL.memGetInt(ptr) >>> 16) & 0xFFFF;
     }
 
+    // Reads the packed z field
     public static int readPackedZ(long ptr) {
         return LWJGL.memGetInt(ptr + 4) & 0xFFFF;
     }
@@ -106,14 +106,17 @@ public class MeshChunkVertex implements ChunkVertexType {
         return Math.max(0, Math.min(15, block));
     }
 
+    // Back to float
     public static float decodePosition(int packed) {
         return (packed / MODEL_SCALE_INV) - MODEL_ORIGIN;
     }
 
+    // Float to packed integer
     private static int encodePosition(float value) {
         return ((int) ((MODEL_ORIGIN + value) * MODEL_SCALE_INV)) & 0xFFFF;
     }
 
+    // Float UV to packed integer
     private static int encodeTexture(float value) {
         return Math.round(value * TEXTURE_MAX_VALUE) & 0xFFFF;
     }
@@ -140,6 +143,7 @@ public class MeshChunkVertex implements ChunkVertexType {
         return block | (sky << 8);
     }
 
+    // Plain clamp
     private static int clamp(int value, int min, int max) {
         return value < min ? min : Math.min(value, max);
     }

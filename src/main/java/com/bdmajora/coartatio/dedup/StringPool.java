@@ -3,19 +3,15 @@ package com.bdmajora.coartatio.dedup;
 import com.bdmajora.coartatio.CoartatioConfig;
 
 // Long-lived string pools, in the spirit of LoliASM's LoliStringPool
-// Kept as separate pools rather than one global one on purpose: NBT keys and resource paths have entirely
-// different lifetimes and cardinalities, and sharing a pool would let a chatty modded NBT workload saturate the
-// cap and starve the resource paths, which are the entries actually worth keeping
-// String.intern() would do the same job, but it puts entries in the JVM's own string table, which cannot be
-// sized or dropped and is shared with every other consumer in the process
+// Split per workload so chatty NBT cannot saturate the cap and starve resource paths; String.intern would
+// put entries in the JVM string table, which cannot be sized or dropped
 public final class StringPool {
-    // NBTTagCompound keys, which are extremely repetitive: id, Count, Damage, tag and x/y/z account for most of
-    // a typical world's compounds
-    // Sharded rather than singly locked because these are interned from the packet decode thread, the chunk IO
-    // thread and the client thread at the same time while a world streams in
+    // NBT keys are extremely repetitive: id, Count, Damage, tag and x/y/z dominate a typical world
+    // Sharded because packet decode, chunk IO and client threads intern concurrently while a world streams
     public static final ShardedStringCache NBT_KEYS =
             new ShardedStringCache("NBT keys", CoartatioConfig.get().poolSizeLimit);
 
+    // Static-only
     private StringPool() {
     }
 }

@@ -39,6 +39,7 @@ public class RenderRegionManager {
         this.renderPassConfiguration = renderPassConfiguration;
     }
 
+    // Deletes empty regions and refreshes the rest
     public void update() {
         this.stagingBuffer.flip();
 
@@ -62,6 +63,7 @@ public class RenderRegionManager {
         }
     }
 
+    // Uploads build results region by region, triggering a graph update when visibility changed
     public void uploadMeshes(CommandList commandList, Collection<ChunkJobResult.Success<? extends ChunkTaskOutput>> results, Runnable graphUpdateTrigger) {
         long uploadedBytes = 0L;
         long startTime = System.nanoTime();
@@ -75,6 +77,7 @@ public class RenderRegionManager {
         }
     }
 
+    // For the frame budget
     public UploadDurationEstimator getUploadDurationEstimator() {
         return this.uploadDurationEstimator;
     }
@@ -99,10 +102,12 @@ public class RenderRegionManager {
             this.graphUpdateTrigger = graphUpdateTrigger;
         }
 
+        // Per-pass upload queue, created lazily
         private ArrayList<PendingSectionUpload> getUploadQueue(TerrainRenderPass pass) {
             return uploadsByFormat.computeIfAbsent(pass.vertexType().getVertexFormat(), $ -> new ArrayList<>());
         }
 
+        // Queues a rebuilt section's meshes for upload
         private void processBuildResult(ChunkBuildOutput result) {
             // Delete all existing data for the section in the region
             region.removeMeshes(result.render.getSectionIndex());
@@ -118,6 +123,7 @@ public class RenderRegionManager {
             }
         }
 
+        // Queues re-sorted index buffers for upload
         private void processSortResult(ChunkSortOutput result) {
             needIndexBuffer = true;
 
@@ -135,6 +141,7 @@ public class RenderRegionManager {
             }
         }
 
+        // Queues every result and returns the bytes pending
         public long processResults(Collection<? extends ChunkTaskOutput> results) {
             for (ChunkTaskOutput output : results) {
                 if (output instanceof ChunkBuildOutput result) {
@@ -204,6 +211,7 @@ public class RenderRegionManager {
             return uploadedBytes;
         }
 
+        // Sum over every queue
         private long getQueuedUploadBytes() {
             long bytes = 0L;
 
@@ -218,10 +226,12 @@ public class RenderRegionManager {
         }
     }
 
+    // Bytes of one upload
     private static long getUploadLength(PendingUpload upload) {
         return upload != null ? upload.getLength() : 0L;
     }
 
+    // Groups results by region so each region's arena is touched once
     private Reference2ReferenceMap.FastEntrySet<RenderRegion, List<ChunkTaskOutput>> createMeshUploadQueues(Collection<ChunkJobResult.Success<? extends ChunkTaskOutput>> results) {
         var map = new Reference2ReferenceOpenHashMap<RenderRegion, List<ChunkTaskOutput>>();
 
@@ -234,6 +244,7 @@ public class RenderRegionManager {
         return map.reference2ReferenceEntrySet();
     }
 
+    // Frees every region and the staging buffer
     public void delete(CommandList commandList) {
         for (RenderRegion region : this.regions.values()) {
             region.delete(commandList);
@@ -243,20 +254,24 @@ public class RenderRegionManager {
         this.stagingBuffer.delete(commandList);
     }
 
+    // Every region
     public Collection<RenderRegion> getLoadedRegions() {
         return this.regions.values();
     }
 
+    // The upload staging path in use
     public StagingBuffer getStagingBuffer() {
         return this.stagingBuffer;
     }
 
+    // The region containing a section, created if absent
     public RenderRegion createForChunk(int chunkX, int chunkY, int chunkZ) {
         return this.create(chunkX >> RenderRegion.REGION_WIDTH_SH,
                 chunkY >> RenderRegion.REGION_HEIGHT_SH,
                 chunkZ >> RenderRegion.REGION_LENGTH_SH);
     }
 
+    // Reuses freed ids before growing
     private int getNextId() {
         int id = this.nextFreeId;
         this.nextFreeId = this.regionIds.nextClearBit(id + 1);
@@ -264,6 +279,7 @@ public class RenderRegionManager {
         return id;
     }
 
+    // Allocates a region and its id
     @NotNull
     private RenderRegion create(int x, int y, int z) {
         var key = RenderRegion.key(x, y, z);
@@ -276,6 +292,7 @@ public class RenderRegionManager {
         return instance;
     }
 
+    // Id space size, for per-region arrays
     public int getRegionIdsLength() {
         return this.regionIds.length();
     }
@@ -291,6 +308,7 @@ public class RenderRegionManager {
                                             PendingUpload vertexUpload, PendingUpload indexUpload) implements PendingSectionUpload {}
 
     private record PendingMeshSortUpload(RenderSection section, TerrainRenderPass pass, PendingUpload indexUpload) implements PendingSectionUpload {
+        // The vertex half of a pending section upload
         @Override
         public PendingUpload vertexUpload() {
             return null;
@@ -298,6 +316,7 @@ public class RenderRegionManager {
     }
 
 
+    // Mapped when supported, else the fallback
     private static StagingBuffer createStagingBuffer(CommandList commandList) {
         if (USE_ADVANCED_STAGING_BUFFERS && MappedStagingBuffer.isSupported(RenderDevice.INSTANCE)) {
             return new MappedStagingBuffer(commandList);

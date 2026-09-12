@@ -23,13 +23,8 @@ import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 
-// the Dynamic Lights page
-// upstream ships the master switches on one screen and the per-type toggles behind a button that
-// opens a second one; everything is groups on a single page here, matching how the Extras tab handles
-// its per-particle-class toggles, because the options screen's search bar makes a long page navigable
-// in a way a nested screen is not
-// sub-options are gated with setEnabledPredicate rather than hidden, so switching the mode to Off
-// greys out what it governs instead of making controls appear and disappear as the page is used
+// The Dynamic Lights page, everything on one page since the search bar makes a long page navigable
+// Sub-options are gated with setEnabledPredicate rather than hidden, so Off greys them out instead of removing them
 public final class DynamicLightsOptionPages {
     private static final String MOD_ID = "impetus";
     private static final String LANG = "impetus.options.dynamiclights.";
@@ -39,6 +34,7 @@ public final class DynamicLightsOptionPages {
     private DynamicLightsOptionPages() {
     }
 
+    // Builds the page; the mode supplier is created first so every group can gate on the pending value
     public static OptionPage dynamicLights() {
         List<OptionGroup> groups = new ArrayList<>();
 
@@ -85,6 +81,7 @@ public final class DynamicLightsOptionPages {
                 .build();
     }
 
+    // TNT and creeper mode cyclers, greyed when dynamic lights are off
     private static OptionGroup explosives(BooleanSupplier enabled) {
         return OptionGroup.createBuilder()
                 .setId(group("explosives"))
@@ -97,6 +94,7 @@ public final class DynamicLightsOptionPages {
                 .build();
     }
 
+    // The master switch; its pending value is what gates every other control
     private static OptionImpl<DynamicLightsConfig, DynamicLightsMode> mode() {
         return OptionImpl.createBuilder(DynamicLightsMode.class, STORAGE)
                 .setId(option("mode", DynamicLightsMode.class))
@@ -236,6 +234,7 @@ public final class DynamicLightsOptionPages {
         return builder.build();
     }
 
+    // Display names for an enum cycler, resolved through the lang keys
     private static TextComponent[] localizedNames(DynamicLightsConfig.Localized[] values) {
         TextComponent[] names = new TextComponent[values.length];
         for (int i = 0; i < values.length; i++) {
@@ -244,10 +243,12 @@ public final class DynamicLightsOptionPages {
         return names;
     }
 
+    // Group id under the dynamiclights namespace
     private static OptionIdentifier<Void> group(String path) {
         return OptionIdentifier.create(MOD_ID, "dynamiclights/" + path);
     }
 
+    // Option id under the dynamiclights namespace
     private static <T> OptionIdentifier<T> option(String path, Class<T> type) {
         return OptionIdentifier.create(MOD_ID, "dynamiclights/" + path, type);
     }

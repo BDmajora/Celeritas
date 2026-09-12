@@ -19,6 +19,7 @@ public class Rect2i {
         this(other.x(), other.y(), other.width(), other.height());
     }
 
+    // Inclusive of the origin, exclusive of the far edge
     public boolean contains(int x, int y) {
         return x >= this.x && y >= this.y && x < this.x + this.width && y < this.y + this.height;
     }
@@ -29,22 +30,27 @@ public class Rect2i {
         return r1.contains(r2.x(), r2.y()) && r1.contains(r2.x() + r2.width() - 1, r2.y() + r2.height() - 1);
     }
 
+    // Left
     public int x() {
         return x;
     }
 
+    // Top
     public int y() {
         return y;
     }
 
+    // Width
     public int width() {
         return width;
     }
 
+    // Height
     public int height() {
         return height;
     }
 
+    // By all four fields
     @Override
     public boolean equals(Object obj) {
         if (obj == this) return true;
@@ -56,11 +62,13 @@ public class Rect2i {
                 this.height == that.height;
     }
 
+    // By all four fields
     @Override
     public int hashCode() {
         return Objects.hash(x, y, width, height);
     }
 
+    // For debugging
     @Override
     public String toString() {
         return "Rect2i[" +

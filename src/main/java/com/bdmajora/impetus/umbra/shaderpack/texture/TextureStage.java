@@ -22,6 +22,7 @@ public enum TextureStage {
     // The composite passes and the final pass, again grouped as OptiFine groups them
     COMPOSITE_AND_FINAL;
 
+    // gbuffers, deferred, composite or final; empty for anything else
     public static Optional<TextureStage> parse(String name) {
         switch (name) {
             case "setup":

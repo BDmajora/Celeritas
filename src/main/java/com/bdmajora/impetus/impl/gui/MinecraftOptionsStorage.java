@@ -13,11 +13,13 @@ public class MinecraftOptionsStorage implements OptionStorage<GameSettings> {
         this.client = Minecraft.getMinecraft();
     }
 
+    // Vanilla's live settings object
     @Override
     public GameSettings getData() {
         return this.client.gameSettings;
     }
 
+    // Writes options.txt and applies any flagged side effects
     @Override
     public void save(Set<OptionFlag> flags) {
         this.getData().saveOptions();

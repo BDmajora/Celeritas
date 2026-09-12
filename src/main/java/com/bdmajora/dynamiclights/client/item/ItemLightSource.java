@@ -17,9 +17,8 @@ import net.minecraftforge.fml.common.registry.ForgeRegistries;
 
 import java.util.Optional;
 
-// how brightly one item glows when held, worn or dropped
-// declared in data rather than code - assets/impetus/dynamiclights/item/*.json - so a resource pack
-// can add light sources for modded items without touching the mod
+// How brightly one item glows when held, worn or dropped
+// Declared in assets/impetus/dynamiclights/item/*.json so a resource pack can cover modded items
 public abstract class ItemLightSource {
     private final ResourceLocation id;
     private final Item item;
@@ -31,14 +30,17 @@ public abstract class ItemLightSource {
         this.waterSensitive = waterSensitive;
     }
 
+    // The json file this was loaded from, used for logging and overrides
     public ResourceLocation id() {
         return this.id;
     }
 
+    // The item this applies to
     public Item item() {
         return this.item;
     }
 
+    // Whether the light goes out underwater, e.g. a torch
     public boolean waterSensitive() {
         return this.waterSensitive;
     }
@@ -53,6 +55,7 @@ public abstract class ItemLightSource {
 
     public abstract int getLuminance(ItemStack stack);
 
+    // For log lines when a definition is rejected or overridden
     @Override
     public String toString() {
         return "ItemLightSource{id=" + this.id + ", item=" + this.item
@@ -127,6 +130,8 @@ public abstract class ItemLightSource {
             this.luminance = luminance;
         }
 
+        // Fixed brightness regardless of stack state
+        // Reads the luminance of the block this item mimics, so a glowstone item glows like glowstone
         @Override
         public int getLuminance(ItemStack stack) {
             return this.luminance;
@@ -142,6 +147,7 @@ public abstract class ItemLightSource {
             this.mimic = block;
         }
 
+        // Reads the luminance of the block this item mimics, so a glowstone item glows like glowstone
         @Override
         public int getLuminance(ItemStack stack) {
             return getLuminance(stack, this.mimic);

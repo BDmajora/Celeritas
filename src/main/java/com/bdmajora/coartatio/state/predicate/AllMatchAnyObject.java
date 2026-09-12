@@ -7,12 +7,8 @@ import net.minecraft.block.state.IBlockState;
 import java.util.Arrays;
 import java.util.List;
 
-// A flattened AND where every condition is itself a multi-valued test, i.e. an AND of ORs
-// Ported from Hydrogen's class of the same name
-// This is the shape of {"facing": "north|south", "half": "top|bottom"}. Unflattened it is one composite object
-// holding N SingleMatchAny objects; flattened it is two arrays and a nested loop
-// Rarer than AllMatchOneBoolean, but one class buys a removed level of indirection on every multipart lookup of
-// this shape, and multipart lookups run per block per chunk rebuild
+// A flattened AND of ORs, the shape of {"facing": "north|south", "half": "top|bottom"}, ported from Hydrogen
+// Two arrays and a nested loop in place of a composite holding N SingleMatchAny objects
 public final class AllMatchAnyObject implements Predicate<IBlockState> {
     // properties[i] is tested against the allowed set values[i]; the two arrays are always the same length and
     // are never handed out, so they can be treated as immutable
@@ -53,6 +49,7 @@ public final class AllMatchAnyObject implements Predicate<IBlockState> {
         return new AllMatchAnyObject(properties, values);
     }
 
+    // Every property must match one of its accepted values; fields are hoisted so the loop reads them once
     @Override
     public boolean apply(IBlockState state) {
         if (state == null) {
@@ -86,6 +83,7 @@ public final class AllMatchAnyObject implements Predicate<IBlockState> {
         return false;
     }
 
+    // Structural equality over both arrays, which is what lets the canonicalizer intern these
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -99,6 +97,7 @@ public final class AllMatchAnyObject implements Predicate<IBlockState> {
         return Arrays.equals(this.properties, other.properties) && Arrays.deepEquals(this.values, other.values);
     }
 
+    // Precomputed at construction; the predicate is immutable
     @Override
     public int hashCode() {
         return this.hash;

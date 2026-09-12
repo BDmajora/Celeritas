@@ -24,6 +24,7 @@ public class MultiOptionPageFrame extends AbstractFrame {
         this.buildFrame();
     }
 
+    // Stacks every page with a heading, skipping pages with nothing visible
     @Override
     public void buildFrame() {
         this.children.clear();
@@ -54,14 +55,17 @@ public class MultiOptionPageFrame extends AbstractFrame {
         super.buildFrame();
     }
 
+    // Whether any option passes the filter
     private boolean hasVisibleOptions(OptionPage page) {
         return page.getOptions().stream().anyMatch(this.optionFilter);
     }
 
+    // Vertical position of a page's heading, for jump-to
     public int getSectionOffset(OptionPage page) {
         return this.sectionOffsets.getOrDefault(page, 0);
     }
 
+    // Starts a builder
     public static Builder createBuilder() {
         return new Builder();
     }
@@ -72,26 +76,31 @@ public class MultiOptionPageFrame extends AbstractFrame {
         private List<OptionPage> pages;
         private Predicate<Option<?>> optionFilter = o -> true;
 
+        // Frame bounds
         public Builder setDimension(Dim2i dim) {
             this.dim = dim;
             return this;
         }
 
+        // Debug outline
         public Builder shouldRenderOutline(boolean renderOutline) {
             this.renderOutline = renderOutline;
             return this;
         }
 
+        // Pages in display order
         public Builder setPages(List<OptionPage> pages) {
             this.pages = pages;
             return this;
         }
 
+        // Hides options failing the predicate
         public Builder setOptionFilter(Predicate<Option<?>> optionFilter) {
             this.optionFilter = optionFilter;
             return this;
         }
 
+        // Finalises
         public MultiOptionPageFrame build() {
             Objects.requireNonNull(this.dim, "Dimension must be specified");
             Objects.requireNonNull(this.pages, "Option pages must be specified");

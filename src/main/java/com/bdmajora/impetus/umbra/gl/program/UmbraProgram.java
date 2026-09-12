@@ -15,6 +15,7 @@ public class UmbraProgram {
         this.drawBuffers = drawBuffers == null ? DrawBuffers.DEFAULT.clone() : drawBuffers.clone();
     }
 
+    // The linked program
     public GlProgram getProgram() {
         return this.program;
     }
@@ -24,14 +25,17 @@ public class UmbraProgram {
         return this.drawBuffers.clone();
     }
 
+    // Binds the program and applies its draw buffers
     public void bind() {
         this.program.bind();
     }
 
+    // glUseProgram(0)
     public void unbind() {
         this.program.unbind();
     }
 
+    // Frees the program
     public void destroy() {
         this.program.destroy();
     }

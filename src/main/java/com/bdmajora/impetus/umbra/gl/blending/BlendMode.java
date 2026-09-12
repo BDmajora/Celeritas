@@ -22,18 +22,22 @@ public final class BlendMode {
         this.dstAlpha = dstAlpha;
     }
 
+    // GL source factor for RGB
     public int srcRgb() {
         return this.srcRgb;
     }
 
+    // GL destination factor for RGB
     public int dstRgb() {
         return this.dstRgb;
     }
 
+    // GL source factor for alpha
     public int srcAlpha() {
         return this.srcAlpha;
     }
 
+    // GL destination factor for alpha
     public int dstAlpha() {
         return this.dstAlpha;
     }

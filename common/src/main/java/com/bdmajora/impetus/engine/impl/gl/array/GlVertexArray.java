@@ -13,6 +13,7 @@ public class GlVertexArray extends GlObject {
         this.setHandle(LWJGLServiceProvider.LWJGL.glGenVertexArrays());
     }
 
+    // glDeleteVertexArrays
     @Override
     protected void destroyInternal() {
         LWJGLServiceProvider.LWJGL.glDeleteVertexArrays(this.handle());

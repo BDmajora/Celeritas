@@ -25,6 +25,7 @@ public class ChunkTracker implements ClientChunkEventListener {
         this.requiredNeighborRadius = requiredNeighborRadius;
     }
 
+    // How many loaded neighbours a chunk needs before it is ready to render
     public void setRequiredNeighborRadius(int radius) {
         if (radius < 0) {
             throw new IllegalArgumentException("radius must be nonnegative");
@@ -58,16 +59,19 @@ public class ChunkTracker implements ClientChunkEventListener {
         }
     }
 
+    // Recentres on the player
     @Override
     public void updateMapCenter(int chunkX, int chunkZ) {
 
     }
 
+    // Resizes the tracked area
     @Override
     public void updateLoadDistance(int loadDistance) {
 
     }
 
+    // A chunk gained data or light; may make it or neighbours ready
     @Override
     public void onChunkStatusAdded(int x, int z, int flags) {
         var key = PositionUtil.packChunk(x, z);
@@ -84,6 +88,7 @@ public class ChunkTracker implements ClientChunkEventListener {
         this.updateNeighbors(x, z);
     }
 
+    // A chunk lost data; may make neighbours unready
     @Override
     public void onChunkStatusRemoved(int x, int z, int flags) {
         var key = PositionUtil.packChunk(x, z);
@@ -104,6 +109,7 @@ public class ChunkTracker implements ClientChunkEventListener {
         this.updateNeighbors(x, z);
     }
 
+    // Re-evaluates readiness of every chunk within the radius
     private void updateNeighbors(int x, int z) {
         int r = this.requiredNeighborRadius;
         for (int ox = -r; ox <= r; ox++) {
@@ -113,6 +119,7 @@ public class ChunkTracker implements ClientChunkEventListener {
         }
     }
 
+    // Recomputes one chunk's readiness from its neighbours and queues a load or unload event
     private void updateMerged(int x, int z) {
         long key = PositionUtil.packChunk(x, z);
 
@@ -136,10 +143,12 @@ public class ChunkTracker implements ClientChunkEventListener {
         }
     }
 
+    // Every chunk currently ready
     public LongCollection getReadyChunks() {
         return LongSets.unmodifiable(this.chunkReady);
     }
 
+    // Drains the queued events
     public void forEachEvent(ChunkEventHandler loadEventHandler, ChunkEventHandler unloadEventHandler) {
         forEachChunk(this.unloadQueue, unloadEventHandler);
         this.unloadQueue.clear();
@@ -148,6 +157,7 @@ public class ChunkTracker implements ClientChunkEventListener {
         this.loadQueue.clear();
     }
 
+    // Unpacks each key and calls the handler
     public static void forEachChunk(LongCollection queue, ChunkEventHandler handler) {
         var iterator = queue.iterator();
 

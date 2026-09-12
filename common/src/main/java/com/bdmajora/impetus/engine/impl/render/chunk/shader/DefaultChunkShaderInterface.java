@@ -51,6 +51,7 @@ public class DefaultChunkShaderInterface implements ChunkShaderInterface {
         this.components = options.components().stream().map(c -> c.create(context)).toList();
     }
 
+    // Binds textures and applies the pass's blend and cull state
     @Deprecated // the shader interface should not modify pipeline state
     public void setupState(TerrainRenderPass pass) {
         if (pass.primitiveType() == QuadPrimitiveType.DIRECT) {
@@ -66,23 +67,28 @@ public class DefaultChunkShaderInterface implements ChunkShaderInterface {
         }
     }
 
+    // Triangles
     @Override
     public GlPrimitiveType getPrimitiveType() {
         return primitiveType;
     }
 
+    // Uploads u_ProjectionMatrix
     public void setProjectionMatrix(Matrix4fc matrix) {
         this.uniformProjectionMatrix.set(matrix);
     }
 
+    // Uploads u_ModelViewMatrix
     public void setModelViewMatrix(Matrix4fc matrix) {
         this.uniformModelViewMatrix.set(matrix);
     }
 
+    // Uploads u_RegionOffset
     public void setRegionOffset(float x, float y, float z) {
         this.uniformRegionOffset.set(x, y, z);
     }
 
+    // Points a sampler at a unit
     public void setTextureSlot(ChunkShaderTextureSlot slot, int val) {
         var uniform = this.uniformTextures.get(slot);
 
@@ -91,6 +97,7 @@ public class DefaultChunkShaderInterface implements ChunkShaderInterface {
         }
     }
 
+    // Uploads per-section ages for the fade-in
     @Override
     public void setSectionAges(long timestamp, long[] loadTimes) {
         var uniform = this.uniformChunkAges;

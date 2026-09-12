@@ -6,6 +6,7 @@ import com.bdmajora.impetus.engine.impl.render.chunk.vertex.format.ChunkVertexEn
 import org.joml.Vector3f;
 
 public class QuadUtil {
+    // Closest axis-aligned facing to a normal, or UNASSIGNED when none dominates
     public static ModelQuadFacing findNormalFace(float x, float y, float z) {
         if (!Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(z)) {
             return ModelQuadFacing.UNASSIGNED;
@@ -30,10 +31,12 @@ public class QuadUtil {
         return ModelQuadFacing.UNASSIGNED;
     }
 
+    // Packed-normal form
     public static ModelQuadFacing findNormalFace(int normal) {
         return findNormalFace(NormI8.unpackX(normal), NormI8.unpackY(normal), NormI8.unpackZ(normal));
     }
 
+    // Face normal from the cross product of the diagonals, normalised
     public static void calculateNormal(ChunkVertexEncoder.Vertex[] quad, Vector3f result) {
         ChunkVertexEncoder.Vertex q0 = quad[0], q1 = quad[1], q2 = quad[2], q3 = quad[3];
 
@@ -75,6 +78,7 @@ public class QuadUtil {
         result.set(normX, normY, normZ);
     }
 
+    // Packed form
     public static int calculateNormal(ChunkVertexEncoder.Vertex[] quad) {
         ChunkVertexEncoder.Vertex q0 = quad[0], q1 = quad[1], q2 = quad[2], q3 = quad[3];
 

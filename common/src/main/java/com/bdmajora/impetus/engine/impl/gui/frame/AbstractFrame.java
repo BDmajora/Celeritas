@@ -24,6 +24,7 @@ public abstract class AbstractFrame extends AbstractWidget implements Interactab
         this.renderOutline = renderOutline;
     }
 
+    // Subclasses populate children here
     public void buildFrame() {
         for (AbstractWidget element : this.children) {
             if (element instanceof AbstractFrame) {
@@ -38,6 +39,7 @@ public abstract class AbstractFrame extends AbstractWidget implements Interactab
         }
     }
 
+    // Draws every child, plus the outline when enabled
     @Override
     public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
         if (this.renderOutline) {
@@ -48,11 +50,13 @@ public abstract class AbstractFrame extends AbstractWidget implements Interactab
         }
     }
 
+    // Children that take input
     @Override
     public Stream<? extends Interactable> interactableChildren() {
         return this.children.stream();
     }
 
+    // Frame bounds
     public Dim2i getDimensions() {
         return this.dim;
     }

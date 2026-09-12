@@ -40,6 +40,7 @@ public class VisibleChunkCollector implements OcclusionCuller.Visitor {
         }
     }
 
+    // One list per region, created on first visible section
     private ChunkRenderList createRenderList(RenderRegion region) {
         ChunkRenderList renderList = new ChunkRenderList(region);
         this.sortedRenderLists.add(renderList);
@@ -47,6 +48,7 @@ public class VisibleChunkCollector implements OcclusionCuller.Visitor {
         return renderList;
     }
 
+    // Called by the walk for every reached section
     @Override
     public void visit(OcclusionNode node, boolean visible) {
         var section = node.getRenderSection();
@@ -69,6 +71,7 @@ public class VisibleChunkCollector implements OcclusionCuller.Visitor {
         }
     }
 
+    // Queues sections needing a rebuild, by importance
     private void addToRebuildLists(RenderSection section) {
         ChunkUpdateType type = section.getPendingUpdate();
 
@@ -88,14 +91,17 @@ public class VisibleChunkCollector implements OcclusionCuller.Visitor {
         }
     }
 
+    // Finalises the lists in walk order
     public SortedRenderLists createRenderLists() {
         return new SortedRenderLists(this.sortedRenderLists);
     }
 
+    // The lists so far
     public List<ChunkRenderList> getCollectedRenderLists() {
         return this.sortedRenderLists;
     }
 
+    // The rebuild queues
     public ChunkRebuildLists getRebuildLists() {
         EnumMap<ChunkUpdateType, Integer> overflowCounts = new EnumMap<>(ChunkUpdateType.class);
         if (this.hasAdditionalUpdates) {

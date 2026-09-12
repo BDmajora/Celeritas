@@ -25,14 +25,9 @@ import java.util.Optional;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// The pack's fixed-function gbuffer programs: sky, entities, block damage, particles, weather, clouds, hand
-// Those vanilla sections still render through the classic fixed-function pipeline — immediate mode and client
-// arrays — and on a compatibility-profile context the pack's fixed-function inputs remain the contract: gl_Vertex,
-// gl_ModelViewProjectionMatrix, gl_MultiTexCoord0
-// GLSL-120 programs consume that state natively; modern single-source packs are normalised by
-// ShaderProgramCompiler but still bind around the same vanilla render section
-// OptiFine's fallback chain is honoured through ProgramSet.get, and phases that resolve to the SAME source share
-// one compiled program rather than compiling it once per phase
+// The pack's fixed-function gbuffer programs: sky, entities, damage, particles, weather, clouds, hand
+// Those sections still render immediate-mode, so gl_Vertex and friends remain the contract on this context
+// OptiFine's fallback chain is honoured and phases resolving to the same source share one compiled program
 public class GbufferPrograms {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -65,18 +60,22 @@ public class GbufferPrograms {
             this.handLightmapLocation = handLightmapLocation;
         }
 
+        // The linked program
         public UmbraProgram getProgram() {
             return this.program;
         }
 
+        // Its uniform set
         public ProgramUniforms getUniforms() {
             return this.uniforms;
         }
 
+        // Its declared targets
         public int[] getDrawBuffers() {
             return this.drawBuffers.clone();
         }
 
+        // Its blend directives
         public ProgramBlendState getBlendState() {
             return this.blendState;
         }
@@ -87,6 +86,7 @@ public class GbufferPrograms {
             return this.alphaTest;
         }
 
+        // Overrides the lightmap coordinates for the hand programs
         public void setHandLightmap(float blockLight, float skyLight) {
             if (this.handLightmapLocation != -1) {
                 LWJGL.glUniform2f(this.handLightmapLocation, blockLight, skyLight);
@@ -209,6 +209,7 @@ public class GbufferPrograms {
         return this.ownedEntries;
     }
 
+    // Frees every gbuffer program
     public void destroy() {
         for (Entry entry : this.ownedEntries) {
             entry.program.destroy();

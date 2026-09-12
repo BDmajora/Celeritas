@@ -17,6 +17,7 @@ public abstract class ClippingHelperImplMixin extends ClippingHelper implements 
     @Unique
     private final FrustumIntersection impetus$frustum = new FrustumIntersection();
 
+    // Mirrors vanilla's matrices into the JOML frustum every time vanilla recomputes its planes
     @Inject(method = "init", at = @At("RETURN"))
     private void updateJoml(CallbackInfo ci) {
         Matrix4f jomlProjection = new Matrix4f();

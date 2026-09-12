@@ -16,6 +16,7 @@ public final class OpenGlDeviceInfo {
     private OpenGlDeviceInfo() {
     }
 
+    // Builds a device description from GL capability queries
     public static GpuDevice capture(DeviceFunctions functions) {
         GlContextInfo context = GlContextInfo.capture();
         EnumSet<GpuDeviceFeature> features = EnumSet.noneOf(GpuDeviceFeature.class);

@@ -21,6 +21,7 @@ public final class Equilibrium {
     private Equilibrium() {
     }
 
+    // Loads on first use, so callers outside the mixin plugin need not order themselves after it
     public static EquilibriumConfig config() {
         if (config == null) {
             config = EquilibriumConfig.load(EquilibriumConfig.defaultFile());
@@ -34,6 +35,7 @@ public final class Equilibrium {
         config = loaded;
     }
 
+    // Convenience for code that wants one rule without touching the config object
     public static boolean isEnabled(String optionName) {
         return config().isOptionEnabled(optionName);
     }
@@ -76,6 +78,7 @@ public final class Equilibrium {
         return lines;
     }
 
+    // Appends a heading and its indented members, or nothing at all when the group is empty
     private static void appendGroup(List<String> lines, String heading, List<String> members) {
         if (members.isEmpty()) {
             return;

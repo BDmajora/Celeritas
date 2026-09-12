@@ -2,17 +2,10 @@ package com.bdmajora.fulgor.collections;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 
-// FIFO of encoded positions that refuses to hold the same position twice; the engine's core queue.
-// Merges Phosphor's PooledLongQueue (pooled 1024-long segments, so a burst during worldgen gives its
-// memory back afterwards) with Alfheim's deduplication (a bulk edit schedules the same position from
-// every neighbour that touches it; without this each one gets evaluated separately).
-//
-// Invariant: the dedup set must be empty when the next cycle's enqueues begin, or a position updated in
-// two consecutive cycles silently gets dropped (shows up later as one stale block). The engine fills a
-// light level's queue while draining the levels above it, so it resets before draining; the renderer's
-// queue only fills after its drain, so it resets after.
-//
-// Not thread-safe except isEmpty(), which reads a volatile flag so the engine can check it without the lock.
+// FIFO of encoded positions that refuses to hold the same one twice; merges Phosphor's pooled segments
+// with Alfheim's dedup so a bulk edit scheduling one position from every neighbour costs one evaluation
+// The dedup set must be empty before a cycle's enqueues begin or a position updated twice in a row is dropped
+// Not thread-safe except isEmpty, which reads a volatile so the engine can check without the lock
 public final class DeduplicatedLongQueue {
     private static final int SEGMENT_SIZE = 1 << 10;
 
@@ -91,10 +84,12 @@ public final class DeduplicatedLongQueue {
         return value;
     }
 
+    // Volatile read, safe to call off-thread
     public boolean isEmpty() {
         return this.empty;
     }
 
+    // Element count; only meaningful under the lock
     public int size() {
         return this.size;
     }

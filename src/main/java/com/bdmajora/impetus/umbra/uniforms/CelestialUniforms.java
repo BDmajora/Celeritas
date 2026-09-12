@@ -12,18 +12,8 @@ import com.bdmajora.impetus.umbra.gl.program.ProgramUniforms;
 import com.bdmajora.impetus.umbra.gl.uniform.UniformCollector;
 import com.bdmajora.impetus.umbra.gl.uniform.UniformUpdateFrequency;
 
-// The sun and moon uniforms
-//
-// The scalar angles are a pure function of the world's celestial angle, transcribed from OptiFine's
-// Shaders.setCamera
-//   celestialAngle = world.getCelestialAngle(partialTicks)
-//   sunAngle       = celestialAngle < 0.75 ? celestialAngle + 0.25 : celestialAngle - 0.75
-//   shadowAngle    = sunAngle <= 0.5 ? sunAngle : sunAngle - 0.5
-//
-// The directional ones — sunPosition, moonPosition, upPosition, shadowLightPosition — are derived from the
-// captured gbufferModelView plus vanilla's celestial rotation, which is the modern-Iris approach
-// That means they only carry real values once the EntityRenderer mixin has captured the frame's matrices; before
-// that they are whatever the previous frame left
+// Sun and moon uniforms. The angles are transcribed from OptiFine's setCamera; the directional ones derive from
+// the captured gbufferModelView, so they are stale until the EntityRenderer mixin has captured this frame
 public final class CelestialUniforms {
     // The pack's sunPathRotation in degrees, tilting the sun and moon's daily arc off the vertical
     // Applied in two places that must agree: the celestial positions here, AND the shadow model-view in
@@ -35,14 +25,17 @@ public final class CelestialUniforms {
     private CelestialUniforms() {
     }
 
+    // Pack's sunPathRotation constant
     public static void setSunPathRotation(float degrees) {
         sunPathRotation = degrees;
     }
 
+    // Current value
     public static float getSunPathRotation() {
         return sunPathRotation;
     }
 
+    // sunPosition, moonPosition, shadowLightPosition and the angles
     public static void addCelestialUniforms(UniformCollector uniforms) {
         uniforms
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "celestialAngle", CelestialUniforms::getCelestialAngle)
@@ -64,6 +57,7 @@ public final class CelestialUniforms {
         return getCelestialPosition(100.0f);
     }
 
+    // Moon direction in view space
     public static Vector3f getMoonPosition() {
         return getCelestialPosition(-100.0f);
     }
@@ -87,6 +81,7 @@ public final class CelestialUniforms {
         return new Vector3f(position.x, position.y, position.z);
     }
 
+    // Rotates a body by the celestial angle and sun path into view space
     private static Vector3f getCelestialPosition(float y) {
         Vector4f position = new Vector4f(0.0f, y, 0.0f, 0.0f);
         Matrix4f celestial = new Matrix4f(CapturedRenderingState.INSTANCE.getGbufferModelView());
@@ -107,6 +102,7 @@ public final class CelestialUniforms {
         return new Vector3f(up.x, up.y, up.z);
     }
 
+    // Always zero; no End flash on 1.12.2
     private static Vector3f getEndFlashPosition() {
         World world = Minecraft.getMinecraft().world;
         if (world == null || world.provider.getDimension() != 1) {
@@ -128,6 +124,7 @@ public final class CelestialUniforms {
         return new Vector3f();
     }
 
+    // World celestial angle, 0..1
     public static float getCelestialAngle() {
         World world = Minecraft.getMinecraft().world;
         if (world == null) {
@@ -136,11 +133,13 @@ public final class CelestialUniforms {
         return world.getCelestialAngle(CapturedRenderingState.INSTANCE.getTickDelta());
     }
 
+    // Celestial angle offset so 0 is sunrise
     public static float getSunAngle() {
         float celestialAngle = getCelestialAngle();
         return celestialAngle < 0.75f ? celestialAngle + 0.25f : celestialAngle - 0.75f;
     }
 
+    // Sun angle by day, moon angle by night
     public static float getShadowAngle() {
         float sunAngle = getSunAngle();
         return sunAngle <= 0.5f ? sunAngle : sunAngle - 0.5f;

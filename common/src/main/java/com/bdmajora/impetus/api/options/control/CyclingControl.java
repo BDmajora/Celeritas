@@ -33,6 +33,7 @@ public class CyclingControl<T> implements Control<T> {
         this.names = names;
     }
 
+    // Localised names when the enum provides them, else the constant names
     private static TextComponent[] determineNames(Object[] universe) {
         TextComponent[] names = new TextComponent[universe.length];
         for (int i = 0; i < names.length; i++) {
@@ -52,20 +53,24 @@ public class CyclingControl<T> implements Control<T> {
         return names;
     }
 
+    // Display names per value
     public TextComponent[] getNames() {
         return this.names;
     }
 
+    // Bound option
     @Override
     public Option<T> getOption() {
         return this.option;
     }
 
+    // The cycler widget
     @Override
     public ControlElement<T> createElement(Dim2i dim) {
         return new CyclingControlElement<>(this.option, dim, this.allowedValues, this.names);
     }
 
+    // Widest name
     @Override
     public int getMaxWidth() {
         return 70;
@@ -82,6 +87,7 @@ public class CyclingControl<T> implements Control<T> {
             this.names = names;
         }
 
+        // Index of the current value in the universe
         private int getCurrentIndex() {
             for (int i = 0; i < allowedValues.length; i++) {
                 if (allowedValues[i] == option.getValue()) {
@@ -92,6 +98,7 @@ public class CyclingControl<T> implements Control<T> {
             return 0;
         }
 
+        // Label and current name
         @Override
         public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
             super.render(drawContext, mouseX, mouseY, delta);
@@ -107,6 +114,7 @@ public class CyclingControl<T> implements Control<T> {
             drawContext.drawString(name, this.dim.getLimitX() - strWidth - 6, this.dim.getCenterY() - 4, enabled ? 0xFFFFFFFF : this.getDisabledControlColor());
         }
 
+        // Left cycles forward, right backward
         @Override
         public boolean mouseClicked(InteractionContext context, double mouseX, double mouseY, int button) {
             if (this.option.isAvailable() && button == 0 && this.dim.containsCursor(mouseX, mouseY)) {
@@ -119,6 +127,7 @@ public class CyclingControl<T> implements Control<T> {
             return false;
         }
 
+        // Steps with wrap-around
         public void cycleControl(boolean reverse) {
             int currentIndex = getCurrentIndex();
             if (reverse) {

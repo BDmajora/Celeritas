@@ -13,6 +13,7 @@ import com.bdmajora.impetus.impl.gui.ImpetusVideoOptionsScreen;
 @Mixin(GuiOptions.class)
 public class MixinGuiOptions extends GuiScreen {
 
+    // Replaces the Video Settings button's screen with Impetus' own
     @Dynamic
     @Inject(method = "actionPerformed", at = @At("HEAD"), cancellable = true)
     private void open(GuiButton button, CallbackInfo ci) {

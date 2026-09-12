@@ -8,10 +8,12 @@ public final class GlobalChunkBuildContext {
 
     private GlobalChunkBuildContext() {}
 
+    // Records the caller as the main thread
     public static void setMainThread() {
         mainThread = Thread.currentThread();
     }
 
+    // This thread's context, from the worker or the main thread binding
     @Nullable
     public static ChunkBuildContext get() {
         var thread = Thread.currentThread();
@@ -25,6 +27,7 @@ public final class GlobalChunkBuildContext {
         }
     }
 
+    // Gives the main thread a context so it can steal jobs
     public static void bindMainThread(ChunkBuildContext context) {
         mainThreadContext = context;
     }

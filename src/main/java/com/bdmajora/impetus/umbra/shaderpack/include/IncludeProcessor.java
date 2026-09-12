@@ -13,14 +13,8 @@ import java.util.regex.Pattern;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-// Resolves OptiFine-style #include directives by recursively inlining the referenced GLSL files
-// Works from a flat map of every GLSL file in the pack, keyed by AbsolutePackPath. Includes resolve relative to
-// the including file, cycles are detected and rejected, and the output is one flattened source
-// Surrounding lines are left untouched so line numbers stay as close to the original as inlining allows — which is
-// what makes a driver's error message point at something the pack author can find
-// Deliberately does NOT evaluate #ifdef or #define conditionals. Those are the GLSL compiler's and
-// GlslPreprocessor's job; this is textual inclusion and nothing else, so an include inside a false #ifdef is still
-// inlined here
+// Inlines OptiFine-style #include recursively from a flat file map, resolving relative to the including file and
+// rejecting cycles. Textual only: #ifdef is left to GlslPreprocessor, so an include inside a false gate still inlines
 public final class IncludeProcessor {
     // Matches:  #include "path"   or   #include <path>   with optional surrounding whitespace.
     private static final Pattern INCLUDE_PATTERN =
@@ -51,6 +45,7 @@ public final class IncludeProcessor {
         return out;
     }
 
+    // Splices each #include in place, detecting cycles via the stack
     private void processInto(AbsolutePackPath path, List<String> lines, List<String> out, Deque<AbsolutePackPath> stack) {
         if (stack.contains(path)) {
             throw new IllegalStateException("Cyclic #include detected involving " + path.getPathString());
@@ -91,6 +86,7 @@ public final class IncludeProcessor {
         }
     }
 
+    // Tolerates both line ending styles
     private static List<String> splitLines(String source) {
         // Preserve empty trailing structure; split on any newline form.
         String[] arr = source.split("\r\n|\r|\n", -1);

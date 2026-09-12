@@ -32,11 +32,13 @@ public class ImpetusGameOptionPages {
     private static final MenuState menuState = new MenuState();
     private static final OptionStorage<MenuState> menuOpts = () -> menuState;
 
+    // Pushes the leaves setting to every leaf block, which caches it
     private static void applyLeavesQuality(boolean seeThrough) {
         Blocks.LEAVES.setGraphicsLevel(seeThrough);
         Blocks.LEAVES2.setGraphicsLevel(seeThrough);
     }
 
+    // Render distance, brightness, GUI scale and the like
     public static OptionPage general() {
         List<OptionGroup> groups = new ArrayList<>();
 
@@ -173,6 +175,7 @@ public class ImpetusGameOptionPages {
         return new OptionPage(StandardOptions.Pages.GENERAL, TextComponent.translatable("impetus.options.pages.general"), ImmutableList.copyOf(groups));
     }
 
+    // Graphics, clouds, weather, particles, leaves and similar fidelity switches
     public static OptionPage quality() {
         List<OptionGroup> groups = new ArrayList<>();
 
@@ -366,10 +369,12 @@ public class ImpetusGameOptionPages {
         return new OptionPage(StandardOptions.Pages.QUALITY, TextComponent.translatable("impetus.options.pages.quality"), ImmutableList.copyOf(groups));
     }
 
+    // Storage over vanilla's GameSettings
     public static OptionStorage<GameSettings> getVanillaOpts() {
         return vanillaOpts;
     }
 
+    // Storage over Impetus' own options
     public static OptionStorage<ImpetusGameOptions> getSodiumOpts() {
         return sodiumOpts;
     }

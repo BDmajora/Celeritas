@@ -28,11 +28,8 @@ import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 
-// The Extras page: everything Sodium Extra contributes plus the finer OptiFine switches, as one tab
-// Upstream spreads this across five tabs; here they're groups since Impetus already has eight tabs
-// and the search bar makes a long page navigable
+// The Extras page: Sodium Extra plus the finer OptiFine switches as one tab, since Impetus already has eight
 // Sub-options use setEnabledPredicate instead of hiding, so a master switch greys out its children
-// rather than making controls appear/disappear while the page is in use
 public final class ExtrasOptionPages {
     private static final String MOD_ID = "impetus";
     private static final String LANG = "impetus.options.extras.";
@@ -42,6 +39,7 @@ public final class ExtrasOptionPages {
     private ExtrasOptionPages() {
     }
 
+    // Builds the page; the particle master is created first so its class toggles gate on the pending value
     public static OptionPage extras() {
         List<OptionGroup> groups = new ArrayList<>();
 
@@ -108,6 +106,7 @@ public final class ExtrasOptionPages {
                 .build();
     }
 
+    // Master switch plus one toggle per discovered particle class, grouped by owning mod
     private static OptionGroup particles(OptionImpl<ExtrasConfig, Boolean> master) {
         BooleanSupplier enabled = master::getValue;
 
@@ -135,6 +134,7 @@ public final class ExtrasOptionPages {
                 .build();
     }
 
+    // Sky and world detail toggles; sub-options gate on their parent
     private static OptionGroup details() {
         OptionImpl<ExtrasConfig, Boolean> stars = toggle("details.stars",
                 (config, value) -> config.detail.stars = value,
@@ -175,6 +175,7 @@ public final class ExtrasOptionPages {
                 .build();
     }
 
+    // Fog master plus the per-type toggles it governs
     private static OptionGroup fog() {
         OptionImpl<ExtrasConfig, Boolean> master = toggle("render.fog",
                 (config, value) -> config.render.fog = value,
@@ -197,6 +198,7 @@ public final class ExtrasOptionPages {
                 .build();
     }
 
+    // Cloud scale, height and translucency, plus weather rendering
     private static OptionGroup cloudsAndWeather() {
         return OptionGroup.createBuilder()
                 .setId(group("clouds"))
@@ -220,6 +222,7 @@ public final class ExtrasOptionPages {
                 .build();
     }
 
+    // Item frame, name tag and armour stand toggles; the frame sub-options gate on frames
     private static OptionGroup entityRendering() {
         OptionImpl<ExtrasConfig, Boolean> itemFrames = toggle("render.item_frames",
                 (config, value) -> config.render.itemFrames = value,
@@ -258,6 +261,7 @@ public final class ExtrasOptionPages {
                 .build();
     }
 
+    // FPS counter and coordinates HUD; layout options gate on the counter being shown
     private static OptionGroup overlay() {
         OptionImpl<ExtrasConfig, Boolean> showFps = toggle("overlay.fps",
                 (config, value) -> config.extra.showFps = value,
@@ -289,6 +293,7 @@ public final class ExtrasOptionPages {
                 .build();
     }
 
+    // Toast master plus per-category toggles it governs
     private static OptionGroup toasts() {
         OptionImpl<ExtrasConfig, Boolean> master = toggle("toasts.all",
                 (config, value) -> config.extra.toasts = value,
@@ -309,6 +314,7 @@ public final class ExtrasOptionPages {
                 .build();
     }
 
+    // Miscellaneous switches with no natural home elsewhere
     private static OptionGroup qualityOfLife() {
         OptionImpl<ExtrasConfig, Boolean> steadyHud = toggle("steady_debug_hud",
                 (config, value) -> config.extra.steadyDebugHud = value,
@@ -534,6 +540,7 @@ public final class ExtrasOptionPages {
         return builder.build();
     }
 
+    // Display names for an enum cycler, resolved through the lang keys
     private static TextComponent[] localizedNames(ExtrasConfig.Localized[] values) {
         TextComponent[] names = new TextComponent[values.length];
         for (int i = 0; i < values.length; i++) {
@@ -542,10 +549,12 @@ public final class ExtrasOptionPages {
         return names;
     }
 
+    // Group id under the extras namespace
     private static OptionIdentifier<Void> group(String path) {
         return OptionIdentifier.create(MOD_ID, "extras/" + path);
     }
 
+    // Option id under the extras namespace
     private static <T> OptionIdentifier<T> option(String path, Class<T> type) {
         return OptionIdentifier.create(MOD_ID, "extras/" + path, type);
     }

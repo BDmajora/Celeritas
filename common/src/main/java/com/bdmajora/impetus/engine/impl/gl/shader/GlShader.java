@@ -37,10 +37,12 @@ public class GlShader extends GlObject {
         this.setHandle(handle);
     }
 
+    // For compile error messages
     public String getName() {
         return this.name;
     }
 
+    // glDeleteShader
     @Override
     protected void destroyInternal() {
         LWJGL.glDeleteShader(this.handle());

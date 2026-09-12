@@ -181,6 +181,7 @@ public class ChunkBuilder {
         this.shutdownThreads();
     }
 
+    // Interrupts and joins every worker
     private void shutdownThreads() {
 
         // Wait for every remaining thread to terminate
@@ -219,10 +220,12 @@ public class ChunkBuilder {
         }
     }
 
+    // Requested count, or a heuristic from the core count when zero
     private static int getThreadCount(int requested) {
         return requested == 0 ? getOptimalThreadCount() : Math.min(requested, getMaxThreadCount());
     }
 
+    // Upper bound the options screen offers
     public static int getMaxThreadCount() {
         int totalCores = Runtime.getRuntime().availableProcessors();
         long memoryMb = Runtime.getRuntime().maxMemory() / (1024L * 1024L);
@@ -232,6 +235,7 @@ public class ChunkBuilder {
         return Math.min(totalCores, maxBuilders);
     }
 
+    // Runs a queued job on the calling thread, for important rebuilds the main thread wants now
     public void tryStealTask(ChunkJob job) {
         if (!this.queue.stealJob(job)) {
             return;
@@ -240,6 +244,7 @@ public class ChunkBuilder {
         executeJobWithLocalContext(job);
     }
 
+    // Runs a job on the main thread's own build context
     private void executeJobWithLocalContext(ChunkJob job) {
         var localContext = this.localContext;
         GlobalChunkBuildContext.bindMainThread(localContext);
@@ -252,6 +257,7 @@ public class ChunkBuilder {
         }
     }
 
+    // Per-frame bookkeeping
     public void tick() {
         // Don't need to run jobs on the main thread if there are worker threads
         if (!this.threads.isEmpty()) {
@@ -264,22 +270,27 @@ public class ChunkBuilder {
         }
     }
 
+    // Nothing waiting
     public boolean isBuildQueueEmpty() {
         return this.queue.isEmpty();
     }
 
+    // Waiting jobs
     public int getScheduledJobCount() {
         return this.queue.size();
     }
 
+    // Workers currently running a job
     public int getBusyThreadCount() {
         return this.busyThreadCount.get();
     }
 
+    // Worker count
     public int getTotalThreadCount() {
         return this.threads.size();
     }
 
+    // Waits for a condition by stealing jobs rather than sleeping, so the wait is productive
     public void managedBlock(BooleanSupplier isDone) {
         this.managedBlocker.managedBlock(isDone);
     }
@@ -307,6 +318,7 @@ public class ChunkBuilder {
             this.context = context;
         }
 
+        // Worker loop: wait for a job, run it, report, repeat until shutdown
         @Override
         public void run() {
             // Run until the chunk builder shuts down

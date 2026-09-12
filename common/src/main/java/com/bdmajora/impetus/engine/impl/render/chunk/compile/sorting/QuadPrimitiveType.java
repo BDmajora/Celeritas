@@ -24,16 +24,19 @@ public final class QuadPrimitiveType implements ChunkPrimitiveType {
         this.triangulating = triangulating;
     }
 
+    // Six indices per quad
     @Override
     public int getIndexBufferElementsPerPrimitive() {
         return triangulating ? 6 : 4;
     }
 
+    // Four
     @Override
     public int getVerticesPerPrimitive() {
         return VERTICES_PER_PRIMITIVE;
     }
 
+    // Sequential quad indices
     @Override
     public void generateSimpleIndexBuffer(ByteBuffer indexBuffer, int numPrimitives) {
         int minimumRequiredBufferSize = getIndexBufferSize(numPrimitives);
@@ -63,6 +66,7 @@ public final class QuadPrimitiveType implements ChunkPrimitiveType {
         }
     }
 
+    // Indices in the given quad order
     private void generateIndexBuffer(ByteBuffer indexBuffer, int[] primitiveMapping) {
         int bufferSize = getIndexBufferSize(primitiveMapping.length);
         if(indexBuffer.capacity() != bufferSize) {
@@ -122,6 +126,7 @@ public final class QuadPrimitiveType implements ChunkPrimitiveType {
         }
     }
 
+    // Back-to-front indices from the camera, using the analyzer's plane data
     @Override
     public void generateSortedIndexBuffer(ByteBuffer indexBuffer, int quadCount, @Nullable TranslucentQuadAnalyzer.SortState chunkData, float x, float y, float z) {
         if (chunkData == null || chunkData.level() == TranslucentQuadAnalyzer.Level.NONE || chunkData.centersLength() < 3) {

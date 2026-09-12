@@ -7,16 +7,8 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// Rewrites the modern-Minecraft (1.17+ core profile) vertex-attribute and matrix names packs use into the GLSL 120
-// fixed-function built-ins a 1.12.2 context actually provides
-// The string-level equivalent of Iris's VanillaCoreTransformer and CompositeCoreTransformer
-// Packs ship those names because Iris supplies them on every version, so a pack authored once runs everywhere
-// Without this pass there are two distinct failures, both seen on packs in real use
-//   Complementary's gbuffers_line references vaPosition, vaNormal and modelViewMatrix WITHOUT declaring them, and
-//   fails to compile outright with "undefined variable"
-//   Photon's gbuffers_line DOES declare them, so it compiles — but nothing on the 1.12.2 draw path ever feeds those
-//   attributes, so they silently read the generic default (0,0,0,1) and the geometry collapses
-// Both are fixed the same way: drop the declarations, then point the references at the fixed-function equivalents
+// Rewrites the 1.17+ attribute and matrix names packs ship (vaPosition, modelViewMatrix) into the fixed-function
+// built-ins 1.12.2 provides. Complementary fails to compile without it; Photon compiles but reads (0,0,0,1)
 public final class VanillaNameTransformer {
     // Modern name -> the GLSL 120 fixed-function expression that replaces it
     // Ordered, because a longer name must be tried before a shorter one it contains
@@ -109,6 +101,7 @@ public final class VanillaNameTransformer {
         return false;
     }
 
+    // Drops the modern attribute declarations and points their uses at the fixed-function built-ins
     public static String transform(String source) {
         if (!isModernNamed(source)) {
             return source;

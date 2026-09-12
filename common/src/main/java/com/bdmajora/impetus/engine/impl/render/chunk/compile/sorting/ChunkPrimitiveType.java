@@ -7,6 +7,7 @@ import java.nio.ByteBuffer;
 import java.util.List;
 
 public interface ChunkPrimitiveType {
+    // Bytes for an index buffer of this many primitives
     default int getIndexBufferSize(int numPrimitives) {
         return numPrimitives * getIndexBufferElementsPerPrimitive() * 4;
     }
@@ -31,6 +32,7 @@ public interface ChunkPrimitiveType {
     // indexBuffer is a NativeBuffer to be populated with 32-bit integers, and x/y/z are the camera
     void generateSortedIndexBuffer(ByteBuffer indexBuffer, int numPrimitives, @Nullable TranslucentQuadAnalyzer.SortState chunkData, float x, float y, float z);
 
+    // Shader defines this primitive type needs
     default List<String> getDefines() {
         return List.of();
     }

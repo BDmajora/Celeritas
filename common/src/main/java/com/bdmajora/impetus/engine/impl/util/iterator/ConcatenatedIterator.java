@@ -12,6 +12,7 @@ public class ConcatenatedIterator<T> implements Iterator<T> {
         this.iterators = iterators;
     }
 
+    // Advances past exhausted inner iterators
     @Override
     public boolean hasNext() {
         if ((currentIterator == null || !currentIterator.hasNext()) && iterators.hasNext()) {
@@ -20,6 +21,7 @@ public class ConcatenatedIterator<T> implements Iterator<T> {
         return currentIterator != null && currentIterator.hasNext();
     }
 
+    // From the current inner iterator
     @Override
     public T next() {
         // hasNext manages replacing the iterator

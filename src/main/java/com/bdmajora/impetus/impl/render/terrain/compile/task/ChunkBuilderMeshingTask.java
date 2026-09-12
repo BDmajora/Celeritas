@@ -55,6 +55,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         this.renderContext = context;
     }
 
+    // Meshes one section: blocks, fluids, tile entities and the visibility graph
     @Override
     public ChunkBuildOutput execute(ChunkBuildContext context, CancellationToken cancellationToken) {
         VintageChunkBuildContext buildContext = (VintageChunkBuildContext)context;
@@ -182,6 +183,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         return new ChunkBuildOutput(this.render, renderData, meshes, this.buildTime);
     }
 
+    // Attaches the offending block and position to a rendering crash
     private ReportedException fillCrashInfo(CrashReport report, IBlockAccess slice, BlockPos pos) {
         CrashReportCategory crashReportSection = report.makeCategory("Block being rendered");
 
@@ -213,6 +215,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         FACINGS[GraphDirection.SOUTH] = EnumFacing.SOUTH;
     }
 
+    // Packs vanilla's VisGraph result into the section's occlusion data
     private static void encodeVisibilityData(VisGraph occluder, MinecraftBuiltRenderSectionData<TextureAtlasSprite, TileEntity> renderData) {
         var data = occluder.computeVisibility();
         renderData.visibilityData = VisibilityEncoding.encode((from, to) -> data.isVisible(FACINGS[from], FACINGS[to]));

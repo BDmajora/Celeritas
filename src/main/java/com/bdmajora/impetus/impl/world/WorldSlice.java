@@ -110,6 +110,7 @@ public class WorldSlice implements ImpetusBlockAccess {
     // Extra cloned chunk sections that the slice needed
     private final Long2ReferenceMap<ClonedChunkSection> extraClonedSections = new Long2ReferenceOpenHashMap<>();
 
+    // Clones the 3x3x3 sections around a render section on the main thread, so the builder thread never touches the world
     public static ChunkRenderContext prepare(World world, SectionPos origin, ClonedChunkSectionCache sectionCache) {
         // Fulgor defers light propagation until something reads light, and the copies below read the
         // section's light arrays directly rather than through Chunk#getLightFor. Resolve what is
@@ -156,6 +157,7 @@ public class WorldSlice implements ImpetusBlockAccess {
         return new ChunkRenderContext(origin, sections, volume);
     }
 
+    // Nether and End have no skylight; skipping the lookup there saves a branch per vertex
     private boolean hasSkyLight() {
         //? if >1.10.2 {
         return this.world.provider.hasSkyLight();
@@ -192,6 +194,7 @@ public class WorldSlice implements ImpetusBlockAccess {
         }
     }
 
+    // Unpacks the cloned sections into flat arrays for the builder thread
     public void copyData(ChunkRenderContext context) {
         this.origin = context.getOrigin();
         this.sections = context.getSections();
@@ -223,10 +226,12 @@ public class WorldSlice implements ImpetusBlockAccess {
         }
     }
 
+    // Drops references so a pooled slice does not pin chunk data between builds
     public void reset() {
         this.extraClonedSections.clear();
     }
 
+    // Chooses the fastest copy shape for a section depending on how much of it the box covers
     private void unpackBlockData(IBlockState[] states, ClonedChunkSection section, StructureBoundingBox box) {
         if (this.origin.equals(section.getPosition()))  {
             this.unpackBlockDataZ(states, section);
@@ -235,6 +240,7 @@ public class WorldSlice implements ImpetusBlockAccess {
         }
     }
 
+    // Fluidlogged API's second state layer, copied alongside blocks when that mod is present
     private void unpackFluidData(Object[] states, ClonedChunkSection section, StructureBoundingBox box) {
         var storage = section.getFluidData();
         if (storage.isEmpty()) {
@@ -250,6 +256,7 @@ public class WorldSlice implements ImpetusBlockAccess {
         }
     }
 
+    // Bounded copy for a partially covered section
     private static void copyBlocks(IBlockState[] blocks, ClonedChunkSection section, int minBlockY, int maxBlockY, int minBlockZ, int maxBlockZ, int minBlockX, int maxBlockX) {
         for (int y = minBlockY; y <= maxBlockY; y++) {
             for (int z = minBlockZ; z <= maxBlockZ; z++) {
@@ -261,6 +268,7 @@ public class WorldSlice implements ImpetusBlockAccess {
         }
     }
 
+    // Row-by-row copy when the box spans whole rows
     private void unpackBlockDataR(IBlockState[] states, ClonedChunkSection section, StructureBoundingBox box) {
         SectionPos pos = section.getPosition();
 
@@ -276,6 +284,7 @@ public class WorldSlice implements ImpetusBlockAccess {
         copyBlocks(states, section, minBlockY, maxBlockY, minBlockZ, maxBlockZ, minBlockX, maxBlockX);
     }
 
+    // Whole-section copy, the common case for the centre section
     private void unpackBlockDataZ(IBlockState[] states, ClonedChunkSection section) {
         // TODO: Look into a faster copy for this?
         final SectionPos pos = section.getPosition();
@@ -293,6 +302,7 @@ public class WorldSlice implements ImpetusBlockAccess {
         copyBlocks(states, section, minBlockY, maxBlockY, minBlockZ, maxBlockZ, minBlockX, maxBlockX);
     }
 
+    // Inclusive bounds test
     private static boolean blockBoxContains(StructureBoundingBox box, int x, int y, int z) {
         return x >= box.minX &&
                 x <= box.maxX &&
@@ -302,17 +312,20 @@ public class WorldSlice implements ImpetusBlockAccess {
                 z <= box.maxZ;
     }
 
+    // IBlockAccess entry point; unpacks to the int overload
     @Override
     public IBlockState getBlockState(BlockPos pos) {
         return this.getBlockState(pos.getX(), pos.getY(), pos.getZ());
     }
 
+    // IBlockAccess entry point
     @Override
     public boolean isAirBlock(BlockPos pos) {
         IBlockState state = this.getBlockState(pos);
         return state.getBlock().isAir(state, this, pos);
     }
 
+    // Reads from the flat arrays; positions outside the slice fall back to the cloned section cache
     public IBlockState getBlockState(int x, int y, int z) {
         if (!blockBoxContains(this.volume, x, y, z)) {
             return this.getBlockStateFallback(x, y, z);
@@ -326,17 +339,20 @@ public class WorldSlice implements ImpetusBlockAccess {
                 [getLocalBlockIndex(relX & 15, relY & 15, relZ & 15)];
     }
 
+    // Slice-relative read, the hot path for the block renderer
     public IBlockState getBlockStateRelative(int x, int y, int z) {
         // NOTE: Not bounds checked. We assume ChunkRenderRebuildTask is the only function using this
         return this.blockStatesArrays[getLocalSectionIndex(x >> 4, y >> 4, z >> 4)]
                 [getLocalBlockIndex(x & 15, y & 15, z & 15)];
     }
 
+    // IBlockAccess entry point
     @Override
     public TileEntity getTileEntity(BlockPos pos) {
         return this.getBlockEntity(pos.getX(), pos.getY(), pos.getZ());
     }
 
+    // From the cloned section's tile entity map, never the live world
     public TileEntity getBlockEntity(int x, int y, int z) {
         if (!blockBoxContains(this.volume, x, y, z)) {
             return null;
@@ -350,6 +366,7 @@ public class WorldSlice implements ImpetusBlockAccess {
                 .getBlockEntity(relX & 15, relY & 15, relZ & 15);
     }
 
+    // Packed sky and block light as vanilla's lightmap expects, from the cloned light arrays
     @Override
     public int getCombinedLight(BlockPos pos, int ambientLight) {
         if (!blockBoxContains(this.volume, pos.getX(), pos.getY(), pos.getZ())) {
@@ -367,12 +384,14 @@ public class WorldSlice implements ImpetusBlockAccess {
         return i << 20 | j << 4;
     }
 
+    // Single-type light read from the cloned arrays
     private int getLightFor(EnumSkyBlock type, int relX, int relY, int relZ) {
         ClonedChunkSection section = this.sections[getLocalSectionIndex(relX >> 4, relY >> 4, relZ >> 4)];
 
         return section.getLightLevel(relX & 15, relY & 15, relZ & 15, type);
     }
 
+    // Vanilla's neighbour-max rule for translucent blocks, over cloned data
     private int getLightFromNeighborsFor(EnumSkyBlock type, BlockPos pos) {
         if(!this.hasSkyLight() && type == EnumSkyBlock.SKY) {
             return this.defaultSkyLightValue;
@@ -418,6 +437,7 @@ public class WorldSlice implements ImpetusBlockAccess {
         }
     }
 
+    // IBlockAccess entry point
     @Override
     public Biome getBiome(BlockPos pos) {
         int x2 = (pos.getX() - this.baseX) >> 4;
@@ -432,6 +452,7 @@ public class WorldSlice implements ImpetusBlockAccess {
         return Biomes.PLAINS;
     }
 
+    // Biome colour through the slice's own biome data, so smooth blending stays off-thread
     @Override
     public int getBlockTint(BlockPos pos, BiomeColorHelper.ColorResolver resolver) {
         if(!blockBoxContains(this.volume, pos.getX(), pos.getY(), pos.getZ())) {
@@ -441,6 +462,7 @@ public class WorldSlice implements ImpetusBlockAccess {
         return this.biomeColorCache.getColor(resolver, pos.getX(), pos.getY(), pos.getZ());
     }
 
+    // Redstone power is never needed for rendering; always zero
     @Override
     @SuppressWarnings("deprecation")
     public int getStrongPower(BlockPos pos, EnumFacing direction) {
@@ -448,16 +470,19 @@ public class WorldSlice implements ImpetusBlockAccess {
         return state.getBlock().getStrongPower(state, this, pos, direction);
     }
 
+    // Forwarded from the world captured at prepare time
     @Override
     public WorldType getWorldType() {
         return this.worldType;
     }
 
+    // Asks the block state directly against this slice
     @Override
     public boolean isSideSolid(BlockPos pos, EnumFacing side, boolean _default) {
         return getBlockState(pos).isSideSolid(this, pos, side);
     }
 
+    // From the cloned biome array; y is ignored on 1.12.2
     public Biome getBiome(int x, int y, int z) {
         int relX = x - this.baseX;
         int relY = y - this.baseY;
@@ -472,10 +497,12 @@ public class WorldSlice implements ImpetusBlockAccess {
         return this.biomeCaches[idx][((z & 15) << 4) | (x & 15)];
     }
 
+    // The render section this slice was prepared for
     public SectionPos getOrigin() {
         return this.origin;
     }
 
+    // Vanilla's per-face diffuse factors
     public float getBrightness(EnumFacing direction, boolean shaded) {
         if (!shaded) {
             return !hasSkyLight() ? 0.9f : 1.0f;
@@ -483,6 +510,7 @@ public class WorldSlice implements ImpetusBlockAccess {
         return LightUtil.diffuseLight(direction);
     }
 
+    // For reads just outside the slice, e.g. a neighbour needed for culling; goes through the cache
     @Nullable
     private ClonedChunkSection fetchFallbackSectionForPos(int x, int y, int z) {
         int sX = PositionUtil.posToSectionCoord(x);
@@ -552,6 +580,7 @@ public class WorldSlice implements ImpetusBlockAccess {
                 [getLocalBlockIndex(relX & 15, relY & 15, relZ & 15)];
     }
 
+    // The live world, for callers that need it; never read from the builder thread
     @Override
     @Optional.Method(modid = FluidloggedCompat.MODID)
     public World getWorld() {
@@ -563,10 +592,12 @@ public class WorldSlice implements ImpetusBlockAccess {
         return y << 8 | z << 4 | x;
     }
 
+    // Index into the 3x3x3 section array
     public static int getLocalSectionIndex(int x, int y, int z) {
         return y << TABLE_BITS << TABLE_BITS | z << TABLE_BITS | x;
     }
 
+    // Index into the 3x3 chunk array
     public static int getLocalChunkIndex(int x, int z) {
         return z << TABLE_BITS | x;
     }

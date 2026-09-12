@@ -9,18 +9,14 @@ import com.bdmajora.impetus.booter.service.MixinBooterService;
 
 import java.io.File;
 
-/**
- * Reads {@code config/mixinbooter.cfg} during the earliest coremod boot and applies its options.
- */
+// Reads config/mixinbooter.cfg during the earliest coremod boot and applies its options
 public final class MixinBooterConfig {
 
     private static final String CATEGORY_DEBUG = "debug";
 
     private MixinBooterConfig() { }
 
-    /**
-     * Load the config file and apply the options that must take effect early.
-     */
+    // Load the config file and apply the options that must take effect early
     static void load() {
         ILogger logger = MixinService.getService().getLogger(Tags.MOD_NAME);
         try {
@@ -88,6 +84,7 @@ public final class MixinBooterConfig {
         }
     }
 
+    // Sets a Mixin debug system property from a config boolean, without overriding one set on the command line
     private static void applyFlag(Configuration config, String key, String property, String comment) {
         boolean value = config.getBoolean(key, CATEGORY_DEBUG, false, comment);
         if (value && System.getProperty(property) == null) {

@@ -36,6 +36,7 @@ public final class MeshShaderSupport {
 
     private MeshShaderSupport() {}
 
+    // Probed once and cached
     public static boolean isSupported() {
         if (supported == null) {
             probe();
@@ -56,6 +57,7 @@ public final class MeshShaderSupport {
         return sparseGeometry;
     }
 
+    // Checks the extensions and a minimal compile, since some drivers advertise but fail
     private static void probe() {
         List<String> missing = new ArrayList<>();
 

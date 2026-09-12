@@ -6,6 +6,7 @@ public class VisibilityEncoding {
     public static final long NULL = 0L;
     public static final long EVERYTHING = everything();
 
+    // Packs a 6x6 face-to-face table into one long
     public static <T> long encode(@NotNull DataHolder holder) {
         long visibilityData = 0;
 
@@ -31,6 +32,7 @@ public class VisibilityEncoding {
         return (from * 8) + to;
     }
 
+    // All faces see all faces; the default for an unbuilt section
     private static long everything() {
         long visibilityData = 0;
 
@@ -53,11 +55,13 @@ public class VisibilityEncoding {
         return foldOutgoingDirections(visibilityData);
     }
 
+    // Mask selecting the rows for a set of incoming faces
     private static long createMask(int incoming) {
         var expanded = (0b0000001_0000001_0000001_0000001_0000001_0000001L * Integer.toUnsignedLong(incoming));
         return (expanded & 0b00000001_00000001_00000001_00000001_00000001_00000001L) * 0xFF;
     }
 
+    // ORs the selected rows into one outgoing set
     private static int foldOutgoingDirections(long data) {
         long folded = data;
         folded |= folded >> 32; // fold top 32 bits onto bottom 32 bits
@@ -67,6 +71,7 @@ public class VisibilityEncoding {
         return (int) (folded & GraphDirectionSet.ALL);
     }
 
+    // For debugging
     public static String stringify(long data) {
         StringBuilder sb = new StringBuilder();
         sb.append("  ");

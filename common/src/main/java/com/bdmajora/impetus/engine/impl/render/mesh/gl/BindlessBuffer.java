@@ -29,16 +29,19 @@ public class BindlessBuffer implements DeviceBuffer {
         }
     }
 
+    // GL name
     @Override
     public int getId() {
         return this.id;
     }
 
+    // Bytes
     @Override
     public long getSize() {
         return this.size;
     }
 
+    // GPU virtual address, for the NV bindless path
     @Override
     public long getDeviceAddress() {
         return this.deviceAddress;
@@ -55,6 +58,7 @@ public class BindlessBuffer implements DeviceBuffer {
         LWJGL.glClearNamedBufferSubDataZero(this.id, GL30.GL_R8UI, offset, length, GL30.GL_RED_INTEGER, GL11.GL_UNSIGNED_BYTE);
     }
 
+    // Makes non-resident, then deletes
     @Override
     public void delete() {
         if (this.deleted) {

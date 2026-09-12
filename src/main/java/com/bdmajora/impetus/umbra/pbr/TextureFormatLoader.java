@@ -8,18 +8,15 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 
-// Reads the resource pack's PBR format declaration and turns it into preprocessor macros
-// The declaration lives in assets/minecraft/optifine/texture.properties as `format = <name>-<version>`, e.g.
-// `format = lab-pbr-1.3`
-// It becomes two macros, MC_TEXTURE_FORMAT_<NAME> and MC_TEXTURE_FORMAT_<NAME>_<VERSION>, because packs gate on
-// both — the coarse one to know the family, the versioned one to know which revision's channel packing to decode
-// Without this a pack decodes LabPBR data with the wrong channel layout and every surface comes out wrong
+// Reads the pack's format = <name>-<version> declaration from optifine/texture.properties into two macros,
+// MC_TEXTURE_FORMAT_<NAME> and MC_TEXTURE_FORMAT_<NAME>_<VERSION>, since packs gate on both
 public final class TextureFormatLoader {
     private static final ResourceLocation LOCATION = new ResourceLocation("minecraft", "optifine/texture.properties");
 
     private TextureFormatLoader() {
     }
 
+    // Adds the two macros when a format is declared; nothing when it is not
     public static void addFormatMacros(Map<String, String> macros) {
         String format = readDeclaredFormat();
         if (format == null || format.isEmpty()) {
@@ -43,10 +40,12 @@ public final class TextureFormatLoader {
         }
     }
 
+    // Uppercases and replaces anything not valid in a macro name
     private static String sanitize(String token) {
         return token.toUpperCase(Locale.ROOT).replace('-', '_').replace('.', '_');
     }
 
+    // The raw format value from texture.properties, or null
     private static String readDeclaredFormat() {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc == null || mc.getResourceManager() == null) {

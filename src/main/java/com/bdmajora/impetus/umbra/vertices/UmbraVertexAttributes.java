@@ -1,12 +1,8 @@
 package com.bdmajora.impetus.umbra.vertices;
 
-// The extra per-vertex attributes an OptiFine 1.12.2 pack expects, and the fixed attribute slots OptiFine
-// hard-codes for them
-// The slots are bound at program-link time by ShaderProgramCompiler and must match what the terrain and entity
-// vertex encoders actually write — a mismatch feeds a pack tangents where it expects entity ids
-// Position, colour, UV and normal go through the fixed-function slots; only the extended data needs dedicated
-// generic slots, which is why only three names live here
-// overlayId does not exist on 1.12.2 and is deliberately absent rather than stubbed
+// The extended per-vertex attributes a pack expects and the slots OptiFine hard-codes for them, bound at link time
+// and matched by the vertex encoders; a mismatch feeds a pack tangents where it expects entity ids
+// overlayId does not exist on 1.12.2 and is deliberately absent
 public final class UmbraVertexAttributes {
     // Block id in x and metadata in y, both derived from the IBlockState
     public static final String MC_ENTITY = "mc_Entity";

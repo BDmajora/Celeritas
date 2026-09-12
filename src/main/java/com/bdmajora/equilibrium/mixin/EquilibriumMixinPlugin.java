@@ -10,26 +10,24 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import java.util.List;
 import java.util.Set;
 
-// decides which Equilibrium mixins apply, by resolving each one's package path against the option tree
-// ported from Lithium's LithiumMixinPlugin; the structure is worth restating because it differs from
-// the other two subsystems in this project - FulgorMixinPlugin and CoartatioMixinPlugin both switch on
-// a hand-written list of mixin names, which is fine when there are a dozen
-// here there are far more than a dozen, and the mapping between a mixin and its switch is not a table
-// anyone maintains: it is the package the mixin lives in, so adding a mixin under an existing option
-// needs no change to this file at all
+// Decides which Equilibrium mixins apply by resolving each one's package path against the option tree
+// Unlike Fulgor and Coartatio there is no hand-written name list: the package is the switch, so adding
+// a mixin under an existing option needs no change here
 public class EquilibriumMixinPlugin implements IMixinConfigPlugin {
+    // Everything below this prefix is ours; anything else is treated as foreign and refused
     private static final String MIXIN_PACKAGE_ROOT = "com.bdmajora.equilibrium.mixin.";
 
-    // kill switch for bisecting a crash without editing the config file
-    // Lithium has the same property under lithium.test.disable_all_mixins; it is the first thing to
-    // reach for when a modpack crashes on startup, because it answers "is this us" in one launch
-    // argument
+    // Kill switch for bisecting a startup crash without editing the config, mirroring Lithium's
+    // lithium.test.disable_all_mixins; answers "is this us" in one launch argument
     private static final String DISABLE_ALL_MIXINS_PROPERTY = "equilibrium.disable_all_mixins";
 
+    // Read once at class init, before any mixin is considered
     public static final boolean DISABLE_ALL_MIXINS = Boolean.parseBoolean(System.getProperty(DISABLE_ALL_MIXINS_PROPERTY));
 
+    // Loaded on first onLoad and shared by every subsequent shouldApplyMixin call
     private static EquilibriumConfig config;
 
+    // Loads the config once; a failure here is fatal because every later decision depends on it
     @Override
     public void onLoad(String mixinPackage) {
         if (DISABLE_ALL_MIXINS) {
@@ -50,11 +48,13 @@ public class EquilibriumMixinPlugin implements IMixinConfigPlugin {
         Equilibrium.setConfig(config);
     }
 
+    // Impetus reobfuscates mixins directly, so there is no refmap to name
     @Override
     public String getRefMapperConfig() {
         return null;
     }
 
+    // Resolves the mixin's package against the option tree; refuses anything it cannot account for
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         if (DISABLE_ALL_MIXINS) {
@@ -82,19 +82,23 @@ public class EquilibriumMixinPlugin implements IMixinConfigPlugin {
         return option.isEnabled();
     }
 
+    // Nothing to negotiate with other configs
     @Override
     public void acceptTargets(Set<String> myTargets, Set<String> otherTargets) {
     }
 
+    // Null means use the mixin list from the json rather than adding any dynamically
     @Override
     public List<String> getMixins() {
         return null;
     }
 
+    // No pre-apply rewriting needed
     @Override
     public void preApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
     }
 
+    // No post-apply rewriting needed
     @Override
     public void postApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
     }

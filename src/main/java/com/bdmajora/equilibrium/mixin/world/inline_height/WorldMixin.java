@@ -15,10 +15,7 @@ import org.spongepowered.asm.mixin.Overwrite;
 // sea level for coordinates outside the world border but zero for an unloaded chunk inside it
 @Mixin(World.class)
 public abstract class WorldMixin implements ChunkAccess {
-    /**
-     * @author JellySquid
-     * @reason Resolve the chunk once rather than testing for it and then fetching it
-     */
+    // Overwrite: reads the heightmap directly instead of going through getChunk
     @Overwrite
     public int getHeight(int x, int z) {
         World world = (World) (Object) this;

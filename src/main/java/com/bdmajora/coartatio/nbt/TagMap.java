@@ -10,9 +10,9 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 
-// Backing map for NBTTagCompound; replaces vanilla's per-compound HashMap.
-// Small compounds use a flat array (cheaper than a hash table below nbtArrayMapThreshold entries), promoting to a hash map once they grow past it.
-// Keys optionally get interned through StringPool to collapse duplicate "id"-style strings. Derived from LoliASM's LoliTagMap / FoamFix's FoamNBTTagCompoundMap.
+// Backing map for NBTTagCompound, replacing vanilla's per-compound HashMap
+// Small compounds use a flat array and promote to a hash map past the configured threshold
+// Keys are optionally interned through StringPool; derived from LoliASM's LoliTagMap and FoamFix
 public class TagMap implements Map<String, NBTBase> {
     private final int promotionThreshold;
     private final boolean internKeys;
@@ -29,6 +29,7 @@ public class TagMap implements Map<String, NBTBase> {
                 : new Object2ObjectOpenHashMap<>();
     }
 
+    // Interns the key if enabled, then promotes to a hash map when the array form would get too slow
     @Override
     public NBTBase put(String key, NBTBase value) {
         if (this.internKeys) {
@@ -45,6 +46,7 @@ public class TagMap implements Map<String, NBTBase> {
         return this.delegate.put(key, value);
     }
 
+    // Routed through put one at a time so interning and promotion both apply
     @Override
     public void putAll(Map<? extends String, ? extends NBTBase> m) {
         // Routed through put() one at a time so interning and promotion both apply.
@@ -53,6 +55,7 @@ public class TagMap implements Map<String, NBTBase> {
         }
     }
 
+    // read() clears before filling, so this also demotes back to array storage to drop a large table
     @Override
     public void clear() {
         // NBTTagCompound.read() clears before filling. Reverting to array storage means a compound
@@ -62,61 +65,73 @@ public class TagMap implements Map<String, NBTBase> {
                 : new Object2ObjectOpenHashMap<>();
     }
 
+    // Delegates to whichever backing map is current
     @Override
     public int size() {
         return this.delegate.size();
     }
 
+    // Delegates
     @Override
     public boolean isEmpty() {
         return this.delegate.isEmpty();
     }
 
+    // Delegates
     @Override
     public boolean containsKey(Object key) {
         return this.delegate.containsKey(key);
     }
 
+    // Delegates
     @Override
     public boolean containsValue(Object value) {
         return this.delegate.containsValue(value);
     }
 
+    // Delegates; the hot path for every NBT read
     @Override
     public NBTBase get(Object key) {
         return this.delegate.get(key);
     }
 
+    // Delegates; never demotes, since a shrinking compound is rare
     @Override
     public NBTBase remove(Object key) {
         return this.delegate.remove(key);
     }
 
+    // Delegates
     @Override
     public Set<String> keySet() {
         return this.delegate.keySet();
     }
 
+    // Delegates
     @Override
     public Collection<NBTBase> values() {
         return this.delegate.values();
     }
 
+    // Delegates
     @Override
     public Set<Entry<String, NBTBase>> entrySet() {
         return this.delegate.entrySet();
     }
 
+    // Map equality by contents, regardless of which backing form each side uses
     @Override
     public boolean equals(Object obj) {
         return obj == this || this.delegate.equals(obj);
     }
 
+    // Delegates, consistent with equals
     @Override
     public int hashCode() {
         return this.delegate.hashCode();
     }
 
+    // Delegates
     @Override
     public String toString() {
         return this.delegate.toString();

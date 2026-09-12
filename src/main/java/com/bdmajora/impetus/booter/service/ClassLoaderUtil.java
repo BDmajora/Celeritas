@@ -26,11 +26,13 @@ final class ClassLoaderUtil implements IClassTracker {
         this.transformerExceptions = getField(TRANSFORMER_EXCEPTIONS_FIELD);
     }
 
+    // Checks LaunchClassLoader's cache, not the parent, since that is where transformed classes live
     @Override
     public boolean isClassLoaded(String name) {
         return this.cachedClasses.containsKey(name);
     }
 
+    // Reports which exclusion lists a class is on, for Mixin's diagnostics
     @Override
     public String getClassRestrictions(String className) {
         String restrictions = "";
@@ -43,16 +45,18 @@ final class ClassLoaderUtil implements IClassTracker {
         return restrictions;
     }
 
+    // Adds to LaunchClassLoader's invalid set so a failed transform is not retried
     @Override
     public void registerInvalidClass(String name) {
         this.invalidClasses.add(name);
     }
 
-    /** Whether the name or transformedName appears in either exclusion list. */
+    // Whether the name or transformedName appears in either exclusion list
     boolean isClassExcluded(String name, String transformedName) {
         return this.isClassClassLoaderExcluded(name, transformedName) || this.isClassTransformerExcluded(name, transformedName);
     }
 
+    // Prefix match against the class loader exclusions
     private boolean isClassClassLoaderExcluded(String name, String transformedName) {
         for (final String exception : this.getClassLoaderExceptions()) {
             if ((transformedName != null && transformedName.startsWith(exception)) || name.startsWith(exception)) {
@@ -62,6 +66,7 @@ final class ClassLoaderUtil implements IClassTracker {
         return false;
     }
 
+    // Prefix match against the transformer exclusions
     private boolean isClassTransformerExcluded(String name, String transformedName) {
         for (final String exception : this.getTransformerExceptions()) {
             if ((transformedName != null && transformedName.startsWith(exception)) || name.startsWith(exception)) {
@@ -71,14 +76,17 @@ final class ClassLoaderUtil implements IClassTracker {
         return false;
     }
 
+    // Reflective read of LaunchClassLoader's private set
     private Set<String> getClassLoaderExceptions() {
         return this.classLoaderExceptions != null ? this.classLoaderExceptions : Collections.<String>emptySet();
     }
 
+    // Reflective read of LaunchClassLoader's private set
     private Set<String> getTransformerExceptions() {
         return this.transformerExceptions != null ? this.transformerExceptions : Collections.<String>emptySet();
     }
 
+    // Reads a private LaunchClassLoader field; these have been stable across every 1.12.2 launchwrapper
     @SuppressWarnings("unchecked")
     private static <T> T getField(String fieldName) {
         try {

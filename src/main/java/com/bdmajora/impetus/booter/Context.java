@@ -5,12 +5,7 @@ import com.bdmajora.impetus.booter.util.Environment;
 
 import java.util.Collection;
 
-/**
- * This class contains loading context for callers
- *
- * @since 10.0
- * @deprecated since 11.0, use {@link Environment#inDev()} and {@link ModDiscoverer#getPresentMods()} instead.
- */
+// This class contains loading context for callers
 @Deprecated
 public final class Context {
 
@@ -29,31 +24,22 @@ public final class Context {
         this.presentMods = presentMods;
     }
 
-    /**
-     * @return the current mod loader
-     */
+    // Always FORGE on 1.12.2
     public ModLoader modLoader() {
         return ModLoader.FORGE;
     }
 
-    /**
-     * @return if the current environment is in-dev
-     */
+    // Whether launched through GradleStart
     public boolean inDev() {
         return Environment.inDev();
     }
 
-    /**
-     * @return name of the mixin config that is currently being processed
-     */
+    // The config being queried, or null for a hijacker
     public String mixinConfig() {
         return mixinConfig;
     }
 
-    /**
-     * @param modId to check against the list of present mods in the context
-     * @return whether the mod is present
-     */
+    // From the discoverer's mod index
     public boolean isModPresent(String modId) {
         return presentMods.contains(modId);
     }

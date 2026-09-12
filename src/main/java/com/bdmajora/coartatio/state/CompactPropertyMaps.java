@@ -99,6 +99,7 @@ public final class CompactPropertyMaps {
         return COMPACTED.get();
     }
 
+    // Shared versus fallen-back counts for /coartatio
     public static String statistics() {
         if (COMPACTED.get() == 0 && DECLINED.get() == 0) {
             return "unused";

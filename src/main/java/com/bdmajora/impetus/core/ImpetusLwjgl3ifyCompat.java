@@ -4,6 +4,7 @@ import com.gtnewhorizons.retrofuturabootstrap.SharedConfig;
 
 public class ImpetusLwjgl3ifyCompat {
     
+    // Excludes Impetus packages from lwjgl3ify's redirect transformer, which would otherwise double-rewrite our LWJGL calls
     public static void apply() {
         // TODO: Move these exclusions to retrofuturabootstrap's config file or manifest to avoid race conditions and state mutation.
         // Exclude Impetus packages from lwjgl3ify's redirect transformer to prevent bytecode conflicts.

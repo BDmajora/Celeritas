@@ -39,56 +39,67 @@ public class MixinBooterService extends AbstractMixinServiceLaunchWrapper {
 
     private boolean initialized;
 
-    /** The shared mixin log, also written to by {@link ClassLoadTracer} and the teeing {@link org.spongepowered.asm.service.mojang.Log4j2AuditingAdapter}. */
+    // The shared mixin log, also written to by ClassLoadTracer and the teeing
+    // org.spongepowered.asm.service.mojang.Log4j2AuditingAdapter
     public static MixinAuditFile auditFile() {
         return AUDIT_FILE;
     }
 
+    // Shown in Mixin's startup banner as the service name
     @Override
     public String getName() {
         return Tags.MOD_NAME;
     }
 
+    // Dev when launched through GradleStart; changes logging and export defaults
     @Override
     protected boolean isDevelopment() {
         return Environment.inDev();
     }
 
+    // CLIENT or SERVER, from the primary tweaker
     @Override
     public String getSideName() {
         return Environment.side();
     }
 
+    // The mirrored mixin log, or null when disabled in config
     @Override
     protected MixinAuditFile createAuditLog() {
         return AUDIT_FILE;
     }
 
+    // Class lookup through LaunchClassLoader
     @Override
     public IClassProvider getClassProvider() {
         return this.classProvider;
     }
 
+    // Bytecode lookup with optional transformer application
     @Override
     public IClassBytecodeProvider getBytecodeProvider() {
         return this.bytecodeProvider;
     }
 
+    // The LaunchWrapper transformers Mixin should delegate to
     @Override
     public ITransformerProvider getTransformerProvider() {
         return this.transformerProvider;
     }
 
+    // Tracks loaded and invalid classes against LaunchClassLoader's own sets
     @Override
     public IClassTracker getClassTracker() {
         return this.classLoaderUtil;
     }
 
+    // Hook for cache invalidation; nothing here needs it
     @Override
     protected void onRefresh() {
         this.transformerProvider.refreshDelegatedTransformers();
     }
 
+    // Installs the INIT trigger once PREINIT starts, and uninstalls it after
     @Override
     public void beginPhase() {
         super.beginPhase();
@@ -97,16 +108,15 @@ public class MixinBooterService extends AbstractMixinServiceLaunchWrapper {
         }
     }
 
-    /**
-     * Advances to {@link MixinEnvironment.Phase#INIT INIT}, called by {@link InitPhaseTrigger} from within
-     * {@code FMLDeobfTweaker}. A no-op if the environment has already moved past it.
-     */
+    // Advances to MixinEnvironment.Phase#INIT INIT, called by InitPhaseTrigger from within FMLDeobfTweaker. A
+    // no-op if the environment has already moved past it
     void gotoInitPhase() {
         if (this.phaseTransitioner != null) {
             this.phaseTransitioner.accept(MixinEnvironment.Phase.INIT);
         }
     }
 
+    // Registers the platform agent and prepares the service for the first transformation
     @Override
     public void init() {
         if (this.initialized) {
@@ -121,6 +131,7 @@ public class MixinBooterService extends AbstractMixinServiceLaunchWrapper {
         }
     }
 
+    // Every jar with a MixinConfigs or MixinConnector manifest entry, found by ModDiscoverer
     @Override
     public Collection<IContainerHandle> getMixinContainers() {
         List<IContainerHandle> containers = new ArrayList<>();
@@ -149,6 +160,7 @@ public class MixinBooterService extends AbstractMixinServiceLaunchWrapper {
         return containers;
     }
 
+    // Maps a jar URI to the mod id that owns it, for log lines and crash reports
     @Override
     protected String resolveSourceId(URI source) {
         if ("file".equals(source.getScheme())) {
@@ -159,6 +171,7 @@ public class MixinBooterService extends AbstractMixinServiceLaunchWrapper {
         return null;
     }
 
+    // The Impetus jar itself
     @Override
     public IContainerHandle getPrimaryContainer() {
         InitPhaseTrigger.install();

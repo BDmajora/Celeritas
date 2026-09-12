@@ -12,6 +12,7 @@ import com.bdmajora.impetus.lwjgl.GLExtension;
 
 public enum BufferCopyFunctions {
     CORE {
+        // Implementation for this GL level
         @Override
         public void copyBufferSubData(CommandList commandList, GlBuffer src, GlBuffer dst, long readOffset, long writeOffset, long bytes) {
             commandList.bindBuffer(GlBufferTarget.COPY_READ_BUFFER, src);
@@ -20,6 +21,7 @@ public enum BufferCopyFunctions {
         }
     },
     PIXEL_PACK {
+        // Implementation for this GL level
         @Override
         public void copyBufferSubData(CommandList commandList, GlBuffer src, GlBuffer dst, long readOffset, long writeOffset, long bytes) {
             if (src.getActiveMapping() != null || dst.getActiveMapping() != null) {
@@ -45,6 +47,7 @@ public enum BufferCopyFunctions {
 
     public abstract void copyBufferSubData(CommandList commandList, GlBuffer src, GlBuffer dst, long readOffset, long writeOffset, long bytes);
 
+    // Core copy, then a map-and-memcpy fallback
     public static BufferCopyFunctions pickBest(RenderDevice device) {
         if (LWJGL.isOpenGLVersionSupported(3, 1) || LWJGL.isExtensionSupported(GLExtension.ARB_copy_buffer)) {
             return CORE;

@@ -15,10 +15,12 @@ public enum ExplosiveLightingMode implements DynamicLightsConfig.Localized {
         this.key = key;
     }
 
+    // Anything but OFF
     public boolean isEnabled() {
         return this != OFF;
     }
 
+    // Lang key for the cycler label
     @Override
     public String translationKey() {
         return this.key;

@@ -66,26 +66,32 @@ public final class ProgramSource {
         return variant == 0 ? programName : programName + "_" + (char) ('a' + variant - 1);
     }
 
+    // Program id, e.g. gbuffers_terrain
     public String getName() {
         return this.name;
     }
 
+    // .vsh, if present
     public Optional<String> getVertexSource() {
         return Optional.ofNullable(this.vertexSource);
     }
 
+    // .gsh, if present
     public Optional<String> getGeometrySource() {
         return Optional.ofNullable(this.geometrySource);
     }
 
+    // .tcs, if present
     public Optional<String> getTessControlSource() {
         return Optional.ofNullable(this.tessControlSource);
     }
 
+    // .tes, if present
     public Optional<String> getTessEvalSource() {
         return Optional.ofNullable(this.tessEvalSource);
     }
 
+    // .fsh, if present
     public Optional<String> getFragmentSource() {
         return Optional.ofNullable(this.fragmentSource);
     }

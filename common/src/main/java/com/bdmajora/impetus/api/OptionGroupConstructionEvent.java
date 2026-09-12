@@ -19,10 +19,12 @@ public class OptionGroupConstructionEvent extends ImpetusEvent {
         this.options = options;
     }
 
+    // Mutable; handlers append
     public List<Option<?>> getOptions() {
         return this.options;
     }
 
+    // Which group is being built
     public OptionIdentifier<Void> getId() {
         return this.id;
     }

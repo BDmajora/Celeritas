@@ -20,6 +20,7 @@ import java.util.stream.Stream;
 public class ImpetusVintageMixinPlugin implements IMixinConfigPlugin {
     public static final Logger LOGGER = LogManager.getLogger("ImpetusMixins");
 
+    // Applies lwjgl3ify compat if RetroFuturaBootstrap is present; absence is the normal stock-Forge case
     @Override
     public void onLoad(String mixinPackage) {
         try {
@@ -31,20 +32,24 @@ public class ImpetusVintageMixinPlugin implements IMixinConfigPlugin {
         }
     }
 
+    // Empty: Impetus reobfuscates mixins directly rather than via a refmap
     @Override
     public String getRefMapperConfig() {
         return "";
     }
 
+    // Unused; getMixins supplies the list directly and Mixin does not consult this for those
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         return false;
     }
 
+    // Nothing to negotiate with other configs
     @Override
     public void acceptTargets(Set<String> myTargets, Set<String> otherTargets) {
     }
 
+    // Turns a class file path under the mixin root into a dotted class name
     private static String mixinClassify(Path baseFolder, Path path) {
         try {
             String className = baseFolder.relativize(path).toString().replace('/', '.').replace('\\', '.');
@@ -54,6 +59,7 @@ public class ImpetusVintageMixinPlugin implements IMixinConfigPlugin {
         }
     }
 
+    // Discovers every class under com.bdmajora.impetus.mixin by walking the jar or classes dir, so new mixins need no listing
     @Override
     public List<String> getMixins() {
         List<Path> rootPaths = new ArrayList<>();
@@ -105,11 +111,13 @@ public class ImpetusVintageMixinPlugin implements IMixinConfigPlugin {
         return new ArrayList<>(possibleMixinClasses);
     }
 
+    // No pre-apply rewriting needed
     @Override
     public void preApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
 
     }
 
+    // No post-apply rewriting needed
     @Override
     public void postApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
 

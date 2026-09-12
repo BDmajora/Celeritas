@@ -6,6 +6,7 @@ import org.joml.Matrix4fc;
 
 public interface ChunkShaderInterface {
     void setupState(TerrainRenderPass pass);
+    // Defaults to nothing
     default void restoreState() {}
     GlPrimitiveType getPrimitiveType();
     void setProjectionMatrix(Matrix4fc matrix);
@@ -13,6 +14,7 @@ public interface ChunkShaderInterface {
     void setRegionOffset(float x, float y, float z);
     void setTextureSlot(ChunkShaderTextureSlot slot, int val);
 
+    // Defaults to nothing; only the fade-in shader uses it
     default void setSectionAges(long timestamp, long[] loadTimes) {
 
     }

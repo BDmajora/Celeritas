@@ -9,6 +9,7 @@ public record ImpetusNotification(Level level, String title, List<String> lines,
         ERROR
     }
 
+    // Past its creation time plus duration
     public boolean isExpired(long nowMillis) {
         return nowMillis - this.createdAtMillis > this.durationMillis;
     }

@@ -11,6 +11,7 @@ public interface ChunkShaderComponent {
     interface Factory<T extends ChunkShaderComponent> {
         T create(ShaderBindingContext context);
 
+        // Defaults to none
         default Collection<String> getDefines() {
             return List.of();
         }

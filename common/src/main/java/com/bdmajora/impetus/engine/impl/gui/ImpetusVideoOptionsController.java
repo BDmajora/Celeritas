@@ -61,12 +61,14 @@ public class ImpetusVideoOptionsController implements Renderable {
         this.font = font;
     }
 
+    // Rebuilds the whole frame tree for a new size
     public void init(int width, int height) {
         this.width = width;
         this.height = height;
         this.frame = this.parentFrameBuilder().build();
     }
 
+    // The root frame: tab area plus the button bar
     protected BasicFrame.Builder parentFrameBuilder() {
         BasicFrame.Builder basicFrameBuilder;
 
@@ -97,12 +99,14 @@ public class ImpetusVideoOptionsController implements Renderable {
         return basicFrameBuilder;
     }
 
+    // Draws the root frame
     @Override
     public void render(DrawContext drawContext, int mouseX, int mouseY, float partialTicks) {
         this.updateControls();
         this.frame.render(drawContext, mouseX, mouseY, partialTicks);
     }
 
+    // Enables Apply and Undo only when something changed
     private void updateControls() {
         boolean hasChanges = this.getAllOptions()
                 .anyMatch(Option::hasChanged);
@@ -114,11 +118,13 @@ public class ImpetusVideoOptionsController implements Renderable {
         this.hasPendingChanges = hasChanges;
     }
 
+    // Every option on every page
     private Stream<Option<?>> getAllOptions() {
         return this.pages.stream()
                 .flatMap(s -> s.getOptions().stream());
     }
 
+    // Writes each changed option, saves every storage, then runs flag side effects
     private void applyChanges() {
         final HashSet<OptionStorage<?>> dirtyStorages = new HashSet<>();
         final EnumSet<OptionFlag> flags = EnumSet.noneOf(OptionFlag.class);
@@ -141,23 +147,28 @@ public class ImpetusVideoOptionsController implements Renderable {
         applyFlagSideEffects(Collections.unmodifiableSet(flags));
     }
 
+    // Platform hook: reload renderer, textures or world as flagged
     protected void applyFlagSideEffects(Set<OptionFlag> flags) {
 
     }
 
+    // Resets every option to its stored value
     private void undoChanges() {
         this.getAllOptions()
                 .forEach(Option::reset);
     }
 
+    // Hides pages with no visible options
     private boolean canShowPage(OptionPage page) {
         return !page.getGroups().isEmpty();
     }
 
+    // Platform hook for pages that are not option pages
     protected void createExtraTabs(Map<String, List<Tab<?>>> tabs) {
 
     }
 
+    // One tab per page, grouped by owning mod
     private AbstractFrame createTabFrame(Dim2i tabFrameDim) {
         // TabFrame will automatically expand its height to fit all tabs, so the scrollable frame can handle it
         return TabFrame.createBuilder()
@@ -184,6 +195,7 @@ public class ImpetusVideoOptionsController implements Renderable {
                 .build(this.font);
     }
 
+    // Assembles search bar, tabs and buttons
     public BasicFrame.Builder parentBasicFrameBuilder(Dim2i parentBasicFrameDim, Dim2i tabFrameDim) {
         return BasicFrame.createBuilder()
                 .setDimension(parentBasicFrameDim)
@@ -222,6 +234,7 @@ public class ImpetusVideoOptionsController implements Renderable {
         this.frame = this.parentFrameBuilder().build();
     }
 
+    // A synthetic page of every option matching the query
     private OptionPage buildSearchResultsPage() {
         var needle = this.searchQuery.toLowerCase(Locale.ROOT);
         var matches = new ArrayList<Option<?>>();
@@ -248,6 +261,7 @@ public class ImpetusVideoOptionsController implements Renderable {
         return new OptionPage(OptionIdentifier.create("impetus", "search_results"), SEARCH_RESULTS_TITLE, groups);
     }
 
+    // Case-insensitive match on name and tooltip
     private boolean matchesQuery(Option<?> option, String needle) {
         var name = this.font.extractString(option.getName());
 

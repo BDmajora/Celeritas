@@ -35,10 +35,12 @@ public final class ProgramBlendState {
         this.perTargetModes = perTargetModes;
     }
 
+    // No directives; leaves vanilla's blend state alone
     public static ProgramBlendState empty() {
         return new ProgramBlendState(false, null, new LinkedHashMap<>());
     }
 
+    // Reads blend.<program> and every blend.<program>.<buffer> override
     public static ProgramBlendState from(ShaderProperties properties, String programName) {
         return from(properties, programName, null);
     }
@@ -76,6 +78,7 @@ public final class ProgramBlendState {
         return new ProgramBlendState(baseSpecified, baseMode, perTargetModes);
     }
 
+    // Whether anything needs applying
     public boolean hasDirectives() {
         return this.baseSpecified || !this.perTargetModes.isEmpty();
     }
@@ -126,6 +129,7 @@ public final class ProgramBlendState {
         }
     }
 
+    // glBlendFuncSeparatei for one attachment
     private static void applySlotMode(int slot, BlendMode mode) {
         if (mode == null) {
             LWJGL.glDisablei(GL11.GL_BLEND, slot);
@@ -135,6 +139,7 @@ public final class ProgramBlendState {
         }
     }
 
+    // Two- or four-factor form; malformed values are logged and ignored
     private static BlendMode parseMode(String programName, String key, String value) {
         if ("off".equals(value.trim().toLowerCase(Locale.ROOT))) {
             return null;
@@ -148,6 +153,7 @@ public final class ProgramBlendState {
         }
     }
 
+    // colortexN or gcolor-style names to an index
     private static int parseTarget(String name) {
         String lower = name.toLowerCase(Locale.ROOT);
         if (lower.startsWith("colortex")) {

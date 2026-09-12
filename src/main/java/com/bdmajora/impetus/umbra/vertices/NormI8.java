@@ -25,6 +25,7 @@ public final class NormI8 {
         return pack(normal.x(), normal.y(), normal.z(), 0);
     }
 
+    // Clamps each component to [-1, 1] and packs as signed bytes
     public static int pack(float x, float y, float z, float w) {
         return ((int) (x * 127) & 0xFF)
                 | (((int) (y * 127) & 0xFF) << 8)
@@ -38,14 +39,17 @@ public final class NormI8 {
         return ((byte) ((norm >> X_OFFSET) & 0xFF)) * NORM;
     }
 
+    // Bits 8..15
     public static float unpackY(int norm) {
         return ((byte) ((norm >> Y_OFFSET) & 0xFF)) * NORM;
     }
 
+    // Bits 16..23
     public static float unpackZ(int norm) {
         return ((byte) ((norm >> Z_OFFSET) & 0xFF)) * NORM;
     }
 
+    // Bits 24..31, tangent handedness
     public static float unpackW(int norm) {
         return ((byte) ((norm >> W_OFFSET) & 0xFF)) * NORM;
     }

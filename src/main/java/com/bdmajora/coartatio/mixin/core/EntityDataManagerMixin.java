@@ -13,14 +13,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.Map;
 
 // Compacts the synced-data map every entity carries, from FoamFix's FoamyArrayBackedDataManagerMap
-// Vanilla gives each EntityDataManager a HashMap<Integer, DataEntry>: boxed integer keys, a Node per entry and
-// an eagerly allocated table, for what is usually a handful of parameters
-// Int2ObjectOpenHashMap still implements Map<Integer, V>, so the field type and every caller are unchanged, but
-// it stores the keys as primitives in a flat array
-// There is one per entity in the world, so the saving scales with entity count rather than with anything the
-// player controls
+// Int2ObjectOpenHashMap still implements Map<Integer, V> so callers are unchanged, but drops the boxing,
+// the per-entry Node and the eager table; one per entity, so it scales with entity count
 @Mixin(EntityDataManager.class)
 public abstract class EntityDataManagerMixin {
+    // Declared as Map<Integer, ...>, which the primitive-keyed replacement still satisfies
     @Mutable
     @Shadow
     @Final

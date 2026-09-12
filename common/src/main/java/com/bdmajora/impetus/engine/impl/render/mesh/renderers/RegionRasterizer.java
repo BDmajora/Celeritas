@@ -20,11 +20,13 @@ public class RegionRasterizer {
                 .link();
     }
 
+    // Debug draw of region bounds
     public void raster(int visibleRegionCount) {
         this.program.bind();
         LWJGL.glDrawMeshTasksNV(0, visibleRegionCount);
     }
 
+    // Frees the program
     public void delete() {
         this.program.delete();
     }

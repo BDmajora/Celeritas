@@ -8,14 +8,8 @@ import com.bdmajora.impetus.engine.impl.render.chunk.vertex.format.impl.MeshChun
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// A finished chunk build, reshaped into what the mesh pipeline actually uploads
-//
-// The mesh shader has no index buffer and no vertex attributes: it reads four consecutive vertices per quad
-// straight out of the geometry arena. So all the pipeline needs from a build is the raw vertex bytes, how many
-// quads each facing contributed, and the section's bounding box for the occlusion rasteriser.
-//
-// Produced on a chunk build worker, never on the render thread — computing this during uploadChunks is what
-// wrecks 1% lows on a fast-moving camera
+// A finished build reshaped for the mesh pipeline: raw vertex bytes, quad counts per facing, and a bounding box
+// Produced on a build worker, never the render thread, since doing it in uploadChunks wrecks 1% lows
 public record SectionGeometry(
         // Total quads across every facing
         int quadCount,
@@ -30,6 +24,7 @@ public record SectionGeometry(
         int minX, int minY, int minZ,
         int sizeX, int sizeY, int sizeZ
 ) {
+    // Returns the quad allocation to the arena
     public void delete() {
         this.geometry.free();
     }
@@ -100,5 +95,6 @@ public record SectionGeometry(
         return new BoundingBox(minX, minY, minZ, maxX - minX, maxY - minY, maxZ - minZ);
     }
 
+    // Section-local bounds of the geometry, for the mesh shader's cull
     private record BoundingBox(int minX, int minY, int minZ, int sizeX, int sizeY, int sizeZ) {}
 }

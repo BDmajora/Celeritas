@@ -9,11 +9,13 @@ public class GlUniformInt extends GlUniform<Integer> {
         super(index);
     }
 
+    // Boxed form
     @Override
     public void set(Integer value) {
         this.setInt(value);
     }
 
+    // glUniform1i
     public void setInt(int value) {
         LWJGL.glUniform1i(this.index, value);
     }

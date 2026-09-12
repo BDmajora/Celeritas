@@ -45,6 +45,7 @@ public class CommonOptionPages {
                 .build();
     }
 
+    // Translucency sorting options
     public static OptionGroup sortingGroup(ImpetusGameOptions gameOpts) {
         return OptionGroup.createBuilder()
                 .setId(StandardOptions.Group.SORTING)
@@ -70,6 +71,7 @@ public class CommonOptionPages {
                 .build();
     }
 
+    // The Performance page shared by every platform
     public static OptionPage performance(ImpetusGameOptions gameOpts) {
         List<OptionGroup> groups = new ArrayList<>();
 

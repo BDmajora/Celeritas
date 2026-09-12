@@ -6,13 +6,8 @@ import com.bdmajora.impetus.umbra.uniforms.CapturedRenderingState;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
-// Picks the shadow pass's section filter, following Iris's ShadowRenderer.createShadowFrustum decision tree
-// The subtlety that matters is voxelization. Iris falls back to distance-only culling whenever the pack stated no
-// preference AND voxelizes, because the advanced frustum is view-DIRECTION dependent and an unstable section set
-// makes a pack's floodfill chase a moving voxel field
-// A pack that explicitly asks for shadow.culling = reversed gets SafeZoneCullingFrustum instead, whose inner
-// voxelDistance box is drawn unconditionally — that request is the pack telling us exactly where its voxelization
-// needs stability, so the advanced test can safely apply everywhere outside it
+// Picks the shadow section filter following Iris's decision tree: distance-only when the pack voxelises and
+// stated no preference, SafeZoneCullingFrustum when it asked for reversed, the advanced frustum otherwise
 public final class ShadowFrustums {
 
     // Accepts every section. Iris returns its NonCullingFrustum in exactly two cases — the pack turned culling off,

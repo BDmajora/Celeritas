@@ -59,6 +59,7 @@ public class OcclusionCuller {
         }
     }
 
+    // The tree walk replaces the graph walk when occlusion is off or the camera is outside the world
     private boolean shouldUseSectionTree(Viewport viewport, boolean useOcclusionCulling) {
         if (!useOcclusionCulling) {
             return true;
@@ -71,6 +72,7 @@ public class OcclusionCuller {
                 || this.getRenderSection(origin.x(), origin.y(), origin.z()) == null;
     }
 
+    // Frustum-only visibility via the octree
     private void findVisibleWithSectionTree(Visitor visitor, Viewport viewport, float searchDistance, int frame) {
         this.sectionTree.forEachVisible(viewport, searchDistance, section -> {
             if (section.getLastVisibleFrame() == frame) {
@@ -123,10 +125,12 @@ public class OcclusionCuller {
         }
     }
 
+    // Distance then frustum
     static boolean isSectionVisible(OcclusionNode section, Viewport viewport, float maxDistance) {
         return isWithinRenderDistance(viewport.getTransform(), section, maxDistance) && isWithinFrustum(viewport, section);
     }
 
+    // Queues each neighbour the section's visibility data lets light through to
     private static void visitNeighbors(final WriteQueue<OcclusionNode> queue, OcclusionNode section, int outgoing, int frame) {
         // Only traverse into neighbors which are actually present.
         // This avoids a null-check on each invocation to enqueue, and since the compiler will see that a null
@@ -166,6 +170,7 @@ public class OcclusionCuller {
         }
     }
 
+    // Records the incoming direction; enqueues on first visit this frame
     private static void visitNode(final WriteQueue<OcclusionNode> queue, @NotNull OcclusionNode render, int incoming, int frame) {
         if (render.getLastVisibleFrame() != frame) {
             // This is the first time we are visiting this section during the given frame, so we must
@@ -179,6 +184,7 @@ public class OcclusionCuller {
         render.addIncomingDirections(incoming);
     }
 
+    // Directions leading away from the camera, so the walk never doubles back
     private static int getOutwardDirections(Vector3ic origin, OcclusionNode section) {
         int planes = 0;
 
@@ -194,6 +200,7 @@ public class OcclusionCuller {
         return planes;
     }
 
+    // Nearest-point distance against the render distance
     private static boolean isWithinRenderDistance(CameraTransform camera, OcclusionNode section, float maxDistance) {
         // origin point of the chunk's bounding box (in view space)
         int ox = section.getOriginX() - camera.intX;
@@ -210,6 +217,7 @@ public class OcclusionCuller {
         //return DistanceFilterHolder.INSTANCE.isWithinDistance(dx, dy, dz, maxDistance);
     }
 
+    // Closest value in a range to zero
     @SuppressWarnings("ManualMinMaxCalculation") // we know what we are doing.
     private static int nearestToZero(int min, int max) {
         // this compiles to slightly better code than Math.min(Math.max(0, min), max)
@@ -224,6 +232,7 @@ public class OcclusionCuller {
     // to deal with floating point imprecision during a frustum check (see GH#2132).
     private static final float CHUNK_SECTION_SIZE = 8.0f /* chunk bounds */ + 1.0f /* maximum model extent */ + 0.125f /* epsilon */;
 
+    // Section box against the frustum
     public static boolean isWithinFrustum(Viewport viewport, OcclusionNode section) {
         return viewport.isBoxVisible(section.getCenterX(), section.getCenterY(), section.getCenterZ(), CHUNK_SECTION_SIZE);
     }
@@ -255,6 +264,7 @@ public class OcclusionCuller {
         }
     }
 
+    // Seeds the walk from the camera's section, or the nearest column when it is outside the world
     private void initWithinWorld(Visitor visitor, WriteQueue<OcclusionNode> queue, Viewport viewport, boolean useOcclusionCulling, int frame) {
         var origin = viewport.getChunkCoord();
         var section = this.getRenderSection(origin.x(), origin.y(), origin.z());
@@ -335,6 +345,7 @@ public class OcclusionCuller {
         }
     }
 
+    // Seeds one section if it exists and is in the frustum
     private void tryVisitNode(WriteQueue<OcclusionNode> queue, int x, int y, int z, int direction, int frame, Viewport viewport) {
         OcclusionNode section = this.getRenderSection(x, y, z);
 
@@ -345,6 +356,7 @@ public class OcclusionCuller {
         visitNode(queue, section, direction, frame);
     }
 
+    // Node lookup by section coordinates
     private OcclusionNode getRenderSection(int x, int y, int z) {
         return this.sections.get(PositionUtil.packSection(x, y, z));
     }

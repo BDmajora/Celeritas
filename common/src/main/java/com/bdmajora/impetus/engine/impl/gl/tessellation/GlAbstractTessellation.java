@@ -12,10 +12,12 @@ public abstract class GlAbstractTessellation implements GlTessellation {
         this.bindings = bindings;
     }
 
+    // Through the LWJGL abstraction
     private static void glVertexAttribIPointer(int index, int size, int type, int stride, long ptr) {
         LWJGL.glVertexAttribIPointer(index, size, type, stride, ptr);
     }
 
+    // Issues a pointer call per attribute of every bound vertex buffer
     protected void bindAttributes(CommandList commandList) {
         for (TessellationBinding binding : this.bindings) {
             commandList.bindBuffer(binding.target(), binding.buffer());

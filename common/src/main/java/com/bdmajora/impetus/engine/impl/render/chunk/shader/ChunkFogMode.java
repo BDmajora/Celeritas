@@ -21,15 +21,18 @@ public enum ChunkFogMode implements ChunkShaderComponent.Factory<ChunkShaderFogC
         this.defines = defines;
     }
 
+    // The uniform component for this mode
     @Override
     public ChunkShaderFogComponent create(ShaderBindingContext context) {
         return factory.apply(context);
     }
 
+    // Shader defines selecting the fog formula
     public List<String> getDefines() {
         return this.defines;
     }
 
+    // GL fog mode constant to enum
     public static ChunkFogMode fromGLMode(int mode) {
         switch (mode) {
             case 0:

@@ -8,10 +8,12 @@ public class GlMutableBuffer extends GlBuffer {
         super();
     }
 
+    // Recorded on each glBufferData
     public void setSize(long size) {
         this.size = size;
     }
 
+    // Current allocation
     public long getSize() {
         return this.size;
     }

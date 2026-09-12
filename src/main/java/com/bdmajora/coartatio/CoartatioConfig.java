@@ -106,6 +106,7 @@ public final class CoartatioConfig {
         this.showDebugOverlay = bool(props, "showDebugOverlay", true);
     }
 
+    // Loads on first use and caches; every reader shares the one instance
     public static CoartatioConfig get() {
         if (instance == null) {
             instance = load();
@@ -113,6 +114,7 @@ public final class CoartatioConfig {
         return instance;
     }
 
+    // Reads the file if present, otherwise starts from defaults and writes them out
     private static CoartatioConfig load() {
         Path file = configDirectory().resolve(FILE_NAME);
 
@@ -139,6 +141,7 @@ public final class CoartatioConfig {
         }
     }
 
+    // The config directory, created eagerly; falls back to the working directory when minecraftHome is unset
     private static Path configDirectory() {
         File home = Launch.minecraftHome;
         Path dir = (home == null ? Paths.get(".") : home.toPath()).resolve("config");
@@ -190,6 +193,7 @@ public final class CoartatioConfig {
         }
     }
 
+    // Lenient boolean parse; anything unrecognised keeps the default
     private static boolean bool(Properties props, String key, boolean fallback) {
         String value = props.getProperty(key);
         if (value == null) {
@@ -221,6 +225,7 @@ public final class CoartatioConfig {
         return entries.toArray(new String[0]);
     }
 
+    // Clamped integer parse; out-of-range and unparseable values keep the default
     private static int integer(Properties props, String key, int fallback, int min, int max) {
         String value = props.getProperty(key);
         if (value == null) {

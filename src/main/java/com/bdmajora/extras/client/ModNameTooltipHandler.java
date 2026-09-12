@@ -29,6 +29,7 @@ public final class ModNameTooltipHandler {
     private ModNameTooltipHandler() {
     }
 
+    // Appends the owning mod's name as the last tooltip line
     @SubscribeEvent(priority = EventPriority.LOW)
     public static void onItemTooltip(ItemTooltipEvent event) {
         if (!Extras.options().extra.modNameTooltip) {
@@ -46,6 +47,7 @@ public final class ModNameTooltipHandler {
         }
     }
 
+    // Owning mod via the registry name's namespace; null for empty stacks and unknown namespaces
     @Nullable
     private static String resolveModName(ItemStack stack) {
         if (stack.isEmpty()) {

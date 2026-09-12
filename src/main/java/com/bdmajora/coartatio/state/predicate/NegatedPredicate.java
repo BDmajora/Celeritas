@@ -3,22 +3,24 @@ package com.bdmajora.coartatio.state.predicate;
 import com.google.common.base.Predicate;
 import net.minecraft.block.state.IBlockState;
 
-// property=!value — inverts whatever it wraps
-// Guava's Predicates.not would work and even defines equals, but only against other Guava NotPredicates, so a
-// negation of one of the flattened predicates here could never be interned alongside them
-// Owning the wrapper is what keeps the whole condition tree poolable
+// property=!value, inverting whatever it wraps
+// Guava's Predicates.not only defines equals against its own type, so owning the wrapper keeps the tree poolable
 public final class NegatedPredicate implements Predicate<IBlockState> {
+    // The predicate being inverted; interned itself, so this wrapper interns too
     private final Predicate<IBlockState> delegate;
 
+    // Takes ownership of an already-canonical delegate
     public NegatedPredicate(Predicate<IBlockState> delegate) {
         this.delegate = delegate;
     }
 
+    // Single virtual call plus a negate; no allocation on the hot model path
     @Override
     public boolean apply(IBlockState state) {
         return !this.delegate.apply(state);
     }
 
+    // Identity of the delegate is what makes two negations interchangeable
     @Override
     public boolean equals(Object o) {
         return o instanceof NegatedPredicate && this.delegate.equals(((NegatedPredicate) o).delegate);

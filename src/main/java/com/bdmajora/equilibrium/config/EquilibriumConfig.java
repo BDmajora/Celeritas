@@ -94,12 +94,15 @@ public class EquilibriumConfig {
         return dir.resolve(FILE_NAME);
     }
 
+    // Registers one rule; a duplicate key means the option tree declares the same mixin twice, which is a
+    // programming error rather than anything a user can cause, so it throws instead of overwriting
     private void addMixinRule(String mixin, boolean enabled) {
         if (this.options.put(mixin, new Option(mixin, enabled, false)) != null) {
             throw new IllegalStateException("Mixin rule already defined: " + mixin);
         }
     }
 
+    // Links a rule to one it requires, so applyDependencies can switch it off when the parent is off
     private void addRuleDependency(String rule, String dependency, boolean requiredValue) {
         Option option = this.options.get(rule);
         Option dependencyOption = this.options.get(dependency);
@@ -116,6 +119,8 @@ public class EquilibriumConfig {
         this.optionsWithDependencies.add(option);
     }
 
+    // Folds a loaded properties file onto the defaults; unknown keys are warned about and skipped so an
+    // old config from a previous version still loads
     private void readProperties(Properties props) {
         for (Map.Entry<Object, Object> entry : props.entrySet()) {
             String key = (String) entry.getKey();
@@ -183,9 +188,8 @@ public class EquilibriumConfig {
     // Finds the option that governs a mixin class, by walking its package path from the root downwards
     // Every prefix of the class name is tried as "mixin.<prefix>"; the first DISABLED rule found short-circuits
     // and wins, otherwise the deepest rule that exists wins
-    // That short-circuit is the whole point: mixin.world=false has to kill everything under world no matter what
-    // the child keys say, because that is what a user switching off a whole category means by it
-    // Returns null when no rule anywhere on the path matched, which the caller reads as "no opinion, leave it on"
+    // The short-circuit is the point: mixin.world=false kills everything under it whatever the child keys say
+    // Null means no rule on the path matched, which the caller reads as "no opinion, leave it on"
     public Option getEffectiveOptionForMixin(String mixinClassName) {
         int lastSplit = 0;
         int nextSplit;
@@ -211,6 +215,7 @@ public class EquilibriumConfig {
         return rule;
     }
 
+    // Recursive because a child is only truly on when every ancestor is too
     public boolean isOptionEnabled(String optionName) {
         Option option = this.options.get(optionName);
         return option != null && option.isEnabledRecursive(this);
@@ -227,10 +232,12 @@ public class EquilibriumConfig {
         }
     }
 
+    // Exact-name lookup; null when nothing declares that key
     public Option getOption(String optionName) {
         return this.options.get(optionName);
     }
 
+    // Parent is the name up to the last dot, so mixin.world.foo yields mixin.world
     public Option getParent(Option option) {
         String optionName = option.getName();
         int split = optionName.lastIndexOf('.');
@@ -238,10 +245,12 @@ public class EquilibriumConfig {
         return split == -1 ? null : this.options.get(optionName.substring(0, split));
     }
 
+    // Total declared options, shown by the stats command
     public int getOptionCount() {
         return this.options.size();
     }
 
+    // How many options a mod forced away from the user's value, which is what makes a config look ignored
     public int getOptionOverrideCount() {
         int count = 0;
 
@@ -254,17 +263,15 @@ public class EquilibriumConfig {
         return count;
     }
 
-    // Switches off every option whose dependencies are not satisfied, repeating until a pass changes nothing
-    // A single pass is not enough: disabling an option can break a dependency of an option already visited
-    // earlier in the same pass, so the loop has to run again
-    // It terminates because any pass that reports a change disabled at least one option, and nothing here ever
-    // re-enables one, so the number of enabled options strictly decreases
+    // Repeats until a pass changes nothing, since disabling one option can break a dependency already visited
+    // Terminates because nothing here re-enables an option, so the enabled count strictly decreases
     private void applyDependencies() {
         //noinspection StatementWithEmptyBody
         while (this.applyDependenciesOnce()) {
         }
     }
 
+    // One sweep; returns whether anything changed so the caller knows to sweep again
     private boolean applyDependenciesOnce() {
         boolean changed = false;
 
@@ -275,11 +282,8 @@ public class EquilibriumConfig {
         return changed;
     }
 
-    // Rewrites the whole file from the current option values, each under its description comment
-    // Everything is written out, not just the changed keys, so the file doubles as the documentation of what
-    // exists; the user's current settings survive because they are what is being written
-    // A null file means this config was never loaded from disk (a test, or a failed resolve), so saving is a
-    // no-op rather than an error, and an IO failure is logged and swallowed — losing settings must not stop launch
+    // Rewrites every key, not just changed ones, so the file doubles as documentation of what exists
+    // A null file (test, failed resolve) is a no-op, and IO failure is logged: losing settings must not stop launch
     public void save() {
         if (this.file == null) {
             return;
@@ -301,6 +305,7 @@ public class EquilibriumConfig {
         }
     }
 
+    // Emits the whole file: banner, then each category with its description, dependencies and default
     private void write(Writer writer) throws IOException {
         writer.write("# Equilibrium — Impetus' general-purpose performance subsystem.\n");
         writer.write("#\n");
@@ -358,6 +363,7 @@ public class EquilibriumConfig {
         }
     }
 
+    // Greedy word wrap for the description comments; long words are left to overflow rather than broken
     private static List<String> wrap(String text, int width) {
         List<String> lines = new ArrayList<>();
         StringBuilder line = new StringBuilder();

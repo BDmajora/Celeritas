@@ -24,6 +24,7 @@ public final class ParticleDiscoveryHandler {
     private ParticleDiscoveryHandler() {
     }
 
+    // Scans the particle manager's factories once per manager instance, at tick END
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) {
@@ -52,6 +53,7 @@ public final class ParticleDiscoveryHandler {
         flushIfDirty(ParticleClassRegistry.getInstance());
     }
 
+    // Persists newly discovered classes so their toggles exist from the next launch
     private static void flushIfDirty(ParticleClassRegistry registry) {
         if (registry.isDirty()) {
             Extras.save();

@@ -70,6 +70,7 @@ public final class ModelCaches {
         }
     }
 
+    // Drops the quad pool after a bake; variants stay open since ModelResourceLocations are built all session
     public static void close() {
         QUADS.close();
         // Variants are not closed with the bake: ModelResourceLocation is constructed throughout the

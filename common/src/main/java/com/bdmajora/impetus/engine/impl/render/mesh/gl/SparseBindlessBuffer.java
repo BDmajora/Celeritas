@@ -36,21 +36,25 @@ public class SparseBindlessBuffer implements DeviceBuffer {
         }
     }
 
+    // Rounds up to a multiple
     public static long alignUp(long value, long alignment) {
         long remainder = value % alignment;
         return remainder == 0 ? value : value + (alignment - remainder);
     }
 
+    // GL name
     @Override
     public int getId() {
         return this.id;
     }
 
+    // Virtual size; only committed pages are backed
     @Override
     public long getSize() {
         return this.size;
     }
 
+    // GPU virtual address
     @Override
     public long getDeviceAddress() {
         return this.deviceAddress;
@@ -90,10 +94,12 @@ public class SparseBindlessBuffer implements DeviceBuffer {
         return this.pageRefCounts.size();
     }
 
+    // Backed memory, for the debug screen
     public long getCommittedBytes() {
         return (long) this.pageRefCounts.size() * PAGE_SIZE;
     }
 
+    // Makes non-resident, then deletes
     @Override
     public void delete() {
         if (this.deleted) {
@@ -104,6 +110,7 @@ public class SparseBindlessBuffer implements DeviceBuffer {
         LWJGL.glDeleteBuffers(this.id);
     }
 
+    // glBufferPageCommitmentARB over a page range
     private void commit(int firstPage, int pageCount, boolean commit) {
         if (pageCount <= 0) {
             return;

@@ -50,6 +50,7 @@ public class ImpetusVintage {
     public static String VERSION;
     private static final ImpetusGameOptions CONFIG = loadConfig();
 
+    // Earliest Forge hook: loads config and registers the event handlers that need it
     @EventHandler
     public void onConstruct(FMLConstructionEvent event) {
         GLRenderDevice.VANILLA_STATE_RESETTER = () -> OpenGlHelper.glBindBuffer(OpenGlHelper.GL_ARRAY_BUFFER, 0);
@@ -79,6 +80,7 @@ public class ImpetusVintage {
         StartupChecks.runAsync(GlContextInfo.capture());
     }
 
+    // Registers commands and the option pages once the game is up
     @EventHandler
     public void onInit(FMLInitializationEvent event) {
         if ((Boolean) Launch.blackboard.get("fml.deobfuscatedEnvironment")) {
@@ -104,6 +106,7 @@ public class ImpetusVintage {
         ClassLoaderCleaner.run();
     }
 
+    // Drives per-frame work that has no better home: toasts and the pack scanner
     @SubscribeEvent
     public void onRenderTick(TickEvent.RenderTickEvent event) {
         // Render thread with a live GL context: build/rebuild the Umbra pipeline the first frame after a pack change.
@@ -114,6 +117,7 @@ public class ImpetusVintage {
         }
     }
 
+    // Tears down world-scoped renderer state
     @SubscribeEvent
     public void onDisconnect(FMLNetworkEvent.ClientDisconnectionFromServerEvent event) {
         // Fires once on leaving a world or server, single-player included, which makes it the one
@@ -123,6 +127,7 @@ public class ImpetusVintage {
         }
     }
 
+    // Draws the notification toast over the HUD
     @SubscribeEvent
     public void onRenderOverlay(RenderGameOverlayEvent.Post event) {
         if (event.getType() == RenderGameOverlayEvent.ElementType.ALL) {
@@ -130,6 +135,7 @@ public class ImpetusVintage {
         }
     }
 
+    // Adds the Impetus lines to the debug screen
     @SubscribeEvent
     public void onF3Text(RenderGameOverlayEvent.Text event) {
         if (!Minecraft.getMinecraft().gameSettings.showDebugInfo) {
@@ -170,18 +176,22 @@ public class ImpetusVintage {
         }
     }
 
+    // Off-heap usage formatted for the debug screen
     private static String getNativeMemoryString() {
         return "Off-Heap: +" + MathUtil.toMib(getNativeMemoryUsage()) + "MB";
     }
 
+    // Direct buffer bytes, from the JVM's buffer pool bean
     private static long getNativeMemoryUsage() {
         return ManagementFactory.getMemoryMXBean().getNonHeapMemoryUsage().getUsed() + NativeBuffer.getTotalAllocated();
     }
 
+    // The mod logger
     public static Logger logger() {
         return LOGGER;
     }
 
+    // Loads or creates the options file
     private static ImpetusGameOptions loadConfig() {
         try {
             ImpetusGameOptions config = ImpetusGameOptions.load();
@@ -197,11 +207,13 @@ public class ImpetusVintage {
         }
     }
 
+    // Pushes settings that vanilla caches, such as leaves quality
     private static void applyRuntimeConfig(ImpetusGameOptions config) {
         NativeBuffer.ENABLE_MEMORY_TRACING = config.advanced.enableMemoryTracing;
         RenderRegionManager.USE_ADVANCED_STAGING_BUFFERS = config.advanced.useAdvancedStagingBuffers;
     }
 
+    // The live options object
     public static ImpetusGameOptions options() {
         if (CONFIG == null) {
             throw new IllegalStateException("Config not yet available");

@@ -17,12 +17,14 @@ public class GlStateTracker {
 
     }
 
+    // Clears the cached binding so a reused name is not mistaken for still bound
     public void notifyVertexArrayDeleted(GlVertexArray vertexArray) {
         if (this.vertexArrayState == vertexArray.handle()) {
             this.vertexArrayState = UNASSIGNED_HANDLE;
         }
     }
 
+    // Clears any cached binding of it
     public void notifyBufferDeleted(GlBuffer buffer) {
         for (GlBufferTarget target : GlBufferTarget.VALUES) {
             if (this.bufferState[target.ordinal()] == buffer.handle()) {
@@ -31,6 +33,7 @@ public class GlStateTracker {
         }
     }
 
+    // Records and returns whether a real bind is needed
     public boolean makeBufferActive(GlBufferTarget target, @Nullable GlBuffer buffer) {
         int handle = buffer == null ? UNASSIGNED_HANDLE : buffer.handle();
 
@@ -43,6 +46,7 @@ public class GlStateTracker {
         return changed;
     }
 
+    // Records and returns whether a real bind is needed
     public boolean makeVertexArrayActive(GlVertexArray array) {
         int handle = array == null ? GlVertexArray.NULL_ARRAY_ID : array.handle();
         boolean changed = this.vertexArrayState != handle;
@@ -56,6 +60,7 @@ public class GlStateTracker {
         return changed;
     }
 
+    // Forgets everything, for when GL state was changed behind our back
     public void clear() {
         Arrays.fill(this.bufferState, -1);
         this.vertexArrayState = -1;

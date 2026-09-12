@@ -8,6 +8,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Collection;
 
 public interface Option<T> {
+    // Defaults to the empty placeholder
     @Nullable
     default OptionIdentifier<T> getId() {
         return null;

@@ -20,10 +20,12 @@ public abstract class CustomTextureData {
             this.content = content;
         }
 
+        // blur and clamp from the .mcmeta sidecar
         public TextureFilteringData getFilteringData() {
             return this.filteringData;
         }
 
+        // Raw file bytes
         public byte[] getContent() {
             return this.content;
         }
@@ -33,11 +35,13 @@ public abstract class CustomTextureData {
     // A marker rather than a stored id because the lightmap object is recreated on resource reloads and brightness
     // changes, so it has to be resolved at bind time
     public static final class LightmapMarker extends CustomTextureData {
+        // By content, so identical textures share one GL object
         @Override
         public boolean equals(Object obj) {
             return obj != null && obj.getClass() == this.getClass();
         }
 
+        // Consistent with equals
         @Override
         public int hashCode() {
             return 33;
@@ -91,34 +95,42 @@ public abstract class CustomTextureData {
             this.content = content;
         }
 
+        // 1D, 2D or 3D
         public String getTextureType() {
             return this.textureType;
         }
 
+        // Pack format name
         public String getInternalFormat() {
             return this.internalFormat;
         }
 
+        // Declared width
         public int getWidth() {
             return this.width;
         }
 
+        // Declared height
         public int getHeight() {
             return this.height;
         }
 
+        // Declared depth, for 3D
         public int getDepth() {
             return this.depth;
         }
 
+        // Pack client format name
         public String getPixelFormat() {
             return this.pixelFormat;
         }
 
+        // Pack client type name
         public String getPixelType() {
             return this.pixelType;
         }
 
+        // Raw file bytes
         public byte[] getContent() {
             return this.content;
         }

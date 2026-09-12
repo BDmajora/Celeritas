@@ -29,6 +29,7 @@ public class ChunkBuilderSortTask extends ChunkBuilderTask<ChunkSortOutput> {
         this.renderPassConfiguration = renderPassConfiguration;
     }
 
+    // Re-sorts a section's translucent quads for a new camera position without rebuilding
     @Override
     public ChunkSortOutput execute(ChunkBuildContext context, CancellationToken cancellationSource) {
         var meshes = new Reference2ReferenceOpenHashMap<TerrainRenderPass, ChunkSortOutput.SortedMesh>();

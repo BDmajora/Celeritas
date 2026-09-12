@@ -14,6 +14,7 @@ public record GlContextInfo(String vendor, String renderer, String version) {
     private static final int GL_RENDERER = 0x1F01;
     private static final int GL_VERSION = 0x1F02;
 
+    // Reads vendor, renderer and version strings from the current context
     public static GlContextInfo capture() {
         var gl = LWJGLServiceProvider.LWJGL;
 
@@ -23,6 +24,7 @@ public record GlContextInfo(String vendor, String renderer, String version) {
                 safe(gl.glGetString(GL_VERSION)));
     }
 
+    // Null to a placeholder, so log lines never NPE
     private static String safe(String value) {
         return value == null ? "" : value;
     }

@@ -26,22 +26,27 @@ public class GlProgram<T> extends GlObject implements ShaderBindingContext {
         this.shaderInterface = interfaceFactory.apply(this);
     }
 
+    // The typed uniform interface bound at link
     public T getInterface() {
         return this.shaderInterface;
     }
 
+    // Starts a program
     public static Builder builder(String identifier) {
         return new Builder(identifier);
     }
 
+    // glUseProgram
     public void bind() {
         LWJGL.glUseProgram(this.handle());
     }
 
+    // glUseProgram(0)
     public void unbind() {
         LWJGL.glUseProgram(0);
     }
 
+    // glDeleteProgram
     @Override
     protected void destroyInternal() {
         LWJGL.glDeleteProgram(this.handle());
@@ -80,6 +85,7 @@ public class GlProgram<T> extends GlObject implements ShaderBindingContext {
             this.program = LWJGL.glCreateProgram();
         }
 
+        // glAttachShader
         public Builder attachShader(GlShader shader) {
             LWJGL.glAttachShader(this.program, shader.handle());
 
@@ -105,12 +111,14 @@ public class GlProgram<T> extends GlObject implements ShaderBindingContext {
             return new GlProgram<>(this.program, factory);
         }
 
+        // Fixes an attribute location before link
         public Builder bindAttribute(String name, int index) {
             LWJGL.glBindAttribLocation(this.program, index, name);
 
             return this;
         }
 
+        // Fixes a fragment output location before link
         public Builder bindFragmentData(String name, int index) {
             LWJGL.glBindFragDataLocation(this.program, index, name);
 

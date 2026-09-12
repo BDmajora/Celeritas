@@ -45,6 +45,7 @@ public final class Extras {
         options().writeChanges();
     }
 
+    // config/impetus-extras.cfg under the game directory
     private static File configFile() {
         File home = Launch.minecraftHome;
         File directory = new File(home == null ? new File(".") : home, "config");

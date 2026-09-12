@@ -32,10 +32,12 @@ public class FluidStateStorage {
         this.nonEmptyCount = counter.intValue();
     }
 
+    // True when no block in the section carries a fluid state, letting the slice skip the copy
     public boolean isEmpty() {
         return this.nonEmptyCount == 0;
     }
 
+    // Typed as Object so nothing here links against Fluidlogged when it is absent
     public Object get(int x, int y, int z) {
         return FluidState.of(data.get(x, y, z));
     }

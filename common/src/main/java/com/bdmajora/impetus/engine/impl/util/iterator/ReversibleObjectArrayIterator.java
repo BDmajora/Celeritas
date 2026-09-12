@@ -24,10 +24,12 @@ public class ReversibleObjectArrayIterator<T> implements Iterator<T> {
         this.currentIndex = reverse ? end - 1 : start;
     }
 
+    // Direction-aware bounds check
     public boolean hasNext() {
         return this.remaining > 0;
     }
 
+    // Next element in the chosen direction
     public T next() {
         if (!this.hasNext()) {
             throw new NoSuchElementException();

@@ -20,6 +20,7 @@ public class BakedQuadGroupAnalyzer {
     private int defaultRenderingFlags = 0;
     private int unassignedFaceRenderingFlags = 0;
 
+    // Which light features a quad needs, from its flags
     private static int computeLightFlagMask(BakedQuadView quad) {
         int flag = 0;
 
@@ -34,6 +35,7 @@ public class BakedQuadGroupAnalyzer {
         return flag;
     }
 
+    // From the sprite, cached per sprite
     private SpriteTransparencyLevel getQuadTransparencyLevel(BakedQuadView quad) {
         if ((quad.getFlags() & ModelQuadFlags.IS_PASS_OPTIMIZABLE) == 0 || quad.impetus$getSprite() == null) {
             return SpriteTransparencyLevel.TRANSLUCENT;
@@ -42,11 +44,13 @@ public class BakedQuadGroupAnalyzer {
         return SpriteTransparencyLevel.Holder.getTransparencyLevel(quad.impetus$getSprite());
     }
 
+    // Baseline for a block before per-quad analysis
     public void setDefaultRenderingFlags(int flags) {
         this.defaultRenderingFlags = flags;
         this.unassignedFaceRenderingFlags = flags;
     }
 
+    // Unions the needs of every quad on a face
     public int getFlagsForRendering(ModelQuadFacing facing, List<? extends BakedQuadView> quads) {
         int quadRenderingFlags = facing == ModelQuadFacing.UNASSIGNED ? this.unassignedFaceRenderingFlags : this.defaultRenderingFlags;
 
@@ -89,6 +93,7 @@ public class BakedQuadGroupAnalyzer {
         return quadRenderingFlags;
     }
 
+    // Downgrades to a cheaper pass when the quad's sprite is opaque
     public static Material chooseOptimalMaterial(int analyzerFlags, Material defaultMaterial, RenderPassConfiguration<?> renderPassConfiguration, BakedQuadView quad) {
         if (defaultMaterial == renderPassConfiguration.defaultSolidMaterial() || (analyzerFlags & USE_RENDER_PASS_OPTIMIZATION) == 0 || (quad.getFlags() & ModelQuadFlags.IS_PASS_OPTIMIZABLE) == 0 || quad.impetus$getSprite() == null) {
             // No improvement possible

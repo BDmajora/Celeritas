@@ -10,6 +10,7 @@ public class IdAllocator {
     private final IntSortedSet released = new IntAVLTreeSet();
     private int next;
 
+    // Reuses a released id before growing
     public int allocate() {
         if (this.released.isEmpty()) {
             return this.next++;
@@ -20,6 +21,7 @@ public class IdAllocator {
         return id;
     }
 
+    // Returns an id for reuse
     public void release(int id) {
         this.released.add(id);
 

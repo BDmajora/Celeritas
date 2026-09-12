@@ -7,12 +7,8 @@ import net.minecraft.block.state.IBlockState;
 import java.util.Arrays;
 import java.util.List;
 
-// A flattened AND over conditions that are all plain property=value tests
-// Vanilla builds this as a Guava AndPredicate wrapping a transformed Iterable wrapping N anonymous classes:
-// five or six objects per selector, times every selector, times every multipart block
-// Here it is one object holding two exactly-sized arrays, and apply is a tight loop with no virtual dispatch
-// per element. Ported from Hydrogen's AllMatchOneObject
-// AllMatchOneBoolean handles the all-boolean case, which is commoner still; this is the general version
+// A flattened AND over plain property=value tests: one object and two arrays where vanilla builds five or six
+// objects per selector. Ported from Hydrogen; AllMatchOneBoolean handles the commoner all-boolean case
 public final class AllMatchOne implements Predicate<IBlockState> {
     private final IProperty<?>[] properties;
     private final Object[] values;
@@ -47,6 +43,7 @@ public final class AllMatchOne implements Predicate<IBlockState> {
         return new AllMatchOne(properties, values);
     }
 
+    // Every property must equal its expected value; fields are hoisted so the loop reads them once
     @Override
     public boolean apply(IBlockState state) {
         if (state == null) {
@@ -70,6 +67,7 @@ public final class AllMatchOne implements Predicate<IBlockState> {
         return true;
     }
 
+    // Structural equality over both arrays, which is what lets the canonicalizer intern these
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -83,6 +81,7 @@ public final class AllMatchOne implements Predicate<IBlockState> {
         return Arrays.equals(this.properties, other.properties) && Arrays.equals(this.values, other.values);
     }
 
+    // Precomputed at construction; the predicate is immutable
     @Override
     public int hashCode() {
         return this.hash;

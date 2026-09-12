@@ -13,6 +13,7 @@ public abstract class Uniform {
         this.location = location;
     }
 
+    // glGetUniformLocation result, resolved at build time
     public final int getLocation() {
         return this.location;
     }

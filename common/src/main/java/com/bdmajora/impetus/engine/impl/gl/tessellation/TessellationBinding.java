@@ -9,11 +9,13 @@ import java.util.Objects;
 public record TessellationBinding(GlBufferTarget target,
                                   GlBuffer buffer,
                                   GlVertexAttributeBinding[] attributeBindings) {
+    // A vertex buffer with its attribute layout
     public static TessellationBinding forVertexBuffer(GlBuffer buffer, GlVertexAttributeBinding[] attributes) {
         Objects.requireNonNull(attributes);
         return new TessellationBinding(GlBufferTarget.ARRAY_BUFFER, buffer, attributes);
     }
 
+    // An index buffer
     public static TessellationBinding forElementBuffer(GlBuffer buffer) {
         return new TessellationBinding(GlBufferTarget.ELEMENT_BUFFER, buffer, new GlVertexAttributeBinding[0]);
     }

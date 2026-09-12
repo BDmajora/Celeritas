@@ -12,16 +12,8 @@ import org.apache.logging.log4j.Logger;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Where a finished chunk build lands: geometry into the quad arena, metadata into the region store
-//
-// The section header the GPU reads is 32 bytes:
-//   header.x  chunkX << 8 | sizeX << 4 | minX
-//   header.y  (chunkY & 0x1FF) << 8 | sizeY << 4 | minY | hidden << 17 | sectionIndex << 18
-//   header.z  chunkZ << 8 | sizeZ << 4 | minZ
-//   header.w  first quad of this section in the arena
-//   ranges    eight uint16 quad counts, one per ModelQuadFacing plus the base offset
-// Position, extent and draw range all fit in those 32 bytes precisely so the section rasteriser can decide
-// visibility from one cache line
+// Where a finished build lands: geometry into the quad arena, a 32-byte header into the region store
+// Position, extent and draw ranges fit those 32 bytes so the section rasteriser decides visibility from one cache line
 public class MeshSectionStore {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/MeshBackend");
 
@@ -43,10 +35,12 @@ public class MeshSectionStore {
         this.sectionQuads.defaultReturnValue(-1);
     }
 
+    // The region table
     public MeshRegionStore getRegions() {
         return this.regions;
     }
 
+    // Where section geometry lives
     public QuadArena getArena() {
         return this.arena;
     }
@@ -97,6 +91,7 @@ public class MeshSectionStore {
         writeHeader(sectionId, sectionX, sectionY, sectionZ, quadAddress, geometry);
     }
 
+    // Frees a section's geometry and clears its table entry
     public void remove(int sectionX, int sectionY, int sectionZ) {
         long key = PositionUtil.packSection(sectionX, sectionY, sectionZ);
 
@@ -133,6 +128,7 @@ public class MeshSectionStore {
         }
     }
 
+    // Uploads every dirty table entry
     public void commit() {
         this.regions.commit();
     }
@@ -173,10 +169,12 @@ public class MeshSectionStore {
         return (int) (key >> 42);
     }
 
+    // Middle field
     private static int unpackSectionY(long key) {
         return (int) (key << 44 >> 44);
     }
 
+    // Low field
     private static int unpackSectionZ(long key) {
         return (int) (key << 22 >> 42);
     }

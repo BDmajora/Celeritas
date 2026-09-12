@@ -6,6 +6,7 @@ import com.bdmajora.impetus.engine.impl.render.chunk.RenderSection;
 import com.bdmajora.impetus.engine.impl.render.chunk.terrain.TerrainRenderPass;
 
 public class ChunkSortOutput extends ChunkTaskOutput {
+    // A re-sorted index buffer for one translucent pass
     public record SortedMesh(NativeBuffer indexData) {}
 
     public final Reference2ReferenceMap<TerrainRenderPass, SortedMesh> meshes;
@@ -15,6 +16,7 @@ public class ChunkSortOutput extends ChunkTaskOutput {
         this.meshes = meshes;
     }
 
+    // Frees the index buffers if never consumed
     @Override
     public void delete() {
         for (SortedMesh data : this.meshes.values()) {

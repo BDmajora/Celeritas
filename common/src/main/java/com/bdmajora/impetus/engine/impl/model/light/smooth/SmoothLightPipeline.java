@@ -11,28 +11,8 @@ import com.bdmajora.impetus.engine.impl.model.quad.properties.ModelQuadFlags;
 import com.bdmajora.impetus.engine.api.util.NormI8;
 import com.bdmajora.impetus.engine.impl.util.PositionUtil;
 
-// a light pipeline producing smooth interpolated lighting and ambient occlusion for model quads
-// this implementation makes a number of improvements over vanilla's own "smooth lighting" option, in no
-// particular order:
-//   corner blocks are now selected from the correct set of neighbours above block faces, fixing
-//   MC-148689 and MC-12558
-//   shading issues caused by anisotropy are fixed by re-orienting quads to a consistent ordering,
-//   fixing MC-138211
-//   blocks next to emissive blocks are too bright (MC-260989)
-//   synchronization issues between the main render thread's light engine and the chunk build worker
-//   threads are corrected by copying light data alongside block states, fixing a number of
-//   inconsistencies in baked chunks (no open issue)
-// it also includes a significant number of optimizations:
-//   computed light data for a given block face is cached and reused when several quads share a facing,
-//   making complex block models less expensive to render
-//   the light data cache encodes as much information as possible into integer words to improve cache
-//   locality and eliminate the multiple array lookups that would otherwise be needed
-//   block faces aligned to the block grid use a fast path for mapping corner light values to vertices,
-//   without expensive interpolation or blending
-//   some critical code paths have been rewritten to hit the JVM's happy path, letting it
-//   auto-vectorize the blend functions
-//   information about a given model quad is cached so the light pipeline can make certain assumptions
-//   and skip unnecessary computation
+// Vanilla's smooth lighting, ported from Sodium: gathers the neighbourhood once per face and bilinearly blends
+// the four corners per vertex, with depth blending for inset and irregular quads
 public class SmoothLightPipeline implements LightPipeline {
     // the cache the light data is read from
     private final LightDataAccess lightCache;
@@ -101,6 +81,7 @@ public class SmoothLightPipeline implements LightPipeline {
         }
     }
 
+    // Clears the per-face cache between blocks
     @Override
     public void reset() {
         this.cachedPos = Long.MIN_VALUE;
@@ -159,6 +140,7 @@ public class SmoothLightPipeline implements LightPipeline {
         }
     }
 
+    // Blends between the near and far face data for a vertex set back from the face
     private void applyInsetPartialFaceVertex(int x, int y, int z, ModelQuadFacing dir, float n1d, float n2d, float[] w) {
         // Avoid blending when the depth is close to one value or the other
         if (MathUtil.roughlyEqual(n1d, 0.0f)) {
@@ -188,6 +170,7 @@ public class SmoothLightPipeline implements LightPipeline {
     private static final float BLENDED_WEIGHT = 0.75f;
     private static final float MAX_WEIGHT = 1f - BLENDED_WEIGHT;
 
+    // Non-axis-aligned quads: weights each vertex against the face nearest its normal
     private void applyIrregularFace(ModelQuadView quad, int x, int y, int z, QuadLightData out, boolean applyAoDepthBlending) {
         for (int i = 0; i < 4; i++) {
             // Clamp the vertex positions to the block's boundaries to prevent weird errors in lighting
@@ -249,6 +232,7 @@ public class SmoothLightPipeline implements LightPipeline {
         }
     }
 
+    // A vertex on an axis-aligned face, optionally offset one block
     private void applyAlignedPartialFaceVertex(int x, int y, int z, ModelQuadFacing dir, float[] w, boolean offset) {
         AoFaceData faceData = this.getCachedFaceData(x, y, z, dir, offset);
 
@@ -261,6 +245,7 @@ public class SmoothLightPipeline implements LightPipeline {
         this.lastAo = faceData.getBlendedShade(w);
     }
 
+    // Multiplies in vanilla's per-face diffuse
     private void applySidedBrightness(QuadLightData out, ModelQuadFacing face, boolean shade) {
         float brightness = this.diffuseProvider.getDiffuse(face, shade);
         float[] br = out.br;
@@ -270,6 +255,7 @@ public class SmoothLightPipeline implements LightPipeline {
         }
     }
 
+    // Per-vertex diffuse from the vertex normals, for irregular quads
     private void applySidedBrightnessFromNormals(QuadLightData out, ModelQuadView quad, boolean shade) {
         // TODO: consider calculating for vertex if mods actually change normals per-vertex
         int normal = quad.getModFaceNormal();
@@ -292,6 +278,7 @@ public class SmoothLightPipeline implements LightPipeline {
         return data;
     }
 
+    // Loads face data for a new block position, reusing the cache across a block's faces
     private void updateCachedData(long key) {
         if (this.cachedPos != key) {
             for (AoFaceData data : this.cachedFaceData) {

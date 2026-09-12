@@ -28,13 +28,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
-// A fully parsed shader pack: every GLSL file keyed by path relative to shaders/, the parsed shaders.properties,
-// and the assembled ProgramSet
-// Construction is free of Minecraft and works over an in-memory map of file contents, which keeps directory-versus-
-// zip reading isolated in ShaderPackLoader and makes the parse testable without a game
-// #include flattening happens here, up front, so consumers receive ProgramSources that are ready to preprocess
-// Per-dimension directories are supported in the common 1.12.2 form: a program under world0/ overrides the same
-// program at the pack root. Other dimension folders are not handled
+// A fully parsed pack: every GLSL file by path, shaders.properties, and the assembled ProgramSet
+// Works over an in-memory map so it is free of Minecraft and testable; #include flattening happens here
+// world0/ overrides the root; other dimension folders are not handled
 public final class ShaderPack {
     // The conventional location of shaders.properties, relative to shaders/
     public static final AbsolutePackPath PROPERTIES_PATH = AbsolutePackPath.fromAbsolutePath("/shaders.properties");
@@ -296,6 +292,7 @@ public final class ShaderPack {
         return new CustomTextureData.PngData(new TextureFilteringData(blur, clamp), content);
     }
 
+    // texture.<stage>.<name> = <path> <type> <format> <w> <h> [<d>] <pixelFormat> <pixelType>
     private CustomTextureData readRawTexture(String[] parts) throws IOException {
         String textureType = parts[1].toUpperCase(java.util.Locale.ROOT);
         if (textureType.equals("TEXTURE_3D")) {
@@ -320,6 +317,7 @@ public final class ShaderPack {
         throw new IOException("Unsupported raw texture target: " + parts[1]);
     }
 
+    // A binary resource from the pack, by pack-relative path
     private byte[] readBinary(String path) throws IOException {
         if (path.startsWith("/")) {
             path = path.substring(1);
@@ -332,6 +330,7 @@ public final class ShaderPack {
         return content;
     }
 
+    // Fails with the field named, since a raw texture directive has many
     private static int parsePositiveInt(String value, String field) throws IOException {
         try {
             int parsed = Integer.parseInt(value);
@@ -388,6 +387,7 @@ public final class ShaderPack {
         return macros;
     }
 
+    // Programs the currently selected profile turns off
     private Set<String> activeProfileDisabledPrograms(ShaderProperties parsedProperties) {
         if (parsedProperties.getProfiles().isEmpty()) {
             return Collections.emptySet();
@@ -430,14 +430,17 @@ public final class ShaderPack {
         return Collections.unmodifiableMap(this.irisCustomTextureDataMap);
     }
 
+    // The option set and current values
     public ShaderPackOptions getShaderPackOptions() {
         return this.shaderPackOptions;
     }
 
+    // Parsed shaders.properties
     public ShaderProperties getProperties() {
         return this.properties;
     }
 
+    // Every program source, by id
     public ProgramSet getProgramSet() {
         return this.baseProgramSet;
     }
@@ -450,10 +453,12 @@ public final class ShaderPack {
         return this.activeFeatures.contains(feature);
     }
 
+    // Every text file, by path
     public Map<AbsolutePackPath, String> getSources() {
         return this.sources;
     }
 
+    // Reads each program's stages, applying includes and option edits
     private ProgramSet buildProgramSet() {
         ProgramSet set = new ProgramSet(this.properties);
 
@@ -523,6 +528,7 @@ public final class ShaderPack {
         return any ? computes : new String[0];
     }
 
+    // One stage file, or null when the pack has none
     private String readStage(String sourceName, String extension) {
         AbsolutePackPath path = locateStage(sourceName, extension);
         if (path == null) {

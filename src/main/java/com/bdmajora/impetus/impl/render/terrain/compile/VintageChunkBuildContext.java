@@ -64,6 +64,7 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
         this.useRenderPassOptimization = ImpetusVintage.options().performance.useRenderPassOptimization;
     }
 
+    // Offsets vanilla buffers so tile entity renderers see section-relative coordinates
     public void setupTranslation(int x, int y, int z) {
         this.lightDataCache.reset(x, y, z);
 
@@ -72,6 +73,7 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
         this.offZ = z;
     }
 
+    // Vanilla buffer for blocks that bypass the Impetus pipeline, one per layer
     public net.minecraft.client.renderer.BufferBuilder getBufferForLayer(BlockRenderLayer layer) {
         var builder = this.worldRenderers[layer.ordinal()];
         if (builder == null) {
@@ -126,6 +128,7 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
         runs.add(pos.getZ() & 15);
     }
 
+    // Copies anything vanilla-rendered into the Impetus mesh buffers
     public void convertVanillaDataToImpetusData(ChunkBuildBuffers buffers) {
         var renderers = this.worldRenderers;
         var used = this.usedWorldRenderers;
@@ -142,6 +145,7 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
         }
     }
 
+    // Resets the vanilla buffers between sections
     @Override
     public void cleanup() {
         super.cleanup();
@@ -154,6 +158,7 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
         }
     }
 
+    // Upgrades the material when the sprite needs alpha or mipmap handling
     private Material selectMaterial(Material material, TextureAtlasSprite sprite) {
         if (sprite != null && sprite.getClass() == TextureAtlasSprite.class && !sprite.hasAnimationMetadata() && this.useRenderPassOptimization) {
             var transparencyLevel = ((SpriteTransparencyLevel.Holder)sprite).impetus$getTransparencyLevel();
@@ -281,10 +286,12 @@ public class VintageChunkBuildContext extends ChunkBuildContext {
         }
     }
 
+    // Emission is 0-15
     private static int clampBlockEmission(int value) {
         return value < 0 ? 0 : (value > 255 ? 255 : value);
     }
 
+    // Section-local coordinates are 0-15
     private static int clampSectionCoord(int value) {
         return value < 0 ? 0 : (value > 15 ? 15 : value);
     }

@@ -7,25 +7,10 @@ import net.minecraft.world.WorldType;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
 
-// a cursor for reading many blocks from one region of the world
-// vanilla's World#getBlockState resolves a chunk and then a section for every single position, which
-// is the right shape for one-off reads and the wrong shape for the callers that matter here: an
-// explosion ray walks sixteen blocks in a line, a collision test walks a box, a path-finder walks a
-// neighbourhood - all of them stay inside one chunk section for long runs
-// the cursor holds the chunk and the section it last touched and only re-resolves when the run
-// crosses a boundary
-// a cursor is a short-lived local - one per explosion, one per movement step - and is never shared
-// between threads, which is what lets it hold mutable state without any of the validation ChunkAccess
-// needs
-// two cases fall back to World#getBlockState: the debug world, whose blocks are computed rather than
-// stored, and any world whose ChunkAccess is missing because mixin.util.chunk_access is off
-// both are resolved once, in the constructor, rather than tested per read
-// whether reading an unloaded chunk loads it is the caller's decision, made at construction, and it
-// has to be because vanilla is not consistent about it: World#getBlockState loads whatever it
-// touches, so an explosion at the edge of the loaded area really does generate terrain and a cursor
-// that quietly declined to would let blasts punch further than they should
-// but World#getCollisionBoxes checks isBlockLoaded first and treats the outside as empty, so a cursor
-// that picked one behaviour for both would break one of them
+// A cursor for reading many blocks from one region, holding the last chunk and section and re-resolving only
+// at a boundary. Short-lived and never shared, so it needs no validation
+// Whether reading an unloaded chunk loads it is the caller's choice at construction, because vanilla is inconsistent:
+// getBlockState loads, getCollisionBoxes treats unloaded as empty, and a cursor must match the path it replaces
 public final class ChunkSectionCursor {
     private static final IBlockState AIR = Blocks.AIR.getDefaultState();
 

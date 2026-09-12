@@ -28,14 +28,17 @@ public class FlatButtonWidget extends AbstractWidget {
         this.action = action;
     }
 
+    // Indent for left-aligned labels
     protected int getLeftAlignedTextOffset(DrawContext drawContext) {
         return 10;
     }
 
+    // Bounds test, only when enabled
     protected boolean isHovered(int mouseX, int mouseY) {
         return this.dim.containsCursor(mouseX, mouseY);
     }
 
+    // Background by state, then the label centred or left-aligned
     @Override
     public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
         if (!this.visible) {
@@ -63,20 +66,24 @@ public class FlatButtonWidget extends AbstractWidget {
         }
     }
 
+    // Replaces the colour set
     public void setStyle(@NotNull Style style) {
         Objects.requireNonNull(style);
 
         this.style = style;
     }
 
+    // Highlighted state, for the active tab
     public void setSelected(boolean selected) {
         this.selected = selected;
     }
 
+    // Label alignment
     public void setLeftAligned(boolean leftAligned) {
         this.leftAligned = leftAligned;
     }
 
+    // Runs the action on left click when enabled and hovered
     @Override
     public boolean mouseClicked(InteractionContext context, double mouseX, double mouseY, int button) {
         if (!this.enabled || !this.visible) {
@@ -92,27 +99,33 @@ public class FlatButtonWidget extends AbstractWidget {
         return false;
     }
 
+    // Plays the click and runs the action
     private void doAction(InteractionContext context) {
         this.action.run();
         context.playClickSound();
     }
 
+    // Greys out and ignores clicks
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
     }
 
+    // Hidden buttons draw nothing and ignore input
     public void setVisible(boolean visible) {
         this.visible = visible;
     }
 
+    // Replaces the label
     public void setLabel(TextComponent text) {
         this.label = text;
     }
 
+    // Current label
     public TextComponent getLabel() {
         return this.label;
     }
 
+    // Bounds test, only when visible
     @Override
     public boolean isMouseOver(double mouseX, double mouseY) {
         return this.dim.containsCursor(mouseX, mouseY);
@@ -123,6 +136,7 @@ public class FlatButtonWidget extends AbstractWidget {
         public int textDefault, textSelected, textDisabled;
         public int accentColor;
 
+        // The standard flat colour set
         public static Style defaults() {
             var style = new Style();
             style.bgHovered = DefaultColors.BACKGROUND_HOVERED;

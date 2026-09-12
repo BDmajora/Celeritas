@@ -33,6 +33,7 @@ public class OcclusionNode extends AbstractSection {
         this.renderRegionId = section.getRegion().getId();
     }
 
+    // Neighbour, or null at a world edge
     public OcclusionNode getAdjacent(int direction) {
         return switch (direction) {
             case GraphDirection.DOWN -> this.adjacentDown;
@@ -45,6 +46,7 @@ public class OcclusionNode extends AbstractSection {
         };
     }
 
+    // Links a neighbour and updates the mask
     public void setAdjacentNode(int direction, OcclusionNode node) {
         if (node == null) {
             this.adjacentMask &= ~GraphDirectionSet.of(direction);
@@ -63,30 +65,37 @@ public class OcclusionNode extends AbstractSection {
         }
     }
 
+    // Which of six neighbours exist
     public int getAdjacentMask() {
         return this.adjacentMask;
     }
 
+    // Stamped when reached by a walk
     public void setLastVisibleFrame(int frame) {
         this.lastVisibleFrame = frame;
     }
 
+    // For the once-per-frame visit check
     public int getLastVisibleFrame() {
         return this.lastVisibleFrame;
     }
 
+    // Directions the walk entered from this frame
     public int getIncomingDirections() {
         return this.incomingDirections;
     }
 
+    // ORs in another entry direction
     public void addIncomingDirections(int directions) {
         this.incomingDirections |= directions;
     }
 
+    // Resets for a new frame
     public void setIncomingDirections(int directions) {
         this.incomingDirections = directions;
     }
 
+    // The section this node wraps
     public RenderSection getRenderSection() {
         return this.section;
     }

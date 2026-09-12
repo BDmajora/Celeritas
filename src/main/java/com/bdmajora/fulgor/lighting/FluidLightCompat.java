@@ -13,6 +13,7 @@ final class FluidLightCompat {
     private FluidLightCompat() {
     }
 
+    // Max of the block and fluid opacity, so a fluidlogged block does not lose the fluid's contribution
     static int getLightOpacity(IBlockState state, IBlockAccess world, BlockPos pos, Chunk chunk) {
         FluidState fluid = FluidState.getFromProvider(chunk, pos);
 
@@ -23,6 +24,7 @@ final class FluidLightCompat {
         return Math.max(fluid.getState().getLightOpacity(world, pos), state.getLightOpacity(world, pos));
     }
 
+    // Max of the block and fluid luminance, so a fluidlogged sea lantern still glows
     static int getLightValue(int blockLightValue, IBlockAccess world, BlockPos pos, Chunk chunk) {
         FluidState fluid = FluidState.getFromProvider(chunk, pos);
 

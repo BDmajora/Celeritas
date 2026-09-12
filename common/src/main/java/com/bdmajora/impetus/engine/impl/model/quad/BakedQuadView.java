@@ -17,10 +17,12 @@ public interface BakedQuadView extends ModelQuadView {
 
     @Nullable SpriteTransparencyLevel getTransparencyLevel();
 
+    // Cast helper; the mixin makes every BakedQuad implement this
     static BakedQuadView of(Object o) {
         return (BakedQuadView)o;
     }
 
+    // Unchecked list cast
     @SuppressWarnings("unchecked")
     static <T> List<? extends BakedQuadView> ofList(List<T> quads) {
         return (List<? extends BakedQuadView>)(List<?>)quads;

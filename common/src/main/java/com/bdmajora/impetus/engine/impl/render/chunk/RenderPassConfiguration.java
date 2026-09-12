@@ -16,16 +16,19 @@ public record RenderPassConfiguration<R>(Map<R, Material> chunkRenderTypeToMater
                                       Material defaultSolidMaterial,
                                       Material defaultCutoutMippedMaterial,
                                       Material defaultTranslucentMaterial) {
+    // The format a pass builds
     @Deprecated
     public ChunkVertexType getVertexTypeForPass(TerrainRenderPass pass) {
         return pass.vertexType();
     }
 
+    // Quads or triangles for a pass
     @Deprecated
     public ChunkPrimitiveType getPrimitiveTypeForPass(TerrainRenderPass pass) {
         return pass.primitiveType();
     }
 
+    // Platform render type to material
     public Material getMaterialForRenderType(Object type) {
         Objects.requireNonNull(type, "Null render type provided");
         var material = chunkRenderTypeToMaterialMap.get(type);
@@ -35,6 +38,7 @@ public record RenderPassConfiguration<R>(Map<R, Material> chunkRenderTypeToMater
         return material;
     }
 
+    // Every pass in draw order
     public Stream<TerrainRenderPass> getAllKnownRenderPasses() {
         return vanillaRenderStages().values().stream().flatMap(Collection::stream).distinct();
     }

@@ -11,6 +11,7 @@ public final class LWJGLServiceProvider {
 
     private LWJGLServiceProvider() {}
 
+    // Reflective construction so neither backend class is linked until chosen
     static LWJGLService constructInstance(String className) {
         try {
             var clz = Class.forName(className);
@@ -21,6 +22,7 @@ public final class LWJGLServiceProvider {
         }
     }
 
+    // Picks LWJGL2 or LWJGL3 by probing which org.lwjgl classes are present
     static LWJGLService createInstance() {
         try {
             Class.forName("org.lwjgl.opengl.GL11C");

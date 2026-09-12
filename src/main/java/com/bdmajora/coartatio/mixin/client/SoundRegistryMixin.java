@@ -12,16 +12,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.Map;
 
-// SoundRegistry overrides RegistrySimple.createUnderlyingMap with its own HashMap, so
-// RegistrySimpleMixin's compaction doesn't reach it - covered separately here.
-// Must inject at RETURN, not HEAD: unlike RegistrySimple's bare "return new HashMap()", this
-// override also assigns the map to the soundRegistry field, and clearMap() reads that field later.
-// Cancelling at HEAD would skip the assignment and NPE on the first resource reload.
+// SoundRegistry overrides createUnderlyingMap with its own HashMap, so RegistrySimpleMixin misses it
+// Injected at RETURN because the override also assigns soundRegistry; cancelling at HEAD NPEs on reload
 @Mixin(SoundRegistry.class)
 public abstract class SoundRegistryMixin {
+    // Read back by clearMap, so it has to point at the same instance that is returned
     @Shadow
     private Map<ResourceLocation, SoundEventAccessor> soundRegistry;
 
+    // Replaces both the field and the return value so the two never diverge
     @Inject(method = "createUnderlyingMap", at = @At("RETURN"), cancellable = true)
     private void coartatio$compactSoundMap(CallbackInfoReturnable<Map<ResourceLocation, SoundEventAccessor>> cir) {
         Map<ResourceLocation, SoundEventAccessor> compact = new Object2ObjectOpenHashMap<>();

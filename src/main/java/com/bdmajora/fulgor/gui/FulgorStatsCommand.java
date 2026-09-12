@@ -11,21 +11,25 @@ import net.minecraft.util.text.TextFormatting;
 // Registered client-side so it works in single-player and on servers without the mod; counters are
 // process-wide (client + integrated server both contribute in single-player)
 public class FulgorStatsCommand extends CommandBase {
+    // Command name, so this is /fulgor
     @Override
     public String getName() {
         return "fulgor";
     }
 
+    // Shown by /help
     @Override
     public String getUsage(ICommandSender sender) {
         return "/fulgor — report the work done by Impetus' lighting subsystem";
     }
 
+    // Zero so any player can run it; it only reads counters
     @Override
     public int getRequiredPermissionLevel() {
         return 0;
     }
 
+    // Indented lines are detail under a heading, so they are greyed
     @Override
     public void execute(MinecraftServer server, ICommandSender sender, String[] args) {
         for (String line : Fulgor.statistics()) {

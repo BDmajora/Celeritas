@@ -32,6 +32,7 @@ public enum FeatureFlags {
         this.usable = usable;
     }
 
+    // Whether this port implements the feature, so a pack requiring it can be refused up front
     public boolean isUsable() {
         return this.usable;
     }

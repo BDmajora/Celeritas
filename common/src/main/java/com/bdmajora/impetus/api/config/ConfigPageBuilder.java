@@ -19,11 +19,13 @@ public final class ConfigPageBuilder {
         this.name = Objects.requireNonNull(name, "Page name must not be null");
     }
 
+    // Appends
     public ConfigPageBuilder addGroup(OptionGroup group) {
         this.groups.add(Objects.requireNonNull(group, "Group must not be null"));
         return this;
     }
 
+    // Finalises
     public OptionPage build() {
         return new OptionPage(this.id, this.name, List.copyOf(this.groups));
     }

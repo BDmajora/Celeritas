@@ -21,6 +21,7 @@ public class GlVertexFormat {
 
     private final int stride;
 
+    // Starts a format of the given stride
     public static Builder builder(int stride) {
         return new Builder(stride);
     }
@@ -37,6 +38,7 @@ public class GlVertexFormat {
         return attr;
     }
 
+    // Every element in declaration order
     public Collection<GlVertexAttribute> getAttributes() {
         return Collections.unmodifiableCollection(this.attributesKeyed.values());
     }
@@ -46,6 +48,7 @@ public class GlVertexFormat {
         return this.stride;
     }
 
+    // For debugging
     @Override
     public String toString() {
         return String.format("GlVertexFormat{attributes=%d,stride=%d}",
@@ -61,6 +64,7 @@ public class GlVertexFormat {
             this.stride = stride;
         }
 
+        // Copies another format's elements
         public Builder addAllElements(GlVertexFormat otherFormat) {
             for (var attribute : otherFormat.getAttributes()) {
                 this.addElement(new GlVertexAttribute(attribute.getFormat(), attribute.getName(), attribute.getCount(), attribute.isNormalized(), attribute.getPointer(), this.stride, attribute.isIntType()));
@@ -68,11 +72,13 @@ public class GlVertexFormat {
             return this;
         }
 
+        // Offset just past the last element
         private int findNextPointer() {
             int nextPtr = this.attributes.values().stream().mapToInt(a -> a.getPointer() + a.getSize()).max().orElse(0);
             return (nextPtr + (ATTRIBUTE_ALIGNMENT - 1)) & ~(ATTRIBUTE_ALIGNMENT - 1);
         }
 
+        // One element at an explicit offset; overlaps are an error
         public Builder addElement(String name, int pointer, GlVertexAttributeFormat format, int count, boolean normalized, boolean intType) {
             if (pointer == NEXT_ALIGNED_POINTER) {
                 pointer = this.findNextPointer();

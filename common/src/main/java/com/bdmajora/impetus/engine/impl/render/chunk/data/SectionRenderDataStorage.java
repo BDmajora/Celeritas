@@ -27,6 +27,7 @@ public class SectionRenderDataStorage {
         this.primitiveType = primitiveType;
     }
 
+    // No section in this region has meshes
     public boolean isEmpty() {
         return this.numAllocations == 0;
     }
@@ -84,6 +85,7 @@ public class SectionRenderDataStorage {
         SectionRenderDataUnsafe.setSliceMask(pMeshData, sliceMask);
     }
 
+    // Frees a section's vertex allocation and clears its data
     public void removeMeshes(int localSectionIndex) {
         if (this.allocations[localSectionIndex] != null) {
             this.allocations[localSectionIndex].delete();
@@ -97,6 +99,7 @@ public class SectionRenderDataStorage {
         removeIndexBuffer(localSectionIndex);
     }
 
+    // Frees a section's index allocation
     public void removeIndexBuffer(int localSectionIndex) {
         if (this.indexAllocations[localSectionIndex] != null) {
             this.indexAllocations[localSectionIndex].delete();
@@ -104,6 +107,7 @@ public class SectionRenderDataStorage {
         }
     }
 
+    // Swaps in a re-sorted index buffer
     public void replaceIndexBuffer(int localSectionIndex, GlBufferSegment indexAllocation) {
         removeIndexBuffer(localSectionIndex);
 
@@ -120,12 +124,14 @@ public class SectionRenderDataStorage {
         }
     }
 
+    // Rewrites every offset after the arena compacted
     public void onBufferResized() {
         for (int sectionIndex = 0; sectionIndex < RenderRegion.REGION_SIZE; sectionIndex++) {
             this.updateMeshes(sectionIndex);
         }
     }
 
+    // Writes a section's per-facing offsets and counts into the native data
     private void updateMeshes(int sectionIndex) {
         var allocation = this.allocations[sectionIndex];
 
@@ -153,10 +159,12 @@ public class SectionRenderDataStorage {
         }
     }
 
+    // Native pointer to a section's draw data
     public long getDataPointer(int sectionIndex) {
         return SectionRenderDataUnsafe.heapPointer(this.pMeshDataArray, sectionIndex);
     }
 
+    // Frees every allocation and the native block
     public void delete() {
         for (var allocation : this.allocations) {
             if (allocation != null) {

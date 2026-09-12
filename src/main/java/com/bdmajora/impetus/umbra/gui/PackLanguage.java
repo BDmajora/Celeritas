@@ -6,13 +6,8 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
-// The localised display strings a pack ships in shaders/lang/<locale>.lang, which is what turns the option screen
-// from raw identifiers into readable labels — `option.SHADER_STYLE=Visual Style`, `value.RP_MODE.1=Integrated PBR+`
-// Follows the OptiFine/Iris convention: en_us is the base, and the active locale is layered on top of it, so a
-// partially translated pack falls back per key rather than per file
-// &-prefixed colour codes are converted to Minecraft's section sign
-// Every lookup falls back to the raw option name or value, so a pack shipping no lang files at all still shows a
-// usable screen
+// The pack's shaders/lang/<locale>.lang strings, layering the active locale over en_us per key so a partial
+// translation falls back cleanly; every lookup falls back to the raw name, so a pack with no lang still works
 public final class PackLanguage {
     private final Map<String, String> entries = new HashMap<>();
 
@@ -25,6 +20,7 @@ public final class PackLanguage {
         }
     }
 
+    // Parses one lang file, converting &-codes; missing files are simply skipped
     private void loadLangFile(Map<AbsolutePackPath, String> sources, String localeName) {
         String contents = findLangFile(sources, localeName);
         if (contents == null) {
@@ -74,6 +70,7 @@ public final class PackLanguage {
         return sb.toString();
     }
 
+    // Active locale first, then en_us, then null
     private String get(String key) {
         return this.entries.get(key);
     }

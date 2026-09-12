@@ -23,13 +23,8 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-// Reads a shader pack off disk — a folder or a .zip — into the in-memory form ShaderPack consumes
-// Free of Minecraft entirely: java.nio and java.util.zip only, so loading can happen before the game is up
-// Two maps come out of it. Text relevant to compilation (GLSL stages, includes, shaders.properties) is read as
-// strings; binary assets the custom-texture directives can point at (.png, raw LUT and data files, plus their
-// .mcmeta sidecars) are read as raw bytes into a separate map
-// Every key is made relative to the pack's shaders/ directory, so a folder pack and a zip pack produce identical
-// keys and nothing downstream has to know which it came from
+// Reads a pack folder or zip into the map ShaderPack consumes, using only java.nio and java.util.zip
+// Text goes to one map, binary assets to another, and every key is made relative to shaders/
 public final class ShaderPackLoader {
     // Extensions read as raw bytes, for the custom-texture directives — texture.<stage>.<sampler>, texture.noise,
     // customTexture.<name> — and their .mcmeta filtering sidecars
@@ -64,6 +59,7 @@ public final class ShaderPackLoader {
         return loadFromDirectory(packRoot, Collections.emptyMap());
     }
 
+    // Walks an unzipped pack
     public static ShaderPack loadFromDirectory(Path packRoot, Map<String, String> changedConfigs) throws IOException {
         Path shadersDir = packRoot.resolve("shaders");
         if (!Files.isDirectory(shadersDir)) {
@@ -73,6 +69,7 @@ public final class ShaderPackLoader {
         Map<AbsolutePackPath, String> sources = new HashMap<>();
         Map<AbsolutePackPath, byte[]> binaries = new HashMap<>();
         Files.walkFileTree(shadersDir, new SimpleFileVisitor<Path>() {
+            // Reads text files as sources and known binaries as raw bytes
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                 String relative = "/" + shadersDir.relativize(file).toString().replace('\\', '/');
@@ -96,6 +93,7 @@ public final class ShaderPackLoader {
         return loadFromZip(zipFile, Collections.emptyMap());
     }
 
+    // Streams a zipped pack, tolerating a single top-level folder
     public static ShaderPack loadFromZip(Path zipFile, Map<String, String> changedConfigs) throws IOException {
         Map<AbsolutePackPath, String> sources = new HashMap<>();
         Map<AbsolutePackPath, byte[]> binaries = new HashMap<>();
@@ -154,6 +152,7 @@ public final class ShaderPackLoader {
         return !isBinaryPath(relative);
     }
 
+    // Textures and other assets that must not be decoded as text
     private static boolean isBinaryPath(String relative) {
         int dot = relative.lastIndexOf('.');
         if (dot < 0) {
@@ -162,6 +161,7 @@ public final class ShaderPackLoader {
         return BINARY_EXTENSIONS.contains(relative.substring(dot + 1).toLowerCase(Locale.ROOT));
     }
 
+    // One entry as UTF-8
     private static String readEntry(ZipInputStream zip) throws IOException {
         StringBuilder sb = new StringBuilder();
         char[] buffer = new char[4096];
@@ -179,6 +179,7 @@ public final class ShaderPackLoader {
         return sb.toString();
     }
 
+    // One entry as bytes
     private static byte[] readBinaryEntry(ZipInputStream zip) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         byte[] buffer = new byte[8192];
@@ -204,16 +205,19 @@ public final class ShaderPackLoader {
             this.delegate = delegate;
         }
 
+        // Delegates without closing the underlying zip
         @Override
         public int read() throws IOException {
             return this.delegate.read();
         }
 
+        // Delegates without closing the underlying zip
         @Override
         public int read(byte[] b, int off, int len) throws IOException {
             return this.delegate.read(b, off, len);
         }
 
+        // No-op, so readers can be closed without ending the zip stream
         @Override
         public void close() {
             // no-op

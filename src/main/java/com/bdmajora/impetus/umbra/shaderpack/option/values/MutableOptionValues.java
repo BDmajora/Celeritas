@@ -35,18 +35,22 @@ public class MutableOptionValues implements OptionValues {
         this.addAll(values);
     }
 
+    // The set these values belong to
     public OptionSet getOptions() {
         return options;
     }
 
+    // Changed booleans only
     public Map<String, Boolean> getBooleanValues() {
         return booleanValues;
     }
 
+    // Changed valued options only
     public Map<String, String> getStringValues() {
         return stringValues;
     }
 
+    // Applies a saved config, ignoring names the set does not declare
     public void addAll(Map<String, String> values) {
         options.getBooleanOptions().forEach((name, option) -> {
             String value = values.get(name);
@@ -97,6 +101,7 @@ public class MutableOptionValues implements OptionValues {
         });
     }
 
+    // Changed value, or empty when still at default
     @Override
     public OptionalBoolean getBooleanValue(String name) {
         if (booleanValues.containsKey(name)) {
@@ -106,26 +111,31 @@ public class MutableOptionValues implements OptionValues {
         }
     }
 
+    // Changed value, or empty when still at default
     @Override
     public Optional<String> getStringValue(String name) {
         return Optional.ofNullable(stringValues.get(name));
     }
 
+    // How many differ from default
     @Override
     public int getOptionsChanged() {
         return this.stringValues.size() + this.booleanValues.size();
     }
 
+    // Independent copy for pending edits
     @Override
     public MutableOptionValues mutableCopy() {
         return new MutableOptionValues(options, new HashMap<>(booleanValues), new HashMap<>(stringValues));
     }
 
+    // Snapshot
     @Override
     public ImmutableOptionValues toImmutable() {
         return new ImmutableOptionValues(options, booleanValues, stringValues);
     }
 
+    // The set these values belong to
     @Override
     public OptionSet getOptionSet() {
         return options;

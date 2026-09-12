@@ -12,22 +12,9 @@ import net.minecraft.world.World;
 
 import javax.annotation.Nullable;
 
-// an allocation-free transcription of World#rayTraceBlocks
-// vanilla's traversal allocates a Vec3d and a BlockPos on every one of its up-to-200 steps, and
-// resolves a chunk from scratch for each block it looks at
-// ray casting is not a rare operation - it is what decides whether a mob can see a player, where a
-// player is looking, whether an arrow hit, and how much of an explosion reaches an entity - so those
-// allocations add up to a meaningful share of the young generation on a busy server
-// the traversal itself is transcribed rather than replaced: it is an unusual DDA with several fixups
-// that look accidental - the -0.0 correction, the one-block back-off when the ray crosses a positive
-// face - and it is not, because those are what make block selection agree between client and server
-// changing any of them would move where players' crosshairs land
-// the only changes here are that the running position is held in three doubles instead of a vector,
-// that positions and vectors are materialised only at the point they are handed to block code, and
-// that block states come from a ChunkSectionCursor
-// one allocation vanilla makes is genuinely dropped rather than deferred: the MISS result built for
-// every non-colliding block along the ray, which vanilla constructs unconditionally and then discards
-// unless returnLastUncollidableBlock was requested - here it is only built when the caller asked for it
+// An allocation-free transcription of World.rayTraceBlocks, which allocates a Vec3d and BlockPos per step
+// The traversal is transcribed, not replaced: its odd fixups are what keep block selection agreeing between client
+// and server. Only the running position is held in doubles, and the MISS result is built only when asked for
 public final class FastRayCaster {
     private FastRayCaster() {
     }

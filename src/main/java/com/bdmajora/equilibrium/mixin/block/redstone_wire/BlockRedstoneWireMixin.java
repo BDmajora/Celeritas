@@ -41,10 +41,7 @@ public abstract class BlockRedstoneWireMixin {
         throw new AssertionError();
     }
 
-    /**
-     * @author JellySquid
-     * @reason Avoid reading the same neighbouring blocks several times per update
-     */
+    // Overwrite: vanilla's power calculation without the redundant neighbour set allocations
     @Overwrite
     private IBlockState calculateCurrentChanges(World worldIn, BlockPos pos1, BlockPos pos2, IBlockState state) {
         IBlockState previousState = state;

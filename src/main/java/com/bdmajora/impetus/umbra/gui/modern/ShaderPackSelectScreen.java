@@ -40,6 +40,7 @@ public class ShaderPackSelectScreen extends GuiScreen {
         this.parent = parent;
     }
 
+    // Scans the shaderpacks folder and builds the list
     @Override
     public void initGui() {
         this.widgets.clear();
@@ -111,6 +112,7 @@ public class ShaderPackSelectScreen extends GuiScreen {
         });
     }
 
+    // One list row, highlighted when it is the selection
     private FlatButtonWidget addRow(int x, int y, String label, boolean enabled, Runnable action) {
         FlatButtonWidget button = new FlatButtonWidget(new Dim2i(x, y, ROW_WIDTH, 20), TextComponent.literal(label), action);
         button.setEnabled(enabled);
@@ -118,12 +120,14 @@ public class ShaderPackSelectScreen extends GuiScreen {
         return button;
     }
 
+    // Bottom-bar button
     private FlatButtonWidget addButton(int x, int y, int w, int h, String label, Runnable action) {
         FlatButtonWidget button = new FlatButtonWidget(new Dim2i(x, y, w, h), TextComponent.literal(label), action);
         this.widgets.add(button);
         return button;
     }
 
+    // Loads the selected pack and reloads chunk renderers, since the vertex format changes
     private void applySelection() {
         String target = this.stagedEnabled ? this.stagedSelection : UmbraConfig.NO_PACK;
         if (target.equals(Umbra.getSelectedPackName())) {
@@ -137,6 +141,7 @@ public class ShaderPackSelectScreen extends GuiScreen {
         initGui();
     }
 
+    // Opens shaderpacks/ in the system file browser
     private void openPackFolder() {
         if (Umbra.getConfig() == null) {
             return;
@@ -150,6 +155,7 @@ public class ShaderPackSelectScreen extends GuiScreen {
         }
     }
 
+    // Forwards to the widgets
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int mouseButton) {
         for (AbstractWidget widget : new ArrayList<>(this.widgets)) {
@@ -159,6 +165,7 @@ public class ShaderPackSelectScreen extends GuiScreen {
         }
     }
 
+    // Draws the list and buttons
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         this.drawDefaultBackground();
@@ -172,6 +179,7 @@ public class ShaderPackSelectScreen extends GuiScreen {
         }
     }
 
+    // Skips vanilla's dirt background when a world is loaded
     @Override
     public void drawWorldBackground(int tint) {
         if (this.mc.world != null) {

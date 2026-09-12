@@ -51,6 +51,7 @@ public class ColorARGB implements ColorU8 {
         return Integer.reverseBytes(color << 8 | alpha);
     }
 
+    // Swaps R and B for GL's byte order
     public static int toABGR(int color) {
         return Integer.reverseBytes(Integer.rotateLeft(color, 8));
     }

@@ -12,16 +12,19 @@ public class ReadOnlyStringControl implements Control<String> {
         this.option = option;
     }
 
+    // Bound option
     @Override
     public Option<String> getOption() {
         return this.option;
     }
 
+    // The label widget
     @Override
     public ControlElement<String> createElement(Dim2i dim) {
         return new Element(this.option, dim);
     }
 
+    // Text width
     @Override
     public int getMaxWidth() {
         return 90;
@@ -32,6 +35,7 @@ public class ReadOnlyStringControl implements Control<String> {
             super(option, dim);
         }
 
+        // Just the value
         @Override
         public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
             super.render(drawContext, mouseX, mouseY, delta);

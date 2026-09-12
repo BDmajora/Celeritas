@@ -11,10 +11,12 @@ import java.util.BitSet;
 public class BufferFlipper {
     private final BitSet flippedBuffers = new BitSet();
 
+    // Swaps front and back for one buffer
     public void flip(int target) {
         this.flippedBuffers.flip(target);
     }
 
+    // Whether the buffer's alt texture is currently front
     public boolean isFlipped(int target) {
         return this.flippedBuffers.get(target);
     }

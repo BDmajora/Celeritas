@@ -40,6 +40,7 @@ public class EntityGatherer {
         };
     }
 
+    // Empties the per-section lists between frames
     public void clear() {
         for (int i = 0; i < NUM_PASSES; i++) {
             entityLists[i].clear();
@@ -47,6 +48,7 @@ public class EntityGatherer {
         this.seenEntities.clear();
     }
 
+    // Buckets loaded entities by render section so the renderer can skip invisible sections
     public List<Entity>[] getLoadedEntityList(WorldClient world) {
         Consumer<Entity> addEntity = this.addEntity;
         // Iterate directly over chunk entity lists where possible - mods may create multipart entities that are not

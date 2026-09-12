@@ -12,9 +12,8 @@ import com.bdmajora.impetus.umbra.shaderpack.materialmap.NamespacedId;
 
 import java.util.Map;
 
-// Render-thread-published, mesher-thread-consumed settings derived from the active shader pack (Impetus's much
-// smaller counterpart of Umbra's WorldRenderingSettings). Pipeline publishes on construction, clears on destroy;
-// chunk-build workers only ever read.
+// Settings the pipeline publishes on construction and clears on destroy, read by chunk-build workers
+// A much smaller counterpart of Iris's WorldRenderingSettings
 public final class WorldRenderingSettings {
     // block.properties mapping as a flat table indexed by 1.12.2 global state id (blockId | meta << 12, 16 bits),
     // holding the pack's id for that state or -1 (Umbra parity: unmapped blocks get mc_Entity.x = -1).
@@ -27,26 +26,32 @@ public final class WorldRenderingSettings {
     private WorldRenderingSettings() {
     }
 
+    // State id to pack id table, indexed by the raw state id
     public static int[] getBlockStateIds() {
         return blockStateIds;
     }
 
+    // Published by the pipeline
     public static void setBlockStateIds(int[] table) {
         blockStateIds = table;
     }
 
+    // Item registry name to pack id
     public static Map<NamespacedId, Integer> getItemIds() {
         return itemIds;
     }
 
+    // Published by the pipeline
     public static void setItemIds(Map<NamespacedId, Integer> table) {
         itemIds = table;
     }
 
+    // Entity registry name to pack id
     public static Map<NamespacedId, Integer> getEntityIds() {
         return entityIds;
     }
 
+    // Published by the pipeline
     public static void setEntityIds(Map<NamespacedId, Integer> table) {
         entityIds = table;
     }
@@ -65,10 +70,12 @@ public final class WorldRenderingSettings {
     // voxelizeLightBlocks: emit geometry for light-emitting blocks so the shadow pass can voxelize them.
     private static boolean voxelizeLightBlocks;
 
+    // Pack's oldHandLight directive
     public static boolean isOldHandLight() {
         return oldHandLight;
     }
 
+    // Published by the pipeline
     public static void setOldHandLight(boolean value) {
         oldHandLight = value;
     }
@@ -89,22 +96,27 @@ public final class WorldRenderingSettings {
         return table == null ? null : table.get(block);
     }
 
+    // Whether emissive blocks are voxelised for the pack
     public static boolean isVoxelizeLightBlocks() {
         return voxelizeLightBlocks;
     }
 
+    // Published by the pipeline
     public static void setVoxelizeLightBlocks(boolean value) {
         voxelizeLightBlocks = value;
     }
 
+    // Pack's dynamicHandLight directive
     public static boolean isDynamicHandLight() {
         return dynamicHandLight;
     }
 
+    // Published by the pipeline
     public static void setDynamicHandLight(boolean value) {
         dynamicHandLight = value;
     }
 
+    // Published by the pipeline
     public static void setSeparateAo(boolean value) {
         separateAo = value;
         // The mesher bakes this into every chunk's vertex colour. Selecting a pack already calls
@@ -113,6 +125,7 @@ public final class WorldRenderingSettings {
         com.bdmajora.impetus.engine.impl.render.chunk.ChunkColorWriter.SeparateAoState.set(value);
     }
 
+    // Pack's oldLighting directive, which changes how the mesher writes light
     public static boolean isOldLighting() {
         return oldLighting;
     }
@@ -127,6 +140,7 @@ public final class WorldRenderingSettings {
         return !oldLighting;
     }
 
+    // Published by the pipeline
     public static void setOldLighting(boolean value) {
         // Baked into chunk vertex colour, so a change needs the chunk rebuild that selecting a pack already
         // schedules (RenderGlobal.loadRenderers()) — same situation as setSeparateAo above.
@@ -139,10 +153,12 @@ public final class WorldRenderingSettings {
     // Umbra's MixinBlockStateBehavior shade rewrite.
     private static volatile float ambientOcclusionLevel = 1.0f;
 
+    // Pack's ambientOcclusionLevel, applied by the mesher
     public static float getAmbientOcclusionLevel() {
         return ambientOcclusionLevel;
     }
 
+    // Published by the pipeline
     public static void setAmbientOcclusionLevel(float value) {
         // Terrain meshes bake AO into vertex colour, so a change needs the same chunk rebuild that selecting a pack
         // already schedules (RenderGlobal.loadRenderers()) — no extra invalidation needed here.
@@ -159,14 +175,17 @@ public final class WorldRenderingSettings {
         return 1.0f - level * (1.0f - vanillaAo);
     }
 
+    // How far the voxel data extends
     public static int getVoxelRenderDistanceChunks() {
         return voxelRenderDistanceChunks;
     }
 
+    // Published by the pipeline
     public static void setVoxelRenderDistanceChunks(int chunks) {
         voxelRenderDistanceChunks = Math.max(0, chunks);
     }
 
+    // Pack id for a state, or the raw block id when the pack does not map it
     public static int getBlockStateId(IBlockState state) {
         if (state == null) {
             return -1;
@@ -179,6 +198,7 @@ public final class WorldRenderingSettings {
         return rawStateId < table.length ? table[rawStateId] : -1;
     }
 
+    // Pack id for an item, or the raw item id
     public static int getItemId(ItemStack stack) {
         if (stack == null || stack.isEmpty()) {
             return -1;
@@ -190,6 +210,7 @@ public final class WorldRenderingSettings {
         return mappedOrRaw(itemIds, key, rawId);
     }
 
+    // Pack id for an entity, or the raw entity id
     public static int getEntityId(Entity entity) {
         if (entity == null) {
             return -1;
@@ -200,6 +221,7 @@ public final class WorldRenderingSettings {
         return mappedOrRaw(entityIds, key, rawId);
     }
 
+    // Pack id for a tile entity via its registry key
     public static int getBlockEntityId(TileEntity tileEntity) {
         if (tileEntity == null) {
             return -1;
@@ -209,6 +231,7 @@ public final class WorldRenderingSettings {
         return mappedOrRaw(entityIds, key, -1);
     }
 
+    // Shared lookup: mapped id if present, else the raw one
     private static int mappedOrRaw(Map<NamespacedId, Integer> map, ResourceLocation key, int rawId) {
         if (map == null || map.isEmpty()) {
             return rawId;

@@ -10,23 +10,16 @@ import net.minecraft.world.World;
 import javax.annotation.Nullable;
 import java.util.List;
 
-// the entity half of a hopper's inventory search, with the case that dominates it removed
-// when there is no inventory tile entity at the target position, vanilla queries the world for
-// entities that implement IInventory - chest and hopper minecarts, and whatever mods add - which is
-// the right behaviour and is also, for the great majority of hoppers, a query that will never find
-// anything and is run several times a second forever
-// if the world holds no live inventory entity at all, the query cannot return one; that is not a
-// heuristic, because World#onEntityAdded and onEntityRemoved are the only two ways an entity enters
-// or leaves a world, chunk loading included, and the count behind InventoryEntityTracker is
-// maintained from both - when it says zero, an empty list is the same answer vanilla would have
-// spent a chunk scan arriving at
-// when the count is non-zero the vanilla query runs unchanged, including its random pick among
-// several candidates, which is observable: two chest minecarts in one block make which one a hopper
-// drains a coin flip, and some contraptions are built on it
+// The entity half of a hopper's inventory search, skipped entirely when the world holds no inventory
+// entity at all; onEntityAdded/onEntityRemoved are the only ways one enters or leaves, so a zero count
+// is exact rather than a heuristic
+// With a non-zero count the vanilla query runs unchanged, including its observable random pick
 public final class HopperEntityLookup {
+    // Static-only
     private HopperEntityLookup() {
     }
 
+    // Null when nothing is there, matching what the vanilla branch returns for an empty candidate list
     @Nullable
     public static IInventory findInventoryEntity(World world, double x, double y, double z) {
         if (world instanceof InventoryEntityTracker

@@ -12,17 +12,10 @@ import net.minecraft.client.shader.ShaderGroup;
 import net.minecraft.client.shader.ShaderUniform;
 import net.minecraft.util.ResourceLocation;
 
-// Sodium Extra's Panini projection, ported to 1.12.2 as a post-processing pass
-// Panini is a roughly cylindrical projection that widens the field of view without the corner stretching a
-// plain perspective projection produces past about 100 degrees. It is a screen-space remap of the already
-// finished frame, which is the only reason it can be a post effect rather than a change to the world projection
-// The strength and the two frustum extents change every frame, but 1.12.2's ShaderGroup can only set uniforms
-// to constants baked into its JSON, so the pass is reached through ShaderGroupAccessor and its uniforms written
-// by hand each frame
-// Refuses to run while a shader pack is loaded: the pack owns the framebuffer contents and its own projection
-// uniforms, so warping the finished image afterwards would leave every screen-space effect in the pack — SSAO,
-// reflections, volumetric light — misaligned with what is actually on screen. Sodium Extra bails for the same
-// reason
+// Sodium Extra's Panini projection as a post-processing pass: a screen-space remap that widens the FOV
+// without the corner stretching of plain perspective past about 100 degrees
+// Uniforms change per frame but ShaderGroup only bakes constants, so they are written by hand each frame
+// Refuses to run under a shader pack, whose screen-space effects would be misaligned by the warp
 public final class PaniniProjection {
     private static final ResourceLocation CHAIN = new ResourceLocation("impetus", "shaders/post/panini.json");
     private static final String CONFIG_UNIFORM = "PaniniParams";
@@ -160,6 +153,7 @@ public final class PaniniProjection {
         return true;
     }
 
+    // Writes strength and the two frustum extents into the pass for this frame
     private static void updateUniforms() {
         float strength = Extras.options().extra.paniniProjectionStrength / 100.0F;
 

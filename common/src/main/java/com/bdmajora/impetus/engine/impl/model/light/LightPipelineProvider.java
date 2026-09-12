@@ -21,6 +21,7 @@ public class LightPipelineProvider {
         this.lighters.put(LightMode.FLAT, new FlatLightPipeline(cache, diffuseProvider, useQuadNormalsForShading));
     }
 
+    // Flat or smooth
     public LightPipeline getLighter(LightMode type) {
         LightPipeline pipeline = this.lighters.get(type);
 
@@ -31,6 +32,7 @@ public class LightPipelineProvider {
         return pipeline;
     }
 
+    // The shared light cache both pipelines read
     public LightDataAccess getLightData() {
         return this.lightData;
     }

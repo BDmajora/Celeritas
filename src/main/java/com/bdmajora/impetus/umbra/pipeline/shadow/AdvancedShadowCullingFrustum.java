@@ -5,19 +5,9 @@ import org.joml.Matrix4fc;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
-// A shadow frustum fitted to the player's view, seen from the shadow light. Port of Iris's
-// shadows.frustum.advanced.AdvancedShadowCullingFrustum
-//
-// The idea: if you are looking toward the sun, geometry behind you cannot cast a shadow onto anything you can see.
-// So the frustum keeps the BACK planes of the view frustum — those whose normal points roughly toward the light —
-// then extrudes EDGE planes along the light vector to close the volume. Anything outside it can be skipped
-//
-// Two caveats. It deliberately does not hold for sun-bounce GI, where geometry behind the camera does contribute.
-// And it is view-DIRECTION dependent, so the set of drawn sections changes as the player turns — see ShadowFrustums
-// for when that is safe and when it is not
-//
-// Derived from L. Spiro's algorithm, as Iris's version is; the plane-intersection step follows the same "line of
-// intersection between two planes" derivation from Graphics Gems 1, p. 305
+// A shadow frustum fitted to the view, seen from the light: keeps the view frustum's back planes and extrudes
+// edge planes along the light vector. View-direction dependent, so unsafe for voxelising packs; see ShadowFrustums
+// Port of Iris's AdvancedShadowCullingFrustum, after L. Spiro
 public class AdvancedShadowCullingFrustum implements Frustum {
     private static final int MAX_CLIPPING_PLANES = 13;
     // Values chosen to match JOML's FrustumIntersection constants, so ported code reads the same — this port does
@@ -43,6 +33,7 @@ public class AdvancedShadowCullingFrustum implements Frustum {
         addEdgePlanes(baseClippingPlanes, isBack);
     }
 
+    // Appends one culling plane
     private void addPlane(float[] plane) {
         if (this.planeCount >= MAX_CLIPPING_PLANES) {
             return;
@@ -105,18 +96,22 @@ public class AdvancedShadowCullingFrustum implements Frustum {
         }
     }
 
+    // Drops w
     private static Vector3f truncate(Vector4f base) {
         return new Vector3f(base.x(), base.y(), base.z());
     }
 
+    // Avoids the sqrt when only comparing
     private static float lengthSquared(Vector3f v) {
         return v.x() * v.x() + v.y() * v.y() + v.z() * v.z();
     }
 
+    // Cross product into a fresh vector
     private static Vector3f cross(Vector3f first, Vector3f second) {
         return new Vector3f(first.x(), first.y(), first.z()).cross(second);
     }
 
+    // A plane through a silhouette edge of the camera frustum, extruded along the light
     private void addEdgePlane(Vector4f backPlane4, Vector4f frontPlane4) {
         Vector3f backPlaneNormal = truncate(backPlane4);
         Vector3f frontPlaneNormal = truncate(frontPlane4);
@@ -171,6 +166,7 @@ public class AdvancedShadowCullingFrustum implements Frustum {
         return inside ? INSIDE : INTERSECT;
     }
 
+    // Box against every plane; inside if no plane rejects it
     @Override
     public boolean testAab(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
         if (this.boxCuller != null && !this.boxCuller.testAab(minX, minY, minZ, maxX, maxY, maxZ)) {

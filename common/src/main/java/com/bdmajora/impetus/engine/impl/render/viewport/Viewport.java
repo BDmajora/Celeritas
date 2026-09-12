@@ -27,6 +27,7 @@ public final class Viewport {
         this.blockCoords = new Vector3i(position.x, position.y, position.z, RoundingMode.FLOOR);
     }
 
+    // World-space box, made camera-relative before the test
     public boolean isBoxVisible(double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
         return this.frustum.testAab(
                 (float)(minX - this.transform.intX) - this.transform.fracX,
@@ -38,10 +39,12 @@ public final class Viewport {
         );
     }
 
+    // Cube form
     public boolean isBoxVisible(int intOriginX, int intOriginY, int intOriginZ, float floatSize) {
         return isBoxVisible(intOriginX, intOriginY, intOriginZ, floatSize, floatSize, floatSize);
     }
 
+    // Split-precision form, the hot path for section culling
     public boolean isBoxVisible(int intOriginX, int intOriginY, int intOriginZ, float floatSizeX, float floatSizeY, float floatSizeZ) {
         float floatOriginX = (intOriginX - this.transform.intX) - this.transform.fracX;
         float floatOriginY = (intOriginY - this.transform.intY) - this.transform.fracY;
@@ -58,14 +61,17 @@ public final class Viewport {
         );
     }
 
+    // The split camera position
     public CameraTransform getTransform() {
         return this.transform;
     }
 
+    // Camera section coordinates
     public Vector3ic getChunkCoord() {
         return this.chunkCoords;
     }
 
+    // Camera block coordinates
     public Vector3ic getBlockCoord() {
         return this.blockCoords;
     }

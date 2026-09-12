@@ -14,6 +14,7 @@ public enum GraphicsVendor {
     MESA,
     OTHER;
 
+    // PCI vendor id to enum
     public static GraphicsVendor fromPciVendorId(int id) {
         return switch (id) {
             case 0x10DE -> NVIDIA;
@@ -23,6 +24,7 @@ public enum GraphicsVendor {
         };
     }
 
+    // From the GL vendor string when no PCI id is available
     public static GraphicsVendor fromContext(GlContextInfo context) {
         var vendor = context.vendor().toLowerCase(Locale.ROOT);
         var renderer = context.renderer().toLowerCase(Locale.ROOT);

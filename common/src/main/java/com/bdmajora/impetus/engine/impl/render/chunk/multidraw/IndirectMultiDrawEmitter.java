@@ -36,6 +36,7 @@ public class IndirectMultiDrawEmitter implements MultiDrawEmitter {
         this.indirectBufferGpu = new GlMutableBuffer();
     }
 
+    // Writes the fields that never change into every command slot once
     private void prefillConstants() {
         // Prefill constants
         long ptr = this.indirectBuffer;
@@ -46,6 +47,7 @@ public class IndirectMultiDrawEmitter implements MultiDrawEmitter {
         }
     }
 
+    // Appends one indirect command per visible facing
     @Override
     public void addDrawCommands(long pMeshData, int facingMask, int indexPointerMask) {
         int size = this.numCommands;
@@ -65,6 +67,7 @@ public class IndirectMultiDrawEmitter implements MultiDrawEmitter {
         this.numCommands = size;
     }
 
+    // Uploads the commands and issues glMultiDrawElementsIndirect
     @Override
     public void executeBatch(CommandList commandList, GlTessellation tessellation, GlPrimitiveType primitiveType) {
         commandList.uploadData(this.indirectBufferGpu, this.indirectBuffer, (long)this.numCommands * COMMAND_SIZE,
@@ -77,11 +80,13 @@ public class IndirectMultiDrawEmitter implements MultiDrawEmitter {
         commandList.bindBuffer(GlBufferTarget.DRAW_INDIRECT_BUFFER, null);
     }
 
+    // No draws
     @Override
     public boolean isEmpty() {
         return this.numCommands == 0;
     }
 
+    // Largest index count in the batch
     @Override
     public int getIndexBufferSize() {
         int elements = 0;
@@ -96,11 +101,13 @@ public class IndirectMultiDrawEmitter implements MultiDrawEmitter {
         return elements;
     }
 
+    // Resets for the next region
     @Override
     public void clear() {
         this.numCommands = 0;
     }
 
+    // Frees the command buffer
     @Override
     public void delete() {
         LWJGL.nmemAlignedFree(this.indirectBuffer);

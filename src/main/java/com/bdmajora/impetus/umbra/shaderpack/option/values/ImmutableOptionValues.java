@@ -23,6 +23,7 @@ public class ImmutableOptionValues implements OptionValues {
         this.stringValues = Collections.unmodifiableMap(new HashMap<>(stringValues));
     }
 
+    // Changed value, or empty when at default
     @Override
     public OptionalBoolean getBooleanValue(String name) {
         if (booleanValues.containsKey(name)) {
@@ -32,26 +33,31 @@ public class ImmutableOptionValues implements OptionValues {
         }
     }
 
+    // Changed value, or empty when at default
     @Override
     public Optional<String> getStringValue(String name) {
         return Optional.ofNullable(stringValues.get(name));
     }
 
+    // How many differ from default
     @Override
     public int getOptionsChanged() {
         return this.stringValues.size() + this.booleanValues.size();
     }
 
+    // Editable copy
     @Override
     public MutableOptionValues mutableCopy() {
         return new MutableOptionValues(options, new HashMap<>(booleanValues), new HashMap<>(stringValues));
     }
 
+    // Already immutable; returns this
     @Override
     public ImmutableOptionValues toImmutable() {
         return this;
     }
 
+    // The set these values belong to
     @Override
     public OptionSet getOptionSet() {
         return options;

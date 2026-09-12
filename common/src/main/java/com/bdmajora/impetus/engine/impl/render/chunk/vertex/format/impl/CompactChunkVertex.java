@@ -29,26 +29,31 @@ public class CompactChunkVertex implements ChunkVertexType {
 
     private static final float TEXTURE_SCALE = (1.0f / TEXTURE_MAX_VALUE);
 
+    // UVs are 16-bit fixed point
     @Override
     public float getTextureScale() {
         return TEXTURE_SCALE;
     }
 
+    // Positions are 16-bit fixed point over the section plus margin
     @Override
     public float getPositionScale() {
         return MODEL_SCALE;
     }
 
+    // Shift so a small negative margin fits the unsigned range
     @Override
     public float getPositionOffset() {
         return -MODEL_ORIGIN;
     }
 
+    // 20-byte layout
     @Override
     public GlVertexFormat getVertexFormat() {
         return VERTEX_FORMAT;
     }
 
+    // Writes one vertex per call
     @Override
     public ChunkVertexEncoder createEncoder() {
         return (ptr, material, vertex, sectionIndex) -> {
@@ -70,6 +75,7 @@ public class CompactChunkVertex implements ChunkVertexType {
         };
     }
 
+    // Tells the shader the compact layout is in use
     @Override
     public Map<String, String> getDefines() {
         var map = ChunkVertexType.super.getDefines();
@@ -77,14 +83,17 @@ public class CompactChunkVertex implements ChunkVertexType {
         return map;
     }
 
+    // Float to 16-bit fixed point
     private static short encodePosition(float value) {
         return (short) ((MODEL_ORIGIN + value) * MODEL_SCALE_INV);
     }
 
+    // Back to float, for CPU-side sorting
     public static float decodePosition(short value) {
         return (((float)Short.toUnsignedInt(value)) / MODEL_SCALE_INV) - MODEL_ORIGIN;
     }
 
+    // Float UV to 16-bit fixed point
     private static short encodeTexture(float value) {
         return (short) (Math.round(value * TEXTURE_MAX_VALUE) & 0xFFFF);
     }

@@ -35,6 +35,7 @@ public final class ShaderMacros {
     private ShaderMacros() {
     }
 
+    // Program names the pack marks as legacy, which get the 120-era macro set
     private static java.util.Set<String> parseLegacyPrograms() {
         String value = System.getProperty("impetus.umbra.legacyPrograms", "");
         java.util.Set<String> names = new java.util.HashSet<>();
@@ -190,6 +191,7 @@ public final class ShaderMacros {
         return out.toString();
     }
 
+    // MC_OS_WINDOWS, MC_OS_LINUX or MC_OS_MAC from the JVM's os.name
     private static String osMacro() {
         String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         if (os.contains("win")) {

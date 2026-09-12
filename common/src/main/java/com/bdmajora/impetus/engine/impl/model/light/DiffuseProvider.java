@@ -7,6 +7,7 @@ public interface DiffuseProvider {
 
     float getDiffuse(float normalX, float normalY, float normalZ, boolean shade);
 
+    // Facing form over the normal form
     default float getDiffuse(ModelQuadFacing lightFace, boolean shade) {
         return getDiffuse(lightFace.getStepX(), lightFace.getStepY(), lightFace.getStepZ(), shade);
     }

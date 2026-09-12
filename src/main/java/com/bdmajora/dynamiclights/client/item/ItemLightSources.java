@@ -21,11 +21,8 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
-// the loaded item light source definitions, rebuilt on every resource reload
-// two maps: definitions loaded from resource packs, and definitions registered in code through
-// registerItemLightSource
-// code registrations win, because a mod that declares its own item is more authoritative than a pack
-// guessing at it, and they survive reloads
+// The loaded item light source definitions, rebuilt on every resource reload
+// Code registrations beat resource pack ones and survive reloads, since a mod knows its own items best
 public final class ItemLightSources {
     private static final String NAMESPACE = "impetus";
     private static final String DIRECTORY = "dynamiclights/item/";
@@ -71,6 +68,7 @@ public final class ItemLightSources {
         }
     }
 
+    // Reads every pack's index.json and unions the listed file names
     private static Set<String> readIndex(IResourceManager resourceManager) {
         Set<String> files = new LinkedHashSet<>();
 
@@ -98,6 +96,7 @@ public final class ItemLightSources {
         return files;
     }
 
+    // Parses one definition; a malformed file is logged and skipped rather than failing the reload
     private static void loadOne(ResourceLocation location, IResource resource) {
         ResourceLocation id = new ResourceLocation(location.getNamespace(),
                 location.getPath().replace(".json", ""));

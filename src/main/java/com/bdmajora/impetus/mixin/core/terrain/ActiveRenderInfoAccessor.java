@@ -9,11 +9,13 @@ import java.nio.FloatBuffer;
 // Exposes the static projection/modelview buffers ActiveRenderInfo keeps private
 @Mixin(ActiveRenderInfo.class)
 public interface ActiveRenderInfoAccessor {
+    // Accessor
     @Accessor("PROJECTION")
     static FloatBuffer getProjectionMatrix() {
         throw new AssertionError();
     }
 
+    // Accessor
     @Accessor("MODELVIEW")
     static FloatBuffer getModelViewMatrix() {
         throw new AssertionError();

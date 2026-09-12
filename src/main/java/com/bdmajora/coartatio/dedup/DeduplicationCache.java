@@ -5,16 +5,9 @@ import it.unimi.dsi.fastutil.objects.ObjectOpenCustomHashSet;
 
 import java.util.Objects;
 
-// An interning pool: every value equal to something already seen is mapped back onto that first instance
-// Ported from Hydrogen's DeduplicationCache with two additions 1.12.2 needs
-// A size cap, because Hydrogen only pooled closed sets and several of ours are not closed — resource paths in
-// particular keep growing with skin downloads and dynamically registered content. Past the cap the pool stops
-// accepting new entries but keeps serving hits for everything it already holds, so it stops being a leak
-// without becoming useless
-// Closing, so bake-scoped pools can drop their backing set once the bake ends. Values already handed out stay
-// canonical; only the index is given up
-// Every method synchronises on the instance. Model baking is single-threaded on 1.12.2, but NBT and
-// ResourceLocation construction are not, and an uncontended monitor costs far less than the allocation avoided
+// An interning pool mapping every value equal to something already seen back onto that first instance
+// Ported from Hydrogen with a size cap, since some of our sets are open-ended, and closing, so bake-scoped pools
+// can drop their index once the bake ends. Synchronised throughout; an uncontended monitor is cheaper than the allocation avoided
 public class DeduplicationCache<T> {
     // Only used for toString, i.e. the memory report line
     private final String name;
@@ -37,11 +30,13 @@ public class DeduplicationCache<T> {
     // Default strategy: ordinary hashCode/equals, but null-tolerant via Objects
     public DeduplicationCache(String name, int sizeLimit) {
         this(name, sizeLimit, new Hash.Strategy<T>() {
+            // Default strategy: the value's own hashCode
             @Override
             public int hashCode(T o) {
                 return Objects.hashCode(o);
             }
 
+            // Default strategy: the value's own equals
             @Override
             public boolean equals(T a, T b) {
                 return Objects.equals(a, b);

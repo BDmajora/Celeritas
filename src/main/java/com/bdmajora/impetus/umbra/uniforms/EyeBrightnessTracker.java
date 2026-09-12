@@ -6,13 +6,8 @@ import net.minecraft.world.World;
 import org.joml.Vector2f;
 import org.joml.Vector2i;
 
-// The temporally smoothed per-frame uniforms
-// eyeBrightness and eyeBrightnessSmooth are the lightmap coordinates at the camera's eye — block and sky, each
-// 0..240 — which packs use for the exposure fade when walking into a cave
-// wetness is rain strength smoothed with OptiFine's separate wetness and dryness half-lives, so getting wet is slow
-// and drying off is slower
-// The smoothing must advance exactly ONCE per frame, from update() on the frame hook — never from the uniform
-// suppliers, which run once per program and would advance it a dozen times a frame at a dozen different rates
+// eyeBrightness, eyeBrightnessSmooth and wetness, smoothed with OptiFine's half-lives
+// Smoothing advances exactly once per frame from the frame hook, never from a supplier that runs per program
 public final class EyeBrightnessTracker {
     // Iris's defaults, in DECISECONDS — the unit its SmoothedFloat takes, which multiplies by 0.1f to reach
     // seconds. So the shipped values mean 60 seconds to get fully wet, 20 to dry off, and 1 second of
@@ -92,14 +87,17 @@ public final class EyeBrightnessTracker {
         wetness += (rainStrength - wetness) * wetnessFactor;
     }
 
+    // Raw block and sky light at the eye, 0..240
     public static Vector2i getEyeBrightness() {
         return new Vector2i(eyeBrightness);
     }
 
+    // Smoothed with OptiFine's eyeBrightnessHalflife
     public static Vector2i getEyeBrightnessSmooth() {
         return new Vector2i(Math.round(smoothed.x), Math.round(smoothed.y));
     }
 
+    // Smoothed rain exposure, for wet surfaces
     public static float getWetness() {
         return wetness;
     }

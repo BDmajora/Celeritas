@@ -16,25 +16,30 @@ public final class ConfigStorage<T> implements OptionStorage<T> {
         this.saveAction = Objects.requireNonNull(saveAction, "Save action must not be null");
     }
 
+    // Save ignores flags
     public static <T> ConfigStorage<T> of(T data, Runnable saveAction) {
         Objects.requireNonNull(saveAction, "Save action must not be null");
         return new ConfigStorage<>(data, flags -> saveAction.run());
     }
 
+    // Save receives the flags
     public static <T> ConfigStorage<T> of(T data, Consumer<Set<OptionFlag>> saveAction) {
         return new ConfigStorage<>(data, saveAction);
     }
 
+    // The config object
     @Override
     public T getData() {
         return this.data;
     }
 
+    // Without flags
     @Override
     public void save() {
         this.saveAction.accept(Set.of());
     }
 
+    // With the flags of the options that changed
     @Override
     public void save(Set<OptionFlag> flags) {
         this.saveAction.accept(flags);

@@ -17,13 +17,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-// The uniforms and variables a pack defines for itself in shaders.properties, as
-// `uniform.<type>.<name> = <expr>` and `variable.<type>.<name> = <expr>`
-// Both evaluate once per frame in DECLARATION ORDER, which is what lets a later expression reference an earlier
-// result — reordering them would break packs that chain several variables together
-// Built-in uniform values reach the expressions through CustomUniformInputs
-// The only difference between the two forms: a `uniform.` entry is additionally uploaded to every program that
-// declares it, while a `variable.` entry exists purely as an intermediate for other expressions
+// The pack's uniform.<type>.<name> and variable.<type>.<name> expressions, evaluated once per frame in
+// declaration order so later ones can reference earlier results. Only uniform. entries are uploaded
 public final class CustomUniforms {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -93,10 +88,12 @@ public final class CustomUniforms {
         }
     }
 
+    // Whether the pack declared any
     public boolean isEmpty() {
         return this.variables.isEmpty();
     }
 
+    // Variable count
     public int size() {
         return this.variables.size();
     }
@@ -121,11 +118,13 @@ public final class CustomUniforms {
         return out;
     }
 
+    // One component of a variable's current value
     private static float component(Variable variable, int index) {
         CustomUniformValue value = variable.current;
         return index < value.width ? value.components[index] : 0.0f;
     }
 
+    // Widens or narrows to the declared type
     private static CustomUniformValue coerce(CustomUniformValue value, Type type) {
         if (value.width == type.width) {
             return value;
@@ -146,6 +145,7 @@ public final class CustomUniforms {
             this.frameTime = frameTime;
         }
 
+        // A variable's current value, or a builtin's
         @Override
         public CustomUniformValue resolve(String name) {
             Variable other = byName.get(name);
@@ -155,11 +155,13 @@ public final class CustomUniforms {
             return inputs.resolve(name);
         }
 
+        // Per-smooth() call state
         @Override
         public SmoothState smoothState(int index) {
             return this.variable.smoothStates[index];
         }
 
+        // Delta for the smoothers
         @Override
         public float frameTime() {
             return this.frameTime;
@@ -175,6 +177,7 @@ public final class CustomUniforms {
             this.width = width;
         }
 
+        // bool, int, float, vec2..4
         static Type parse(String token) {
             switch (token.toLowerCase(Locale.ROOT)) {
                 case "bool": return BOOL;
@@ -213,6 +216,7 @@ public final class CustomUniforms {
     public static final class Builder {
         private final Map<String, PendingVariable> pending = new LinkedHashMap<>();
 
+        // Declares one variable.<type>.<name> or uniform.<type>.<name>
         public void addVariable(String typeToken, String name, String expression, boolean isUniform) {
             Type type = Type.parse(typeToken);
             if (type == null) {
@@ -226,10 +230,12 @@ public final class CustomUniforms {
             this.pending.put(name, new PendingVariable(name, type, expression, isUniform));
         }
 
+        // Whether anything was declared
         public boolean isEmpty() {
             return this.pending.isEmpty();
         }
 
+        // Compiles every expression, in dependency order
         public CustomUniforms build() {
             CustomUniformInputs inputs = new CustomUniformInputs();
             // Capture the full built-in uniform surface (common + celestial + system-time are all registered
@@ -251,6 +257,7 @@ public final class CustomUniforms {
             return new CustomUniforms(inputs, variables);
         }
 
+        // A declaration awaiting compilation
         @com.github.bsideup.jabel.Desugar
         private record PendingVariable(String name, Type type, String expression, boolean isUniform) {
         }

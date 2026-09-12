@@ -9,11 +9,13 @@ public class GlUniformFloat extends GlUniform<Float> {
         super(index);
     }
 
+    // Boxed form
     @Override
     public void set(Float value) {
         this.setFloat(value);
     }
 
+    // glUniform1f
     public void setFloat(float value) {
         LWJGL.glUniform1f(this.index, value);
     }

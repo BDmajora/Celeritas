@@ -74,46 +74,57 @@ public class RenderRegion {
         this.stagingBuffer = stagingBuffer;
     }
 
+    // Packed region coordinates
     public static long key(int x, int y, int z) {
         return PositionUtil.packSection(x, y, z);
     }
 
+    // Region origin in sections
     public int getChunkX() {
         return this.x << REGION_WIDTH_SH;
     }
 
+    // Region origin in sections
     public int getChunkY() {
         return this.y << REGION_HEIGHT_SH;
     }
 
+    // Region origin in sections
     public int getChunkZ() {
         return this.z << REGION_LENGTH_SH;
     }
 
+    // Region origin in blocks
     public int getOriginX() {
         return this.getChunkX() << 4;
     }
 
+    // Region origin in blocks
     public int getOriginY() {
         return this.getChunkY() << 4;
     }
 
+    // Region origin in blocks
     public int getOriginZ() {
         return this.getChunkZ() << 4;
     }
 
+    // Region centre in blocks
     public int getCenterX() {
         return (this.getChunkX() + REGION_WIDTH / 2) << 4;
     }
 
+    // Region centre in blocks
     public int getCenterY() {
         return (this.getChunkY() + REGION_HEIGHT / 2) << 4;
     }
 
+    // Region centre in blocks
     public int getCenterZ() {
         return (this.getChunkZ() + REGION_LENGTH / 2) << 4;
     }
 
+    // Frees every storage and resource
     public void delete(CommandList commandList) {
         for (var storage : this.sectionRenderData.values()) {
             storage.delete();
@@ -128,14 +139,17 @@ public class RenderRegion {
         Arrays.fill(this.sectionLoadTimes, 0);
     }
 
+    // No sections attached
     public boolean isEmpty() {
         return this.sectionCount == 0;
     }
 
+    // Storage for a pass, or null
     public SectionRenderDataStorage getStorage(TerrainRenderPass pass) {
         return this.sectionRenderData.get(pass);
     }
 
+    // Storage for a pass, created on first use
     public SectionRenderDataStorage createStorage(TerrainRenderPass pass, RenderPassConfiguration<?> renderPassConfiguration) {
         var storage = this.sectionRenderData.get(pass);
 
@@ -147,6 +161,7 @@ public class RenderRegion {
         return storage;
     }
 
+    // Frees pass storages no section uses any more
     public void removeEmptyStorages() {
         if (this.sectionRenderData.isEmpty()) {
             return;
@@ -166,6 +181,7 @@ public class RenderRegion {
         }
     }
 
+    // Frees a section's meshes in every pass
     public void removeMeshes(int sectionIndex) {
         if (this.sectionRenderData.isEmpty()) {
             return;
@@ -175,14 +191,17 @@ public class RenderRegion {
         }
     }
 
+    // Whether the pass has any geometry here
     public boolean hasSectionsInPass(TerrainRenderPass pass) {
         return this.sectionRenderData.containsKey(pass);
     }
 
+    // Passes with storage
     public Set<TerrainRenderPass> getPasses() {
         return this.sectionRenderData.keySet();
     }
 
+    // Rewrites offsets after an arena resize
     public void refresh(CommandList commandList) {
         this.allDeviceResources.forEach(resources -> resources.deleteTessellations(commandList));
 
@@ -191,6 +210,7 @@ public class RenderRegion {
         }
     }
 
+    // Attaches a section at its local index
     public void addSection(RenderSection section) {
         var sectionIndex = section.getSectionIndex();
         var prev = this.sections[sectionIndex];
@@ -204,6 +224,7 @@ public class RenderRegion {
         this.sectionCount++;
     }
 
+    // Detaches and frees its meshes
     public void removeSection(RenderSection section) {
         var sectionIndex = section.getSectionIndex();
         var prev = this.sections[sectionIndex];
@@ -223,21 +244,25 @@ public class RenderRegion {
         this.sectionCount--;
     }
 
+    // Stamps when a section first got geometry, for the fade-in
     public void updateSectionLoadTime(RenderSection section) {
         long timestamp = System.nanoTime();
         this.sectionLoadTimes[section.getSectionIndex()] = timestamp;
         this.newestSectionLoadTime = timestamp;
     }
 
+    // Section by local index
     @Nullable
     public RenderSection getSection(int id) {
         return this.sections[id];
     }
 
+    // Per-vertex-format GPU resources
     public Collection<DeviceResources> getAllResources() {
         return this.allDeviceResources;
     }
 
+    // Resources for a format, or null
     public DeviceResources getResources(GlVertexFormat format) {
         var stride = format.getStride();
         var list = this.allDeviceResources;
@@ -251,6 +276,7 @@ public class RenderRegion {
         return null;
     }
 
+    // Resources for a format, created on first use
     public DeviceResources createResources(GlVertexFormat format, CommandList commandList) {
         var resources = getResources(format);
         if (resources == null) {
@@ -264,6 +290,7 @@ public class RenderRegion {
         return resources;
     }
 
+    // Rebuilds tessellations after any arena changed
     public void update(CommandList commandList) {
         var oldList = this.allDeviceResources;
         boolean needListUpdate = false;
@@ -299,6 +326,7 @@ public class RenderRegion {
             this.stride = stride;
         }
 
+        // Replaces the unsorted tessellation
         public void updateTessellation(CommandList commandList, GlTessellation tessellation) {
             if (this.tessellation != null) {
                 this.tessellation.delete(commandList);
@@ -307,10 +335,12 @@ public class RenderRegion {
             this.tessellation = tessellation;
         }
 
+        // For unsorted passes
         public GlTessellation getTessellation() {
             return this.tessellation;
         }
 
+        // Replaces the sorted tessellation
         public void updateIndexedTessellation(CommandList commandList, GlTessellation tessellation) {
             if (this.indexedTessellation != null) {
                 this.indexedTessellation.delete(commandList);
@@ -319,10 +349,12 @@ public class RenderRegion {
             this.indexedTessellation = tessellation;
         }
 
+        // For sorted passes, with the per-section index arena
         public GlTessellation getIndexedTessellation() {
             return this.indexedTessellation;
         }
 
+        // Frees both
         public void deleteTessellations(CommandList commandList) {
             if (this.tessellation != null) {
                 this.tessellation.delete(commandList);
@@ -335,10 +367,12 @@ public class RenderRegion {
             }
         }
 
+        // The geometry arena's buffer
         public GlBuffer getVertexBuffer() {
             return this.geometryArena.getBufferObject();
         }
 
+        // The index arena's buffer, or null
         public GlBuffer getIndexBuffer() {
             if (this.indexArena == null) {
                 throw new IllegalStateException("Attempted to retrieve index buffer for a non-indexed region");
@@ -346,6 +380,7 @@ public class RenderRegion {
             return this.indexArena.getBufferObject();
         }
 
+        // Frees the buffers
         public void delete(CommandList commandList) {
             this.deleteTessellations(commandList);
             this.geometryArena.delete(commandList);
@@ -354,19 +389,23 @@ public class RenderRegion {
             }
         }
 
+        // Whether delete has run
         public boolean isDeleted() {
             return this.geometryArena.isDeleted();
         }
 
+        // Vertex storage
         public GlBufferArena getGeometryArena() {
             return this.geometryArena;
         }
 
 
+        // Sorted index storage, or null
         public GlBufferArena getIndexArena() {
             return this.indexArena;
         }
 
+        // Created on first sorted section
         public GlBufferArena getOrCreateIndexArena(CommandList commandList) {
             if (this.indexArena == null) {
                 this.indexArena = new GlBufferArena(commandList, (REGION_SIZE * 126) / 4 * 6, 4, this.stagingBuffer);
@@ -374,10 +413,12 @@ public class RenderRegion {
             return this.indexArena;
         }
 
+        // No geometry left
         public boolean shouldDelete() {
             return this.geometryArena.isEmpty();
         }
 
+        // Frees the index arena once no section needs sorting
         public void deleteIndexArenaIfPossible(CommandList commandList) {
             if (this.indexArena != null && this.indexArena.isEmpty()) {
                 this.updateIndexedTessellation(commandList, null);

@@ -15,6 +15,7 @@ public abstract class GlResource {
         this.handle = -1;
     }
 
+    // Called once by the subclass constructor
     protected final void setHandle(int handle) {
         this.handle = handle;
     }
@@ -28,6 +29,7 @@ public abstract class GlResource {
         return this.handle;
     }
 
+    // Whether destroy has run
     public final boolean isDestroyed() {
         return this.destroyed;
     }

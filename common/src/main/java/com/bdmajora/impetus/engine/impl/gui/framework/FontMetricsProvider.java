@@ -3,6 +3,7 @@ package com.bdmajora.impetus.engine.impl.gui.framework;
 import java.util.List;
 
 public interface FontMetricsProvider {
+    // Plain string width
     default int getStringWidth(String str) {
         return getStringWidth(new TextComponent.Literal(str));
     }

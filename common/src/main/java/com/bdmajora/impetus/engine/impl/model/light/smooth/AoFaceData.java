@@ -15,6 +15,7 @@ class AoFaceData {
 
     private int flags;
 
+    // Gathers the nine neighbouring light words and computes the four corner values
     public void initLightData(LightDataAccess cache, int x, int y, int z, ModelQuadFacing direction, boolean offset) {
         final int adjX;
         final int adjY;
@@ -169,6 +170,7 @@ class AoFaceData {
         return br1 + br2 + br3 + br4 >> 2 & 16711935;
     }
 
+    // Splits packed corner light into separate sky and block arrays, once
     public void unpackLightData() {
         int[] lm = this.lm;
 
@@ -188,18 +190,22 @@ class AoFaceData {
         this.flags |= AoCompletionFlags.HAS_UNPACKED_LIGHT_DATA;
     }
 
+    // Weighted sky light
     public float getBlendedSkyLight(float[] w) {
         return weightedSum(this.sl, w);
     }
 
+    // Weighted block light
     public float getBlendedBlockLight(float[] w) {
         return weightedSum(this.bl, w);
     }
 
+    // Weighted AO shade
     public float getBlendedShade(float[] w) {
         return weightedSum(this.ao, w);
     }
 
+    // Dot product over four corners
     private static float weightedSum(float[] v, float[] w) {
         float t0 = v[0] * w[0];
         float t1 = v[1] * w[1];
@@ -209,14 +215,17 @@ class AoFaceData {
         return t0 + t1 + t2 + t3;
     }
 
+    // Vanilla layout to a float
     private static float unpackSkyLight(int i) {
         return (i >> 16) & 0xFF;
     }
 
+    // Vanilla layout to a float
     private static float unpackBlockLight(int i) {
         return i & 0xFF;
     }
 
+    // Vanilla's corner rule: average, ignoring zeros unless the block is emissive
     private static int calculateCornerBrightness(int a, int b, int c, int d, boolean aem, boolean bem, boolean cem, boolean dem) {
         // FIX: Normalize corner vectors correctly to the minimum non-zero value between each one to prevent
         // strange issues
@@ -249,6 +258,7 @@ class AoFaceData {
         return ((a + b + c + d) >> 2) & 0xFF00FF;
     }
 
+    // Smaller of two, treating zero as absent
     private static int minNonZero(int a, int b) {
         if (a == 0) {
             return b;
@@ -259,14 +269,17 @@ class AoFaceData {
         return Math.min(a, b);
     }
 
+    // Whether initLightData ran
     public boolean hasLightData() {
         return (this.flags & AoCompletionFlags.HAS_LIGHT_DATA) != 0;
     }
 
+    // Whether unpackLightData ran
     public boolean hasUnpackedLightData() {
         return (this.flags & AoCompletionFlags.HAS_UNPACKED_LIGHT_DATA) != 0;
     }
 
+    // Clears both flags for reuse
     public void reset() {
         this.flags = 0;
     }

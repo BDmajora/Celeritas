@@ -12,6 +12,7 @@ import java.nio.ShortBuffer;
 // Anything allocated here must NOT outlive the block: the memory is reused by the next frame on that thread
 public abstract class MemoryStack implements AutoCloseable {
 
+    // Pushes a frame on the current backend's stack; pair with close
     public static MemoryStack stackPush() {
         return LWJGLServiceProvider.LWJGL.stackPush();
     }
@@ -48,18 +49,21 @@ public abstract class MemoryStack implements AutoCloseable {
         return buf;
     }
 
+    // Allocates and fills
     public IntBuffer ints(int... values) {
         IntBuffer buf = mallocInt(values.length);
         buf.put(values).flip();
         return buf;
     }
 
+    // Single-float convenience
     public FloatBuffer floats(float value) {
         FloatBuffer buf = mallocFloat(1);
         buf.put(0, value);
         return buf;
     }
 
+    // Allocates and fills
     public FloatBuffer floats(float... values) {
         FloatBuffer buf = mallocFloat(values.length);
         buf.put(values).flip();

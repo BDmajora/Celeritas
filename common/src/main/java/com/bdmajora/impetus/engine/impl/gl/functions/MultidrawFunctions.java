@@ -8,12 +8,14 @@ import com.bdmajora.impetus.lwjgl.LWJGLServiceProvider;
 
 public enum MultidrawFunctions {
     NONE {
+        // Implementation for this GL level
         @Override
         public void multiDrawElementsBaseVertex(int mode, long pCount, int type, long pIndices, int size, long pBaseVertex) {
             throw new UnsupportedOperationException("Platform does not support DrawElementsBaseVertex");
         }
     },
     FALLBACK {
+        // Implementation for this GL level
         @Override
         public void multiDrawElementsBaseVertex(int mode, long pCount, int type, long pIndices, int size, long pBaseVertex) {
             // No real multidraw call available, so just issue one glDrawElementsBaseVertex per batch entry
@@ -29,12 +31,14 @@ public enum MultidrawFunctions {
         }
     },
     CORE {
+        // Implementation for this GL level
         @Override
         public void multiDrawElementsBaseVertex(int mode, long pCount, int type, long pIndices, int size, long pBaseVertex) {
             LWJGL.glMultiDrawElementsBaseVertex(mode, pCount, type, pIndices, size, pBaseVertex);
         }
     };
 
+    // Core, then ARB, then an emulating loop
     public static MultidrawFunctions pickBest(RenderDevice device) {
         if (LWJGL.isOpenGLVersionSupported(3, 2)) {
             return CORE;

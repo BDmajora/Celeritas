@@ -31,6 +31,7 @@ public class ChunkMeshBufferBuilder {
         this.analyzer = collectSortState ? new TranslucentQuadAnalyzer() : null;
     }
 
+    // Encodes one quad, growing the buffer and feeding the translucency analyzer
     public void push(ChunkVertexEncoder.Vertex[] vertices, Material material) {
         var vertexStart = this.count * this.stride;
         var vertexSize = vertices.length * this.stride;
@@ -54,6 +55,7 @@ public class ChunkMeshBufferBuilder {
         this.count += vertices.length;
     }
 
+    // Doubles until the quad fits
     private void grow(int bytesNeeded) {
         // Grow by a factor of 2, or by however many bytes more we need, whichever is larger.
         int newCapacity = Math.max(this.capacity * 2, this.capacity + bytesNeeded);
@@ -64,6 +66,7 @@ public class ChunkMeshBufferBuilder {
         this.capacity = newCapacity;
     }
 
+    // Resets for a new section
     public void start(int sectionIndex) {
         this.count = 0;
         this.sectionIndex = sectionIndex;
@@ -72,17 +75,20 @@ public class ChunkMeshBufferBuilder {
         }
     }
 
+    // The analyzer's classification of what was pushed
     @Nullable
     public TranslucentQuadAnalyzer.SortState getSortState() {
         return this.analyzer != null ? this.analyzer.getSortState() : null;
     }
 
+    // Clears the analyzer
     public void resetSortState() {
         if (this.analyzer != null) {
             this.analyzer.clear();
         }
     }
 
+    // Frees the native buffer
     public void destroy() {
         if (this.buffer != null) {
             LWJGL.memFree(this.buffer);
@@ -94,10 +100,12 @@ public class ChunkMeshBufferBuilder {
         this.resetSortState();
     }
 
+    // No vertices
     public boolean isEmpty() {
         return this.count == 0;
     }
 
+    // A view over what was written
     public ByteBuffer slice() {
         if (this.isEmpty()) {
             throw new IllegalStateException("No vertex data in buffer");
@@ -106,6 +114,7 @@ public class ChunkMeshBufferBuilder {
         return LWJGL.memSlice(this.buffer, 0, this.stride * this.count);
     }
 
+    // Vertices written
     public int count() {
         return this.count;
     }

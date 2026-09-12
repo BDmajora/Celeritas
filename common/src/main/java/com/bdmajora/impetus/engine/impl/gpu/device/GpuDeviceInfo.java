@@ -13,6 +13,7 @@ public record GpuDeviceInfo(GraphicsBackend backend,
         supportedFeatures = copyFeatures(supportedFeatures);
     }
 
+    // Immutable copy, empty-safe
     private static Set<GpuDeviceFeature> copyFeatures(Set<GpuDeviceFeature> features) {
         if (features.isEmpty()) {
             return Collections.emptySet();

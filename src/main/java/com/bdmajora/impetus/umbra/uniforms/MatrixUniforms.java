@@ -46,6 +46,7 @@ public final class MatrixUniforms {
     private MatrixUniforms() {
     }
 
+    // gbuffer, shadow and previous-frame matrices with their inverses
     public static void addMatrixUniforms(UniformCollector uniforms) {
         CapturedRenderingState state = CapturedRenderingState.INSTANCE;
         uniforms
@@ -152,6 +153,7 @@ public final class MatrixUniforms {
                         () -> CameraUniforms.getCameraPositionFract(CameraUniforms.getPreviousCameraPositionUnshifted()));
     }
 
+    // Double to float
     private static Vector3f toVector3f(Vector3d position) {
         return new Vector3f((float) position.x, (float) position.y, (float) position.z);
     }
@@ -187,6 +189,7 @@ public final class MatrixUniforms {
         return IDENTITY;
     }
 
+    // Rejects NaN and infinity before upload, which a degenerate projection can produce
     private static boolean isFinite(Matrix4fc matrix) {
         for (int column = 0; column < 4; column++) {
             for (int row = 0; row < 4; row++) {
@@ -235,6 +238,7 @@ public final class MatrixUniforms {
                 .transpose3x3(new Matrix3f());
     }
 
+    // Identity, for packs reading gl_TextureMatrix outside a textured draw
     private static Matrix4fc getDefaultTextureMatrix() {
         int previousTexture = LWJGL.glGetInteger(GL_ACTIVE_TEXTURE);
         int previousMatrixMode = LWJGL.glGetInteger(GL_MATRIX_MODE);
@@ -272,6 +276,7 @@ public final class MatrixUniforms {
             this.parent = parent;
         }
 
+        // Previous-frame supplier; advances when sampled
         @Override
         public Matrix4fc get() {
             int frame = SystemTimeUniforms.COUNTER.getFrameCounter();

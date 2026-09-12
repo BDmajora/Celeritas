@@ -7,26 +7,32 @@ public final class SectionPos extends Vector3i {
         super(x, y, z);
     }
 
+    // First block x in the section
     public int minX() {
         return x() * 16;
     }
 
+    // First block y
     public int minY() {
         return y() * 16;
     }
 
+    // First block z
     public int minZ() {
         return z() * 16;
     }
 
+    // Last block x, inclusive
     public int maxX() {
         return minX() + 15;
     }
 
+    // Last block y, inclusive
     public int maxY() {
         return minY() + 15;
     }
 
+    // Last block z, inclusive
     public int maxZ() {
         return minZ() + 15;
     }

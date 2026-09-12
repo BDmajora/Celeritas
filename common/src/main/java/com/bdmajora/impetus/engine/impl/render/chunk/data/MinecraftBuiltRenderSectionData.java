@@ -15,6 +15,7 @@ public class MinecraftBuiltRenderSectionData<SPRITE, BLOCKENTITY> extends BuiltR
     public List<BLOCKENTITY> culledBlockEntities = new ArrayList<>();
     public List<BLOCKENTITY> globalBlockEntities = new ArrayList<>();
 
+    // Freezes the block entity and sprite lists
     @Override
     public void bake() {
         super.bake();
@@ -23,6 +24,7 @@ public class MinecraftBuiltRenderSectionData<SPRITE, BLOCKENTITY> extends BuiltR
         globalBlockEntities = List.copyOf(globalBlockEntities);
     }
 
+    // Which of geometry, sprites and entities the section has
     @Override
     public int getVisualBitmaskForSection() {
         int flags = super.getVisualBitmaskForSection();
@@ -35,6 +37,7 @@ public class MinecraftBuiltRenderSectionData<SPRITE, BLOCKENTITY> extends BuiltR
         return flags;
     }
 
+    // By contents
     @Override
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
@@ -43,11 +46,13 @@ public class MinecraftBuiltRenderSectionData<SPRITE, BLOCKENTITY> extends BuiltR
         return Objects.equals(animatedSprites, that.animatedSprites) && Objects.equals(culledBlockEntities, that.culledBlockEntities) && Objects.equals(globalBlockEntities, that.globalBlockEntities);
     }
 
+    // By contents
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), animatedSprites, culledBlockEntities, globalBlockEntities);
     }
 
+    // Block entities of visible sections followed by the global ones
     @SuppressWarnings("unchecked")
     public static <BLOCKENTITY> Iterator<BLOCKENTITY> generateBlockEntityIterator(SortedRenderLists renderLists, Collection<RenderSection> globalSections) {
         List<Iterator<BLOCKENTITY>> iterators = new ArrayList<>();
@@ -95,6 +100,7 @@ public class MinecraftBuiltRenderSectionData<SPRITE, BLOCKENTITY> extends BuiltR
         }
     }
 
+    // Visits the same set without allocating an iterator
     @SuppressWarnings("unchecked")
     public static <BLOCKENTITY> void forEachBlockEntity(Consumer<BLOCKENTITY> consumer, SortedRenderLists renderLists, Collection<RenderSection> globalSections) {
         Iterator<ChunkRenderList> renderListIterator = renderLists.iterator();

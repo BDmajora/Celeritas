@@ -29,6 +29,7 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
         super();
         this.prevScreen = prevScreen;
         this.controller = new ImpetusVideoOptionsController(() -> this.mc.displayGuiScreen(this.prevScreen), createPages(this), new VintageDrawContext()) {
+            // Reloads the renderer, textures or world as the changed options demand
             @Override
             protected void applyFlagSideEffects(Set<OptionFlag> flags) {
                 super.applyFlagSideEffects(flags);
@@ -61,6 +62,7 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
         resetDrag();
     }
 
+    // Assembles every subsystem's page in tab order
     private static List<OptionPage> createPages(GuiScreen parent) {
         List<OptionPage> pages = new ArrayList<>();
         pages.add(ImpetusGameOptionPages.general());
@@ -80,6 +82,7 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
         return pages;
     }
 
+    // Forwards to the Sodium screen and starts drag tracking
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int mouseButton) {
         this.controller.getFrame().mouseClicked(VintageInteractionContext.INSTANCE, mouseX, mouseY, mouseButton);
@@ -87,17 +90,20 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
         lastMouseY = mouseY;
     }
 
+    // Forwards and ends drag tracking
     @Override
     protected void mouseReleased(int mouseX, int mouseY, int mouseButton) {
         this.controller.getFrame().mouseReleased(VintageInteractionContext.INSTANCE, mouseX, mouseY, mouseButton);
         resetDrag();
     }
 
+    // Clears the drag origin
     private void resetDrag() {
         lastMouseX = -1;
         lastMouseY = -1;
     }
 
+    // Synthesises drag events, which vanilla does not deliver as such
     @Override
     protected void mouseClickMove(int mouseX, int mouseY, int clickedMouseButton, long timeSinceLastClick) {
         super.mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick);
@@ -113,6 +119,7 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
         lastMouseY = mouseY;
     }
 
+    // Forwards keys; Escape is handled by the parent
     @Override
     protected void keyTyped(char typedChar, int keyCode) throws IOException {
         // Give the framework (e.g. the search bar) first refusal; fall back to vanilla handling (ESC-to-close).
@@ -123,6 +130,7 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
         super.keyTyped(typedChar, keyCode);
     }
 
+    // Forwards scroll wheel events, which vanilla reports outside the click callbacks
     @Override
     public void handleMouseInput() throws IOException {
         super.handleMouseInput();
@@ -135,12 +143,14 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
         }
     }
 
+    // Draws the Sodium screen through the vintage draw context
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         this.drawDefaultBackground();
         this.controller.render(new VintageDrawContext(), mouseX, mouseY, partialTicks);
     }
 
+    // Skips vanilla's dirt background when a world is loaded
     @Override
     public void drawWorldBackground(int tint) {
         if (this.mc.world != null) {
@@ -150,6 +160,7 @@ public class ImpetusVideoOptionsScreen extends GuiScreen {
         super.drawWorldBackground(tint);
     }
 
+    // Rebuilds layout for the current resolution
     @Override
     public void initGui() {
         this.controller.init(this.width, this.height);

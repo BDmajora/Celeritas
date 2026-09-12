@@ -21,6 +21,7 @@ public enum GlBufferUsage {
         this.id = id;
     }
 
+    // GL usage constant
     public int getId() {
         return this.id;
     }

@@ -10,6 +10,7 @@ public enum ModelQuadWinding {
         this.indices = indices;
     }
 
+    // Vertex order for this winding
     public int[] getIndices() {
         return this.indices;
     }

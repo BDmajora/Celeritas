@@ -4,13 +4,8 @@ import com.bdmajora.impetus.lwjgl.GL11;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Holds a shader pack's "blend off" override in place while vanilla's fixed-function renderers draw into packed
-// gbuffer targets
-// The problem it solves: a pack can declare blend.<program>=off, but vanilla renderers call enableBlend() on their
-// own throughout the draw, which would switch it back on and blend the gbuffer channels together as if they were
-// colours
-// Only the blend ENABLE is suppressed. Capturing the full blend state and replaying it later was tried and breaks
-// the hand and entity transitions, which legitimately change blend func mid-pass
+// Holds a pack's blend.<program>=off in place while vanilla's fixed-function renderers, which call enableBlend
+// themselves, draw into packed gbuffer targets. Only the enable is suppressed; replaying full state broke the hand
 public final class BlendOverrideGuard {
     // Set between the two hooks below, while the pack's blend state is being applied and the result is not yet known
     private static boolean capturing;
@@ -41,6 +36,7 @@ public final class BlendOverrideGuard {
         lockedBlendOff = LWJGL.glGetInteger(GL11.GL_BLEND) == 0;
     }
 
+    // Ends the override so vanilla's enableBlend works again
     public static void release() {
         locked = false;
         capturing = false;
@@ -52,6 +48,7 @@ public final class BlendOverrideGuard {
         return shouldSuppressBlendEnable();
     }
 
+    // True only while a blend-off program is bound and drawing into the gbuffer
     private static boolean shouldSuppressBlendEnable() {
         return locked && lockedBlendOff;
     }

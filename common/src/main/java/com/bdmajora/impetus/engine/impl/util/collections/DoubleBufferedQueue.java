@@ -13,6 +13,7 @@ public final class DoubleBufferedQueue<E> {
         this.write = new QueueImpl<>();
     }
 
+    // Swaps read and write; returns whether there is anything to read
     public boolean flip() {
         if (this.write.size() == 0) {
             return false;
@@ -27,15 +28,18 @@ public final class DoubleBufferedQueue<E> {
         return true;
     }
 
+    // Empties both sides
     public void reset() {
         this.read.clear();
         this.write.clear();
     }
 
+    // The side being consumed
     public ReadQueue<E> read() {
         return this.read;
     }
 
+    // The side being filled
     public WriteQueue<E> write() {
         return this.write;
     }
@@ -53,6 +57,7 @@ public final class DoubleBufferedQueue<E> {
             this.elements = (E[]) new Object[capacity];
         }
 
+        // Grows ahead of a known batch to avoid repeated resizes
         @Override
         public void ensureCapacity(int numElements) {
             int len = this.writeIndex + numElements;
@@ -71,6 +76,7 @@ public final class DoubleBufferedQueue<E> {
             return this.elements[this.readIndex++];
         }
 
+        // Appends, growing if full
         @Override
         public void enqueue(@NotNull E e) {
             if (this.writeIndex >= this.elements.length) {
@@ -81,6 +87,7 @@ public final class DoubleBufferedQueue<E> {
         }
 
 
+        // Nulls out references so they can be collected
         public void clear() {
             if (this.writeIndex != 0) {
                 Arrays.fill(this.elements, 0, this.writeIndex, null);
@@ -90,14 +97,17 @@ public final class DoubleBufferedQueue<E> {
             this.writeIndex = 0;
         }
 
+        // Element count
         public int size() {
             return this.writeIndex - this.readIndex;
         }
 
+        // Resizes to the next size at least this large
         private void grow(int minimumSize) {
             this.resize(getNextSize(minimumSize, this.elements.length));
         }
 
+        // Copies into a new array
         private void resize(int length) {
             @SuppressWarnings("unchecked")
             E[] elements = (E[]) new Object[length];
@@ -106,6 +116,7 @@ public final class DoubleBufferedQueue<E> {
             this.elements = elements;
         }
 
+        // Doubles until large enough
         private static int getNextSize(int minimumSize, int currentSize) {
             return Math.max(minimumSize, currentSize << 1);
         }

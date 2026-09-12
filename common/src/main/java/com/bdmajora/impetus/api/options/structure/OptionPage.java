@@ -22,6 +22,7 @@ public class OptionPage {
         this.options = this.groups.stream().flatMap(g -> g.getOptions().stream()).toList();
     }
 
+    // Fires the construction event and appends whatever other mods add
     private List<OptionGroup> collectExtraGroups(List<OptionGroup> groups) {
         OptionPageConstructionEvent event = new OptionPageConstructionEvent(this.id, this.name);
         OptionPageConstructionEvent.BUS.post(event);
@@ -29,18 +30,22 @@ public class OptionPage {
         return extraGroups.isEmpty() ? groups : Stream.of(groups.stream(), extraGroups.stream()).flatMap(Function.identity()).toList();
     }
 
+    // Page id
     public OptionIdentifier<Void> getId() {
         return id;
     }
 
+    // In display order
     public List<OptionGroup> getGroups() {
         return this.groups;
     }
 
+    // Flattened across groups
     public List<Option<?>> getOptions() {
         return this.options;
     }
 
+    // Tab label
     public TextComponent getName() {
         return this.name;
     }

@@ -15,12 +15,14 @@ import java.nio.ByteBuffer;
 
 public enum BufferMapRangeFunctions {
     CORE {
+        // Implementation for this GL level
         @Override
         public ByteBuffer mapBufferRange(GlBuffer buffer, long offset, long length, EnumBitField<GlBufferMapFlags> flags) {
             return LWJGL.glMapBufferRange(GlBufferTarget.ARRAY_BUFFER.getTargetParameter(), offset, length, flags.getBitField());
         }
     },
     MAP_FULL_AND_SLICE {
+        // Implementation for this GL level
         @Override
         public ByteBuffer mapBufferRange(GlBuffer buffer, long offset, long length, EnumBitField<GlBufferMapFlags> flags) {
             if (flags.contains(GlBufferMapFlags.EXPLICIT_FLUSH)) {
@@ -47,6 +49,7 @@ public enum BufferMapRangeFunctions {
 
     public abstract ByteBuffer mapBufferRange(GlBuffer buffer, long offset, long length, EnumBitField<GlBufferMapFlags> flags);
 
+    // Core map range, then a full-map fallback
     public static BufferMapRangeFunctions pickBest(RenderDevice device) {
         if (LWJGL.isOpenGLVersionSupported(3, 0)
                 || LWJGL.isExtensionSupported(GLExtension.ARB_map_buffer_range)) {

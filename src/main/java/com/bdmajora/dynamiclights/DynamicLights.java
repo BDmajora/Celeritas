@@ -11,18 +11,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 
-// the Dynamic Lights subsystem: LambDynLights' light-emitting entities and items, ported to Impetus on
-// 1.12.2
-// a held torch, a dropped glowstone block or a burning creeper lights the world around it, but none of
-// that is real block light - the engine tracks the sources itself, folds their contribution into the
-// lightmap at every place light is read, and schedules a chunk rebuild when a source moves far enough
-// to matter
-// nothing is written back to the world, so the effect is purely client-side
-// sources: LambDynLights (https://github.com/LambdAurora/LambDynamicLights) by way of
-// SodiumDynamicLights (https://github.com/Txni/SodiumDynamicLights) for the engine, and Celeritas
-// Dynamic Lights for most of the 1.12.2 injection points
-// like Extras, none of the mixins here are gated at coremod time: they read options() at call time, so
-// the mode switch takes effect the moment it changes
+// The Dynamic Lights subsystem: LambDynLights' glowing entities and items, ported to 1.12.2
+// Sources are tracked client-side and folded into the lightmap wherever light is read; nothing is written to the world
+// Mixins are not gated at coremod time, they read options() at call time so the mode switch is live
 public final class DynamicLights {
     public static final Logger LOGGER = LogManager.getLogger("Impetus/DynamicLights");
 
@@ -80,6 +71,7 @@ public final class DynamicLights {
         options().writeChanges();
     }
 
+    // config/impetus-dynamiclights.cfg under the game directory
     private static File configFile() {
         File home = Launch.minecraftHome;
         File directory = new File(home == null ? new File(".") : home, "config");

@@ -6,6 +6,7 @@ public interface SectionTicker {
     void tickVisibleRenders();
     void onRenderListUpdated(List<ChunkRenderList> renderLists);
 
+    // Defaults to empty
     default String getDebugString() {
         return "";
     }

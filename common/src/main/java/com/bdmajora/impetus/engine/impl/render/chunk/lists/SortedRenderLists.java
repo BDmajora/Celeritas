@@ -18,6 +18,7 @@ public class SortedRenderLists implements ChunkRenderListIterable {
         this.passes = getAllPassesInLists(lists);
     }
 
+    // Union of passes any listed section uses
     private static ReferenceOpenHashSet<TerrainRenderPass> getAllPassesInLists(ObjectArrayList<ChunkRenderList> lists) {
         ReferenceOpenHashSet<TerrainRenderPass> usedPasses = new ReferenceOpenHashSet<>();
 
@@ -28,20 +29,24 @@ public class SortedRenderLists implements ChunkRenderListIterable {
         return usedPasses;
     }
 
+    // Reverse for translucent passes, which draw back-to-front
     @Override
     public ReversibleObjectArrayIterator<ChunkRenderList> iterator(boolean reverse) {
         return new ReversibleObjectArrayIterator<>(this.lists, reverse);
     }
 
+    // Whether anything uses the pass, so an empty pass can be skipped
     @Override
     public boolean hasPass(TerrainRenderPass pass) {
         return this.passes.contains(pass);
     }
 
+    // Every pass in use
     public Set<TerrainRenderPass> getPasses() {
         return this.passes;
     }
 
+    // For frames with nothing visible
     public static SortedRenderLists empty() {
         return EMPTY;
     }

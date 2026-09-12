@@ -23,21 +23,15 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-// Builds the pack's gbuffers_terrain and gbuffers_water, transformed onto Impetus's own vertex format by
-// ImpetusTerrainTransformer and wrapped in UmbraTerrainShaderInterface
-// The source comes from this port's own ShaderPack model, and the result is handed back to the chunk renderer
-// mixin. Any failure returns null, so the engine falls back to its default terrain shader and rendering continues
-// rather than crashing
-// Deliberately NOT cached here. ShaderChunkRenderer caches the returned program per options in its own map and
-// DELETES it when the renderer is torn down on a pack switch or reload — so handing out a shared instance would
-// serve an already-deleted GL program after the first reload. One build per renderer instance is the correct
-// lifecycle
+// Builds the pack's gbuffers_terrain and gbuffers_water on Impetus's vertex format; null on failure so the
+// engine's default shader takes over. Not cached here: ShaderChunkRenderer caches per options and deletes on reload
 public final class UmbraTerrainProgramOverride {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/UmbraTerrain");
 
     private UmbraTerrainProgramOverride() {
     }
 
+    // Whether a pack is loaded and its pipeline is live
     public static boolean areShadersActive() {
         return Umbra.isShaderPackInUse();
     }
@@ -50,6 +44,7 @@ public final class UmbraTerrainProgramOverride {
     // retried once and not once per frame
     private static final Map<ChunkShaderOptions, GlProgram<ChunkShaderInterface>> SHADOW_PROGRAMS = new HashMap<>();
 
+    // The transformed terrain or water program for these options; null falls back to the engine's default
     public static GlProgram<ChunkShaderInterface> getProgramOverride(ChunkShaderOptions options) {
         ShaderPack pack = Umbra.getCurrentPack();
         if (pack == null) {
@@ -114,6 +109,7 @@ public final class UmbraTerrainProgramOverride {
         SHADOW_PROGRAMS.clear();
     }
 
+    // Transforms and compiles one pack program; any failure is logged and yields null
     private static GlProgram<ChunkShaderInterface> build(ShaderPack pack, ChunkShaderOptions options, ProgramId programId) {
         GlShader vertexShader = null;
         GlShader fragmentShader = null;

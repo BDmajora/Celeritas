@@ -38,66 +38,82 @@ public final class CapturedRenderingState {
     private CapturedRenderingState() {
     }
 
+    // Model-view captured at the start of the gbuffer stage
     public Matrix4f getGbufferModelView() {
         return this.gbufferModelView;
     }
 
+    // Captured by the renderer mixin
     public void setGbufferModelView(Matrix4f modelView) {
         this.gbufferModelView.set(modelView);
     }
 
+    // Projection captured at the start of the gbuffer stage
     public Matrix4f getGbufferProjection() {
         return this.gbufferProjection;
     }
 
+    // Captured by the renderer mixin
     public void setGbufferProjection(Matrix4f projection) {
         this.gbufferProjection.set(projection);
     }
 
+    // Camera position this frame
     public Vector3d getCameraPosition() {
         return this.cameraPosition;
     }
 
+    // Captured by the renderer mixin
     public void setCameraPosition(double x, double y, double z) {
         this.cameraPosition.set(x, y, z);
     }
 
+    // Shadow pass model-view
     public Matrix4f getShadowModelView() {
         return this.shadowModelView;
     }
 
+    // Captured by the shadow renderer
     public void setShadowModelView(Matrix4f modelView) {
         this.shadowModelView.set(modelView);
     }
 
+    // Shadow pass projection
     public Matrix4f getShadowProjection() {
         return this.shadowProjection;
     }
 
+    // Captured by the shadow renderer
     public void setShadowProjection(Matrix4f projection) {
         this.shadowProjection.set(projection);
     }
 
+    // Block atlas size, for atlasSize
     public Vector2i getAtlasSize() {
         return this.atlasSize;
     }
 
+    // Captured on stitch
     public void setAtlasSize(int width, int height) {
         this.atlasSize.set(width, height);
     }
 
+    // Fog colour this frame
     public Vector3f getFogColor() {
         return this.fogColor;
     }
 
+    // Captured from vanilla's fog setup
     public void setFogColor(float red, float green, float blue) {
         this.fogColor.set(red, green, blue);
     }
 
+    // GL colour multiplier this draw
     public Vector4f getColorModulator() {
         return this.colorModulator;
     }
 
+    // Captured from GlStateManager.color
     public void setColorModulator(float red, float green, float blue, float alpha) {
         this.colorModulator.set(red, green, blue, alpha);
     }
@@ -111,66 +127,82 @@ public final class CapturedRenderingState {
         return this.entityColor;
     }
 
+    // Hurt or flash tint for the entity being drawn
     public void setEntityColor(float red, float green, float blue, float alpha) {
         this.entityColor.set(red, green, blue, alpha);
     }
 
+    // Clears after the entity
     public void resetEntityColor() {
         this.entityColor.set(0.0f, 0.0f, 0.0f, 0.0f);
     }
 
+    // Iris render stage enum ordinal
     public int getRenderStage() {
         return this.renderStage;
     }
 
+    // Set as the frame progresses
     public void setRenderStage(int renderStage) {
         this.renderStage = renderStage;
     }
 
+    // Partial ticks this frame
     public float getTickDelta() {
         return this.tickDelta;
     }
 
+    // Captured at frame start
     public void setTickDelta(float tickDelta) {
         this.tickDelta = tickDelta;
     }
 
+    // Alpha test threshold for the current draw
     public float getCurrentAlphaTest() {
         return this.currentAlphaTest;
     }
 
+    // Captured from GlStateManager.alphaFunc
     public void setCurrentAlphaTest(float currentAlphaTest) {
         this.currentAlphaTest = currentAlphaTest;
     }
 
+    // Pack id of the tile entity being drawn, or -1
     public int getCurrentRenderedBlockEntity() {
         return this.currentRenderedBlockEntity;
     }
 
+    // Set by the tile entity dispatcher mixin
     public void setCurrentRenderedBlockEntity(int id) {
         this.currentRenderedBlockEntity = id;
     }
 
+    // Pack id of the entity being drawn, or -1
     public int getCurrentRenderedEntity() {
         return this.currentRenderedEntity;
     }
 
+    // Set by the entity renderer mixin
     public void setCurrentRenderedEntity(int id) {
         this.currentRenderedEntity = id;
     }
 
+    // Pack id of the item being drawn, or -1
     public int getCurrentRenderedItem() {
         return this.currentRenderedItem;
     }
 
+    // Set by the item renderer mixin
     public void setCurrentRenderedItem(int id) {
         this.currentRenderedItem = id;
     }
 
+    // Bumped on every resource reload, so caches keyed on it invalidate
     public int getTextureReloadCount() {
         return this.textureReloadCount;
     }
 
+    // Called on reload
     public void incrementTextureReloadCount() {
         this.textureReloadCount++;
     }

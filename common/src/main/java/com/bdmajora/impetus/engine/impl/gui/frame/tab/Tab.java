@@ -28,18 +28,22 @@ public record Tab<T extends AbstractFrame>(
         @Nullable AtomicReference<Integer> verticalScrollBarOffset,
         boolean stackable
 ) {
+    // Starts a builder
     public static Tab.Builder<?> createBuilder() {
         return new Tab.Builder<>();
     }
 
+    // Builds this tab's content frame at the given size
     public T createFrame(Dim2i dim) {
         return this.frameFunction != null ? this.frameFunction.apply(dim) : null;
     }
 
+    // A scrollable tab for one page
     public static Tab<ScrollableFrame> from(OptionPage page, Predicate<Option<?>> optionFilter, AtomicReference<Integer> verticalScrollBarOffset) {
         return from(page, optionFilter, verticalScrollBarOffset, true);
     }
 
+    // Same, with stackable controlling whether it merges into a multi-page view
     public static Tab<ScrollableFrame> from(OptionPage page, Predicate<Option<?>> optionFilter, AtomicReference<Integer> verticalScrollBarOffset, boolean stackable) {
         Function<Dim2i, ScrollableFrame> frameFunction = dim2i -> ScrollableFrame
                 .createBuilder()

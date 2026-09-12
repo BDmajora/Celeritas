@@ -29,17 +29,20 @@ public class BakedChunkModelBuilder implements ChunkModelBuilder {
         this.splitBySide = !pass.isSorted();
     }
 
+    // The buffer for one facing, so faces stay grouped for culling
     @Override
     public ChunkMeshBufferBuilder getVertexBuffer(ModelQuadFacing facing) {
         Objects.requireNonNull(this.renderData, "Builder has not been started");
         return splitBySide ? this.vertexBuffers[facing.ordinal()] : this.vertexBuffers[ModelQuadFacing.UNASSIGNED.ordinal()];
     }
 
+    // The section data being filled
     @Override
     public BuiltRenderSectionData getSectionContextBundle() {
         return this.renderData;
     }
 
+    // Frees every facing buffer
     public void destroy() {
         for (ChunkMeshBufferBuilder builder : this.vertexBuffers) {
             if(builder != null) {
@@ -48,6 +51,7 @@ public class BakedChunkModelBuilder implements ChunkModelBuilder {
         }
     }
 
+    // Resets the buffers for a new section
     public void begin(BuiltRenderSectionData renderData, int sectionIndex) {
         this.renderData = renderData;
 
@@ -58,6 +62,7 @@ public class BakedChunkModelBuilder implements ChunkModelBuilder {
         }
     }
 
+    // No vertices written on any facing
     public boolean isEmpty() {
         for (var vertexBuffer : this.vertexBuffers) {
             if (vertexBuffer != null && !vertexBuffer.isEmpty()) {

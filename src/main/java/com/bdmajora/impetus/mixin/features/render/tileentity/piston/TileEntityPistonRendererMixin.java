@@ -11,10 +11,6 @@ public class TileEntityPistonRendererMixin {
     // pistons flicker if the TESR stops rendering before the chunk mesh updates with the block model,
     // so the progress the redirect reports never reaches the value that would end the TESR draw
     // @author / @reason are Mixin's required metadata on an overwrite-class injector
-    /**
-     * @author embeddedt
-     * @reason always render the piston TESR, even past 100% progress
-     */
     @Redirect(method = "render(Lnet/minecraft/tileentity/TileEntityPiston;DDDFIF)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/tileentity/TileEntityPiston;getProgress(F)F", ordinal = 0))
     private float alwaysRenderTESR(TileEntityPiston instance, float ticks) {
         return 0f;

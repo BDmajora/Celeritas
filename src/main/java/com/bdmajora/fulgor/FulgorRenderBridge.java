@@ -5,13 +5,8 @@ import com.bdmajora.fulgor.api.SectionLightInfo;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
 
-// the two places Impetus' terrain renderer has to know that Fulgor exists
-// both stem from the same thing: the renderer does not read the world through the interfaces the rest
-// of the game uses - it copies block states and light arrays out of chunk sections wholesale so a
-// worker thread can mesh them, which means it bypasses every hook Fulgor relies on
-// kept here rather than inlined at the call sites so that the renderer depends on one named seam
-// instead of on the lighting subsystem's internals, and so both call sites degrade the same way when
-// Fulgor is switched off
+// The two places the terrain renderer has to know Fulgor exists: it copies chunk sections wholesale for the
+// mesher, bypassing every hook Fulgor relies on. One named seam so both call sites degrade the same way when off
 public final class FulgorRenderBridge {
     private FulgorRenderBridge() {
     }

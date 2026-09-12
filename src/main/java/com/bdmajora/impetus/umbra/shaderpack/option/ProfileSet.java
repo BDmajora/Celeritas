@@ -36,10 +36,12 @@ public class ProfileSet {
         this.orderedProfiles = orderedProfiles;
     }
 
+    // In declaration order
     public void forEach(BiConsumer<String, Profile> action) {
         orderedProfiles.forEach(action);
     }
 
+    // Finds the profile the current values match, plus its neighbours for cycling
     public ProfileResult scan(OptionSet options, OptionValues values) {
         if (sortedProfiles.size() <= 0) {
             return new ProfileResult(null, null, null);
@@ -63,6 +65,7 @@ public class ProfileSet {
         return new ProfileResult(null, next, prev);
     }
 
+    // Builds from the parsed profile.<name> lines
     public static ProfileSet fromTree(Map<String, List<String>> tree, OptionSet optionSet) {
         LinkedHashMap<String, Profile> profiles = new LinkedHashMap<>();
 
@@ -73,6 +76,7 @@ public class ProfileSet {
         return new ProfileSet(profiles);
     }
 
+    // One profile, resolving profile.<parent> references recursively
     private static Profile parse(String name, List<String> parents, Map<String, List<String>> tree, OptionSet optionSet) throws IllegalArgumentException {
         Profile.Builder builder = new Profile.Builder(name);
         List<String> options = tree.get(name);
@@ -112,6 +116,7 @@ public class ProfileSet {
         return builder.build();
     }
 
+    // Profile count
     public int size() {
         return sortedProfiles.size();
     }

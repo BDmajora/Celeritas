@@ -10,10 +10,12 @@ public final class ConfigThemeRegistry {
     private ConfigThemeRegistry() {
     }
 
+    // Later registrations replace earlier
     public static void register(ConfigTheme theme) {
         THEMES.put(theme.getModId(), theme);
     }
 
+    // Empty when the mod registered no theme
     public static OptionalInt getAccentColor(String modId) {
         ConfigTheme theme = THEMES.get(modId);
         return theme != null ? OptionalInt.of(theme.getAccentColor()) : OptionalInt.empty();

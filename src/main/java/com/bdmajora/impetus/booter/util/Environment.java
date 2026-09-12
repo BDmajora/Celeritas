@@ -11,23 +11,17 @@ public class Environment {
     private static final boolean inDev = System.getProperty("sun.java.command", "").contains("GradleStart");
     private static final String side, mcVersion;
 
-    /**
-     * @return current Minecraft version
-     */
+    // Read reflectively from ForgeVersion so it is not inlined at compile time
     public static String minecraftVersion() {
         return mcVersion;
     }
 
-    /**
-     * @return if the current environment is in dev
-     */
+    // Whether launched through GradleStart
     public static boolean inDev() {
         return inDev;
     }
 
-    /**
-     * @return current physical side
-     */
+    // CLIENT or SERVER, from the primary tweaker
     public static String side() {
         return side;
     }

@@ -10,6 +10,7 @@ import java.util.ListIterator;
 
 public class MixinExtrasFixer implements IClassTransformer, Opcodes {
 
+    // Only touches MixinExtras' handle utility on ASM older than 5.1
     @Override
     public byte[] transform(String name, String transformedName, byte[] classBytes) {
         switch (name) {
@@ -22,6 +23,7 @@ public class MixinExtrasFixer implements IClassTransformer, Opcodes {
         return classBytes;
     }
 
+    // Rewrites a Handle constructor call that old ASM lacks
     private byte[] fixHandleInstantiation(byte[] classBytes) {
         ClassNode node = new ClassNode();
         ClassReader reader = new ClassReader(classBytes);

@@ -110,6 +110,7 @@ public final class ShaderStorageBufferHolder {
         allocate(width, height);
     }
 
+    // Whether the pack declared any buffers at all
     public boolean isEmpty() {
         return this.definitions.isEmpty();
     }
@@ -142,6 +143,7 @@ public final class ShaderStorageBufferHolder {
         });
     }
 
+    // Frees every buffer
     public void destroy() {
         for (int buffer : this.buffers.values()) {
             LWJGL.glDeleteBuffers(buffer);
@@ -165,6 +167,7 @@ public final class ShaderStorageBufferHolder {
         ACTIVE_BUFFERS.clear();
     }
 
+    // Sizes screen-relative buffers for the current resolution; fixed ones are unaffected
     private void allocate(int newWidth, int newHeight) {
         for (Definition definition : this.definitions.values()) {
             // Fixed-size buffers survive resizes (they may hold accumulated history data).

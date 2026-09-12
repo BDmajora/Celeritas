@@ -18,19 +18,9 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 
-// A parsed shaders.properties file, in OptiFine's format
-// The parser keeps the FULL key/value map and layers typed accessors over the handful of directives the pipeline
-// actually consumes — shadow configuration, cloud mode, per-program blend modes and enable toggles, custom
-// textures. Unknown keys are preserved verbatim, so a later consumer can read one without re-parsing the file
-//
-// Two copies are parsed, matching Iris, and which one a directive comes from is load-bearing
-//   the pipeline directives come from the PREPROCESSED contents, so #if MC_VERSION and option-gated sections
-//   resolve to what will actually run
-//   the option-menu layout directives — sliders, profile.*, screen* — come from the ORIGINAL contents, because the
-//   menu has to present every option regardless of the values currently active
-//
-// Parsing is a deliberate split-on-first-=, not java.util.Properties, whose backslash-escape handling would mangle
-// the GLSL-adjacent values that occasionally contain one
+// A parsed shaders.properties: the full map plus typed accessors for what the pipeline consumes
+// Pipeline directives come from the preprocessed contents so option gates resolve; menu layout directives come
+// from the original so every option is presented. Split on first = rather than Properties, whose escapes mangle GLSL
 public final class ShaderProperties {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
     private static final List<String> LEGACY_RENDER_TARGETS =
@@ -100,6 +90,7 @@ public final class ShaderProperties {
         parseCustomUniformDirectives();
     }
 
+    // No directives at all; every getter returns its default
     public static ShaderProperties empty() {
         return new ShaderProperties(Collections.emptyMap(), Collections.emptyMap(),
                 Collections.emptyMap(), Collections.emptySet());
@@ -126,10 +117,12 @@ public final class ShaderProperties {
                 expressionDefines, profileDisabledPrograms);
     }
 
+    // A copy with the active profile's program.<name>.enabled=false entries applied
     public ShaderProperties withProfileDisabledPrograms(Set<String> disabledPrograms) {
         return new ShaderProperties(this.raw, this.original, this.expressionDefines, disabledPrograms);
     }
 
+    // Key=value lines, honouring backslash continuation and skipping comments
     private static Map<String, String> parseMap(String contents) {
         Map<String, String> map = new LinkedHashMap<>();
         for (String rawLine : contents.split("\r\n|\r|\n")) {
@@ -361,6 +354,7 @@ public final class ShaderProperties {
         return flags == null ? new boolean[]{false, false} : flags.clone();
     }
 
+    // flip.<program>.<buffer> = true|false
     private void parseExplicitFlip(String key, String value) {
         String rest = key.substring("flip.".length());
         int dot = rest.indexOf('.');
@@ -413,6 +407,7 @@ public final class ShaderProperties {
         return this.viewportScaleOverrides.get(programName);
     }
 
+    // colortexN or gcolor-style name to an index; null for anything else
     private static Integer colorTargetIndex(String name) {
         if (name.startsWith("colortex")) {
             try {
@@ -425,6 +420,7 @@ public final class ShaderProperties {
         return legacyIndex >= 0 ? legacyIndex : null;
     }
 
+    // Tokens of a space-separated value
     private static List<String> splitWhitespace(String value) {
         List<String> result = new ArrayList<>();
         for (String token : value.trim().split("\\s+")) {
@@ -435,6 +431,7 @@ public final class ShaderProperties {
         return result;
     }
 
+    // Null rather than an exception for a malformed number
     private static Integer parseIntOrNull(String value) {
         try {
             return Integer.parseInt(value.trim());
@@ -471,14 +468,17 @@ public final class ShaderProperties {
         return Collections.unmodifiableMap(this.subScreenOptions);
     }
 
+    // screen.columns
     public Optional<Integer> getMainScreenColumnCount() {
         return Optional.ofNullable(this.mainScreenColumnCount);
     }
 
+    // screen.<name>.columns per sub-screen
     public Map<String, Integer> getSubScreenColumnCount() {
         return Collections.unmodifiableMap(this.subScreenColumnCount);
     }
 
+    // Raw lookup for directives with no dedicated getter
     public Optional<String> get(String key) {
         return Optional.ofNullable(this.raw.get(key));
     }
@@ -742,11 +742,13 @@ public final class ShaderProperties {
                 "program." + programName + "..enabled");
     }
 
+    // Whether the active profile switched the program off
     private boolean isProfileDisabled(String programName) {
         return this.profileDisabledPrograms.contains(programName)
                 || this.profileDisabledPrograms.contains("world0/" + programName);
     }
 
+    // First of several alternative spellings that is set
     private Optional<Boolean> firstBoolean(String... keys) {
         for (String key : keys) {
             Optional<Boolean> value = getBoolean(key);
@@ -757,11 +759,13 @@ public final class ShaderProperties {
         return Optional.empty();
     }
 
+    // The program's flip directives, by buffer index
     public Map<Integer, Boolean> getExplicitFlips(String programName) {
         Map<Integer, Boolean> flips = this.explicitFlips.get(programName);
         return flips == null ? Collections.emptyMap() : Collections.unmodifiableMap(flips);
     }
 
+    // Parsed integer, empty when unset or malformed
     private OptionalInt getInt(String key) {
         String value = this.raw.get(key);
         if (value == null) {
@@ -774,6 +778,7 @@ public final class ShaderProperties {
         }
     }
 
+    // Parsed boolean, empty when unset or malformed
     private Optional<Boolean> getBoolean(String key) {
         String value = this.raw.get(key);
         if (value == null) {
@@ -786,6 +791,7 @@ public final class ShaderProperties {
         return PropertiesPreprocessor.evaluateBooleanExpression(value, this.expressionDefines);
     }
 
+    // true/false, on/off; empty for anything else
     private static Optional<Boolean> parseBooleanValue(String value) {
         String v = value.trim().toLowerCase(Locale.ROOT);
         if (v.equals("true")) {

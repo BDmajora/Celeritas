@@ -14,17 +14,20 @@ public class RenderSectionMetricsTracker {
     private final PriorityQueue<RenderSection> slowestSections = new PriorityQueue<>(BY_BUILD_TIME);
     private final ReferenceOpenHashSet<RenderSection> sectionsInHeap = new ReferenceOpenHashSet<>();
 
+    // Tracks a section on its first build
     private void addSection(RenderSection section) {
         slowestSections.add(section);
         sectionsInHeap.add(section);
     }
 
+    // Forgets an unloaded section
     public void removeSection(RenderSection section) {
         if (sectionsInHeap.remove(section)) {
             slowestSections.remove(section);
         }
     }
 
+    // Records the latest build time
     public void updateSectionBuildDuration(RenderSection section, long duration) {
         removeSection(section);
 
@@ -38,6 +41,7 @@ public class RenderSectionMetricsTracker {
         }
     }
 
+    // For the debug overlay
     public Collection<RenderSection> getSlowestSections() {
         return Collections.unmodifiableCollection(this.slowestSections);
     }

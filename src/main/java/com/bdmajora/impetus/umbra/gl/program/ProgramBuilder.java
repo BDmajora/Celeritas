@@ -27,6 +27,7 @@ public class ProgramBuilder {
         this.program = program;
     }
 
+    // Creates the program object
     public static ProgramBuilder begin(String name) {
         int program = LWJGL.glCreateProgram();
         if (program == 0) {
@@ -35,6 +36,7 @@ public class ProgramBuilder {
         return new ProgramBuilder(name, program);
     }
 
+    // glAttachShader
     public ProgramBuilder attach(GlShader shader) {
         LWJGL.glAttachShader(this.program, shader.getGlId());
         this.attached.add(shader);
@@ -81,6 +83,7 @@ public class ProgramBuilder {
         return new GlProgram(this.program, this.name);
     }
 
+    // Detaches every stage after linking, so the shader objects can be deleted
     private void detachAll() {
         for (GlShader shader : this.attached) {
             if (!shader.isDestroyed()) {

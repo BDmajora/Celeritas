@@ -8,20 +8,15 @@ import org.joml.Vector3i;
 
 import java.time.LocalDateTime;
 
-// The wall-clock frame uniforms
-// frameTimeCounter is seconds since load, wrapping at 3600 exactly as OptiFine does — the wrap is there to keep
-// the float from losing sub-frame precision after an hour of play, which would make every time-driven animation
-// judder
-// frameCounter is an int incremented per frame, wrapping at 720720 (a highly composite number, so it divides
-// evenly by every small cycle length a pack might modulo it against)
-// COUNTER has to be ticked exactly once per frame from the frame-setup hook, or every time-driven effect in the
-// pack runs at the wrong rate
+// frameTimeCounter wrapping at 3600 to keep float precision, and frameCounter wrapping at 720720 so every small
+// cycle length divides it. Ticked exactly once per frame or every time-driven effect runs at the wrong rate
 public final class SystemTimeUniforms {
     public static final Timer COUNTER = new Timer();
 
     private SystemTimeUniforms() {
     }
 
+    // frameCounter, frameTime, frameTimeCounter and the wall-clock uniforms
     public static void addSystemTimeUniforms(UniformCollector uniforms) {
         uniforms
                 .uniform1f(UniformUpdateFrequency.PER_FRAME, "frameTimeCounter", COUNTER::getFrameTimeCounter)
@@ -32,16 +27,19 @@ public final class SystemTimeUniforms {
                 .uniform2i(UniformUpdateFrequency.PER_TICK, "currentYearTime", SystemTimeUniforms::getCurrentYearTime);
     }
 
+    // Year, month, day
     private static Vector3i getCurrentDate() {
         LocalDateTime now = LocalDateTime.now();
         return new Vector3i(now.getYear(), now.getMonthValue(), now.getDayOfMonth());
     }
 
+    // Hour, minute, second
     private static Vector3i getCurrentTime() {
         LocalDateTime now = LocalDateTime.now();
         return new Vector3i(now.getHour(), now.getMinute(), now.getSecond());
     }
 
+    // Day of year and seconds of day
     private static Vector2i getCurrentYearTime() {
         LocalDateTime now = LocalDateTime.now();
         int elapsed = ((now.getDayOfYear() - 1) * 86400)
@@ -82,14 +80,17 @@ public final class SystemTimeUniforms {
             return this.lastFrameTime;
         }
 
+        // Seconds since start, wrapped
         public float getFrameTimeCounter() {
             return this.frameTimeCounter;
         }
 
+        // Frames since start, wrapped
         public int getFrameCounter() {
             return this.frameCounter;
         }
 
+        // Restart both counters
         public void reset() {
             this.frameCounter = 0;
             this.frameTimeCounter = 0.0f;

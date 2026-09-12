@@ -12,20 +12,21 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-// Replaces ConditionPropertyValue.getPredicate's leaf predicate with a flattened, interned one:
-// vanilla allocates a fresh anonymous Predicate (plus an OR composite for multi-valued conditions
-// like facing=north|south) per call, and none of those closures can ever compare equal.
-// Cancels at HEAD instead of @Overwrite so other mods' injections into this method still apply.
+// Vanilla allocates a fresh anonymous Predicate per call, and no two closures ever compare equal
+// Cancelled at HEAD rather than @Overwrite so other mods' injections into this method still apply
 @Mixin(ConditionPropertyValue.class)
 public class ConditionPropertyValueMixin {
+    // Property name, e.g. facing
     @Shadow
     @Final
     private String key;
 
+    // Expected value, possibly multi-valued like north|south
     @Shadow
     @Final
     private String value;
 
+    // Hands off to the canonicalizer, which interns so identical leaves share one instance
     @Inject(method = "getPredicate", at = @At("HEAD"), cancellable = true)
     private void coartatio$canonicalize(BlockStateContainer container,
                                         CallbackInfoReturnable<Predicate<IBlockState>> cir) {

@@ -33,6 +33,7 @@ public final class ChunkCullTask implements Supplier<VisibleChunkCollector> {
         this.sectionTicker = sectionTicker;
     }
 
+    // Blocks until the graph walk finishes and returns its collector
     @Override
     public VisibleChunkCollector get() {
         this.occlusionCuller.findVisible(this.collector, this.viewport, this.searchDistance, this.useOcclusionCulling, this.frame);

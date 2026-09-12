@@ -24,11 +24,13 @@ public final class FulgorOptionPages {
     private static final String MOD_ID = "fulgor";
 
     private static final OptionStorage<FulgorConfig> STORAGE = new OptionStorage<FulgorConfig>() {
+        // The options screen edits the live config directly
         @Override
         public FulgorConfig getData() {
             return FulgorConfig.get();
         }
 
+        // Writes the file once the screen is dismissed
         @Override
         public void save() {
             FulgorConfig.get().save();
@@ -38,6 +40,7 @@ public final class FulgorOptionPages {
     private FulgorOptionPages() {
     }
 
+    // Builds the page; most toggles need a restart since the mixin plugin already read them
     public static OptionPage lighting() {
         List<OptionGroup> groups = new ArrayList<>();
 

@@ -35,10 +35,12 @@ public class ScrollableFrame extends AbstractFrame {
         this.buildFrame();
     }
 
+    // Starts a builder
     public static Builder createBuilder() {
         return new Builder();
     }
 
+    // Creates scroll bars only on the axes where the content overflows
     public void setupFrame(AtomicReference<Integer> verticalScrollBarOffset, AtomicReference<Integer> horizontalScrollBarOffset) {
         int maxWidth = 0;
         int maxHeight = 0;
@@ -88,6 +90,7 @@ public class ScrollableFrame extends AbstractFrame {
         }
     }
 
+    // Lays out the inner frame offset by the scroll position
     @Override
     public void buildFrame() {
         this.children.clear();
@@ -117,6 +120,7 @@ public class ScrollableFrame extends AbstractFrame {
     }
 
 
+    // Clips to the viewport, draws the inner frame, then the bars
     @Override
     public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
         if (this.canScrollHorizontal || this.canScrollVertical) {
@@ -143,6 +147,7 @@ public class ScrollableFrame extends AbstractFrame {
         }
     }
 
+    // Bars first, then the inner frame
     @Override
     public boolean mouseClicked(InteractionContext context, double mouseX, double mouseY, int button) {
         return (this.canScrollHorizontal && this.horizontalScrollBar.mouseClicked(context, mouseX, mouseY, button)) ||
@@ -150,6 +155,7 @@ public class ScrollableFrame extends AbstractFrame {
                 super.mouseClicked(context, applyOffset(this.horizontalScrollBar, mouseX, false), applyOffset(this.verticalScrollBar, mouseY, false), button);
     }
 
+    // Bars first, then the inner frame
     @Override
     public boolean mouseDragged(InteractionContext context, double mouseX, double mouseY, int button, double deltaX, double deltaY) {
         return (this.canScrollHorizontal && this.horizontalScrollBar.mouseDragged(context, mouseX, mouseY, button, deltaX, deltaY)) ||
@@ -157,6 +163,7 @@ public class ScrollableFrame extends AbstractFrame {
                 super.mouseDragged(context, applyOffset(this.horizontalScrollBar, mouseX, false), applyOffset(this.verticalScrollBar, mouseY, false), button, deltaX, deltaY);
     }
 
+    // Bars first, then the inner frame
     @Override
     public boolean mouseReleased(InteractionContext context, double mouseX, double mouseY, int button) {
         return (this.canScrollHorizontal && this.horizontalScrollBar.mouseReleased(context, mouseX, mouseY, button))
@@ -164,6 +171,7 @@ public class ScrollableFrame extends AbstractFrame {
                 || super.mouseReleased(context, applyOffset(this.horizontalScrollBar, mouseX, false), applyOffset(this.verticalScrollBar, mouseY, false), button);
     }
 
+    // Inner frame first, so a nested scrollable takes precedence
     @Override
     public boolean mouseScrolled(InteractionContext context, double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         return (this.canScrollHorizontal && this.horizontalScrollBar.mouseScrolled(context, mouseX, mouseY, horizontalAmount, verticalAmount))
@@ -171,6 +179,7 @@ public class ScrollableFrame extends AbstractFrame {
                 || super.mouseScrolled(context, applyOffset(this.horizontalScrollBar, mouseX, false), applyOffset(this.verticalScrollBar, mouseY, false), horizontalAmount, verticalAmount);
     }
 
+    // Within the viewport
     @Override
     public boolean isMouseOver(double mouseX, double mouseY) {
         return this.dim.containsCursor(mouseX, mouseY);
@@ -184,36 +193,43 @@ public class ScrollableFrame extends AbstractFrame {
         private AtomicReference<Integer> horizontalScrollBarOffset = new AtomicReference<>(0);
         private int scrollBarAccentColor = DefaultColors.ELEMENT_ACTIVATED;
 
+        // Viewport bounds
         public Builder setDimension(Dim2i dim) {
             this.dim = dim;
             return this;
         }
 
+        // Debug outline
         public Builder shouldRenderOutline(boolean state) {
             this.renderOutline = state;
             return this;
         }
 
+        // Shared ref so the position survives a rebuild
         public Builder setVerticalScrollBarOffset(AtomicReference<Integer> verticalScrollBarOffset) {
             this.verticalScrollBarOffset = verticalScrollBarOffset;
             return this;
         }
 
+        // Shared ref so the position survives a rebuild
         public Builder setHorizontalScrollBarOffset(AtomicReference<Integer> horizontalScrollBarOffset) {
             this.horizontalScrollBarOffset = horizontalScrollBarOffset;
             return this;
         }
 
+        // The content to scroll
         public Builder setFrame(AbstractFrame frame) {
             this.frame = frame;
             return this;
         }
 
+        // Thumb colour
         public Builder setScrollBarAccentColor(int scrollBarAccentColor) {
             this.scrollBarAccentColor = scrollBarAccentColor;
             return this;
         }
 
+        // Finalises
         public ScrollableFrame build() {
             return new ScrollableFrame(this.dim, this.frame, this.renderOutline, this.verticalScrollBarOffset, this.horizontalScrollBarOffset, this.scrollBarAccentColor);
         }

@@ -6,11 +6,8 @@ import net.minecraft.block.state.IBlockState;
 import java.util.Arrays;
 import java.util.List;
 
-// Array-backed AND/OR over arbitrary child predicates: the fallback for condition trees none of the flattened
-// forms can express — a nested AND inside an OR, a negation, or a mod-added ICondition implementation
-// Worth having even so, because Guava's Predicates.and holds on to the transformed Iterable it was handed,
-// which keeps the whole ICondition tree and its BlockStateContainer reference alive for as long as the baked
-// model lives
+// Array-backed AND/OR over arbitrary children: the fallback for trees no flattened form can express
+// Still worth having, since Guava's composite retains the ICondition tree and its container for the model's lifetime
 public final class CompositePredicate implements Predicate<IBlockState> {
     private final Predicate<IBlockState>[] predicates;
     // true = AND, false = OR. One field instead of two subclasses, so apply below is written once
@@ -30,6 +27,7 @@ public final class CompositePredicate implements Predicate<IBlockState> {
         return new CompositePredicate(predicates.toArray(new Predicate[0]), true);
     }
 
+    // OR form; short-circuits on the first match
     @SuppressWarnings("unchecked")
     public static CompositePredicate any(List<Predicate<IBlockState>> predicates) {
         return new CompositePredicate(predicates.toArray(new Predicate[0]), false);
@@ -50,6 +48,7 @@ public final class CompositePredicate implements Predicate<IBlockState> {
         return this.requireAll;
     }
 
+    // Structural equality over the children and the AND/OR flag
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -63,6 +62,7 @@ public final class CompositePredicate implements Predicate<IBlockState> {
         return this.requireAll == other.requireAll && Arrays.equals(this.predicates, other.predicates);
     }
 
+    // Precomputed at construction; the predicate is immutable
     @Override
     public int hashCode() {
         return this.hash;

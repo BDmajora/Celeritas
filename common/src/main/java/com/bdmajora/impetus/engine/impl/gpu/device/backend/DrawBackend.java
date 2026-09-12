@@ -10,10 +10,12 @@ public enum DrawBackend {
     VK_MULTIDRAW,
     VK_INDIRECT;
 
+    // For the current device
     public static DrawBackend chooseCurrent() {
         return choose(RenderDevice.INSTANCE.getGpuDevice());
     }
 
+    // Picks the most capable backend the device supports
     public static DrawBackend choose(GpuDevice device) {
         if (device.backend() != GraphicsBackend.VULKAN) {
             return OPENGL;

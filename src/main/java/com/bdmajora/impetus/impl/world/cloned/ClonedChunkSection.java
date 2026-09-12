@@ -80,6 +80,7 @@ public class ClonedChunkSection {
 
     }
 
+    // Copies the chunk's biome array so biome colour never touches the live chunk
     private void populateBiomeData(int chunkX, int chunkZ, World world) {
         BlockPos.MutableBlockPos biomePos = new BlockPos.MutableBlockPos();
 
@@ -94,31 +95,38 @@ public class ClonedChunkSection {
         }
     }
 
+    // Section-local read
     public IBlockState getBlockState(int x, int y, int z) {
         return data.get(x, y, z);
     }
 
+    // Column-local biome read
     public Biome getBiomeForNoiseGen(int x, int z) {
         return this.biomeData[x | z << 4];
     }
 
+    // The copied biome array
     public Biome[] getBiomeData() {
         return this.biomeData;
     }
 
+    // From the copied tile entity map
     public TileEntity getBlockEntity(int x, int y, int z) {
         return this.blockEntities.get(packLocal(x, y, z));
     }
 
+    // Which section this is a copy of
     public SectionPos getPosition() {
         return this.sectionPos;
     }
 
+    // From the copied light arrays
     public int getLightLevel(int x, int y, int z, EnumSkyBlock type) {
         NibbleArray lightArray = type == EnumSkyBlock.BLOCK ? this.data.getBlockLight() : this.data.getSkyLight();
         return lightArray != null ? lightArray.get(x, y, z) : type.defaultLightValue;
     }
 
+    // Null for an empty section, which callers treat as all air
     private static ExtendedBlockStorage getChunkSection(Chunk chunk, int y) {
         ExtendedBlockStorage section = null;
 
@@ -131,10 +139,12 @@ public class ClonedChunkSection {
         return section;
     }
 
+    // For the cache's eviction
     public long getLastUsedTimestamp() {
         return this.lastUsedTimestamp;
     }
 
+    // Touched on every acquire
     public void setLastUsedTimestamp(long timestamp) {
         this.lastUsedTimestamp = timestamp;
     }

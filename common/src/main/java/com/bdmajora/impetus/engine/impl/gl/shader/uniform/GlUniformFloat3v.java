@@ -9,6 +9,7 @@ public class GlUniformFloat3v extends GlUniform<float[]> {
         super(index);
     }
 
+    // Array form; must be length 3
     @Override
     public void set(float[] value) {
         if (value.length != 3) {
@@ -18,6 +19,7 @@ public class GlUniformFloat3v extends GlUniform<float[]> {
         LWJGL.glUniform3fv(this.index, value);
     }
 
+    // glUniform3f
     public void set(float x, float y, float z) {
         LWJGL.glUniform3f(this.index, x, y, z);
     }

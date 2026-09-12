@@ -10,6 +10,7 @@ final class FluidloggedCompat {
     private FluidloggedCompat() {
     }
 
+    // The fluid state sharing the position if there is one, else the real block state
     static IBlockState getFluidOrReal(IBlockAccess access, BlockPos pos) {
         return FluidloggedUtils.getFluidOrReal(access, pos);
     }

@@ -13,10 +13,12 @@ public enum OsKind {
 
     private static final OsKind CURRENT = detect();
 
+    // Detected once and cached
     public static OsKind current() {
         return CURRENT;
     }
 
+    // From os.name
     private static OsKind detect() {
         var name = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
 

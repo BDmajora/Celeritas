@@ -84,6 +84,7 @@ public class ColorSRGB {
         return (bias + (scale * t)) >>> 16;
     }
 
+    // Linear values outside [0, 1] would produce NaN in the transfer function
     private static float clampLinearInput(float input) {
         // !(a > b) is used to guard against NaN
         if (!(input > MIN_BOUND)) {

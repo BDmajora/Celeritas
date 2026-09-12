@@ -7,6 +7,7 @@ import com.bdmajora.impetus.engine.impl.util.color.ColorSRGB;
 // weights by alpha (unlike vanilla's flat average, which causes dark-edge artifacts on cutout textures)
 // Ported from Umbra's MixinMipmapGenerator
 public class MipmapHelper {
+    // Averages two ARGB pixels per channel, in gamma space as vanilla does
     public static int weightedAverageColor(int one, int two) {
         int alphaOne = ColorARGB.unpackAlpha(one);
         int alphaTwo = ColorARGB.unpackAlpha(two);

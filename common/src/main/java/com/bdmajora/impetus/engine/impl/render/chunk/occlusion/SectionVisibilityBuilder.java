@@ -22,6 +22,7 @@ public class SectionVisibilityBuilder {
 
     private final BitSet blocks;
 
+    // Indices of every boundary block, the flood-fill seeds
     private static int[] buildFloodfillIndices() {
         IntArrayList indicesList = new IntArrayList(TOTAL_BLOCKS - (SECTION_AXIS_SIZE - 2) * (SECTION_AXIS_SIZE - 2) * (SECTION_AXIS_SIZE - 2));
         for (int x = 0; x < SECTION_AXIS_SIZE; x++) {
@@ -40,6 +41,7 @@ public class SectionVisibilityBuilder {
         this.blocks = new BitSet(SECTION_AXIS_SIZE * SECTION_AXIS_SIZE * SECTION_AXIS_SIZE);
     }
 
+    // Which faces can see which, as the packed encoding
     public long computeVisibilityEncoding() {
         int opaqueCount = blocks.cardinality();
         if (opaqueCount == TOTAL_BLOCKS) {
@@ -54,10 +56,12 @@ public class SectionVisibilityBuilder {
         }
     }
 
+    // Flags a block as blocking the flood
     public void markOpaque(int x, int y, int z) {
         this.blocks.set(getIndex(x & 15, y & 15, z & 15));
     }
 
+    // Floods from each unvisited boundary block and records the faces it escapes through
     private long computeWithFloodFill() {
         long resultEncoding = 0;
         var blocks = this.blocks;
@@ -78,6 +82,7 @@ public class SectionVisibilityBuilder {
         return resultEncoding;
     }
 
+    // One BFS through non-opaque blocks
     private void exploreFrom(BitSet escapedFaces, IntArrayFIFOQueue queue, int startIndex) {
         queue.enqueue(startIndex);
         var blocks = this.blocks;
@@ -102,6 +107,7 @@ public class SectionVisibilityBuilder {
         }
     }
 
+    // Neighbour index, or -1 off the edge
     private static int getNeighborIndex(int idx, int dir) {
         switch (dir) {
             case GraphDirection.UP -> {
@@ -150,6 +156,7 @@ public class SectionVisibilityBuilder {
         }
     }
 
+    // Flat index into the 16x16x16 bitset
     private static int getIndex(int x, int y, int z) {
         return (y << Y_SHIFT) | (z << Z_SHIFT) | (x << X_SHIFT);
     }

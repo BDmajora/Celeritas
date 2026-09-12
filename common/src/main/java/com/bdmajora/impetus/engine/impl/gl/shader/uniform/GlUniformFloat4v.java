@@ -9,6 +9,7 @@ public class GlUniformFloat4v extends GlUniform<float[]> {
         super(index);
     }
 
+    // glUniform4fv; must be length 4
     @Override
     public void set(float[] value) {
         if (value.length != 4) {

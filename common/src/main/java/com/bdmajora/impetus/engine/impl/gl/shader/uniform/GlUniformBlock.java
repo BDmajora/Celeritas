@@ -12,6 +12,7 @@ public class GlUniformBlock {
         this.binding = uniformBlockBinding;
     }
 
+    // glBindBufferBase at this block's binding point
     public void bindBuffer(GlBuffer buffer) {
         LWJGL.glBindBufferBase(GL32.GL_UNIFORM_BUFFER, this.binding, buffer.handle());
     }

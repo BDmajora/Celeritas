@@ -150,6 +150,7 @@ public interface LWJGLService {
 
     void glDispatchComputeIndirect(long indirect);
     void glClearTexImage(int texture, int level, int format, int type, ByteBuffer data);
+    // Null data clears to zero
     default void glClearTexImage(int texture, int level, int format, int type) {
         glClearTexImage(texture, level, format, type, (ByteBuffer) null);
     }
@@ -164,6 +165,7 @@ public interface LWJGLService {
     void glBindFramebuffer(int target, int framebuffer);
     int glCheckFramebufferStatus(int target);
     void glFramebufferTexture2D(int target, int attachment, int textarget, int texture, int level);
+    // Optional; backends without layered attachments throw
     default void glFramebufferTextureLayer(int target, int attachment, int texture, int level, int layer) {
         throw new UnsupportedOperationException("Layered framebuffer attachments are not supported");
     }
@@ -181,17 +183,21 @@ public interface LWJGLService {
 
     void glEnable(int cap);
     void glDisable(int cap);
+    // Optional; false unless the backend overrides
     default boolean supportsBufferBlending() {
         return false;
     }
+    // Optional; backends without indexed enable throw
     default void glEnablei(int target, int index) {
         throw new UnsupportedOperationException("Indexed GL enable is not supported");
     }
+    // Optional; backends without indexed enable throw
     default void glDisablei(int target, int index) {
         throw new UnsupportedOperationException("Indexed GL disable is not supported");
     }
     void glBlendFunc(int sfactor, int dfactor);
     void glBlendFuncSeparate(int srcRGB, int dstRGB, int srcAlpha, int dstAlpha);
+    // Optional; backends without per-buffer blending throw
     default void glBlendFuncSeparatei(int buffer, int srcRGB, int dstRGB, int srcAlpha, int dstAlpha) {
         throw new UnsupportedOperationException("Per-buffer blending is not supported");
     }
@@ -248,6 +254,7 @@ public interface LWJGLService {
     void memSet(long address, int value, long bytes);
     void memCopy(long src, long dst, long bytes);
 
+    // Buffer form over the address form, copying src's remaining bytes
     default void memCopy(ByteBuffer src, ByteBuffer dst) {
         memCopy(memAddress(src), memAddress(dst), src.remaining());
     }
@@ -278,22 +285,27 @@ public interface LWJGLService {
         throw new UnsupportedOperationException("Direct state access is not supported");
     }
 
+    // Optional DSA; throws unless the backend has it
     default void glNamedBufferStorage(int buffer, long size, int flags) {
         throw new UnsupportedOperationException("Direct state access is not supported");
     }
 
+    // Optional DSA; throws unless the backend has it
     default long nglMapNamedBufferRange(int buffer, long offset, long length, int access) {
         throw new UnsupportedOperationException("Direct state access is not supported");
     }
 
+    // Optional DSA; throws unless the backend has it
     default void glUnmapNamedBuffer(int buffer) {
         throw new UnsupportedOperationException("Direct state access is not supported");
     }
 
+    // Optional DSA; throws unless the backend has it
     default void glFlushMappedNamedBufferRange(int buffer, long offset, long length) {
         throw new UnsupportedOperationException("Direct state access is not supported");
     }
 
+    // Optional DSA; throws unless the backend has it
     default void glCopyNamedBufferSubData(int readBuffer, int writeBuffer, long readOffset, long writeOffset, long size) {
         throw new UnsupportedOperationException("Direct state access is not supported");
     }
@@ -304,6 +316,7 @@ public interface LWJGLService {
         throw new UnsupportedOperationException("Direct state access is not supported");
     }
 
+    // Optional DSA; throws unless the backend has it
     default void glClearNamedBufferDataZero(int buffer, int internalFormat, int format, int type) {
         throw new UnsupportedOperationException("Direct state access is not supported");
     }
@@ -315,10 +328,12 @@ public interface LWJGLService {
         throw new UnsupportedOperationException("Bindless buffers are not supported");
     }
 
+    // Optional NV bindless; throws unless the backend has it
     default void glMakeNamedBufferResidentNV(int buffer, int access) {
         throw new UnsupportedOperationException("Bindless buffers are not supported");
     }
 
+    // Optional NV bindless; throws unless the backend has it
     default void glMakeNamedBufferNonResidentNV(int buffer) {
         throw new UnsupportedOperationException("Bindless buffers are not supported");
     }
@@ -335,6 +350,7 @@ public interface LWJGLService {
         throw new UnsupportedOperationException("Client state is not supported");
     }
 
+    // Optional fixed-function; no-op on backends without client state
     default void glDisableClientState(int cap) {
         throw new UnsupportedOperationException("Client state is not supported");
     }

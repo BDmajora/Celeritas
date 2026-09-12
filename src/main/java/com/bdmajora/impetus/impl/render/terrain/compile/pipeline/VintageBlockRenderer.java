@@ -78,10 +78,12 @@ public class VintageBlockRenderer {
         this.useRenderPassOptimization = ImpetusVintage.options().performance.useRenderPassOptimization;
     }
 
+    // Clears per-section caches before the next section
     public void resetSharedState() {
         Arrays.fill(this.currentOrientations, null);
     }
 
+    // Emits every quad of a block model into the mesh, culling faces against neighbours
     public void renderBlock(IBlockState state, BlockPos pos, ImpetusBlockAccess blockAccess, BlockRenderLayer layer) {
         int defaultFlags = BakedQuadGroupAnalyzer.USE_ALL_THINGS;
         if (!useRenderPassOptimization) {
@@ -132,6 +134,7 @@ public class VintageBlockRenderer {
         this.currentBlockAccess = null;
     }
 
+    // Runs the chosen light pipeline for one quad
     private QuadLightData getVertexLight(LightPipeline lighter, BlockPos pos, EnumFacing cullFace, BakedQuadView quad) {
         QuadLightData light = this.quadLightData;
         lighter.calculate(quad, pos.getX(), pos.getY(), pos.getZ(), light, VintageDiffuseProvider.fromEnumFacingOrUnassigned(cullFace), quad.getLightFace(), quad.hasShade(), false);
@@ -139,6 +142,7 @@ public class VintageBlockRenderer {
         return light;
     }
 
+    // Tint colours per vertex, through the biome blender when the quad is tinted
     private int[] getVertexColors(BlockPos pos, IBlockColor colorProvider, BakedQuadView quad) {
         final int[] vertexColors = this.quadColors;
 
@@ -295,6 +299,7 @@ public class VintageBlockRenderer {
         }
     }
 
+    // Emission is 0-15
     private static int clampBlockEmission(int value) {
         return value < 0 ? 0 : (value > 255 ? 255 : value);
     }

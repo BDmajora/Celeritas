@@ -25,11 +25,13 @@ public class TabHeaderWidget extends FlatButtonWidget {
         this.modId = modId;
     }
 
+    // Headers are never hover-highlighted
     @Override
     protected boolean isHovered(int mouseX, int mouseY) {
         return false;
     }
 
+    // Label only, no background
     @Override
     public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
         String icon = Objects.requireNonNullElse(drawContext.getModLogoPath(this.modId), FALLBACK_TEXTURE);

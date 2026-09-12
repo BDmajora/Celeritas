@@ -9,13 +9,9 @@ import net.minecraft.util.EnumFacing;
 import net.minecraft.world.EnumSkyBlock;
 import net.minecraft.world.chunk.Chunk;
 
-// Bookkeeping for Fulgor's chunk-boundary fix (inherited from Phosphor): vanilla drops light
-// propagation into a chunk that isn't loaded yet (MC-3329, MC-117067, MC-117094 come from this).
-// Each chunk keeps a table of short section masks, one per (light type, direction, edge half,
-// in/out); Chunk.onLoad replays whatever's outstanding once both sides agree, and the table is
-// serialised since a chunk can be saved with work still owed.
-// Edge is split into 8-block halves because skylight can arrive around the diagonal neighbour,
-// letting a half replay as soon as its own diagonal loads instead of waiting on both.
+// Bookkeeping for the chunk-boundary fix inherited from Phosphor: vanilla drops propagation into an unloaded
+// chunk (MC-3329, MC-117067). Each chunk keeps section masks per (type, direction, half, in/out), replayed on load
+// Edges split into 8-block halves so a half can replay once its own diagonal loads instead of waiting on both
 public final class NeighborLightFlags {
     public static final String NBT_KEY = "NeighborLightChecks";
 
@@ -27,6 +23,7 @@ public final class NeighborLightFlags {
         IN,
         OUT;
 
+        // The facing seen from the neighbouring chunk, so a flag set on one side is read on the other
         public BoundaryFacing getOpposite() {
             return this == IN ? OUT : IN;
         }

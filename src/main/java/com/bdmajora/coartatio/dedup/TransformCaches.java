@@ -8,13 +8,9 @@ import net.minecraft.client.renderer.block.model.ItemTransformVec3f;
 
 import java.util.Objects;
 
-// Bake-scoped pools for the two objects every baked model carries and almost never varies
-// This is the tractable core of FoamFix's geDeduplicate. FoamFix walks the entire baked model graph
-// reflectively and shares every structurally identical leaf; the overwhelming majority of what it finds is
-// these two, because a model's camera transforms come from its JSON parent and its override list is empty
-// unless the model declares overrides of its own
-// Doing it at construction rather than as a post-bake graph walk avoids reflection entirely, leaves nothing to
-// keep in sync with Forge's model classes, and shares the objects before the duplicates are ever reachable
+// Bake-scoped pools for the two objects every baked model carries and almost never varies: camera transforms
+// and the override list. The tractable core of FoamFix's deduplication, done at construction instead of by a
+// reflective post-bake graph walk
 public final class TransformCaches {
     // ItemCameraTransforms defines no equals, so two identical transform blocks from different model files
     // would never compare equal on their own and the pool would hold one entry per model
@@ -22,6 +18,7 @@ public final class TransformCaches {
     // and the equality agree
     private static final Hash.Strategy<ItemCameraTransforms> TRANSFORMS_STRATEGY =
             new Hash.Strategy<ItemCameraTransforms>() {
+                // Structural hash over all eight transforms, so equal-by-value instances collide
                 @Override
                 public int hashCode(ItemCameraTransforms transforms) {
                     if (transforms == null) {
@@ -38,6 +35,7 @@ public final class TransformCaches {
                     return 31 * hash + vectorHash(transforms.fixed);
                 }
 
+                // Structural equality; vanilla's class does not define equals
                 @Override
                 public boolean equals(ItemCameraTransforms a, ItemCameraTransforms b) {
                     if (a == b) {
@@ -81,10 +79,12 @@ public final class TransformCaches {
         return overrides.getOverrides().isEmpty() ? ItemOverrideList.NONE : overrides;
     }
 
+    // Arms the pools for a bake
     public static void open() {
         TRANSFORMS.open();
     }
 
+    // Drops the pool indices after a bake; the shared objects live on in the models
     public static void close() {
         TRANSFORMS.close();
     }

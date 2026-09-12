@@ -9,25 +9,20 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
 
 import java.util.List;
 
-// Ticks block entity light sources once per client tick
-// Entities recompute their own luminance from onEntityUpdate, but a block entity has no equivalent hook that every
-// implementation runs through — a non-tickable one never ticks at all — so the world's block entity list has to be
-// walked from outside instead
-// The walk is skipped entirely unless some mod has registered a block entity handler. Nothing does by default, so
-// on an ordinary install this costs one map-emptiness check per tick rather than a pass over every loaded block
-// entity, which on a large base is thousands of them
-// Celeritas Dynamic Lights has no equivalent: its block entity code is complete but nothing ever calls it, so its
-// "Block Entities" toggle governs a path that never runs
+// Ticks block entity light sources once per client tick, since unlike entities they have no shared update hook
+// The walk is skipped unless a mod registered a block entity handler, so a default install pays one map check
 public final class TileEntityLightTicker {
     private TileEntityLightTicker() {
     }
 
     private static final TileEntityLightTicker INSTANCE = new TileEntityLightTicker();
 
+    // Typed as Object so the event bus registration needs no Forge import at the call site
     public static Object instance() {
         return INSTANCE;
     }
 
+    // Runs at END so it sees the world state the tick produced
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) {

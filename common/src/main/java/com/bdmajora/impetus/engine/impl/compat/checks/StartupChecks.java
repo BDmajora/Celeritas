@@ -32,6 +32,7 @@ public final class StartupChecks {
     private StartupChecks() {
     }
 
+    // Hooks the uncaught exception handler to show a dialog before the game dies
     public static void installCrashDialog() {
         if (!CRASH_DIALOG_INSTALLED.compareAndSet(false, true)) {
             return;
@@ -61,12 +62,14 @@ public final class StartupChecks {
         });
     }
 
+    // Runs the checks off the render thread; they probe the OS and can block
     public static void runAsync(GlContextInfo context) {
         var thread = new Thread(() -> run(context), "Impetus Compatibility Checks");
         thread.setDaemon(true);
         thread.start();
     }
 
+    // The checks themselves, each tolerant of the others failing
     private static void run(GlContextInfo context) {
         try {
             var adapters = GraphicsAdapterProbe.probe();
@@ -79,6 +82,7 @@ public final class StartupChecks {
         }
     }
 
+    // Known bad driver and launcher combinations
     private static void runBugChecks(GlContextInfo context, List<GraphicsAdapterInfo> adapters) {
         warnIfPojavLauncher();
         warnIfOutdatedNvidiaDriver(adapters);
@@ -99,6 +103,7 @@ public final class StartupChecks {
         }
     }
 
+    // Pojav's GL translation layer is unsupported
     private static void warnIfPojavLauncher() {
         if (!isPojavLauncher()) {
             return;
@@ -113,6 +118,7 @@ public final class StartupChecks {
                 "performance problems, graphical bugs, or crashes.");
     }
 
+    // Detected from the environment variables Pojav sets
     private static boolean isPojavLauncher() {
         return envPresent("POJAV_RENDERER")
                 || envPresent("POJAVEXEC_EGL")
@@ -121,15 +127,18 @@ public final class StartupChecks {
                 || propertyContains("java.vm.name", "dalvik");
     }
 
+    // Non-empty environment variable
     private static boolean envPresent(String key) {
         String value = System.getenv(key);
         return value != null && !value.isEmpty();
     }
 
+    // System property substring check
     private static boolean propertyContains(String key, String needle) {
         return System.getProperty(key, "").toLowerCase(Locale.ROOT).contains(needle);
     }
 
+    // Drivers before the known-good version have a threading bug that corrupts terrain
     private static void warnIfOutdatedNvidiaDriver(List<GraphicsAdapterInfo> adapters) {
         for (var adapter : adapters) {
             if (adapter.vendor() != GraphicsVendor.NVIDIA) {
@@ -153,6 +162,7 @@ public final class StartupChecks {
     }
 
     private record DriverVersion(int major, int minor) implements Comparable<DriverVersion> {
+        // Parses the major.minor form; null when unparseable
         static DriverVersion parseNvidia(String raw) {
             if (raw == null || raw.trim().isEmpty()) {
                 return null;
@@ -178,6 +188,7 @@ public final class StartupChecks {
             return null;
         }
 
+        // Null rather than an exception
         private static Integer parseInt(String value) {
             try {
                 return Integer.parseInt(value);
@@ -186,6 +197,7 @@ public final class StartupChecks {
             }
         }
 
+        // Major then minor
         @Override
         public int compareTo(DriverVersion other) {
             int majorCmp = Integer.compare(this.major, other.major);

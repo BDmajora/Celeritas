@@ -68,6 +68,7 @@ public class TranslucentQuadAnalyzer {
 
         public static final Level[] VALUES = values();
 
+        // Whether the camera moving can change the correct order
         public boolean requiresDynamicSorting() {
             return this.ordinal() >= Level.DYNAMIC.ordinal();
         }
@@ -86,10 +87,12 @@ public class TranslucentQuadAnalyzer {
     public record SortState(Level level, float[] centers, float[] normals, int centersLength, BitSet normalSigns, Vector3f sharedNormal, NormalPlanes[] triggerPlanes) {
         public static final SortState NONE = new SortState(Level.NONE, null, null, 0, null, null, null);
 
+        // Whether the camera moving can change the correct order
         public boolean requiresDynamicSorting() {
             return level.requiresDynamicSorting();
         }
 
+        // Drops scratch data, keeping only what a re-sort needs
         public SortState compactForStorage() {
             if(this == NONE || requiresDynamicSorting()) {
                 return this;
@@ -98,11 +101,13 @@ public class TranslucentQuadAnalyzer {
             }
         }
 
+        // Null-safe compact
         public static SortState compacted(SortState state) {
             return state != null ? state.compactForStorage() : null;
         }
     }
 
+    // Defensive copy
     private static BitSet cloneBits(BitSet bits) {
         if(bits.isEmpty()) {
             return EMPTY;
@@ -111,6 +116,7 @@ public class TranslucentQuadAnalyzer {
         }
     }
 
+    // A single plane never needs re-sorting
     private boolean areAllQuadsOnSamePlane() {
         // Let globalNormal = (a, b, c). Any plane with this normal vector is denoted by the equation ax + by + cz = d,
         // for some real number d.
@@ -141,6 +147,7 @@ public class TranslucentQuadAnalyzer {
         return true;
     }
 
+    // Classifies the section: none, static, or dynamic with trigger planes
     public SortState getSortState() {
         if(quadCenters.isEmpty()) {
             return SortState.NONE;
@@ -173,6 +180,7 @@ public class TranslucentQuadAnalyzer {
         }
     }
 
+    // Resets for the next section
     public void clear() {
         quadCenters.clear();
         quadNormals.clear();
@@ -184,6 +192,7 @@ public class TranslucentQuadAnalyzer {
         trackedNormalsOverflowed = false;
     }
 
+    // Groups quads by normal; crossing any plane triggers a re-sort
     private NormalPlanes[] buildTriggerPlanes() {
         if (trackedNormalsOverflowed || planesByNormal.isEmpty()) {
             return null;
@@ -199,6 +208,7 @@ public class TranslucentQuadAnalyzer {
         return planes;
     }
 
+    // Records a quad centre under its normal
     private void accumulatePlane(float centerX, float centerY, float centerZ) {
         if (trackedNormalsOverflowed) {
             return;
@@ -222,6 +232,7 @@ public class TranslucentQuadAnalyzer {
         accumulator.distances.add(accumulator.nx * centerX + accumulator.ny * centerY + accumulator.nz * centerZ);
     }
 
+    // Face normal of the captured quad from its vertices
     private void calculateNormal() {
         final Vector3f v0 = vertexPositions[0];
 
@@ -269,6 +280,7 @@ public class TranslucentQuadAnalyzer {
         currentNormal.set(normX, normY, normZ);
     }
 
+    // Stores the current quad's centre and normal
     private void captureQuad() {
         // The four positions in vertexPositions form a quad. Find its center
         float totalX = 0, totalY = 0, totalZ = 0;
@@ -317,6 +329,7 @@ public class TranslucentQuadAnalyzer {
         }
     }
 
+    // Accumulates one vertex; every fourth completes a quad
     public void capture(ChunkVertexEncoder.Vertex vertex) {
         int i = currentVertex;
         vertexPositions[i].set(vertex.x, vertex.y, vertex.z);

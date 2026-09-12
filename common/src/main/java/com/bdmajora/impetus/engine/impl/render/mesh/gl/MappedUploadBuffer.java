@@ -30,10 +30,12 @@ public class MappedUploadBuffer {
         }
     }
 
+    // GL name
     public int getId() {
         return this.id;
     }
 
+    // Bytes
     public long getSize() {
         return this.size;
     }
@@ -43,10 +45,12 @@ public class MappedUploadBuffer {
         return this.clientAddress;
     }
 
+    // Makes a written range visible to the GPU
     public void flush(long offset, long length) {
         LWJGL.glFlushMappedNamedBufferRange(this.id, offset, length);
     }
 
+    // Unmaps, then deletes
     public void delete() {
         if (this.deleted) {
             return;

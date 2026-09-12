@@ -28,6 +28,7 @@ public class MathHelperMixin {
     @Mutable
     private static float[] SIN_TABLE;
 
+    // Builds the compact table then drops vanilla's, which nothing has read yet at this point
     @Inject(method = "<clinit>", at = @At("RETURN"))
     private static void onClassInit(CallbackInfo ci) {
         CompactSineLUT.init(SIN_TABLE);
@@ -35,19 +36,13 @@ public class MathHelperMixin {
         SIN_TABLE = null;
     }
 
-    /**
-     * @author jellysquid3
-     * @reason Use the compact lookup table
-     */
+    // Overwrite: through the compact table
     @Overwrite
     public static float sin(float value) {
         return CompactSineLUT.sin(value);
     }
 
-    /**
-     * @author jellysquid3
-     * @reason Use the compact lookup table
-     */
+    // Overwrite: through the compact table
     @Overwrite
     public static float cos(float value) {
         return CompactSineLUT.cos(value);

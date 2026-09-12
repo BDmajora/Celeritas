@@ -32,6 +32,7 @@ public final class ProgramSet {
         this.programArrays.put(id, sources);
     }
 
+    // The pack's properties
     public ShaderProperties getProperties() {
         return this.properties;
     }
@@ -68,6 +69,7 @@ public final class ProgramSet {
         return (source != null && source.isValid()) ? Optional.of(source) : Optional.empty();
     }
 
+    // The composite/deferred/final family, indexed by pass number
     public ProgramSource[] getArray(ProgramArrayId id) {
         return this.programArrays.get(id);
     }

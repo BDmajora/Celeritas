@@ -20,6 +20,7 @@ public class BakedQuadFactoryMixin {
         return quad;
     }
 
+    // Marks quads whose UVs cover the whole sprite, which lets the atlas skip per-quad clamping later
     private static void handleMaterialClassifications(BakedQuad quad, TextureAtlasSprite sprite, BlockPartFace face) {
         if (sprite.getClass() == TextureAtlasSprite.class) {
             float minUV = Float.MAX_VALUE, maxUV = Float.MIN_VALUE;

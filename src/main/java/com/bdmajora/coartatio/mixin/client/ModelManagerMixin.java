@@ -8,16 +8,17 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// Patches ModelManager.onResourceManagerReload, which brackets the whole model bake (builds the
-// bakery, runs it, installs the result). Opens/closes the bake-scoped pools around it so a
-// second reload (resource pack swap, F3+T) doesn't keep the previous pack's geometry alive.
+// onResourceManagerReload brackets the whole model bake, so the bake-scoped pools open and close around it
+// Without this a second reload (pack swap, F3+T) keeps the previous pack's geometry alive
 @Mixin(ModelManager.class)
 public class ModelManagerMixin {
+    // Bake is about to start; arm the pools
     @Inject(method = "onResourceManagerReload", at = @At("HEAD"))
     private void coartatio$openPools(IResourceManager resourceManager, CallbackInfo ci) {
         Coartatio.onResourceReloadStart();
     }
 
+    // Bake finished; release everything scoped to it
     @Inject(method = "onResourceManagerReload", at = @At("RETURN"))
     private void coartatio$closePools(IResourceManager resourceManager, CallbackInfo ci) {
         Coartatio.onResourceReloadFinish();

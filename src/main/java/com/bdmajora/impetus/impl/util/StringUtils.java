@@ -30,6 +30,7 @@ public class StringUtils {
         return dp[m][n];
     }
 
+    // Ranks options by edit distance to the input, for the options screen search
     public static <T> List<T> fuzzySearch(Iterable<T> options, String userInput, int maxDistance, Function<T, String> toStringFn) {
         List<T> result = new ArrayList<>();
         String[] targetWords = userInput.toLowerCase().split("\\s+");

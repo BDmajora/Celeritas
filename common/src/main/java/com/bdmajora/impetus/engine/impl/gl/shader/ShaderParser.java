@@ -10,6 +10,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ShaderParser {
+    // Resolves #import lines and injects the defines after #version
     public static String parseShader(String src, Function<String, String> sourceProvider, ShaderConstants constants) {
         List<String> lines = parseShader(src, sourceProvider);
         lines.addAll(1, constants.getDefineStrings());
@@ -17,6 +18,7 @@ public class ShaderParser {
         return String.join("\n", lines);
     }
 
+    // Resolves #import lines, recursively
     public static List<String> parseShader(String src, Function<String, String> sourceProvider) {
         List<String> builder = new LinkedList<>();
         String line;
@@ -38,6 +40,7 @@ public class ShaderParser {
 
     private static final Pattern IMPORT_PATTERN = Pattern.compile("#import <(?<namespace>.*):(?<path>.*)>");
 
+    // Loads and parses one imported file
     private static List<String> resolveImport(String line, Function<String, String> sourceProvider) {
         Matcher matcher = IMPORT_PATTERN.matcher(line);
 

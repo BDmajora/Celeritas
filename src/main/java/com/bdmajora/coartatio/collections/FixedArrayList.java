@@ -9,12 +9,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 
-// An immutable List that is exactly one object plus one exactly-sized array. Ported from Hydrogen
-// The lists this replaces are ArrayLists built by Lists.newArrayList() and then never touched again, so they
-// carry a growth buffer that is on average a third wasted, on top of the ArrayList object itself. Once per face
-// per baked model, that adds up
-// Implements List directly rather than extending AbstractList, so nothing inherits a modCount field or the
-// AbstractList iterator machinery
+// Immutable List that is exactly one object plus one exactly-sized array, ported from Hydrogen
+// Replaces never-modified ArrayLists that carry a growth buffer a third wasted on average, once per face per model
+// Implements List directly so nothing inherits AbstractList's modCount or iterator machinery
 public class FixedArrayList<T> implements List<T> {
     private final T[] array;
 
@@ -27,21 +24,25 @@ public class FixedArrayList<T> implements List<T> {
         this.array = array;
     }
 
+    // Array length is the size; never changes
     @Override
     public int size() {
         return this.array.length;
     }
 
+    // Only empty when built from an empty source
     @Override
     public boolean isEmpty() {
         return this.array.length == 0;
     }
 
+    // Linear scan; lists here are small
     @Override
     public boolean contains(Object o) {
         return ArrayUtils.contains(this.array, o);
     }
 
+    // Guava's array iterator, which allocates nothing beyond itself
     @Override
     public Iterator<T> iterator() {
         return Iterators.forArray(this.array);
@@ -81,11 +82,13 @@ public class FixedArrayList<T> implements List<T> {
         throw new UnsupportedOperationException();
     }
 
+    // Immutable
     @Override
     public boolean remove(Object o) {
         throw new UnsupportedOperationException();
     }
 
+    // One scan per element of c
     @Override
     public boolean containsAll(Collection<?> c) {
         for (Object o : c) {
@@ -97,56 +100,67 @@ public class FixedArrayList<T> implements List<T> {
         return true;
     }
 
+    // Immutable
     @Override
     public boolean addAll(Collection<? extends T> c) {
         throw new UnsupportedOperationException();
     }
 
+    // Immutable
     @Override
     public boolean addAll(int index, Collection<? extends T> c) {
         throw new UnsupportedOperationException();
     }
 
+    // Immutable
     @Override
     public boolean removeAll(Collection<?> c) {
         throw new UnsupportedOperationException();
     }
 
+    // Immutable
     @Override
     public boolean retainAll(Collection<?> c) {
         throw new UnsupportedOperationException();
     }
 
+    // Immutable
     @Override
     public void clear() {
         throw new UnsupportedOperationException();
     }
 
+    // Direct array index; the hot path for quad lists
     @Override
     public T get(int index) {
         return this.array[index];
     }
 
+    // Immutable
     @Override
     public T set(int index, T element) {
         throw new UnsupportedOperationException();
     }
 
+    // Immutable
     @Override
     public void add(int index, T element) {
         throw new UnsupportedOperationException();
     }
 
+    // Immutable
     @Override
     public T remove(int index) {
         throw new UnsupportedOperationException();
     }
 
+    // First match by equals, or -1
     @Override
     public int indexOf(Object o) {
         return ArrayUtils.indexOf(this.array, o);
     }
 
+    // Last match by equals, or -1
     @Override
     public int lastIndexOf(Object o) {
         return ArrayUtils.lastIndexOf(this.array, o);
@@ -160,11 +174,13 @@ public class FixedArrayList<T> implements List<T> {
         return java.util.Collections.unmodifiableList(Arrays.asList(this.array)).listIterator();
     }
 
+    // Rare path; borrows an unmodifiable view rather than writing a bidirectional iterator
     @Override
     public ListIterator<T> listIterator(int index) {
         return java.util.Collections.unmodifiableList(Arrays.asList(this.array)).listIterator(index);
     }
 
+    // Rare path; a view over the array, still unmodifiable
     @Override
     public List<T> subList(int fromIndex, int toIndex) {
         return java.util.Collections.unmodifiableList(Arrays.asList(this.array).subList(fromIndex, toIndex));
@@ -196,6 +212,7 @@ public class FixedArrayList<T> implements List<T> {
         return true;
     }
 
+    // Must match AbstractList.hashCode so mixed-implementation comparisons behave
     @Override
     public int hashCode() {
         // Must match AbstractList.hashCode so that mixed-implementation comparisons behave.
@@ -206,6 +223,7 @@ public class FixedArrayList<T> implements List<T> {
         return hash;
     }
 
+    // Arrays.toString, matching what an ArrayList would print
     @Override
     public String toString() {
         return Arrays.toString(this.array);

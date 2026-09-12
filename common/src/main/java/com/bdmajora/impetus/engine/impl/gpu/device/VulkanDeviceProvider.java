@@ -8,14 +8,17 @@ public final class VulkanDeviceProvider {
     private VulkanDeviceProvider() {
     }
 
+    // Always false; Vulkan is not available on this platform
     public static boolean isAvailable() {
         return false;
     }
 
+    // Always empty
     public static Optional<GpuDevice> probe() {
         return Optional.empty();
     }
 
+    // For the startup log
     public static String getUnavailableReason() {
         return UNAVAILABLE_REASON;
     }

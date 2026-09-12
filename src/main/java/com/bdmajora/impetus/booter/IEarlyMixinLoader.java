@@ -2,61 +2,31 @@ package com.bdmajora.impetus.booter;
 
 import java.util.List;
 
-/**
- * Early mixins are defined as mixins that affects vanilla or forge classes.
- * Or technically, classes that can be queried via the current state of {@link net.minecraft.launchwrapper.LaunchClassLoader}
- *
- *
- * Implement this in your {@link net.minecraftforge.fml.relauncher.IFMLLoadingPlugin}.
- * Return all early mixin configs you want MixinBooter to queue and send to Mixin library.
- *
- * @deprecated as of 11.0, the line of "early" and "late" mixin loading no longer is present, use
- *             {@code MixinConfigs} manifest entry to list your configs or {@code MixinConnector} to denote
- *             a class implementing {@link org.spongepowered.asm.mixin.connect.IMixinConnector} and call
- *             {@link org.spongepowered.asm.mixin.Mixins#addConfiguration(String)} (or related methods) there
- */
+// Early mixins are defined as mixins that affects vanilla or forge classes. Or technically, classes that can be
+// queried via the current state of net.minecraft.launchwrapper.LaunchClassLoader Implement this in your
+// net.minecraftforge.fml.relauncher.IFMLLoadingPlugin. Return all early mixin configs you want MixinBooter to
+// queue and send to Mixin library
 @Deprecated
 public interface IEarlyMixinLoader {
 
-    /**
-     * @return mixin configurations to be queued and sent to Mixin library.
-     */
     List<String> getMixinConfigs();
 
-    /**
-     * Runs when a mixin config is successfully queued and sent to Mixin library.
-     *
-     * @since 10.0
-     * @param context current context of the loading process.
-     * @return true if the mixinConfig should be queued, false if it should not.
-     */
+    // Runs when a mixin config is successfully queued and sent to Mixin library
     default boolean shouldMixinConfigQueue(Context context) {
         return this.shouldMixinConfigQueue(context.mixinConfig());
     }
 
-    /**
-     * Runs when a mixin config is successfully queued and sent to Mixin library.
-     *
-     * @param mixinConfig mixin config name, queried via {@link IEarlyMixinLoader#getMixinConfigs()}.
-     * @return true if the mixinConfig should be queued, false if it should not.
-     */
+    // Runs when a mixin config is successfully queued and sent to Mixin library
     default boolean shouldMixinConfigQueue(String mixinConfig) {
         return true;
     }
 
-    /**
-     * Runs when a mixin config is successfully queued and sent to Mixin library.
-     * @since 10.0
-     * @param context current context of the loading process.
-     */
+    // Runs when a mixin config is successfully queued and sent to Mixin library
     default void onMixinConfigQueued(Context context) {
         this.onMixinConfigQueued(context.mixinConfig());
     }
 
-    /**
-     * Runs when a mixin config is successfully queued and sent to Mixin library.
-     * @param mixinConfig mixin config name, queried via {@link IEarlyMixinLoader#getMixinConfigs()}.
-     */
+    // Runs when a mixin config is successfully queued and sent to Mixin library
     default void onMixinConfigQueued(String mixinConfig) { }
 
 }

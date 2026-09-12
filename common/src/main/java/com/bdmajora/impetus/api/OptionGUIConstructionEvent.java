@@ -21,6 +21,7 @@ public class OptionGUIConstructionEvent extends ImpetusEvent {
         return this.pages;
     }
     
+    // Handlers add their own pages
     public void addPage(OptionPage page) {
         this.pages.add(page);
     }

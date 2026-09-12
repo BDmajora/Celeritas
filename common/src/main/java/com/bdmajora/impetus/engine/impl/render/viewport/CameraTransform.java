@@ -30,10 +30,12 @@ public final class CameraTransform {
         this.z = z;
     }
 
+    // Floor as int
     private static int integral(double value) {
         return (int) value;
     }
 
+    // Remainder as float, so positions stay precise far from origin
     private static float fractional(double value) {
         float fullPrecision = (float) (value - integral(value));
         float modifier = Math.copySign(PRECISION_MODIFIER, fullPrecision);
@@ -41,6 +43,7 @@ public final class CameraTransform {
         return  (fullPrecision + modifier) - modifier;
     }
 
+    // By the split fields
     @Override
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
@@ -48,6 +51,7 @@ public final class CameraTransform {
         return x == that.x && y == that.y && z == that.z;
     }
 
+    // By the split fields
     @Override
     public int hashCode() {
         int hash = 1;

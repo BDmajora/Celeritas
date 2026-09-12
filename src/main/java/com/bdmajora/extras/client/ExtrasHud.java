@@ -30,6 +30,7 @@ public final class ExtrasHud {
     private ExtrasHud() {
     }
 
+    // Draws the overlay unless the debug screen or hideGUI already owns the corner
     @SubscribeEvent
     public static void onRenderOverlay(RenderGameOverlayEvent.Text event) {
         Minecraft minecraft = Minecraft.getMinecraft();
@@ -66,6 +67,7 @@ public final class ExtrasHud {
         }
     }
 
+    // One line per enabled readout, in a fixed order
     private static List<String> collectLines(Minecraft minecraft, ExtrasConfig options) {
         List<String> lines = new ArrayList<>();
         ExtrasConfig.ExtraSettings settings = options.extra;

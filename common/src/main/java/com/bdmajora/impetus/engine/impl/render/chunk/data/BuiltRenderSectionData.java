@@ -12,15 +12,18 @@ public class BuiltRenderSectionData {
     public boolean hasBlockGeometry;
     public long visibilityData;
 
+    // Which of geometry, sprites and entities the section has
     public int getVisualBitmaskForSection() {
         return this.hasBlockGeometry ? (1 << RenderVisualsService.HAS_BLOCK_GEOMETRY) : 0;
     }
 
+    // Freezes collections after building
     @MustBeInvokedByOverriders
     public void bake() {
 
     }
 
+    // By contents
     @Override
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
@@ -28,6 +31,7 @@ public class BuiltRenderSectionData {
         return hasBlockGeometry == that.hasBlockGeometry && visibilityData == that.visibilityData;
     }
 
+    // By contents
     @Override
     public int hashCode() {
         return Objects.hash(hasBlockGeometry, visibilityData);

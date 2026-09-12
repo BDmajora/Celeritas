@@ -13,6 +13,7 @@ public interface OptionValues {
 
     Optional<String> getStringValue(String name);
 
+    // Changed value, else the declared default
     default boolean getBooleanValueOrDefault(String name) {
         return getBooleanValue(name).orElseGet(() -> {
             if (!getOptionSet().getBooleanOptions().containsKey(name)) {
@@ -23,6 +24,7 @@ public interface OptionValues {
         });
     }
 
+    // Changed value, else the declared default
     default String getStringValueOrDefault(String name) {
         return getStringValue(name).orElseGet(() -> getOptionSet().getStringOptions().get(name).getOption().getDefaultValue());
     }

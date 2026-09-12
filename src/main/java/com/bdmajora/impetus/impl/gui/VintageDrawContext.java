@@ -46,6 +46,7 @@ public class VintageDrawContext implements DrawContext {
         this.componentCache = new HashMap<>();
     }
 
+    // Maps Sodium's style set onto vanilla's Style object
     private ITextComponent applyStyles(ITextComponent c, Set<TextFormattingStyle> styles) {
         if (styles.isEmpty()) {
             return c;
@@ -68,6 +69,7 @@ public class VintageDrawContext implements DrawContext {
         return mutable;
     }
 
+    // First key with a translation, so fallbacks work
     private static String findKey(List<String> keys) {
         for (var str : keys) {
             if (I18n.hasKey(str)) {
@@ -77,6 +79,7 @@ public class VintageDrawContext implements DrawContext {
         return keys.get(0);
     }
 
+    // Translates one Sodium component into a vanilla one
     private ITextComponent convertComponent(TextComponent component) {
         if (component instanceof TextComponent.Literal literal) {
             return new TextComponentString(literal.text());
@@ -96,6 +99,7 @@ public class VintageDrawContext implements DrawContext {
         }
     }
 
+    // Converts and caches, since the same components are drawn every frame
     private ITextComponent compile(TextComponent component) {
         var compiled = this.componentCache.get(component);
         if (compiled == null) {
@@ -105,11 +109,13 @@ public class VintageDrawContext implements DrawContext {
         return compiled;
     }
 
+    // Vanilla's Gui.drawRect
     @Override
     public void fill(int x1, int y1, int x2, int y2, int color) {
         Gui.drawRect(x1, y1, x2, y2, color);
     }
 
+    // Through the font renderer, with or without shadow
     @Override
     public int drawString(TextComponent str, int x, int y, int color, boolean shadow) {
         GlStateManager.enableBlend();
@@ -121,27 +127,32 @@ public class VintageDrawContext implements DrawContext {
         return len;
     }
 
+    // Binds and draws a full texture
     @Override
     public void blitWholeImage(String icon, int x, int y, int width, int height) {
         Minecraft.getMinecraft().getTextureManager().bindTexture(new ResourceLocation(icon));
         Gui.drawModalRectWithCustomSizedTexture(x, y, 0, 0, width, height, (float)width, (float)height);
     }
 
+    // GlStateManager
     @Override
     public void pushMatrix() {
         GlStateManager.pushMatrix();
     }
 
+    // GlStateManager
     @Override
     public void translate(double x, double y, double z) {
         GlStateManager.translate(x, y, z);
     }
 
+    // GlStateManager
     @Override
     public void popMatrix() {
         GlStateManager.popMatrix();
     }
 
+    // Converts GUI coordinates to window pixels, flipping y since GL's origin is bottom-left
     @Override
     public void enableScissor(int x, int y, int x2, int y2) {
         int width = x2 - x + 1;
@@ -153,31 +164,37 @@ public class VintageDrawContext implements DrawContext {
         GL11.glScissor(x * scale, mc.displayHeight - (y + height) * scale, width * scale, height * scale);
     }
 
+    // Ends the clip
     @Override
     public void disableScissor() {
         GL11.glDisable(GL11.GL_SCISSOR_TEST);
     }
 
+    // Font renderer width of the compiled component
     @Override
     public int getStringWidth(TextComponent component) {
         return font.getStringWidth(compile(component).getUnformattedText());
     }
 
+    // Truncates to fit, for tooltips
     @Override
     public String substrByWidth(String str, int maxWidth) {
         return font.trimStringToWidth(str, maxWidth);
     }
 
+    // Word-wraps through the font renderer and converts each line back
     @Override
     public List<TextComponent> split(TextComponent component, int maxWidth) {
         return font.listFormattedStringToWidth(compile(component).getFormattedText(), maxWidth).stream().map(TextComponent::literal).collect(Collectors.toList());
     }
 
+    // Plain text with formatting codes stripped
     @Override
     public String extractString(TextComponent component) {
         return compile(component).getUnformattedText();
     }
 
+    // Font renderer's line height
     @Override
     public int lineHeight() {
         return font.FONT_HEIGHT;

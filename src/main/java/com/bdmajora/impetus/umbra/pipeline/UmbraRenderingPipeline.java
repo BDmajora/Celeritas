@@ -69,20 +69,10 @@ import java.util.regex.Pattern;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// the Umbra-native frame pipeline: owns the gbuffer framebuffer that world rendering is redirected into,
-// and the composite/final full-screen chain that turns the gbuffer into the image on screen
-// frame flow, driven by the EntityRenderer mixin:
-//   beginWorldRendering (renderWorld HEAD) binds the gbuffer FBO, so vanilla's own clear and all world
-//   rendering - Impetus terrain via the pack's transformed gbuffers_terrain, everything else
-//   fixed-function - lands in colortex0..N plus depthtex0
-//   captureRenderingState (after setupCameraTransform) copies the camera matrices vanilla itself
-//   captured in ActiveRenderInfo into CapturedRenderingState for the uniform providers
-//   finishWorldRendering (renderWorld RETURN) runs each compositeN pass, ping-ponging the render targets
-//   exactly like OptiFine's buffer flip, then final into Minecraft's framebuffer - or a plain blit of
-//   colortex0 when the pack has no final - then hands GL state back to vanilla
-// construction compiles every pass up front (via FullscreenTransformer); a pass that fails to compile is
-// skipped with an error log rather than aborting the pipeline
-// must be created, used and destroyed on the render thread
+// The frame pipeline: the gbuffer FBO world rendering is redirected into, and the composite and final chain
+// beginWorldRendering binds the gbuffer, captureRenderingState copies the camera matrices, finishWorldRendering
+// runs each pass ping-ponging targets like OptiFine then final into vanilla's framebuffer
+// Every pass compiles up front; a failure skips that pass. Render thread only
 public class UmbraRenderingPipeline {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -235,11 +225,13 @@ public class UmbraRenderingPipeline {
         putGbufferSampler("noisetex", GBUFFER_NOISE_TEX_UNIT);
     }
 
+    // Registers a sampler name in the fullscreen layout
     private static void putSharedSampler(Map<String, Integer> fullscreen, String name, int unit) {
         fullscreen.put(name, unit);
         GBUFFER_SAMPLER_UNITS.put(name, unit);
     }
 
+    // Registers a sampler name in the gbuffer layout
     private static void putGbufferSampler(String name, int unit) {
         GBUFFER_SAMPLER_UNITS.put(name, unit);
     }
@@ -703,10 +695,12 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Highest unit a program can address, from the driver
     private static int maxProgrammableTextureUnit() {
         return Math.max(CUSTOM_TEX_FIRST_UNIT - 1, LWJGL.glGetInteger(GL_MAX_TEXTURE_IMAGE_UNITS) - 1);
     }
 
+    // A sampler object with depth-compare on, for shadow2D lookups
     private static int createShadowHardwareSampler(boolean linear, boolean mipmapped) {
         int sampler = LWJGL.glGenSamplers();
         LWJGL.glSamplerParameteri(sampler, GL11.GL_TEXTURE_MAG_FILTER, linear ? GL11.GL_LINEAR : GL11.GL_NEAREST);
@@ -733,6 +727,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Every composite, deferred and final program the pack ships, in pass order
     private List<ProgramSource> collectFullscreenSources(ShaderPack pack) {
         List<ProgramSource> sources = new ArrayList<>();
         for (ProgramArrayId id : FULLSCREEN_FAMILIES) {
@@ -841,6 +836,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Finds colorimgN references so those targets get image bindings
     private static void collectRenderTargetImages(String source, TreeSet<Integer> out) {
         if (source == null) {
             return;
@@ -1008,6 +1004,7 @@ public class UmbraRenderingPipeline {
 
     }
 
+    // Four comma-separated floats
     private static float[] parseVec4(String value) {
         String[] parts = value.split(",");
         try {
@@ -1029,6 +1026,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Tolerates a trailing f
     private static float parseFloatLiteral(String value) {
         String cleaned = value.trim();
         if (cleaned.endsWith("f") || cleaned.endsWith("F")) {
@@ -1196,6 +1194,7 @@ public class UmbraRenderingPipeline {
         return value;
     }
 
+    // const int NAME = value; in shader text
     private static int parseConstInt(String text, String name, int fallback) {
         String value = lastMatch(Pattern.compile("const\\s+int\\s+" + name + "\\s*=\\s*([-+]?\\d+)"), text, 1);
         if (value == null) {
@@ -1214,6 +1213,7 @@ public class UmbraRenderingPipeline {
         return matcher.find() ? Integer.parseInt(matcher.group(1)) : fallback;
     }
 
+    // #define NAME value in shader text
     private static float parseDefineFloat(String text, String name, float fallback) {
         Matcher matcher = Pattern.compile("(?m)^\\s*#define\\s+" + name + "\\s+([0-9.]+)").matcher(text);
         if (!matcher.find()) {
@@ -1226,15 +1226,18 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // const bool NAME = value;, false when absent
     private static boolean parseConstBool(String text, String name) {
         return parseOptionalConstBool(text, name).orElse(false);
     }
 
+    // const bool with presence distinguished from false
     private static Optional<Boolean> parseOptionalConstBool(String text, String name) {
         String value = lastMatch(Pattern.compile("const\\s+bool\\s+" + name + "\\s*=\\s*(true|false)"), text, 1);
         return value != null ? Optional.of(Boolean.parseBoolean(value)) : Optional.empty();
     }
 
+    // Reads the shadowHardwareFiltering and shadowtex filtering constants
     private void parseShadowDepthSamplingSettings(String text) {
         Arrays.fill(this.shadowHardwareFiltering, false);
         Arrays.fill(this.shadowMipmap, false);
@@ -1252,6 +1255,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // A shared constant sets both entries, then per-index constants override
     private static void applyBothThenIndexed(String text, String bothName, String indexedPrefix, boolean[] values) {
         if (bothName != null) {
             parseOptionalConstBool(text, bothName).ifPresent(value -> Arrays.fill(values, value));
@@ -1274,6 +1278,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // const float NAME = value;
     private static float parseConstFloat(String text, String name, float fallback) {
         Float value = parseConstFloat(text, name);
         return value != null ? value : fallback;
@@ -1361,6 +1366,7 @@ public class UmbraRenderingPipeline {
         return framebuffer;
     }
 
+    // Fails loudly with the purpose and attachments named
     private static void checkFramebufferComplete(UmbraFramebuffer framebuffer, String purpose, int[] buffers) {
         int status = framebuffer.getStatus();
         if (status != GL30.GL_FRAMEBUFFER_COMPLETE) {
@@ -1369,6 +1375,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Sets the FBO's draw buffers from a program's logical colortex list
     private void drawGbufferBuffers(UmbraFramebuffer framebuffer, int[] logicalDrawBuffers) {
         int[] physicalDrawBuffers = new int[logicalDrawBuffers.length];
         java.util.Set<Integer> written = new java.util.HashSet<>();
@@ -1495,6 +1502,7 @@ public class UmbraRenderingPipeline {
         pass.viewportOffsetY = scale[2];
     }
 
+    // Honours a pass's flip.<pass>.<buffer> directives before it runs
     private void applyExplicitPreFlips(Map<Integer, Boolean> explicitFlips, BufferFlipper flipper, String name) {
         for (Map.Entry<Integer, Boolean> entry : explicitFlips.entrySet()) {
             if (entry.getValue()) {
@@ -1523,6 +1531,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Schedules the per-frame clears each target needs, with its declared clear colour
     private void buildClearPasses() {
         for (int i = 0; i < UmbraRenderTargets.MAX_COLOR_BUFFERS; i++) {
             if (this.renderTargets.get(i) == null) {
@@ -1544,10 +1553,12 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Whether a colortex is attached to the gbuffer FBO
     private boolean isGbufferAttachment(int index) {
         return this.gbufferAttachmentPoints.containsKey(index);
     }
 
+    // colortex0 clears to fog colour, the rest to transparent black, unless overridden
     private float[] defaultClearColor(int index) {
         if (this.colorBufferClearColors[index] != null) {
             return this.colorBufferClearColors[index];
@@ -1579,6 +1590,7 @@ public class UmbraRenderingPipeline {
         return TextureStage.COMPOSITE_AND_FINAL;
     }
 
+    // For debug logging
     private static String formatBitSet(BitSet bitSet) {
         List<Integer> values = new ArrayList<>();
         for (int bit = bitSet.nextSetBit(0); bit >= 0; bit = bitSet.nextSetBit(bit + 1)) {
@@ -1587,10 +1599,12 @@ public class UmbraRenderingPipeline {
         return values.toString();
     }
 
+    // For debug logging
     private static String formatClearColor(float[] color) {
         return color == null ? "fog" : Arrays.toString(color);
     }
 
+    // For debug logging
     private static String summarizeSamplers(int[] samplers) {
         StringBuilder builder = new StringBuilder("[");
         boolean first = true;
@@ -1666,6 +1680,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // The final program, which writes the main framebuffer rather than a colortex
     private FullscreenPass buildFinalPass(ShaderPack pack, BufferFlipper flipper) {
         Optional<ProgramSource> source = pack.getProgramSet().get(ProgramId.Final);
         if (!source.isPresent()) {
@@ -1721,6 +1736,7 @@ public class UmbraRenderingPipeline {
         return mipmappedBuffers;
     }
 
+    // colortexN or gcolor-style sampler name to an index; null for anything else
     private static Integer colorTargetIndex(String name) {
         if (name.startsWith("colortex")) {
             try {
@@ -1737,6 +1753,7 @@ public class UmbraRenderingPipeline {
         return null;
     }
 
+    // Transforms and compiles one composite-family program
     private UmbraProgram compileFullscreenProgram(ProgramSource source, TextureStage stage) {
         String vshRaw = source.getVertexSource().orElse(null);
         String fshRaw = source.getFragmentSource().orElse(null);
@@ -1888,6 +1905,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Distinguishes the two fixed layouts by a marker name
     private static boolean isGbufferSamplerLayout(Map<String, Integer> samplerUnits) {
         return samplerUnits.getOrDefault("depthtex0", -1) == GBUFFER_DEPTH_TEX_0_UNIT;
     }
@@ -1903,6 +1921,7 @@ public class UmbraRenderingPipeline {
         return units;
     }
 
+    // Layout per stage; composite and final share, gbuffer differs
     private static Map<TextureStage, Map<String, Integer>> samplerUnitsByStage() {
         Map<TextureStage, Map<String, Integer>> byStage = new java.util.EnumMap<>(TextureStage.class);
         for (TextureStage stage : TextureStage.values()) {
@@ -1911,6 +1930,7 @@ public class UmbraRenderingPipeline {
         return byStage;
     }
 
+    // Layout for one stage
     private static Map<String, Integer> samplerUnitsForStage(TextureStage stage) {
         return stage == TextureStage.GBUFFERS_AND_SHADOW ? GBUFFER_SAMPLER_UNITS : FULLSCREEN_SAMPLER_UNITS;
     }
@@ -1930,6 +1950,7 @@ public class UmbraRenderingPipeline {
         return merged;
     }
 
+    // Registers every uniform the pipeline can supply against one program
     private static ProgramUniforms buildUniforms(String name, UmbraProgram program) {
         ProgramUniforms.Builder builder = ProgramUniforms.builder(name, program.getProgram().getGlId());
         CommonUniforms.addCommonUniforms(builder);
@@ -1947,16 +1968,19 @@ public class UmbraRenderingPipeline {
         return samplers;
     }
 
+    // The texture a pass reads for a colortex
     private int frontTexture(BufferFlipper flipper, int index) {
         UmbraRenderTarget target = this.renderTargets.getOrCreate(index);
         return flipper.isFlipped(index) ? target.getAltTexture() : target.getMainTexture();
     }
 
+    // Same, from a snapshotted flip state
     private int frontTexture(BitSet flips, int index) {
         UmbraRenderTarget target = this.renderTargets.getOrCreate(index);
         return flips.get(index) ? target.getAltTexture() : target.getMainTexture();
     }
 
+    // The texture a pass writes for a colortex
     private int backTexture(BitSet flips, int index) {
         UmbraRenderTarget target = this.renderTargets.getOrCreate(index);
         return flips.get(index) ? target.getMainTexture() : target.getAltTexture();
@@ -1974,6 +1998,7 @@ public class UmbraRenderingPipeline {
         return sanitizeDrawBuffers(name, drawBuffers, UmbraRenderTargets.MAX_COLOR_BUFFERS);
     }
 
+    // Drops out-of-range targets, logging each with the program name
     private static int[] sanitizeDrawBuffers(String name, int[] drawBuffers, int maxExclusive) {
         // An out-of-range index is normally just an inactive #ifdef path in the pack, so it is dropped silently
         // rather than reported; the consumer stays because sanitize requires one
@@ -2112,6 +2137,7 @@ public class UmbraRenderingPipeline {
         return this.worldRenderingActive && this.gbufferPrograms != null && this.gbufferPrograms.hasDirect(phase);
     }
 
+    // Whether the frame is between the deferred and composite stages
     public boolean isRenderingPostDeferredTranslucents() {
         return this.worldRenderingActive && !this.deferredPasses.isEmpty()
                 && this.currentGbuffer == this.translucentGbufferFramebuffer;
@@ -2515,12 +2541,14 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Blend state for the opaque terrain pass on every attachment
     private static void restoreGbufferOpaqueBlend(int[] drawBuffers) {
         GlStateManager.disableBlend();
         GlStateManager.depthMask(true);
         disableIndexedBlend(drawBuffers.length);
     }
 
+    // Blend state for the translucent terrain pass
     private static void restoreGbufferTranslucentBlend(int[] drawBuffers) {
         GlStateManager.enableBlend();
         GlStateManager.tryBlendFuncSeparate(
@@ -2538,6 +2566,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Turns blending off per attachment after a pass that set it per attachment
     private static void disableIndexedBlend(int drawBufferSlots) {
         if (!LWJGL.supportsBufferBlending()) {
             return;
@@ -2548,6 +2577,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Hook for the chunk renderer after a terrain pass; resets indexed blend
     public void afterTerrainDraw(int drawBufferSlots) {
         if (!this.worldRenderingActive || UmbraShadowRenderer.isShadowPass()) {
             return;
@@ -2683,6 +2713,7 @@ public class UmbraRenderingPipeline {
         return beginHandRendering(ProgramId.HandWater, 23); // MC_RENDER_STAGE_HAND_TRANSLUCENT
     }
 
+    // Binds the hand program and depth setup; false when the pack has none
     private boolean beginHandRendering(ProgramId programId, int renderStage) {
         if (this.destroyed || !this.worldRenderingActive) {
             return false;
@@ -2782,6 +2813,7 @@ public class UmbraRenderingPipeline {
         GlStateManager.bindTexture(0);
     }
 
+    // Restores state after the hand
     public void endHandRendering() {
         LWJGL.glUseProgram(0);
         GlStateManager.depthFunc(GL11.GL_LEQUAL);
@@ -2804,6 +2836,7 @@ public class UmbraRenderingPipeline {
         GlStateManager.color(1.0f, 1.0f, 1.0f, 1.0f);
     }
 
+    // Light at the player's eye, for the hand's lightmap
     private static int getHandPackedLight() {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.world == null || mc.player == null) {
@@ -2813,14 +2846,17 @@ public class UmbraRenderingPipeline {
         return mc.world.getCombinedLight(eyePos, 0);
     }
 
+    // Block light half of packed light as a lightmap coordinate
     private static float getBlockLightmapCoord(int packedLight) {
         return packedLight & 0xFFFF;
     }
 
+    // Sky light half
     private static float getSkyLightmapCoord(int packedLight) {
         return (packedLight >>> 16) & 0xFFFF;
     }
 
+    // Vanilla's lightmap texture matrix, which packs expect on unit 1
     private static void setupLightmapTextureMatrix() {
         GlStateManager.setActiveTexture(OpenGlHelper.lightmapTexUnit);
         GlStateManager.matrixMode(GL_TEXTURE_MODE);
@@ -2914,6 +2950,7 @@ public class UmbraRenderingPipeline {
 
     }
 
+    // Whether the pipeline is between beginWorldRendering and its end
     public boolean isWorldRenderingActive() {
         return this.worldRenderingActive;
     }
@@ -2960,6 +2997,7 @@ public class UmbraRenderingPipeline {
                 || this.backFaceCulling[layerOrdinal];
     }
 
+    // Packs with a shadow pass replace vanilla's blob shadows
     public boolean shouldDisableVanillaEntityShadows() {
         return this.shadowRenderer != null;
     }
@@ -3143,6 +3181,7 @@ public class UmbraRenderingPipeline {
         return built;
     }
 
+    // Honours program.<name>.enabled
     private static boolean isProgramEnabled(ShaderPack pack, String programName) {
         return pack.getProperties().getProgramEnabled(programName).orElse(Boolean.TRUE);
     }
@@ -3227,6 +3266,7 @@ public class UmbraRenderingPipeline {
         return GlslPreprocessor.foldFloatConditionals(source, java.util.Collections.emptyMap());
     }
 
+    // Applies the fixes every source needs before any transform
     public static String stabilizeShaderSource(String name, String source) {
         source = foldUncompilableConditionals(name, source);
         source = normalizeArbTextureLookups(name, source);
@@ -3238,6 +3278,7 @@ public class UmbraRenderingPipeline {
         return source;
     }
 
+    // Compute work group counts, honouring #ifdef gates
     private static int[] parseWorkGroups(String source, Map<String, String> defines) {
         String active = preprocessActiveShaderSource(source, defines);
         int[] workGroups = parseWorkGroupsDirect(active);
@@ -3251,6 +3292,7 @@ public class UmbraRenderingPipeline {
         return scale != null ? scale : parseWorkGroupsRenderDirect(source);
     }
 
+    // workGroupsRender directive, screen-relative
     private static float[] parseWorkGroupsRenderDirect(String source) {
         Matcher matcher = Pattern.compile(
                 "const\\s+vec2\\s+workGroupsRender\\s*=\\s*vec2\\s*\\(([^)]*)\\)")
@@ -3294,6 +3336,7 @@ public class UmbraRenderingPipeline {
         return GlslPreprocessor.resolveConditionals(source, defines);
     }
 
+    // workGroups directive, absolute
     private static int[] parseWorkGroupsDirect(String source) {
         String stripped = stripGlslComments(source);
         Matcher vector = Pattern.compile(
@@ -3324,12 +3367,14 @@ public class UmbraRenderingPipeline {
         return null;
     }
 
+    // Whether the dispatch reaches every element of the target volume
     private static boolean coversVolume(int[] workGroups, int[] localSize, int[] volume) {
         return workGroups[0] * localSize[0] >= volume[0]
                 && workGroups[1] * localSize[1] >= volume[1]
                 && workGroups[2] * localSize[2] >= volume[2];
     }
 
+    // layout(local_size_x = ...) values
     private static int[] parseLocalSize(String source) {
         Matcher matcher = Pattern.compile(
                 "local_size_x\\s*=\\s*(\\d+)(?:\\s*,\\s*local_size_y\\s*=\\s*(\\d+))?(?:\\s*,\\s*local_size_z\\s*=\\s*(\\d+))?")
@@ -3343,12 +3388,14 @@ public class UmbraRenderingPipeline {
         return new int[]{x, y, z};
     }
 
+    // One axis of a workGroups directive
     private static int parseNamedWorkGroup(String source, String axis) {
         Matcher matcher = Pattern.compile("const\\s+int\\s+workGroups" + axis + "\\s*=\\s*(\\d+)\\s*;")
                 .matcher(source);
         return matcher.find() ? Integer.parseInt(matcher.group(1)) : 0;
     }
 
+    // Null for anything not a positive integer
     private static Integer parsePositiveInt(String raw) {
         try {
             int value = Integer.parseInt(raw.trim());
@@ -3358,10 +3405,12 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Integer ceiling division
     private static int ceilDiv(int value, int divisor) {
         return Math.max(1, (value + divisor - 1) / divisor);
     }
 
+    // Removes line and block comments before directive parsing
     private static String stripGlslComments(String source) {
         return source.replaceAll("(?s)/\\*.*?\\*/", "").replaceAll("(?m)//.*$", "");
     }
@@ -3440,6 +3489,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Frees the compute programs attached to a pass family
     private static void destroyFamilyComputes(List<FullscreenPass> family) {
         for (FullscreenPass pass : family) {
             for (ComputePass compute : pass.computes) {
@@ -3556,6 +3606,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Generates mips on targets the pass declared via mipmapEnabled
     private void setupMipmappedBuffers(FullscreenPass pass) {
         if (pass.mipmappedBuffers.nextSetBit(0) < 0) {
             return;
@@ -3572,6 +3623,7 @@ public class UmbraRenderingPipeline {
         GlTextureUnits.resetToUnit0();
     }
 
+    // Returns every target to the non-mipmapped filter at frame end
     private void resetRenderTargetMipmaps() {
         GlTextureUnits.selectScratch(MIPMAP_SCRATCH_UNIT);
         for (int i = 0; i < UmbraRenderTargets.MAX_COLOR_BUFFERS; i++) {
@@ -3584,12 +3636,14 @@ public class UmbraRenderingPipeline {
         GlTextureUnits.resetToUnit0();
     }
 
+    // Clears any pending GL error so the next check is attributable
     public static void drainGlError() {
         while (LWJGL.glGetError() != 0) {
             // discard
         }
     }
 
+    // Logs a pending GL error with the call site
     public static void reportGlError(String where) {
         int error = LWJGL.glGetError();
         if (error != 0) {
@@ -3603,6 +3657,7 @@ public class UmbraRenderingPipeline {
     private static final int GL_PROJECTION_MODE = 0x1701;
     private static final int GL_TEXTURE_MODE = 0x1702;
 
+    // Identity matrices for fullscreen passes that still use fixed-function transforms
     private static void pushFullscreenFixedFunctionMatrices() {
         // Projection is the ortho that maps the [0,1] fullscreen quad to NDC [-1,1] (matching Umbra's composite
         // gl_ProjectionMatrix), so `gl_Position = ftransform()` (Complementary/BSL) resolves to
@@ -3619,6 +3674,7 @@ public class UmbraRenderingPipeline {
         GlStateManager.loadIdentity();
     }
 
+    // Restores the matrices
     private static void popFixedFunctionMatrices() {
         GlStateManager.matrixMode(GL_PROJECTION_MODE);
         GlStateManager.popMatrix();
@@ -3647,6 +3703,7 @@ public class UmbraRenderingPipeline {
         bindShaderPackResources();
     }
 
+    // Binds and returns the previous binding for restore
     private static int bindScratchTexture2D(int texture) {
         GlTextureUnits.selectScratch(DEPTH_COPY_SCRATCH_UNIT);
         int previousTexture = LWJGL.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
@@ -3654,11 +3711,13 @@ public class UmbraRenderingPipeline {
         return previousTexture;
     }
 
+    // Rebinds the saved texture
     private static void restoreScratchTexture2D(int texture) {
         LWJGL.glBindTexture(GL11.GL_TEXTURE_2D, texture);
         GlTextureUnits.resetToUnit0();
     }
 
+    // Back to vanilla's framebuffer
     private static void bindMainRenderTarget(Minecraft mc) {
         if (OpenGlHelper.isFramebufferEnabled()) {
             mc.getFramebuffer().bindFramebuffer(true);
@@ -3668,6 +3727,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Resets draw and read buffers after an FBO with custom ones
     private static void restoreMainDrawReadBuffers(Minecraft mc) {
         if (OpenGlHelper.isFramebufferEnabled()) {
             LWJGL.glDrawBuffers(GL30.GL_COLOR_ATTACHMENT0);
@@ -3678,6 +3738,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Binds each colortex the pass samples, respecting flips
     private void bindColorSamplers(FullscreenPass pass) {
         for (int i = UmbraRenderTargets.MAX_COLOR_BUFFERS - 1; i >= 0; i--) {
             if (pass.colorSamplers[i] != 0) {
@@ -3737,6 +3798,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // depthtex0, 1 and 2
     private void bindDepthSamplers() {
         // Bind both the high fullscreen units and the OptiFine 1.12 gbuffers units (6/12).
         bindDepthSampler(DEPTH_TEX_0_UNIT, this.renderTargets.getDepthTexture());
@@ -3747,6 +3809,7 @@ public class UmbraRenderingPipeline {
         GlTextureUnits.resetToUnit0();
     }
 
+    // normals and specular atlases, or the neutral fallbacks
     private void bindGbufferPbrSamplers() {
         // PBR maps on the gbuffer-stage normals/specular units (2/3, through GlStateManager so its cache stays
         // coherent). Fullscreen passes overwrite these units with colortex2/3; rebind before later gbuffers stages
@@ -3760,6 +3823,7 @@ public class UmbraRenderingPipeline {
         GlStateManager.setActiveTexture(OpenGlHelper.defaultTexUnit);
     }
 
+    // One depth texture to one unit
     private static void bindDepthSampler(int unit, DepthTexture texture) {
         LWJGL.glBindSampler(unit, 0);
         bindTextureUnit(unit, texture.getTextureId());
@@ -3772,6 +3836,7 @@ public class UmbraRenderingPipeline {
         GlTextureUnits.resetToUnit0();
     }
 
+    // noisetex
     private void bindNoiseTexture() {
         int customNoise = this.customTextureManager.getNoiseTextureId();
         int texture = customNoise != -1 ? customNoise : this.noiseTexture.getTextureId();
@@ -3780,6 +3845,7 @@ public class UmbraRenderingPipeline {
         GlTextureUnits.resetToUnit0();
     }
 
+    // shadowtex and shadowcolor, or the stub when there is no shadow pass
     private void bindShadowSamplers() {
         if (this.shadowRenderer == null && this.stubShadowMap == null) {
             return;
@@ -3823,6 +3889,7 @@ public class UmbraRenderingPipeline {
         GlTextureUnits.resetToUnit0();
     }
 
+    // One shadow depth texture with its compare sampler object
     private void bindShadowDepthUnit(int unit, int texture, int sampler) {
         LWJGL.glBindSampler(unit, sampler);
         bindTextureUnit(unit, texture);
@@ -3874,6 +3941,7 @@ public class UmbraRenderingPipeline {
         bindGbufferColorSamplers(this.activeGbufferSamplerFlips);
     }
 
+    // colortex samplers for a gbuffer program, using the feedback copies where needed
     private void bindGbufferColorSamplers(BitSet samplerFlips) {
         for (int i = 4; i < UmbraRenderTargets.MAX_COLOR_BUFFERS; i++) {
             if (this.renderTargets.get(i) == null) {
@@ -3897,6 +3965,7 @@ public class UmbraRenderingPipeline {
         GlTextureUnits.resetToUnit0();
     }
 
+    // Copies targets a gbuffer program both reads and writes, since that is undefined otherwise
     private BitSet prepareGbufferFeedbackSamplers(int[] drawBuffers) {
         BitSet samplerFlips = null;
         for (int logicalIndex : drawBuffers) {
@@ -3912,12 +3981,14 @@ public class UmbraRenderingPipeline {
         return samplerFlips == null ? this.activeGbufferSamplerFlips : samplerFlips;
     }
 
+    // Targets packs commonly read back during the gbuffer stage
     private static boolean isGbufferFeedbackSampler(int logicalIndex) {
         return logicalIndex >= 0
                 && logicalIndex < GBUFFER_COLOR_TEXTURE_UNITS.length
                 && GBUFFER_COLOR_TEXTURE_UNITS[logicalIndex] >= 0;
     }
 
+    // Blit so the program reads a stable copy
     private void copyGbufferFrontToBack(int logicalIndex) {
         if (this.gbufferFeedbackCopyFramebuffer == null) {
             this.gbufferFeedbackCopyFramebuffer = new UmbraFramebuffer();
@@ -3936,6 +4007,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Returns to unit 0 with the block atlas, as vanilla expects
     private void restoreTextureUnits() {
         this.customTextureManager.unbindAll();
         this.customImageManager.unbindAll();
@@ -3984,6 +4056,7 @@ public class UmbraRenderingPipeline {
         GlStateManager.setActiveTexture(OpenGlHelper.defaultTexUnit);
     }
 
+    // Custom textures and images the pack declared
     private void bindShaderPackResources() {
         if (this.destroyed) {
             return;
@@ -3999,6 +4072,7 @@ public class UmbraRenderingPipeline {
         }
     }
 
+    // Image bindings for the current program
     public void bindCustomImages() {
         bindShaderPackResources();
     }

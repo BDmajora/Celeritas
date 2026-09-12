@@ -61,7 +61,9 @@ public class RenderListManager {
     @Nullable
     private final SectionTicker sectionTicker;
 
+    // Per-pass and per-sort-type counts for the debug screen
     public record RenderListDebugStatistics(Object2IntOpenHashMap<TerrainRenderPass> renderPassCounts, int[] sortingSectionCounts) {
+        // Sort counts formatted
         public String getSortingString() {
             StringBuilder sb = new StringBuilder();
 
@@ -101,6 +103,7 @@ public class RenderListManager {
         this.rebuildLists = ChunkRebuildLists.EMPTY;
     }
 
+    // Kicks off the occlusion walk, async when enabled
     public void startGraphUpdate(Viewport viewport, int frame, int regionIdsLength, float searchDistance, boolean useOcclusionCulling, int targetQueueSize) {
         if (this.currentOcclusionFuture != null) {
             throw new IllegalStateException("Occlusion work in progress while trying to submit next task");
@@ -123,6 +126,7 @@ public class RenderListManager {
         this.needsUpdate = false;
     }
 
+    // Collects the walk's result into the current render lists
     public void finishPreviousGraphUpdate() {
         if (currentOcclusionFuture != null) {
             VisibleChunkCollector visitor = currentOcclusionFuture.join();
@@ -145,6 +149,7 @@ public class RenderListManager {
         }
     }
 
+    // Stops the async walker
     public void destroy() {
         if (currentOcclusionFuture != null) {
             currentOcclusionFuture.join();
@@ -164,10 +169,12 @@ public class RenderListManager {
         }
     }
 
+    // Node by section coordinates, or null
     private OcclusionNode getOcclusionNode(int x, int y, int z) {
         return this.occlusionNodes.get(PositionUtil.packSection(x, y, z));
     }
 
+    // Links a new node to its six neighbours
     private void connectNeighborNodes(OcclusionNode render) {
         for (int direction = 0; direction < GraphDirection.COUNT; direction++) {
             OcclusionNode adj = this.getOcclusionNode(render.getChunkX() + GraphDirection.x(direction),
@@ -181,6 +188,7 @@ public class RenderListManager {
         }
     }
 
+    // Unlinks a removed node
     private void disconnectNeighborNodes(OcclusionNode render) {
         for (int direction = 0; direction < GraphDirection.COUNT; direction++) {
             OcclusionNode adj = render.getAdjacent(direction);
@@ -200,6 +208,7 @@ public class RenderListManager {
         }
     }
 
+    // Adds a section to the graph
     public void attachRenderSection(RenderSection section) {
         this.assertOcclusionNotRunning();
 
@@ -218,6 +227,7 @@ public class RenderListManager {
         this.needsUpdate = true;
     }
 
+    // Removes a section from the graph
     public void detachRenderSection(RenderSection section) {
         this.assertOcclusionNotRunning();
 
@@ -244,6 +254,7 @@ public class RenderListManager {
         }
     }
 
+    // Installs a section's face-to-face visibility after a build
     public void updateVisibilityData(int x, int y, int z, long visibilityData) {
         this.submitUpdateTask(() -> {
             var node = this.getOcclusionNode(x, y, z);
@@ -254,6 +265,7 @@ public class RenderListManager {
         });
     }
 
+    // Whether the last walk reached the section
     public boolean isSectionVisible(int x, int y, int z) {
         OcclusionNode render = this.getOcclusionNode(x, y, z);
 
@@ -268,6 +280,7 @@ public class RenderListManager {
         return render.getLastVisibleFrame() >= this.lastUpdatedFrame;
     }
 
+    // Advances sprite animation for visible sections
     public void tickVisibleRenders() {
         if (this.sectionTicker != null) {
             this.sectionTicker.tickVisibleRenders();
@@ -275,6 +288,7 @@ public class RenderListManager {
     }
 
 
+    // Computed lazily per frame
     public RenderListDebugStatistics getDebugStatistics() {
         if (this.debugStatistics == null) {
             this.debugStatistics = computeDebugStatistics();
@@ -282,6 +296,7 @@ public class RenderListManager {
         return this.debugStatistics;
     }
 
+    // From the section ticker
     public String getTickerDebugString() {
         if (this.sectionTicker == null) {
             return "";
@@ -289,6 +304,7 @@ public class RenderListManager {
         return this.sectionTicker.getDebugString();
     }
 
+    // Walks the render lists once
     private RenderListDebugStatistics computeDebugStatistics() {
         Object2IntOpenHashMap<TerrainRenderPass> renderPassCounts = new Object2IntOpenHashMap<>();
 

@@ -39,6 +39,7 @@ public interface CommandList extends AutoCloseable {
 
     void deleteTessellation(GlTessellation tessellation);
 
+    // Nothing to release; exists so try-with-resources reads naturally
     @Override
     default void close() {
         this.flush();

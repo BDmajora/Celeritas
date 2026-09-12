@@ -19,6 +19,7 @@ public class SplitMixRandom {
         this.setSeed(seed);
     }
 
+    // Stafford's variant 13 finaliser
     private static long staffordMix13(long z) {
         z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
         z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
@@ -26,24 +27,29 @@ public class SplitMixRandom {
         return z ^ (z >>> 31);
     }
 
+    // Variant 4, upper 32 bits only, for nextInt
     private static int staffordMix4Upper32(long z) {
         z = (z ^ (z >>> 33)) * 0x62A9D9ED799705F5L;
 
         return (int) (((z ^ (z >>> 28)) * 0xCB24D0A5C88C35B3L) >>> 32);
     }
 
+    // Advances the state by the golden gamma and mixes
     public long nextLong() {
         return staffordMix13(this.x += PHI);
     }
 
+    // Upper 32 bits of a mixed state
     public int nextInt() {
         return staffordMix4Upper32(this.x += PHI);
     }
 
+    // Unbiased bounded int by rejection
     public int nextInt(final int n) {
         return (int) this.nextLong(n);
     }
 
+    // Unbiased bounded long by rejection
     public long nextLong(final long n) {
         if (n <= 0) {
             throw new IllegalArgumentException("illegal bound " + n + " (must be positive)");
@@ -66,18 +72,22 @@ public class SplitMixRandom {
         return t;
     }
 
+    // 53 random bits scaled to [0, 1)
     public double nextDouble() {
         return (staffordMix13(this.x += PHI) >>> 11) * 0x1.0p-53;
     }
 
+    // 24 random bits scaled to [0, 1)
     public float nextFloat() {
         return (staffordMix4Upper32(this.x += PHI) >>> 8) * 0x1.0p-24f;
     }
 
+    // Sign bit of a long
     public boolean nextBoolean() {
         return staffordMix4Upper32(this.x += PHI) < 0;
     }
 
+    // Fills eight bytes per long
     public void nextBytes(final byte[] bytes) {
         int i = bytes.length, n;
 
@@ -89,10 +99,12 @@ public class SplitMixRandom {
         }
     }
 
+    // Mixes the seed so similar seeds diverge
     public void setSeed(final long seed) {
         this.x = HashCommon.murmurHash3(seed);
     }
 
+    // Raw state, for reproducing a sequence exactly
     public void setState(final long state) {
         this.x = state;
     }

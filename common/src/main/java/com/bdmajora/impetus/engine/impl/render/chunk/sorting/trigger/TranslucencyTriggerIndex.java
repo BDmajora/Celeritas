@@ -7,16 +7,9 @@ import it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap;
 
 import java.util.function.Consumer;
 
-// global face-normal index driving precise translucency re-sort scheduling
-// sections with dynamically-sorted translucent geometry register the planes of that geometry, grouped
-// by quantized normal
-// each frame the camera moves, collectTriggered treats the movement as a segment and reports only the
-// sections owning a plane that the segment crossed - the only situations in which the relative order
-// of two quads sharing a normal can flip
-// compared to the legacy "re-sort everything near the camera on every block of movement" heuristic
-// this both eliminates redundant sorts (movement parallel to all planes triggers nothing) and catches
-// crossings the heuristic missed (sub-block movement through a pane)
-// not thread-safe; all access happens on the render thread alongside render-list building
+// Global face-normal index for precise translucency re-sort scheduling: sections register their quad planes by
+// quantised normal, and camera movement is treated as a segment that triggers only the sections whose plane it crossed
+// Render thread only
 public final class TranslucencyTriggerIndex {
     // Movement components smaller than this can't meaningfully cross a plane; skips whole normal groups.
     private static final double MOVEMENT_EPSILON = 1.0E-9;
@@ -37,6 +30,7 @@ public final class TranslucencyTriggerIndex {
         }
     }
 
+    // A section and its per-normal plane distances
     private record Entry(RenderSection section, float[] distances) {
     }
 
@@ -67,6 +61,7 @@ public final class TranslucencyTriggerIndex {
         this.keysBySection.put(section, keys);
     }
 
+    // Drops a section from every normal bucket
     public void remove(RenderSection section) {
         var keys = this.keysBySection.remove(section);
 
@@ -141,10 +136,12 @@ public final class TranslucencyTriggerIndex {
         }
     }
 
+    // Every indexed section
     public void forEachSection(Consumer<RenderSection> consumer) {
         this.keysBySection.keySet().forEach(consumer);
     }
 
+    // Empties the index
     public void clear() {
         this.buckets.clear();
         this.keysBySection.clear();

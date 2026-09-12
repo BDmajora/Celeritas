@@ -10,6 +10,7 @@ public enum GraphicsBackend {
         this.displayName = displayName;
     }
 
+    // For the debug screen
     public String getDisplayName() {
         return this.displayName;
     }

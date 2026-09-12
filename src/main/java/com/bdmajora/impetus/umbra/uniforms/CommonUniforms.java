@@ -119,10 +119,12 @@ public final class CommonUniforms {
     private CommonUniforms() {
     }
 
+    // Advances the per-frame smoothers before any program samples them
     public static void beginFrame() {
         updateComplementaryCustomUniforms();
     }
 
+    // Registers every OptiFine and Iris uniform this port supplies
     public static void addCommonUniforms(UniformCollector uniforms) {
         CelestialUniforms.addCelestialUniforms(uniforms);
         SystemTimeUniforms.addSystemTimeUniforms(uniforms);
@@ -340,96 +342,115 @@ public final class CommonUniforms {
                 .uniform2i(UniformUpdateFrequency.PER_FRAME, "terrainTextureSize", CapturedRenderingState.INSTANCE::getAtlasSize);
     }
 
+    // Complementary's isEyeInCave: smoothed sky visibility below a threshold
     private static float getIsEyeInCave() {
         updateComplementaryCustomUniforms();
         return isEyeInWater() == 0 ? cachedEyeInCave : 0.0f;
     }
 
+    // Complementary: 1 in a biome with no precipitation
     private static float getInDry() {
         updateComplementaryCustomUniforms();
         return cachedInDry;
     }
 
+    // Complementary: 1 in a biome that rains
     private static float getInRainy() {
         updateComplementaryCustomUniforms();
         return cachedInRainy;
     }
 
+    // Complementary: 1 in a biome that snows
     private static float getInSnowy() {
         updateComplementaryCustomUniforms();
         return cachedInSnowy;
     }
 
+    // Complementary: ramps from 0 to 1 over the first seconds after load
     private static float getStarter() {
         updateComplementaryCustomUniforms();
         return cachedStarter;
     }
 
+    // Complementary: low-passed frame time
     private static float getFrameTimeSmooth() {
         updateComplementaryCustomUniforms();
         return cachedFrameTimeSmooth;
     }
 
+    // Complementary: eye brightness mapped to 0..1
     public static float getEyeBrightnessM() {
         updateComplementaryCustomUniforms();
         return cachedEyeBrightnessM;
     }
 
+    // Complementary: second smoothing of eyeBrightnessM
     private static float getEyeBrightnessM2() {
         updateComplementaryCustomUniforms();
         return cachedEyeBrightnessM2;
     }
 
+    // Complementary: rain strength scaled by biome
     private static float getRainFactor() {
         updateComplementaryCustomUniforms();
         return cachedRainFactor;
     }
 
+    // Complementary: smoothed camera speed
     private static float getVelocity() {
         updateComplementaryCustomUniforms();
         return cachedVelocity;
     }
 
+    // Complementary: smoothed rain strength
     private static float getRainStrengthS() {
         updateComplementaryCustomUniforms();
         return cachedRainStrengthS;
     }
 
+    // Complementary: rain strength with a longer fade, for star visibility
     private static float getRainStrengthShiningStars() {
         updateComplementaryCustomUniforms();
         return cachedRainStrengthShiningStars;
     }
 
+    // Complementary: second smoothing of rain strength
     private static float getRainStrengthS2() {
         updateComplementaryCustomUniforms();
         return cachedRainStrengthS2;
     }
 
+    // Complementary: 1 when precipitation is rain rather than snow
     private static float getIsPrecipitationRain() {
         updateComplementaryCustomUniforms();
         return cachedPrecipitationRain;
     }
 
+    // Complementary: 1 while the player is being hurt
     private static float getTouchMyBody() {
         updateComplementaryCustomUniforms();
         return cachedTouchMyBody;
     }
 
+    // Complementary: smoothed sneak state
     private static float getSneakSmooth() {
         updateComplementaryCustomUniforms();
         return cachedSneakSmooth;
     }
 
+    // Complementary: smoothed burning state
     private static float getBurningSmooth() {
         updateComplementaryCustomUniforms();
         return cachedBurningSmooth;
     }
 
+    // Complementary: combined nausea and darkness effect strength
     private static float getEffectStrength() {
         updateComplementaryCustomUniforms();
         return cachedEffectStrength;
     }
 
+    // Steps every Complementary smoother by the frame delta
     private static void updateComplementaryCustomUniforms() {
         int frame = SystemTimeUniforms.COUNTER.getFrameCounter();
         if (frame == complementaryUniformFrame) {
@@ -486,16 +507,19 @@ public final class CommonUniforms {
         return getEyeAltitude() < 5.0f ? skyBrightness : 1.0f;
     }
 
+    // Sky light at the eye, 0..1
     private static float getEyeSkyBrightness() {
         Vector2i brightness = EyeBrightnessTracker.getEyeBrightness();
         return clamp(brightness.y / 240.0f, 0.0f, 1.0f);
     }
 
+    // Frame time clamped so a stall cannot blow up the smoothers
     private static float getSafeFrameTime() {
         float frameTime = SystemTimeUniforms.COUNTER.getLastFrameTime();
         return frameTime > 0.0f ? Math.min(frameTime, 0.25f) : DEFAULT_FRAME_TIME;
     }
 
+    // 1 when the camera moved this frame
     private static float getMoving() {
         Vector3d current = CameraUniforms.getCurrentCameraPosition();
         Vector3d previous = CameraUniforms.getPreviousCameraPosition();
@@ -505,6 +529,7 @@ public final class CommonUniforms {
         return diffSum > 0.0 && diffSum < 1.0 ? 1.0f : 0.0f;
     }
 
+    // Camera displacement per second, unsmoothed
     private static float getRawVelocity() {
         Vector3d current = CameraUniforms.getCurrentCameraPosition();
         Vector3d previous = CameraUniforms.getPreviousCameraPosition();
@@ -514,6 +539,7 @@ public final class CommonUniforms {
         return (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
+    // 0 none, 1 rain, 2 snow at the camera
     private static int getBiomePrecipitation() {
         Biome biome = getCameraBiome();
         if (biome == null) {
@@ -525,11 +551,13 @@ public final class CommonUniforms {
         return biome.canRain() ? 1 : 0;
     }
 
+    // Registry id of the camera biome
     private static int getBiomeId() {
         Biome biome = getCameraBiome();
         return biome == null ? -1 : Biome.getIdForBiome(biome);
     }
 
+    // Iris biome category enum for the camera biome
     private static int getBiomeCategory() {
         Biome biome = getCameraBiome();
         if (biome == null) {
@@ -586,11 +614,13 @@ public final class CommonUniforms {
         return 5;
     }
 
+    // Biome rainfall at the camera
     private static float getRainfall() {
         Biome biome = getCameraBiome();
         return biome == null ? 0.0f : biome.getRainfall();
     }
 
+    // Biome temperature at the camera
     private static float getTemperature() {
         World world = world();
         Entity camera = Minecraft.getMinecraft().getRenderViewEntity();
@@ -600,6 +630,7 @@ public final class CommonUniforms {
         return world.getBiome(new BlockPos(camera)).getTemperature(new BlockPos(camera));
     }
 
+    // Biome at the camera position, or plains without a world
     private static Biome getCameraBiome() {
         World world = world();
         Entity camera = Minecraft.getMinecraft().getRenderViewEntity();
@@ -609,53 +640,65 @@ public final class CommonUniforms {
         return world.getBiome(new BlockPos(camera));
     }
 
+    // Plain clamp
     private static float clamp(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
     }
 
+    // The client player, or null
     private static EntityPlayer player() {
         return Minecraft.getMinecraft().player;
     }
 
+    // Boolean to the 0/1 int packs expect
     private static int bool(boolean value) {
         return value ? 1 : 0;
     }
 
+    // Enchantment glint alpha for the current draw
     private static float getUmbraGlintAlpha() {
         return 1.0f;
     }
 
+    // Texture scale for the current draw
     private static float getUmbraTextureScale() {
         return UmbraChunkVertexType.INSTANCE.getTextureScale();
     }
 
+    // Model scale for the current draw
     private static float getUmbraModelScale() {
         return UmbraChunkVertexType.INSTANCE.getPositionScale();
     }
 
+    // Model offset for the current draw
     private static Vector3f getUmbraModelOffset() {
         float offset = UmbraChunkVertexType.INSTANCE.getPositionOffset();
         return new Vector3f(offset, offset, offset);
     }
 
+    // Texture scale as a vec2
     private static Vector2f getTextureScaleVector() {
         float scale = getUmbraTextureScale();
         return new Vector2f(scale, scale);
     }
 
+    // Model scale as a vec3
     private static Vector3f getModelScaleVector() {
         float scale = getUmbraModelScale();
         return new Vector3f(scale, scale, scale);
     }
 
+    // Camera translation for the current draw
     private static Vector3f getUmbraCameraTranslation() {
         return CameraUniforms.getCameraPositionFract(CameraUniforms.getCurrentCameraPositionUnshifted()).negate();
     }
 
+    // The texture bound on unit 0
     private static int getGtextureId() {
         return getTextureUnit0Integer(GL_TEXTURE_BINDING_2D);
     }
 
+    // Size of the texture bound on unit 0
     private static Vector2i getGtextureSize() {
         int activeTexture = LWJGL.glGetInteger(GL_ACTIVE_TEXTURE);
         LWJGL.glActiveTexture(GL_TEXTURE0);
@@ -668,6 +711,7 @@ public final class CommonUniforms {
         }
     }
 
+    // glGetTexLevelParameteri on unit 0's texture
     private static int getTextureUnit0Integer(int pname) {
         int activeTexture = LWJGL.glGetInteger(GL_ACTIVE_TEXTURE);
         LWJGL.glActiveTexture(GL_TEXTURE0);
@@ -678,6 +722,7 @@ public final class CommonUniforms {
         }
     }
 
+    // The current GL blend factors
     private static Vector4i getBlendFunc() {
         if (LWJGL.glGetInteger(GL11.GL_BLEND) == 0) {
             return new Vector4i(0, 0, 0, 0);
@@ -689,46 +734,55 @@ public final class CommonUniforms {
                 LWJGL.glGetInteger(GL_BLEND_DST_ALPHA));
     }
 
+    // Main hand setting
     private static int isRightHanded() {
         EntityPlayer player = player();
         return bool(player == null || player.getPrimaryHand() == EnumHandSide.RIGHT);
     }
 
+    // Player sneaking
     private static int isSneaking() {
         EntityPlayer player = player();
         return bool(player != null && player.isSneaking());
     }
 
+    // Player sprinting
     private static int isSprinting() {
         EntityPlayer player = player();
         return bool(player != null && player.isSprinting());
     }
 
+    // Player hurt time active
     private static int isHurt() {
         EntityPlayer player = player();
         return bool(player != null && player.hurtTime > 0);
     }
 
+    // Hurt time as a 0..1 fraction
     private static float getRawHurtFactor() {
         EntityPlayer player = player();
         return player != null && (player.hurtTime > 0 || player.deathTime > 0) ? 0.4f : 0.0f;
     }
 
+    // Player invisible
     private static int isInvisible() {
         EntityPlayer player = player();
         return bool(player != null && player.isInvisible());
     }
 
+    // Player on fire
     private static int isBurning() {
         EntityPlayer player = player();
         return bool(player != null && player.isBurning());
     }
 
+    // Player on the ground
     private static int isOnGround() {
         EntityPlayer player = player();
         return bool(player != null && player.onGround);
     }
 
+    // Player's feet in water
     private static int isFeetInWater() {
         EntityPlayer player = player();
         World world = world();
@@ -739,36 +793,43 @@ public final class CommonUniforms {
         return bool(world.isBlockLoaded(feet) && world.getBlockState(feet).getMaterial() == Material.WATER);
     }
 
+    // Always 0; 1.12.2 has no swimming animation
     private static int isInSwimmingAnimation() {
         EntityPlayer player = player();
         return bool(player != null && player.isInWater());
     }
 
+    // Player riding anything
     private static int isRiding() {
         EntityPlayer player = player();
         return bool(player != null && player.isRiding());
     }
 
+    // Player gliding
     private static int isElytraFlying() {
         EntityPlayer player = player();
         return bool(player != null && player.isElytraFlying());
     }
 
+    // Vehicle in water
     private static int isVehicleInWater() {
         Entity vehicle = vehicle();
         return bool(vehicle != null && vehicle.isInWater());
     }
 
+    // Pack entity id of the vehicle, or -1
     private static int getVehicleId() {
         Entity vehicle = vehicle();
         return vehicle == null ? 0 : WorldRenderingSettings.getEntityId(vehicle);
     }
 
+    // Vehicle look direction
     private static Vector3f getVehicleLookVector() {
         Entity vehicle = vehicle();
         return vehicle == null ? new Vector3f() : toVector3f(vehicle.getLook(CapturedRenderingState.INSTANCE.getTickDelta()));
     }
 
+    // Vehicle position relative to the camera
     private static Vector3f getRelativeVehiclePosition() {
         Entity vehicle = vehicle();
         if (vehicle == null) {
@@ -782,82 +843,99 @@ public final class CommonUniforms {
         return new Vector3f((float) (camera.x - x), (float) (camera.y - y), (float) (camera.z - z));
     }
 
+    // The player's vehicle, or null
     private static Entity vehicle() {
         EntityPlayer player = player();
         return player == null ? null : player.getRidingEntity();
     }
 
+    // Survival or adventure
     private static boolean isSurvivalLike() {
         Minecraft mc = Minecraft.getMinecraft();
         return mc.player != null && mc.playerController != null && mc.playerController.isNotCreative()
                 && !mc.playerController.isSpectator();
     }
 
+    // Inverse of the chunk fade duration
     private static float getChunkFadeTimeInv() {
         int durationMs = ImpetusVintage.options().quality.chunkFadeInDuration;
         return durationMs > 0 ? 1.0f / durationMs : 0.0f;
     }
 
+    // Always 0; 1.12.2 has no mood
     private static float getPlayerMood() {
         return getIsEyeInCave();
     }
 
+    // Always 0; 1.12.2 has no mood
     private static float getConstantMood() {
         return getIsEyeInCave();
     }
 
+    // Health as a fraction of max
     private static float getCurrentPlayerHealth() {
         EntityPlayer player = player();
         return player != null && isSurvivalLike() ? player.getHealth() / player.getMaxHealth() : -1.0f;
     }
 
+    // Max health
     private static float getMaxPlayerHealth() {
         EntityPlayer player = player();
         return player != null && isSurvivalLike() ? player.getMaxHealth() : -1.0f;
     }
 
+    // Hunger as a fraction of 20
     private static float getCurrentPlayerHunger() {
         EntityPlayer player = player();
         return player != null && isSurvivalLike() ? player.getFoodStats().getFoodLevel() / 20.0f : -1.0f;
     }
 
+    // Armour as a fraction of 20
     private static float getCurrentPlayerArmor() {
         EntityPlayer player = player();
         return player != null && isSurvivalLike() ? player.getTotalArmorValue() / 50.0f : -1.0f;
     }
 
+    // Air as a fraction of max
     private static float getCurrentPlayerAir() {
         EntityPlayer player = player();
         return player != null && isSurvivalLike() ? player.getAir() / 300.0f : -1.0f;
     }
 
+    // Max air
     private static float getMaxPlayerAir() {
         return isSurvivalLike() ? 300.0f : -1.0f;
     }
 
+    // Third-person view is 0
     private static int isFirstPersonCamera() {
         return bool(Minecraft.getMinecraft().gameSettings.thirdPersonView == 0);
     }
 
+    // Spectator mode
     private static int isSpectator() {
         Minecraft mc = Minecraft.getMinecraft();
         return bool(mc.playerController != null && mc.playerController.isSpectator());
     }
 
+    // Interpolated thunder strength
     private static float getThunderStrength() {
         World world = world();
         return world == null ? 0.0f : clamp(world.getThunderStrength(CapturedRenderingState.INSTANCE.getTickDelta()), 0.0f, 1.0f);
     }
 
+    // Always 0; no heavy fog on 1.12.2
     private static int isHeavyFog() {
         return bool(getBlindness() > 0.0f || isEyeInWater() == 2);
     }
 
+    // World sea level
     private static int getSeaLevel() {
         World world = world();
         return world == null ? 0 : world.getSeaLevel();
     }
 
+    // Pack id of the block under the crosshair, or 0
     private static int getCurrentSelectedBlockId() {
         Minecraft mc = Minecraft.getMinecraft();
         RayTraceResult hit = mc.objectMouseOver;
@@ -871,6 +949,7 @@ public final class CommonUniforms {
         return WorldRenderingSettings.getBlockStateId(mc.world.getBlockState(pos));
     }
 
+    // Position of the block under the crosshair, relative to the camera
     private static Vector3f getCurrentSelectedBlockPos() {
         Minecraft mc = Minecraft.getMinecraft();
         RayTraceResult hit = mc.objectMouseOver;
@@ -886,6 +965,7 @@ public final class CommonUniforms {
         return new Vector3f((float) cx, (float) cy, (float) cz);
     }
 
+    // Absolute eye position
     private static Vector3f getEyePosition() {
         Entity camera = Minecraft.getMinecraft().getRenderViewEntity();
         if (camera == null) {
@@ -895,17 +975,20 @@ public final class CommonUniforms {
         return toVector3f(eye);
     }
 
+    // Eye position relative to the camera
     private static Vector3f getRelativeEyePosition() {
         Vector3d camera = CameraUniforms.getCurrentCameraPositionUnshifted();
         Vector3f eye = getEyePosition();
         return new Vector3f((float) (camera.x - eye.x), (float) (camera.y - eye.y), (float) (camera.z - eye.z));
     }
 
+    // Player look direction
     private static Vector3f getPlayerLookVector() {
         Entity camera = Minecraft.getMinecraft().getRenderViewEntity();
         return camera == null ? new Vector3f() : toVector3f(camera.getLook(CapturedRenderingState.INSTANCE.getTickDelta()));
     }
 
+    // Player body yaw as a direction
     private static Vector3f getPlayerBodyVector() {
         Entity camera = Minecraft.getMinecraft().getRenderViewEntity();
         if (camera == null) {
@@ -915,6 +998,7 @@ public final class CommonUniforms {
         return new Vector3f(-MathHelper.sin(yaw), 0.0f, MathHelper.cos(yaw));
     }
 
+    // Nearest lightning bolt relative to the camera, w=1 when one exists
     private static Vector4f getLightningBoltPosition() {
         // NB: w must be 0 when no bolt is present -- packs use it as the "lightning is flashing" flag. Spell all four
         // components out: JOML's no-arg Vector4f() is (0, 0, 0, 1), which would leave lightning permanently active.
@@ -935,16 +1019,19 @@ public final class CommonUniforms {
         return new Vector4f(0.0f, 0.0f, 0.0f, 0.0f);
     }
 
+    // Cloud scroll time
     private static float getCloudTime() {
         World world = world();
         return world == null ? 0.0f : (world.getTotalWorldTime() + CapturedRenderingState.INSTANCE.getTickDelta()) * 0.03f;
     }
 
+    // Always 0; no End flash on 1.12.2
     private static float getEndFlashIntensity() {
         updateComplementaryCustomUniforms();
         return cachedEndFlashIntensity;
     }
 
+    // Always 0
     private static float getPreviousEndFlashIntensity() {
         updateComplementaryCustomUniforms();
         return cachedPreviousEndFlashIntensity;
@@ -963,6 +1050,7 @@ public final class CommonUniforms {
         return 0.0f;
     }
 
+    // Window size in pixels
     private static Vector2f getScreenSize() {
         Minecraft mc = Minecraft.getMinecraft();
         return new Vector2f(mc.displayWidth, mc.displayHeight);
@@ -976,6 +1064,7 @@ public final class CommonUniforms {
         return isFogEnabled() ? LWJGL.glGetInteger(GL11.GL_FOG_MODE) : 0;
     }
 
+    // Current GL fog density
     private static float getFogDensity() {
         return isFogEnabled() ? finiteNonNegative(LWJGL.glGetFloat(GL_FOG_DENSITY), 0.0f) : 0.0f;
     }
@@ -986,6 +1075,7 @@ public final class CommonUniforms {
     // Swamp / boss-bar biomes render a much closer fog: OptiFine sets fogStart = farPlaneDistance * 0.05.
     private static final float FOG_START_FRACTION_THICK = 0.05f;
 
+    // Current GL fog start
     private static float getFogStart() {
         // Deterministically mirror OptiFine's setupFog instead of sampling GL_FOG_START. Reading the
         // live GL fog state during the fullscreen composite pass is unreliable: it often still holds
@@ -995,6 +1085,7 @@ public final class CommonUniforms {
         return getFar() * (showsThickFog() ? FOG_START_FRACTION_THICK : FOG_START_FRACTION);
     }
 
+    // Current GL fog end
     private static float getFogEnd() {
         // OptiFine sets fogEnd = farPlaneDistance for every above-water terrain case.
         return getFar();
@@ -1014,32 +1105,39 @@ public final class CommonUniforms {
         return world.provider.doesXZShowFog((int) camera.posX, (int) camera.posZ) || bossFog;
     }
 
+    // 0 sphere, 1 cylinder; always sphere here
     private static int getFogShape() {
         return 1;
     }
 
+    // Current fog colour with alpha
     private static Vector4f getUmbraFogColor() {
         Vector3f fogColor = CapturedRenderingState.INSTANCE.getFogColor();
         return new Vector4f(fogColor.x, fogColor.y, fogColor.z, 1.0f);
     }
 
+    // Distant Horizons render distance; 0 without the mod
     private static int getDhRenderDistance() {
         return Minecraft.getMinecraft().gameSettings.renderDistanceChunks;
     }
 
+    // Voxel render distance in chunks
     private static int getVxRenderDistance() {
         int chunks = WorldRenderingSettings.getVoxelRenderDistanceChunks();
         return chunks > 0 ? chunks : Minecraft.getMinecraft().gameSettings.renderDistanceChunks;
     }
 
+    // Whether GL fog is on
     private static boolean isFogEnabled() {
         return LWJGL.glGetInteger(GL11.GL_FOG) != 0;
     }
 
+    // Guards against NaN and negative fog values from mods
     private static float finiteNonNegative(float value, float fallback) {
         return Float.isFinite(value) && value >= 0.0f ? value : fallback;
     }
 
+    // Main hand stack
     private static ItemStack heldItem() {
         EntityPlayer player = Minecraft.getMinecraft().player;
         return player == null ? ItemStack.EMPTY : player.getHeldItemMainhand();
@@ -1057,33 +1155,40 @@ public final class CommonUniforms {
         return blockLightValue(off) > blockLightValue(main) ? off : main;
     }
 
+    // Pack item id of the main hand stack
     private static int getHeldItemId() {
         return WorldRenderingSettings.getItemId(brightestHeldItem());
     }
 
+    // Light level of the main hand item's block, for hand light
     private static int getHeldBlockLightValue() {
         // dynamicHandLight = false: the pack does not want held items lighting the world, so report nothing held.
         return WorldRenderingSettings.isDynamicHandLight() ? blockLightValue(brightestHeldItem()) : 0;
     }
 
+    // Light colour of the main hand item
     private static Vector3f getHeldBlockLightColor() {
         return WorldRenderingSettings.isDynamicHandLight()
                 ? heldLightColor(brightestHeldItem()) : new Vector3f(0.0f, 0.0f, 0.0f);
     }
 
+    // Off hand stack
     private static ItemStack offhandItem() {
         EntityPlayer player = Minecraft.getMinecraft().player;
         return player == null ? ItemStack.EMPTY : player.getHeldItemOffhand();
     }
 
+    // Pack item id of the off hand stack
     private static int getHeldItemId2() {
         return WorldRenderingSettings.getItemId(offhandItem());
     }
 
+    // Light level of the off hand item's block
     private static int getHeldBlockLightValue2() {
         return WorldRenderingSettings.isDynamicHandLight() ? blockLightValue(offhandItem()) : 0;
     }
 
+    // Light colour of the off hand item
     private static Vector3f getHeldBlockLightColor2() {
         if (!WorldRenderingSettings.isDynamicHandLight()) {
             return new Vector3f(0.0f, 0.0f, 0.0f);
@@ -1091,6 +1196,7 @@ public final class CommonUniforms {
         return heldLightColor(offhandItem());
     }
 
+    // Light level of a block item, or the pack's per-item override
     private static int blockLightValue(ItemStack stack) {
         if (stack.isEmpty()) {
             return 0;
@@ -1099,14 +1205,17 @@ public final class CommonUniforms {
         return block.getDefaultState().getLightValue();
     }
 
+    // White unless the pack maps a colour
     private static Vector3f heldLightColor(ItemStack stack) {
         return new Vector3f(1.0f, 1.0f, 1.0f);
     }
 
+    // Vanilla vec to JOML
     private static Vector3f toVector3f(Vec3d vector) {
         return new Vector3f((float) vector.x, (float) vector.y, (float) vector.z);
     }
 
+    // Sky colour at the camera
     private static Vector3f getSkyColor() {
         World world = world();
         Entity camera = Minecraft.getMinecraft().getRenderViewEntity();
@@ -1117,20 +1226,24 @@ public final class CommonUniforms {
         return new Vector3f((float) sky.x, (float) sky.y, (float) sky.z);
     }
 
+    // The client world, or null
     private static World world() {
         return Minecraft.getMinecraft().world;
     }
 
+    // Interpolated rain strength
     private static float getRainStrength() {
         World world = world();
         return world == null ? 0.0f : world.getRainStrength(CapturedRenderingState.INSTANCE.getTickDelta());
     }
 
+    // Eye y coordinate
     private static float getEyeAltitude() {
         Entity camera = Minecraft.getMinecraft().getRenderViewEntity();
         return camera == null ? 0.0f : (float) (camera.posY + camera.getEyeHeight());
     }
 
+    // 0 air, 1 water, 2 lava
     private static int isEyeInWater() {
         Entity camera = Minecraft.getMinecraft().getRenderViewEntity();
         World world = world();
@@ -1148,11 +1261,13 @@ public final class CommonUniforms {
         return 0;
     }
 
+    // Blindness effect strength
     private static float getBlindness() {
         EntityLivingBase player = livingCamera();
         return (player != null && player.isPotionActive(MobEffects.BLINDNESS)) ? 1.0f : 0.0f;
     }
 
+    // Always 0; no darkness effect on 1.12.2
     private static float getDarknessFactor() {
         EntityLivingBase player = livingCamera();
         if (player == null) {
@@ -1169,6 +1284,7 @@ public final class CommonUniforms {
         return clamp(effect.getDuration() / 20.0f, 0.0f, 1.0f);
     }
 
+    // Always 0
     private static float getDarknessLightFactor() {
         return getDarknessFactor();
     }
@@ -1187,97 +1303,118 @@ public final class CommonUniforms {
         return 0.7f + (float) Math.sin(duration * Math.PI * 0.2) * 0.3f;
     }
 
+    // The render view entity if living, else the player
     private static EntityLivingBase livingCamera() {
         Entity camera = Minecraft.getMinecraft().getRenderViewEntity();
         return camera instanceof EntityLivingBase ? (EntityLivingBase) camera : null;
     }
 
+    // World time modulo a day
     private static int getWorldTime() {
         World world = world();
         return world == null ? 0 : (int) (world.getWorldTime() % 24000L);
     }
 
+    // World time divided by a day
     private static int getWorldDay() {
         World world = world();
         return world == null ? 0 : (int) (world.getWorldTime() / 24000L);
     }
 
+    // 0..7
     private static int getMoonPhase() {
         World world = world();
         return world == null ? 0 : world.getMoonPhase();
     }
 
+    // Celestial angle 0..1
     private static float getTimeAngle() {
         return getWorldTime() / 24000.0f;
     }
 
+    // Sun height clamped to 0..1
     private static float getTimeBrightness() {
         return (float) Math.max(Math.sin(getTimeAngle() * Math.PI * 2.0), 0.0);
     }
 
+    // Moon height clamped to 0..1
     private static float getMoonBrightness() {
         return (float) Math.max(Math.sin(getTimeAngle() * Math.PI * -2.0), 0.0);
     }
 
+    // Fade around sunrise and sunset, for shadow softening
     private static float getShadowFade() {
         return clamp(1.0f - (Math.abs(Math.abs(CelestialUniforms.getSunAngle() - 0.5f) - 0.25f) - 0.23f)
                 * 100.0f, 0.0f, 1.0f);
     }
 
+    // Complementary spelling of shadowFade
     private static float getShdFade() {
         return clamp(1.0f - (Math.abs(Math.abs(CelestialUniforms.getSunAngle() - 0.5f) - 0.25f) - 0.225f)
                 * 40.0f, 0.0f, 1.0f);
     }
 
+    // Complementary blindness curve
     private static float getBlindFactor() {
         float blindFactorSqrt = clamp(getBlindness() * 2.0f - 1.0f, 0.0f, 1.0f);
         return blindFactorSqrt * blindFactorSqrt;
     }
 
+    // Complementary: time shifted so noon is 0
     private static float getAdjustedTime() {
         return Math.abs((((getWorldTime() / 1000.0f) + 6.0f) % 24.0f) - 12.0f);
     }
 
+    // Complementary: daytime weight
     private static float getDay() {
         return clamp(5.4f - getAdjustedTime(), 0.0f, 1.0f);
     }
 
+    // Complementary: night weight
     private static float getNight() {
         return clamp(getAdjustedTime() - 6.0f, 0.0f, 1.0f);
     }
 
+    // Complementary: dawn and dusk weight
     private static float getDawnDusk() {
         return (1.0f - getDay()) - getNight();
     }
 
+    // Always 0 on 1.12.2
     private static int getBedrockLevel() {
         return 0;
     }
 
+    // Cloud layer height from the Impetus option
     private static float getCloudHeight() {
         return ImpetusVintage.options().quality.cloudHeight;
     }
 
+    // World height
     private static int getHeightLimit() {
         World world = world();
         return world == null ? 256 : world.getHeight();
     }
 
+    // Logical height, lower in the Nether
     private static int getLogicalHeightLimit() {
         World world = world();
         return world == null ? 256 : world.getActualHeight();
     }
 
+    // Nether-style bedrock ceiling
     private static int hasCeiling() {
         World world = world();
         return bool(world != null && !world.provider.isSurfaceWorld());
     }
 
+    // Whether the dimension has sky light
     private static int hasSkylight() {
         World world = world();
         return bool(world == null || world.provider.isSurfaceWorld());
     }
 
+    // Dimension ambient light
     private static float getAmbientLight() {
         World world = world();
         if (world == null) {
@@ -1298,30 +1435,36 @@ public final class CommonUniforms {
                 ? mc.getFramebuffer().framebufferWidth : mc.displayWidth;
     }
 
+    // Height of the current render target
     private static int getRenderTargetHeight() {
         Minecraft mc = Minecraft.getMinecraft();
         return OpenGlHelper.isFramebufferEnabled() && mc.getFramebuffer() != null
                 ? mc.getFramebuffer().framebufferHeight : mc.displayHeight;
     }
 
+    // Window width as float
     private static float getViewWidth() {
         return getRenderTargetWidth();
     }
 
+    // Window height as float
     private static float getViewHeight() {
         return getRenderTargetHeight();
     }
 
+    // 1 / width
     private static float getPixelSizeX() {
         int width = getRenderTargetWidth();
         return width > 0 ? 1.0f / width : 0.0f;
     }
 
+    // 1 / height
     private static float getPixelSizeY() {
         int height = getRenderTargetHeight();
         return height > 0 ? 1.0f / height : 0.0f;
     }
 
+    // width / height
     private static float getAspectRatio() {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.displayHeight == 0) {
@@ -1330,6 +1473,7 @@ public final class CommonUniforms {
         return (float) mc.displayWidth / (float) mc.displayHeight;
     }
 
+    // Far plane, from render distance
     private static float getFar() {
         int renderDistanceChunks = Minecraft.getMinecraft().gameSettings.renderDistanceChunks;
         return renderDistanceChunks * 16.0f;
@@ -1349,6 +1493,7 @@ public final class CommonUniforms {
             this.accumulator = initialValue;
         }
 
+        // Asymmetric exponential smoothing, matching OptiFine's smooth() semantics
         private float update(float target, float halfLifeUp, float halfLifeDown, float deltaSeconds) {
             if (!this.initialized) {
                 this.initialized = true;

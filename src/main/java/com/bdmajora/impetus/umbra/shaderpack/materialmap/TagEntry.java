@@ -15,10 +15,12 @@ public final class TagEntry implements Entry {
         this.propertyPredicates = propertyPredicates;
     }
 
+    // The tag
     public NamespacedId getId() {
         return this.id;
     }
 
+    // property=value conditions
     public Map<String, String> getPropertyPredicates() {
         return this.propertyPredicates;
     }

@@ -12,11 +12,13 @@ public class GenericBinding<S, T> implements OptionBinding<S, T> {
         this.getter = getter;
     }
 
+    // Through the setter
     @Override
     public void setValue(S storage, T value) {
         this.setter.accept(storage, value);
     }
 
+    // Through the getter
     @Override
     public T getValue(S storage) {
         return this.getter.apply(storage);

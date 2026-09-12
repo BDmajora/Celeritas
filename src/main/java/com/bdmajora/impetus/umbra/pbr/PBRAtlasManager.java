@@ -14,17 +14,9 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.Map;
 
-// Builds the `normals` and `specular` PBR atlases that sit alongside the block atlas
-// For every stitched sprite, the companion textures <name>_n.png and <name>_s.png are loaded — the LabPBR/OldPBR
-// resource-pack convention — and uploaded into two atlas textures with the EXACT same layout as the base atlas
-// That identical layout is the whole trick: the base UVs then address the PBR data directly, so a shader needs no
-// second coordinate set and no lookup table
-// A sprite with no companion keeps the neutral defaults, normals 127/127/255/255 (a flat +Z normal) and specular
-// 0/0/0/0 (no reflectance), which are the same values the pipeline's 1x1 fallback textures hold
-// Rebuilt on every atlas stitch, i.e. every resource reload. Animated sprites contribute only their first frame;
-// PBR animation parity is a known gap
-// Original implementation for 1.12.2's TextureMap architecture — Iris's SpriteContents-based atlas classes have no
-// counterpart here and do not port
+// Builds the normals and specular PBR atlases alongside the block atlas, with the exact same layout so base
+// UVs address the PBR data directly. Sprites without _n/_s companions keep the flat-normal and no-reflectance defaults
+// Rebuilt on every stitch; animated sprites contribute only their first frame
 public final class PBRAtlasManager {
     private static final Logger LOGGER = LogManager.getLogger("Impetus/Umbra");
 
@@ -57,6 +49,7 @@ public final class PBRAtlasManager {
         return specularCount > 0 ? specularAtlas : fallback;
     }
 
+    // Allocates both atlases at the base size and uploads every companion it can find
     public static void rebuild(Map<String, TextureAtlasSprite> sprites, int atlasWidth, int atlasHeight, int mipmapLevels) {
         try {
             destroy();
@@ -94,6 +87,7 @@ public final class PBRAtlasManager {
         }
     }
 
+    // Frees both GL textures, e.g. before a resource reload
     public static void destroy() {
         if (normalsAtlas != -1) {
             TextureUtil.deleteTexture(normalsAtlas);
@@ -107,6 +101,7 @@ public final class PBRAtlasManager {
         specularCount = 0;
     }
 
+    // Creates one atlas texture with every mip level filled with the neutral value
     private static int allocateAtlas(int width, int height, int mipmapLevels, int fillArgb) {
         int texture = TextureUtil.glGenTextures();
         TextureUtil.allocateTextureImpl(texture, mipmapLevels, width, height);
@@ -147,6 +142,7 @@ public final class PBRAtlasManager {
         GlStateManager.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     }
 
+    // One flat array per mip level, halving each time
     private static int[][] neutralMipLevels(int width, int height, int mipmapLevels, int fillArgb) {
         int levelCount = Math.max(1, mipmapLevels + 1);
         int[][] levels = new int[levelCount][];
@@ -160,6 +156,7 @@ public final class PBRAtlasManager {
         return levels;
     }
 
+    // Loads a companion, mipmaps it and copies it into the sprite's rect; false when the file is absent
     private static boolean uploadCompanion(TextureAtlasSprite sprite, String suffix, int atlasTexture, int mipmapLevels) {
         BufferedImage image = readCompanion(sprite.getIconName(), suffix);
         if (image == null) {
@@ -215,6 +212,7 @@ public final class PBRAtlasManager {
         return out;
     }
 
+    // Resolves <name>_n or _s next to the sprite; null when missing
     private static BufferedImage readCompanion(String iconName, String suffix) {
         ResourceLocation icon = new ResourceLocation(iconName);
         ResourceLocation location = new ResourceLocation(icon.getNamespace(),

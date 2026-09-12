@@ -14,15 +14,8 @@ import java.util.Deque;
 
 import static com.bdmajora.impetus.lwjgl.LWJGLServiceProvider.LWJGL;
 
-// Owns the two buffers the GPU walks to find geometry: one region header per region, 256 section headers per
-// region
-//
-// Regions here are the same 8x4x8 blocks of sections RenderRegion already uses, so a section id is
-// (regionId << 8) | slotWithinRegion and the GPU can go from a region to its sections by shifting.
-//
-// Section headers are staged in native memory per region and uploaded as one 8 KB block whenever the region is
-// dirty. Uploading whole regions rather than individual sections is what keeps a mass world edit from turning
-// into thousands of tiny copies
+// The region and section header buffers the GPU walks to find geometry; a section id is (regionId << 8) | slot
+// Headers are staged per region and uploaded as one 8 KB block, so a mass edit is not thousands of tiny copies
 public class MeshRegionStore {
     // Bytes per region header: two packed uint64s
     public static final int REGION_HEADER_BYTES = 16;
@@ -52,18 +45,22 @@ public class MeshRegionStore {
         this.sectionBuffer = new BindlessBuffer((long) maxRegions * REGION_SECTION_BLOCK_BYTES);
     }
 
+    // GPU address of the region table
     public long getRegionBufferAddress() {
         return this.regionBuffer.getDeviceAddress();
     }
 
+    // GPU address of the section table
     public long getSectionBufferAddress() {
         return this.sectionBuffer.getDeviceAddress();
     }
 
+    // Capacity
     public int getMaxRegions() {
         return this.regions.length;
     }
 
+    // Live regions
     public int getRegionCount() {
         return this.regionIdByKey.size();
     }
@@ -73,10 +70,12 @@ public class MeshRegionStore {
         return this.regionIds.maxIndex();
     }
 
+    // Whether an id is allocated
     public boolean regionExists(int regionId) {
         return this.regions[regionId] != null;
     }
 
+    // Packed region coordinates
     public long getRegionKey(int regionId) {
         return this.regions[regionId].key;
     }
@@ -219,6 +218,7 @@ public class MeshRegionStore {
         }
     }
 
+    // Frustum test on the region's bounds, for CPU-side stats
     public boolean isRegionVisible(Viewport viewport, int regionId) {
         Region region = this.regions[regionId];
 
@@ -245,6 +245,7 @@ public class MeshRegionStore {
                 + Math.abs((region.z << 3) + 3 - cameraSectionZ)) >> 1;
     }
 
+    // Frees the GPU tables
     public void delete() {
         for (Region region : this.regions) {
             if (region != null) {
@@ -258,6 +259,7 @@ public class MeshRegionStore {
         this.sectionBuffer.delete();
     }
 
+    // Queues the region's table entry for re-upload
     private void markDirty(Region region) {
         if (region.dirty) {
             return;
@@ -304,6 +306,7 @@ public class MeshRegionStore {
         LWJGL.memPutLong(ptr + 8, z);
     }
 
+    // Section coordinates to the containing region's key
     private static long regionKey(int sectionX, int sectionY, int sectionZ) {
         return PositionUtil.packSection(sectionX >> 3, sectionY >> 2, sectionZ >> 3);
     }
@@ -344,6 +347,7 @@ public class MeshRegionStore {
             LWJGL.memSet(this.sectionHeaders, 0, REGION_SECTION_BLOCK_BYTES);
         }
 
+        // Releases the native mirrors
         private void free() {
             if (this.sectionHeaders != 0L) {
                 LWJGL.nmemFree(this.sectionHeaders);

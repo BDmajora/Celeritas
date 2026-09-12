@@ -19,6 +19,7 @@ public class SharedQuadIndexBuffer {
         this.primitiveType = primitiveType;
     }
 
+    // Grows if a draw needs more indices than exist
     public void ensureCapacity(CommandList commandList, int elementCount) {
         int primitiveCount = elementCount / primitiveType.getIndexBufferElementsPerPrimitive();
 
@@ -27,10 +28,12 @@ public class SharedQuadIndexBuffer {
         }
     }
 
+    // Doubles until large enough
     private int getNextSize(int primitiveCount) {
         return Math.max(this.maxPrimitives * 2, primitiveCount + 16384);
     }
 
+    // Regenerates the sequential index pattern at the new size
     private void grow(CommandList commandList, int primitiveCount) {
         var bufferSize = primitiveType.getIndexBufferSize(primitiveCount);
 
@@ -45,10 +48,12 @@ public class SharedQuadIndexBuffer {
     }
 
 
+    // For binding
     public GlBuffer getBufferObject() {
         return this.buffer;
     }
 
+    // Frees the buffer
     public void delete(CommandList commandList) {
         commandList.deleteBuffer(this.buffer);
     }

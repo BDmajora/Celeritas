@@ -14,14 +14,17 @@ public final class ActiveCustomUniforms {
     private ActiveCustomUniforms() {
     }
 
+    // Installs the pack's custom uniforms
     public static void set(CustomUniforms uniforms) {
         active = uniforms;
     }
 
+    // On pack unload
     public static void clear() {
         active = null;
     }
 
+    // Evaluates every expression for this frame
     public static void update() {
         CustomUniforms current = active;
         if (current != null) {
@@ -29,6 +32,7 @@ public final class ActiveCustomUniforms {
         }
     }
 
+    // Registers each declared uniform against a program
     public static void assignTo(UniformCollector collector) {
         CustomUniforms current = active;
         if (current != null) {

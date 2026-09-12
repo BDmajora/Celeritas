@@ -2,19 +2,9 @@ package com.bdmajora.impetus.umbra.terrain;
 
 import java.util.regex.Matcher;
 
-// The one definition of how gl_Fog.* is substituted, shared by FullscreenTransformer, ImpetusTerrainTransformer
-// and ModernPackTransformer so the three cannot drift apart
-//
-// What the references do: OptiFine 1.12.2 never rewrites gl_Fog at all, because it runs on a GL compatibility
-// context where packs read the live fixed-function fog state Minecraft sets in EntityRenderer.setupFog. Iris
-// renames gl_Fog to irisInt_Fog and rebuilds it from live uniforms, noting that it must be defined and valid in
-// every pass because SEUS v11 reads gl_Fog.color and breaks otherwise. Both hand the pack LIVE values; only
-// substituting constants would be wrong
-//
-// Why per-field substitution rather than Iris's struct: Iris injects a global initialised from uniforms. This port
-// was already burned by exactly that pattern once — a uniform-initialised global can be evaluated before the
-// uniforms are uploaded, which is why the terrain bridge aliases the matrix built-ins as expressions rather than
-// globals. Substituting each field inline is semantically identical and sidesteps the hazard
+// The one definition of how gl_Fog.* is substituted, shared by all three transformers so they cannot drift
+// Packs need live fog values as under OptiFine and Iris; each field is substituted inline rather than through a
+// uniform-initialised global, which this port has already seen evaluated before the uniforms were uploaded
 final class FogParameters {
     // gl_Fog.scale is the one field that cannot be a stand-alone declaration: it is 1.0 / (end - start) computed
     // from two uniforms, so it is neither a constant nor expressible as a const float. It is inlined as an

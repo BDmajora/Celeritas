@@ -34,10 +34,12 @@ public class OptionPageFrame extends AbstractFrame {
         this.buildFrame();
     }
 
+    // Starts a builder
     public static Builder createBuilder() {
         return new Builder();
     }
 
+    // Creates a control element per visible option, grouped
     public void setupFrame() {
         this.children.clear();
         this.drawable.clear();
@@ -59,6 +61,7 @@ public class OptionPageFrame extends AbstractFrame {
         this.dim = this.dim.withHeight(y);
     }
 
+    // Stacks the groups vertically with separators
     @Override
     public void buildFrame() {
         if (this.page == null) return;
@@ -94,6 +97,7 @@ public class OptionPageFrame extends AbstractFrame {
         super.buildFrame();
     }
 
+    // Draws controls, then the tooltip for whichever is hovered
     @Override
     public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
         this.renderSectionHeader(drawContext);
@@ -124,6 +128,7 @@ public class OptionPageFrame extends AbstractFrame {
         drawContext.drawString(this.page.getName(), x + 7, textY, accentColor);
     }
 
+    // Owning mod name for the tooltip footer, or empty
     private static String normalizeModForTooltip(@Nullable String mod) {
         if(mod == null) {
             return null;
@@ -135,6 +140,7 @@ public class OptionPageFrame extends AbstractFrame {
         }
     }
 
+    // Wrapped tooltip beside the control, flipped left when it would overflow
     private void renderOptionTooltip(DrawContext drawContext, ControlElement<?> element) {
         if (this.lastTime + 500 > System.currentTimeMillis()) return;
 
@@ -199,26 +205,31 @@ public class OptionPageFrame extends AbstractFrame {
         private OptionPage page;
         private Predicate<Option<?>> optionFilter = o -> true;
 
+        // Frame bounds
         public Builder setDimension(Dim2i dim) {
             this.dim = dim;
             return this;
         }
 
+        // Debug outline
         public Builder shouldRenderOutline(boolean renderOutline) {
             this.renderOutline = renderOutline;
             return this;
         }
 
+        // The page to show
         public Builder setOptionPage(OptionPage page) {
             this.page = page;
             return this;
         }
 
+        // Hides options failing the predicate, for search
         public Builder setOptionFilter(Predicate<Option<?>> optionFilter) {
             this.optionFilter = optionFilter;
             return this;
         }
 
+        // Finalises
         public OptionPageFrame build() {
             Objects.requireNonNull(this.dim, "Dimension must be specified");
             Objects.requireNonNull(this.page, "Option Page must be specified");

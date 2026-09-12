@@ -45,10 +45,12 @@ public class VintageRenderPassConfigurationBuilder {
             this.allowMipmaps = allowMipmaps;
         }
 
+        // From game settings
         private static boolean mipmapsEnabled() {
             return Minecraft.getMinecraft().gameSettings.mipmapLevels > 0;
         }
 
+        // Binds the block atlas with the right filtering
         private static void apply(boolean mipped) {
             var textureManager = Minecraft.getMinecraft().getTextureManager();
             textureManager.bindTexture(TextureMap.LOCATION_BLOCKS_TEXTURE);
@@ -57,11 +59,13 @@ public class VintageRenderPassConfigurationBuilder {
             }
         }
 
+        // Applies texture state for the pass
         @Override
         public void setup() {
             apply(this.allowMipmaps && mipmapsEnabled());
         }
 
+        // Restores default texture state
         @Override
         public void clear() {
             // Mirrors vanilla's restoreLastBlurMipmap(): everything drawn after this pass (entities, particles, the
@@ -75,6 +79,7 @@ public class VintageRenderPassConfigurationBuilder {
     private static final TerrainRenderPass.PipelineState MIPMAPPED_STATE = new AtlasMipmapState(true);
     private static final TerrainRenderPass.PipelineState UNMIPMAPPED_STATE = new AtlasMipmapState(false);
 
+    // One pass per vanilla render layer, with cutout and translucent handled by their own flags
     private static TerrainRenderPass.TerrainRenderPassBuilder builderForRenderType(BlockRenderLayer chunkRenderType, ChunkVertexType vertexType) {
         var extraDefines = new HashMap<String, String>();
 
@@ -87,6 +92,7 @@ public class VintageRenderPassConfigurationBuilder {
         return TerrainRenderPass.builder().extraDefines(extraDefines).pipelineState(pipelineState).vertexType(vertexType).primitiveType(QuadPrimitiveType.TRIANGULATED);
     }
 
+    // The full pass set, in vanilla's layer order
     public static RenderPassConfiguration<BlockRenderLayer> build(ChunkVertexType vertexType) {
         // First, build the main passes
         TerrainRenderPass solidPass, cutoutMippedPass, translucentPass;
