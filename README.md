@@ -48,7 +48,7 @@ Impetus ships as a single jar containing several subsystems, each with its own m
 | `coarctatio` | Memory and allocation reductions across vanilla systems |
 | `equilibrium` | Chunk and world access caching |
 | `dynamiclights` | Dynamic light sources for held and dropped items |
-| `extras` | Optional rendering feature toggles |
+| `extras` | Optional rendering feature toggles, including the Render Budget and GPU Booster pair for weaker machines |
 
 Impetus suppresses the mixin configurations of superseded lighting mods (Phosphor, Alfheim) when it detects
 them, since running two lighting engines at once corrupts world lighting. Remove those mods rather than
@@ -114,6 +114,8 @@ independent, original implementations.
 * **Rongmario**, for MixinBooter, the basis of the bundled Mixin bootstrap
 * **Mumfrey**, for creating the Mixin bytecode patching system, and **CleanroomMC** for CleanMix
 * **LlamaLad7**, for MixinExtras
+* **orf**, for GpuShift (MIT), whose adaptive render-budget design the Extras page's Render Budget group reimplements for 1.12.2
+* **Mr.Toad**, for GPUBooster, ported to 1.12.2 with permission as the Extras page's GPU Booster group
 * **Asek3**, for developing Rubidium, the original port of Sodium 0.5 to Forge
 * **CelestialAbyss**, for developing the Embeddium logo, and **input-Here** for visual touchups
 * **Ven ([@basdxz](https://github.com/basdxz))**, for help with translucency sorting, suggesting the general approach for async occlusion culling, and other suggestions during development

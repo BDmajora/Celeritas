@@ -55,6 +55,8 @@ public final class ExtrasOptionPages {
         groups.add(fog());
         groups.add(cloudsAndWeather());
         groups.add(entityRendering());
+        groups.add(renderBudget());
+        groups.add(gpuBooster());
         groups.add(overlay());
         groups.add(toasts());
         groups.add(qualityOfLife());
@@ -253,6 +255,79 @@ public final class ExtrasOptionPages {
                         config -> config.render.enchantingTableBooks, null, null, null))
                 .add(toggle("render.pistons", (config, value) -> config.render.pistons = value,
                         config -> config.render.pistons, OptionImpact.LOW, null, null))
+                .build();
+    }
+
+    // Adaptive render budgeting (GpuShift's design); everything gates on the master, and the particle slider reads Off at 100% since that hands particles back entirely
+    private static OptionGroup renderBudget() {
+        OptionImpl<ExtrasConfig, Boolean> master = toggle("budget.enabled",
+                (config, value) -> config.renderBudget.enabled = value,
+                config -> config.renderBudget.enabled, OptionImpact.VARIES, null, null);
+        BooleanSupplier enabled = master::getValue;
+
+        OptionImpl<ExtrasConfig, Boolean> entities = toggle("budget.entities",
+                (config, value) -> config.renderBudget.smartEntityCulling = value,
+                config -> config.renderBudget.smartEntityCulling, OptionImpact.MEDIUM, null, enabled);
+        BooleanSupplier entitiesOn = () -> enabled.getAsBoolean() && entities.getValue();
+
+        OptionImpl<ExtrasConfig, Boolean> blockEntities = toggle("budget.block_entities",
+                (config, value) -> config.renderBudget.blockEntities = value,
+                config -> config.renderBudget.blockEntities, OptionImpact.MEDIUM, null, enabled);
+        BooleanSupplier blockEntitiesOn = () -> enabled.getAsBoolean() && blockEntities.getValue();
+
+        return OptionGroup.createBuilder()
+                .setId(group("render_budget"))
+                .add(master)
+                .add(cycling("budget.profile", ExtrasConfig.BudgetProfile.class, ExtrasConfig.BudgetProfile.values(),
+                        (config, value) -> config.renderBudget.profile = value,
+                        config -> config.renderBudget.profile, enabled))
+                .add(toggle("budget.adaptive", (config, value) -> config.renderBudget.adaptive = value,
+                        config -> config.renderBudget.adaptive, null, null, enabled))
+                .add(slider("budget.particles",
+                        ExtrasConfig.RenderBudgetSettings.PARTICLE_BUDGET_MIN,
+                        ExtrasConfig.RenderBudgetSettings.PARTICLE_BUDGET_MAX, 5,
+                        value -> value >= ExtrasConfig.RenderBudgetSettings.PARTICLE_BUDGET_MAX
+                                ? TextComponent.translatable("options.off")
+                                : TextComponent.literal(value + "%"),
+                        (config, value) -> config.renderBudget.particleBudget = value,
+                        config -> config.renderBudget.particleBudget, OptionImpact.MEDIUM, null, enabled))
+                .add(entities)
+                .add(slider("budget.entity_distance",
+                        ExtrasConfig.RenderBudgetSettings.ENTITY_DISTANCE_MIN,
+                        ExtrasConfig.RenderBudgetSettings.ENTITY_DISTANCE_MAX, 8,
+                        value -> TextComponent.literal(value + " blocks"),
+                        (config, value) -> config.renderBudget.entityCullDistance = value,
+                        config -> config.renderBudget.entityCullDistance, null, null, entitiesOn))
+                .add(blockEntities)
+                .add(slider("budget.block_entity_distance",
+                        ExtrasConfig.RenderBudgetSettings.BLOCK_ENTITY_DISTANCE_MIN,
+                        ExtrasConfig.RenderBudgetSettings.BLOCK_ENTITY_DISTANCE_MAX, 8,
+                        value -> TextComponent.literal(value + " blocks"),
+                        (config, value) -> config.renderBudget.blockEntityDistance = value,
+                        config -> config.renderBudget.blockEntityDistance, null, null, blockEntitiesOn))
+                .add(toggle("budget.item_frames", (config, value) -> config.renderBudget.itemFrames = value,
+                        config -> config.renderBudget.itemFrames, OptionImpact.LOW, null, blockEntitiesOn))
+                .add(toggle("budget.overlay", (config, value) -> config.renderBudget.overlay = value,
+                        config -> config.renderBudget.overlay, null, null, null))
+                .build();
+    }
+
+    // GPU Booster, the companion to the render budget: where the budget decides what not to draw, this makes what is drawn cheaper to hand over; everything gates on the master
+    private static OptionGroup gpuBooster() {
+        OptionImpl<ExtrasConfig, Boolean> master = toggle("booster.enabled",
+                (config, value) -> config.gpuBooster.enabled = value,
+                config -> config.gpuBooster.enabled, OptionImpact.VARIES, null, null);
+        BooleanSupplier enabled = master::getValue;
+
+        return OptionGroup.createBuilder()
+                .setId(group("gpu_booster"))
+                .add(master)
+                .add(toggle("booster.fast_random", (config, value) -> config.gpuBooster.fastRandom = value,
+                        config -> config.gpuBooster.fastRandom, OptionImpact.MEDIUM, null, enabled))
+                .add(toggle("booster.fast_math", (config, value) -> config.gpuBooster.fastMath = value,
+                        config -> config.gpuBooster.fastMath, OptionImpact.LOW, null, enabled))
+                .add(toggle("booster.stream_uploads", (config, value) -> config.gpuBooster.streamUploads = value,
+                        config -> config.gpuBooster.streamUploads, OptionImpact.VARIES, null, enabled))
                 .build();
     }
 

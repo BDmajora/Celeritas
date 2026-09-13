@@ -10,10 +10,14 @@
     "light_updates.WorldMixin",
     "biome_colors.BiomeColorHelperMixin",
     "sky_colors.BiomeMixin",
-    "sky_colors.BiomeSwampMixin"
+    "sky_colors.BiomeSwampMixin",
+    "booster.EntityRandomMixin",
+    "booster.MathHelperFastMixin"
   ],
   "client": [
     "animation.TextureMapMixin",
+    "booster.ParticleRandomMixin",
+    "booster.WorldVertexBufferUploaderMixin",
     "particle.EntityRendererRainSplashMixin",
     "particle.ParticleManagerAccessor",
     "particle.ParticleManagerMixin",
@@ -29,6 +33,7 @@
     "render.block_entity.TileEntityBeaconRendererMixin",
     "render.block_entity.TileEntityEnchantmentTableRendererMixin",
     "render.block_entity.TileEntityPistonRendererMixin",
+    "render.block_entity.TileEntityRendererDispatcherBudgetMixin",
     "render.entity.ForgeHooksClientMixin",
     "render.entity.LayerCapeMixin",
     "render.entity.RenderEntityItemMixin",
@@ -36,6 +41,7 @@
     "render.entity.RenderItemMixin",
     "render.entity.RenderLivingBaseMixin",
     "render.entity.RenderPaintingMixin",
+    "render.entity.RenderShadowMixin",
     "render.fog.EntityRendererFogFalloffMixin",
     "render.fog.EntityRendererFogMixin",
     "render.fog.EntityRendererVoidFogMixin",

@@ -1,6 +1,7 @@
 package com.bdmajora.extras.mixin.render.entity;
 
 import com.bdmajora.extras.Extras;
+import com.bdmajora.extras.client.budget.RenderBudgetController;
 import net.minecraft.client.entity.AbstractClientPlayer;
 import net.minecraft.client.renderer.entity.Render;
 import net.minecraft.client.renderer.entity.RenderLivingBase;
@@ -13,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-// Armor stand visibility and player name tags in 1.12.2's shared living-entity renderer; a hidden stand still draws its label since stands are used as invisible signposts
+// Render-budget skipping, armor stand visibility and player name tags in 1.12.2's shared living-entity renderer; a hidden stand still draws its label since stands are used as invisible signposts
 @Mixin(RenderLivingBase.class)
 public abstract class RenderLivingBaseMixin<T extends EntityLivingBase> extends Render<T> {
     private RenderLivingBaseMixin(RenderManager renderManager) {
@@ -27,6 +28,12 @@ public abstract class RenderLivingBaseMixin<T extends EntityLivingBase> extends 
     )
     private void impetus$doRender(T entity, double x, double y, double z,
                                   float entityYaw, float partialTicks, CallbackInfo ci) {
+        // Budget first: a skipped mob draws nothing, not even a signpost label, since named entities are never budgeted away
+        if (RenderBudgetController.shouldCullLivingEntity(entity)) {
+            ci.cancel();
+            return;
+        }
+
         if (entity instanceof EntityArmorStand && !Extras.options().render.armorStands) {
             ci.cancel();
 

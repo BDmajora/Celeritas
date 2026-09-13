@@ -2,6 +2,7 @@ package com.bdmajora.extras.mixin.particle;
 
 import com.bdmajora.extras.Extras;
 import com.bdmajora.extras.ExtrasConfig;
+import com.bdmajora.extras.client.budget.RenderBudgetController;
 import com.bdmajora.extras.client.particle.ParticleClassRegistry;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.particle.IParticleFactory;
@@ -59,7 +60,7 @@ public class ParticleManagerMixin {
         }
     }
 
-    // Records the class and applies the master and per-class filters; recordClass is identity-guarded and isEmptyDisabled short-circuits the no-filter case
+    // Records the class and applies the master and per-class filters, then the render budget; recordClass is identity-guarded and isEmptyDisabled short-circuits the no-filter case, and the budget runs last so a particle the user switched off never spends budget
     @Inject(method = "addEffect", at = @At("HEAD"), cancellable = true)
     private void impetus$filterEffect(Particle effect, CallbackInfo ci) {
         if (effect == null) {
@@ -75,6 +76,11 @@ public class ParticleManagerMixin {
         }
 
         if (!registry.isEmptyDisabled() && registry.isClassDisabled(effect.getClass().getName())) {
+            ci.cancel();
+            return;
+        }
+
+        if (RenderBudgetController.shouldCullParticle(effect)) {
             ci.cancel();
         }
     }

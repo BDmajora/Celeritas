@@ -3,6 +3,7 @@ package com.bdmajora.extras.mixin.render.entity;
 import com.bdmajora.extras.Extras;
 import com.bdmajora.extras.ExtrasConfig;
 import com.bdmajora.extras.client.ItemFrameLodState;
+import com.bdmajora.extras.client.budget.RenderBudgetController;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.MapItemRenderer;
 import net.minecraft.client.renderer.entity.RenderItemFrame;
@@ -15,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// Item frame visibility, name tags and LOD (MoreCulling's "Frame LOD": past the distance a framed item loses four hidden faces and a map is skipped); the flag is cleared unconditionally so it cannot leak into other item rendering
+// Item frame visibility, render-budget skipping, name tags and LOD (MoreCulling's "Frame LOD": past the distance a framed item loses four hidden faces and a map is skipped); the flag is cleared unconditionally so it cannot leak into other item rendering
 @Mixin(RenderItemFrame.class)
 public class RenderItemFrameMixin {
     @Inject(
@@ -25,7 +26,7 @@ public class RenderItemFrameMixin {
     )
     private void impetus$doRender(EntityItemFrame entity, double x, double y, double z,
                                   float entityYaw, float partialTicks, CallbackInfo ci) {
-        if (!Extras.options().render.itemFrames) {
+        if (!Extras.options().render.itemFrames || RenderBudgetController.shouldCullItemFrame(entity)) {
             ci.cancel();
         }
     }

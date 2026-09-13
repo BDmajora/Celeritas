@@ -1,5 +1,6 @@
 package com.bdmajora.extras;
 
+import com.bdmajora.extras.client.booster.GpuBooster;
 import com.bdmajora.extras.client.particle.ParticleClassRegistry;
 import com.github.bsideup.jabel.Desugar;
 import net.minecraft.client.resources.I18n;
@@ -19,12 +20,16 @@ public final class ExtrasConfig {
     private static final String CAT_DETAIL = "detail";
     private static final String CAT_RENDER = "render";
     private static final String CAT_EXTRA = "extra";
+    private static final String CAT_RENDER_BUDGET = "render_budget";
+    private static final String CAT_GPU_BOOSTER = "gpu_booster";
 
     public final AnimationSettings animation = new AnimationSettings();
     public final ParticleSettings particle = new ParticleSettings();
     public final DetailSettings detail = new DetailSettings();
     public final RenderSettings render = new RenderSettings();
     public final ExtraSettings extra = new ExtraSettings();
+    public final RenderBudgetSettings renderBudget = new RenderBudgetSettings();
+    public final GpuBoosterSettings gpuBooster = new GpuBoosterSettings();
 
     private final List<BooleanProperty> booleans = Arrays.asList(
             // --- Animations -------------------------------------------------------------------
@@ -157,7 +162,31 @@ public final class ExtrasConfig {
             bool(CAT_EXTRA, "modNameTooltip", false, "Append the source mod's name to item tooltips",
                     v -> extra.modNameTooltip = v, () -> extra.modNameTooltip),
             bool(CAT_EXTRA, "paniniProjection", false, "Apply a Panini projection post-effect to widen the view",
-                    v -> extra.paniniProjection = v, () -> extra.paniniProjection)
+                    v -> extra.paniniProjection = v, () -> extra.paniniProjection),
+            // --- Render budget ----------------------------------------------------------------
+            bool(CAT_RENDER_BUDGET, "enabled", false, "Adaptive render budgeting: skip distant idle mobs and thin cosmetic particles under frame pressure",
+                    v -> renderBudget.enabled = v, () -> renderBudget.enabled),
+            bool(CAT_RENDER_BUDGET, "adaptive", true, "Tighten the budget a further step when frames run 20% or more over the profile target",
+                    v -> renderBudget.adaptive = v, () -> renderBudget.adaptive),
+            bool(CAT_RENDER_BUDGET, "smartEntityCulling", true, "Skip rendering distant non-player living entities under pressure",
+                    v -> renderBudget.smartEntityCulling = v, () -> renderBudget.smartEntityCulling),
+            bool(CAT_RENDER_BUDGET, "blockEntities", true, "Skip vanilla decorative block entity renderers (chests, signs, heads, banners, beds, shulker boxes) past the block entity distance under pressure",
+                    v -> renderBudget.blockEntities = v, () -> renderBudget.blockEntities),
+            bool(CAT_RENDER_BUDGET, "itemFrames", true, "Skip plain item frames past the block entity distance under pressure; glowing, named and map frames are kept",
+                    v -> renderBudget.itemFrames = v, () -> renderBudget.itemFrames),
+            bool(CAT_RENDER_BUDGET, "overlay", false, "Show the budget, frame pressure and skipped counts on the HUD",
+                    v -> renderBudget.overlay = v, () -> renderBudget.overlay),
+            bool(CAT_RENDER_BUDGET, "quickSetupShown", false, "Whether the one-time quick setup screen has been shown on a world join",
+                    v -> renderBudget.quickSetupShown = v, () -> renderBudget.quickSetupShown),
+            // --- GPU booster ------------------------------------------------------------------
+            bool(CAT_GPU_BOOSTER, "enabled", false, "Master switch for the GPU Booster set: fast random, fast math and streamed vertex uploads",
+                    v -> gpuBooster.enabled = v, () -> gpuBooster.enabled),
+            bool(CAT_GPU_BOOSTER, "fastRandom", true, "Give entities and particles a cheaper random generator than java.util.Random",
+                    v -> gpuBooster.fastRandom = v, () -> gpuBooster.fastRandom),
+            bool(CAT_GPU_BOOSTER, "fastMath", true, "Cheaper angle wrapping and log2 in MathHelper",
+                    v -> gpuBooster.fastMath = v, () -> gpuBooster.fastMath),
+            bool(CAT_GPU_BOOSTER, "streamUploads", true, "Draw immediate-mode geometry through a streamed vertex buffer instead of client-side arrays",
+                    v -> gpuBooster.streamUploads = v, () -> gpuBooster.streamUploads)
     );
 
     private final List<IntProperty> integers = Arrays.asList(
@@ -187,7 +216,19 @@ public final class ExtrasConfig {
             new IntProperty(CAT_EXTRA, "autosaveInterval", ExtraSettings.AUTOSAVE_VANILLA_TICKS,
                     ExtraSettings.AUTOSAVE_MIN_TICKS, ExtraSettings.AUTOSAVE_MAX_TICKS,
                     "Singleplayer autosave interval in ticks (900 = vanilla)",
-                    v -> extra.autosaveInterval = v, () -> extra.autosaveInterval)
+                    v -> extra.autosaveInterval = v, () -> extra.autosaveInterval),
+            new IntProperty(CAT_RENDER_BUDGET, "particleBudget", RenderBudgetSettings.PARTICLE_BUDGET_DEFAULT,
+                    RenderBudgetSettings.PARTICLE_BUDGET_MIN, RenderBudgetSettings.PARTICLE_BUDGET_MAX,
+                    "Percentage of cosmetic particles allowed to spawn (100 = no particle budgeting)",
+                    v -> renderBudget.particleBudget = v, () -> renderBudget.particleBudget),
+            new IntProperty(CAT_RENDER_BUDGET, "entityCullDistance", RenderBudgetSettings.ENTITY_DISTANCE_DEFAULT,
+                    RenderBudgetSettings.ENTITY_DISTANCE_MIN, RenderBudgetSettings.ENTITY_DISTANCE_MAX,
+                    "Distance in blocks past which idle living entities may be skipped under pressure",
+                    v -> renderBudget.entityCullDistance = v, () -> renderBudget.entityCullDistance),
+            new IntProperty(CAT_RENDER_BUDGET, "blockEntityDistance", RenderBudgetSettings.BLOCK_ENTITY_DISTANCE_DEFAULT,
+                    RenderBudgetSettings.BLOCK_ENTITY_DISTANCE_MIN, RenderBudgetSettings.BLOCK_ENTITY_DISTANCE_MAX,
+                    "Distance in blocks past which decorative block entities and item frames may be skipped under pressure (vanilla stops most at 64 anyway)",
+                    v -> renderBudget.blockEntityDistance = v, () -> renderBudget.blockEntityDistance)
     );
 
     private Configuration config;
@@ -204,6 +245,7 @@ public final class ExtrasConfig {
             if (config.hasChanged()) {
                 config.save();
             }
+            GpuBooster.apply(options.gpuBooster);
             return options;
         } catch (Exception e) {
             Extras.LOGGER.error("Could not read {}, falling back to defaults", file, e);
@@ -236,6 +278,9 @@ public final class ExtrasConfig {
         extra.weatherOverride = readEnum(config, CAT_EXTRA, "weatherOverride",
                 WeatherOverride.values(), WeatherOverride.DEFAULT,
                 "Client-side weather (0 = Default, 1 = Clear, 2 = Rain, 3 = Thunder). Creative/cheats only.");
+        renderBudget.profile = readEnum(config, CAT_RENDER_BUDGET, "profile",
+                BudgetProfile.values(), BudgetProfile.BALANCED,
+                "Render budget profile (0 = Quality, 1 = Balanced, 2 = Performance)");
 
         ParticleClassRegistry registry = ParticleClassRegistry.getInstance();
         registry.loadDisabledClasses(config.getStringList("disabledClasses", CAT_PARTICLE_CLASSES,
@@ -259,6 +304,7 @@ public final class ExtrasConfig {
         config.get(CAT_EXTRA, "textContrast", TextContrast.SHADOW.ordinal()).set(extra.textContrast.ordinal());
         config.get(CAT_EXTRA, "timeOverride", 0).set(extra.timeOverride.ordinal());
         config.get(CAT_EXTRA, "weatherOverride", 0).set(extra.weatherOverride.ordinal());
+        config.get(CAT_RENDER_BUDGET, "profile", BudgetProfile.BALANCED.ordinal()).set(renderBudget.profile.ordinal());
 
         ParticleClassRegistry registry = ParticleClassRegistry.getInstance();
         config.get(CAT_PARTICLE_CLASSES, "disabledClasses", new String[0])
@@ -268,6 +314,7 @@ public final class ExtrasConfig {
 
         config.save();
         registry.markClean();
+        GpuBooster.apply(gpuBooster);
     }
 
     private static <T extends Enum<T>> T readEnum(Configuration config, String category, String key,
@@ -406,6 +453,27 @@ public final class ExtrasConfig {
 
         WeatherOverride(String key) {
             this.key = key;
+        }
+
+        // Lang key for the cycler label
+        @Override
+        public String translationKey() {
+            return this.key;
+        }
+    }
+
+    // How hard the render budget pushes; ordinal order is aggressiveness, and the target is the frame time the EMA is measured against (45 / 60 / ~71 FPS)
+    public enum BudgetProfile implements Localized {
+        QUALITY("impetus.options.extras.budget_profile.quality", 22.2),
+        BALANCED("impetus.options.extras.budget_profile.balanced", 16.7),
+        PERFORMANCE("impetus.options.extras.budget_profile.performance", 14.0);
+
+        private final String key;
+        public final double targetFrameMillis;
+
+        BudgetProfile(String key, double targetFrameMillis) {
+            this.key = key;
+            this.targetFrameMillis = targetFrameMillis;
         }
 
         // Lang key for the cycler label
@@ -554,6 +622,40 @@ public final class ExtrasConfig {
         public TimeOverride timeOverride = TimeOverride.DEFAULT;
         public WeatherOverride weatherOverride = WeatherOverride.DEFAULT;
         public int autosaveInterval = AUTOSAVE_VANILLA_TICKS;
+    }
+
+    // Adaptive render budgeting (see client.budget.RenderBudgetController); off by default since it trades distant mobs and cosmetic particles for frame time, which is only a good trade on a machine that needs it
+    public static final class RenderBudgetSettings {
+        public static final int PARTICLE_BUDGET_MIN = 0;
+        public static final int PARTICLE_BUDGET_DEFAULT = 65;
+        public static final int PARTICLE_BUDGET_MAX = 100;
+        public static final int ENTITY_DISTANCE_MIN = 16;
+        public static final int ENTITY_DISTANCE_DEFAULT = 96;
+        public static final int ENTITY_DISTANCE_MAX = 256;
+        // Vanilla's dispatcher already drops most special renderers past 64 blocks, so the useful range sits below that
+        public static final int BLOCK_ENTITY_DISTANCE_MIN = 32;
+        public static final int BLOCK_ENTITY_DISTANCE_DEFAULT = 48;
+        public static final int BLOCK_ENTITY_DISTANCE_MAX = 128;
+
+        public boolean enabled = false;
+        public BudgetProfile profile = BudgetProfile.BALANCED;
+        public boolean adaptive = true;
+        public int particleBudget = PARTICLE_BUDGET_DEFAULT;
+        public int entityCullDistance = ENTITY_DISTANCE_DEFAULT;
+        public boolean smartEntityCulling = true;
+        public boolean blockEntities = true;
+        public int blockEntityDistance = BLOCK_ENTITY_DISTANCE_DEFAULT;
+        public boolean itemFrames = true;
+        public boolean overlay = false;
+        public boolean quickSetupShown = false;
+    }
+
+    // GPU Booster (see client.booster): the parts of Mr.Toad's GPUBooster that still have something to do on 1.12.2, since this renderer already owns buffer storage and vanilla's framebuffer already uses a depth renderbuffer; off by default like the render budget
+    public static final class GpuBoosterSettings {
+        public boolean enabled = false;
+        public boolean fastRandom = true;
+        public boolean fastMath = true;
+        public boolean streamUploads = true;
     }
 
     // Declarative property bindings

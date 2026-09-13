@@ -2,6 +2,8 @@ package com.bdmajora.extras.client;
 
 import com.bdmajora.extras.Extras;
 import com.bdmajora.extras.ExtrasConfig;
+import com.bdmajora.extras.client.budget.RenderBudget;
+import com.bdmajora.extras.client.budget.RenderBudgetController;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
@@ -16,6 +18,7 @@ import net.minecraftforge.fml.relauncher.SideOnly;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 // FPS and coordinate overlay in the configured corner and contrast, hidden while F3 is up or the GUI is hidden; the light-updates warning is not optional since that switch makes the world quietly stop relighting
 @Mod.EventBusSubscriber(Side.CLIENT)
@@ -99,7 +102,48 @@ public final class ExtrasHud {
             lines.add(I18n.format("impetus.options.extras.overlay.light_updates"));
         }
 
+        if (options.renderBudget.overlay) {
+            if (options.renderBudget.enabled) {
+                addBudgetLines(lines, options.renderBudget);
+            } else {
+                lines.add(I18n.format("impetus.options.extras.overlay.budget.off"));
+            }
+        }
+
         return lines;
+    }
+
+    // Budget target against the frame-time EMA, the limits in force, and how much the last tick actually refused; zeros on the last line mean the scene has nothing to budget
+    private static void addBudgetLines(List<String> lines, ExtrasConfig.RenderBudgetSettings settings) {
+        RenderBudget budget = RenderBudgetController.budget();
+
+        lines.add(I18n.format("impetus.options.extras.overlay.budget",
+                settings.profile.localizedName(),
+                String.format(Locale.ROOT, "%.1f", budget.emaFrameMillis),
+                String.format(Locale.ROOT, "%.1f", budget.targetFrameMillis),
+                Math.round(budget.framePressure * 100.0),
+                budget.adaptiveActive ? I18n.format("impetus.options.extras.overlay.budget.adaptive") : ""));
+
+        lines.add(I18n.format("impetus.options.extras.overlay.budget.limits",
+                Math.round(budget.particleScale * 100.0),
+                distanceLimit(budget.limitsEntities(), budget.entityCullDistance, budget.armed),
+                distanceLimit(budget.limitsBlockEntities(), budget.blockEntityCullDistance, budget.armed)));
+
+        lines.add(I18n.format("impetus.options.extras.overlay.budget.counters",
+                RenderBudgetController.entitiesSkipped(), RenderBudgetController.entitiesProtected(),
+                RenderBudgetController.particlesSkipped(), RenderBudgetController.particlesProtected(),
+                RenderBudgetController.blockEntitiesSkipped(), RenderBudgetController.blockEntitiesProtected(),
+                RenderBudgetController.itemFramesSkipped(), RenderBudgetController.itemFramesProtected()));
+    }
+
+    // "off", "96m (idle)" while under target, or "96m" while skipping is live
+    private static String distanceLimit(boolean limited, int distance, boolean armed) {
+        if (!limited) {
+            return I18n.format("options.off");
+        }
+        return I18n.format(armed
+                ? "impetus.options.extras.overlay.budget.distance_armed"
+                : "impetus.options.extras.overlay.budget.distance_idle", distance);
     }
 
     private static void drawLine(FontRenderer font, String text, int x, int y,

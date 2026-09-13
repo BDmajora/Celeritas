@@ -84,6 +84,9 @@ public class ImpetusVintage {
         // Item light sources are read from resource packs here rather than at construction, because the item registry does not exist until now
         DynamicLights.onClientInit();
 
+        // Key bindings must exist before the controls screen enumerates them
+        com.bdmajora.extras.client.budget.RenderBudgetKeys.register();
+
         ClientCommandHandler.instance.registerCommand(new CoarctatioStatsCommand());
         ClientCommandHandler.instance.registerCommand(new FulgorStatsCommand());
         ClientCommandHandler.instance.registerCommand(new EquilibriumStatsCommand());

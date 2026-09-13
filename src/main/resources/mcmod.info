@@ -8,7 +8,7 @@
     "url": "",
     "updateUrl": "",
     "authorList": ["bdmajora"],
-    "credits": "embeddedt (Celeritas/Embeddium), the Sodium project, and the Iris project",
+    "credits": "embeddedt (Celeritas/Embeddium), the Sodium project, the Iris project, orf (GpuShift), and Mr.Toad (GPUBooster)",
     "logoFile": "assets/impetus/textures/gui/impetus.png",
     "screenshots": [],
     "dependencies": []
